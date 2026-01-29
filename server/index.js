@@ -12,27 +12,23 @@ dotenv.config(); // 读取 .env
 
 const app = express();
 
-// 👇👇👇 复制并粘贴这段代码 👇👇👇
-app.use((req, res, next) => {
-  // 1. 允许任何来源访问
-  res.header("Access-Control-Allow-Origin", "*");
-  
-  // 2. 允许的请求方法
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
-  
-  // 3. 允许的请求头 (把所有可能用到的都加上)
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-user-id");
+// 👇👇👇 删掉刚才的手动代码，换成这一段 👇👇👇
 
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
+// 1. 引入 cors 包 (确保顶部已经 import cors form 'cors')
+// 如果没有 import，请加上： import cors from 'cors';
 
-  // 5. 这是一个调试 Log，帮我们确认新代码生效了
-  console.log(`收到请求: ${req.method} ${req.url}`);
-  
-  next();
-});
-// 👆👆👆 复制结束 👆👆👆
+// 2. 配置万能 CORS
+app.use(cors({
+  origin: true, // ✨ 自动允许任何来源（反射 Origin 头），比 '*' 更兼容
+  credentials: true, // 允许携带 Cookie
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id']
+}));
+
+// 3. 🛡️ 强制处理所有 OPTIONS 预检请求 (这一步很关键！)
+app.options('*', cors()); 
+
+// 👆👆👆 替换结束 👆👆👆
 
 //app.use(cors());
 app.use(express.json());
