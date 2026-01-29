@@ -12,30 +12,7 @@ dotenv.config(); // 读取 .env
 
 const app = express();
 
-// 1. 定义白名单：只允许这些地址访问
-const allowedOrigins = [
-  "http://localhost:3000",                  // 允许本地开发环境 (前端)
-  "http://localhost:5000",                  // 允许本地开发环境 (后端自己)
-  "https://website-6el3.vercel.app"         // 允许你的 Vercel 线上网站 (注意：末尾不要带斜杠 /)
-];
-
-// 2. 配置 CORS 选项
-const corsOptions = {
-  origin: function (origin, callback) {
-    // !origin 意味着请求没有 Origin 头 (比如 Postman, 或者你的本地 Node爬虫脚本)
-    // 我们通常允许这些服务器端工具访问，因为 CORS 主要防浏览器
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS')); // 不在白名单里，直接报错
-    }
-  },
-  credentials: true, // 允许携带 Cookie (如果你以后做登录功能，这行必须加)
-  optionsSuccessStatus: 200
-};
-
-app.use(cors(corsOptions));
-// app.use(cors());
+app.use(cors());
 app.use(express.json());
 
 // 连接数据库
