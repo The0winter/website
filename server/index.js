@@ -12,7 +12,30 @@ dotenv.config(); // 读取 .env
 
 const app = express();
 
-app.use(cors());
+// 👇👇👇 复制并粘贴这段代码 👇👇👇
+app.use((req, res, next) => {
+  // 1. 允许任何来源访问
+  res.header("Access-Control-Allow-Origin", "*");
+  
+  // 2. 允许的请求方法
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+  
+  // 3. 允许的请求头 (把所有可能用到的都加上)
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-user-id");
+
+  // 4. 关键点：如果是 OPTIONS 请求，直接返回 200 OK，不要往下走了
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+
+  // 5. 这是一个调试 Log，帮我们确认新代码生效了
+  console.log(`收到请求: ${req.method} ${req.url}`);
+  
+  next();
+});
+// 👆👆👆 复制结束 👆👆👆
+
+//app.use(cors());
 app.use(express.json());
 
 // 连接数据库
