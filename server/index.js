@@ -23,7 +23,6 @@ app.use((req, res, next) => {
   // 3. 允许的请求头 (把所有可能用到的都加上)
   res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-user-id");
 
-  // 4. 关键点：如果是 OPTIONS 请求，直接返回 200 OK，不要往下走了
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
