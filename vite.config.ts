@@ -12,7 +12,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:5000', // 告诉前端：凡是 /api 开头的请求，都转发给后端 5000 端口
+        target: 'https://website-production-565f.up.railway.app', // 告诉前端：凡是 /api 开头的请求，都转发给后端 5000 端口
         changeOrigin: true,
         secure: false,
       },

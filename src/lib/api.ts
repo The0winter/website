@@ -1,5 +1,5 @@
 // API client for local backend (localhost:5000)
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'https://website-production-565f.up.railway.app/api';
 
 export interface Profile {
   id: string;
