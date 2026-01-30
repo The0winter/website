@@ -5,6 +5,10 @@ import Chapter from '../models/Chapter.js';
 // 辅助函数：睡眠
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * 核心爬虫函数：智能单线程稳定版
+ * 特点：不并发、智能等待正文加载、随机延迟防封
+ */
 export const scrapeAndSaveBook = async (bookIndexUrl, customBookId) => {
     // 2. 在需要用到的时候再加载，并加上 try-catch 防止生产环境误触发崩溃
     let puppeteer;
@@ -17,13 +21,6 @@ export const scrapeAndSaveBook = async (bookIndexUrl, customBookId) => {
     }
 
     console.log(`🚀 [爬虫服务] 启动... ${bookIndexUrl}`);
-
-/**
- * 核心爬虫函数：智能单线程稳定版
- * 特点：不并发、智能等待正文加载、随机延迟防封
- */
-export const scrapeAndSaveBook = async (bookIndexUrl, customBookId) => {
-    console.log(`🚀 [爬虫服务] 启动智能稳定版: ${bookIndexUrl}`);
 
     // 1. 启动浏览器
     // headless: false 方便你调试和手动过验证码（如果出现的话）
