@@ -53,7 +53,7 @@ export default function ProfilePage() {
                 <div className="relative -mt-16 mb-6">
                     <div className="h-32 w-32 rounded-full border-4 border-white bg-white shadow-md flex items-center justify-center text-4xl font-bold text-indigo-600 select-none overflow-hidden">
                         {/* ✅ 修改 1: 优化头像逻辑，支持中文首字和英文大写 */}
-                        {(user.username || '用户').substring(0, 1).toUpperCase()}
+                        {(user.username || 'User').substring(0, 1).toUpperCase()}
                     </div>
                 </div>
 

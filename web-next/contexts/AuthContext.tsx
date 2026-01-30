@@ -75,13 +75,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return signUp(email, password, username, 'reader');
   };
 
-  const signIn = async (email: string, password: string) => {
+const signIn = async (email: string, password: string) => {
     try {
+      // 1. 【原有逻辑】先执行登录，拿到基础信息
       const { user: sessionUser, profile: sessionProfile } = await authApi.signIn(email, password);
-      setUser(sessionUser);
+
+      // 2. 【新增补丁】为了解决“名字不显示”的 Bug，我们立刻用 ID 去拉取一次完整信息
+      // 只要这一步成功，我们就用新的完整数据；如果失败，也不会报错，继续用上面的 sessionUser
+      try {
+        const { user: fullUser, profile: fullProfile } = await authApi.getSession(sessionUser.id);
+        
+        // 如果成功拿到了带 username 的完整用户
+        if (fullUser && fullUser.username) {
+           setUser(fullUser); // ✅ 存入完整数据 (带名字)
+           setProfile(fullProfile);
+           saveUserToStorage(fullUser.id);
+           return { error: null }; // 🎉 完美结束
+        }
+      } catch (e) {
+        console.warn('获取完整信息失败，将使用基础登录信息');
+      }
+
+      // 3. 【保底逻辑】如果上面的补丁没跑通，依然执行你原来的逻辑，保证登录功能绝不会坏
+      setUser(sessionUser); // ⚠️ 虽然这里 username 可能是空的，但至少能登录进去
       setProfile(sessionProfile);
       saveUserToStorage(sessionUser.id);
       return { error: null };
+
     } catch (error) {
       return { error: error as Error };
     }
