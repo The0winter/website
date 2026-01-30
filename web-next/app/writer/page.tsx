@@ -39,11 +39,17 @@ export default function WriterDashboard() {
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'info' | 'error'} | null>(null);
 
   // --- 获取数据 ---
+// inside WriterDashboard component...
+
   const fetchMyData = useCallback(async () => {
     if (!user) return;
     try {
       setLoading(true);
-      const books = await booksApi.getMyBooks();
+      
+      // 🔴 修改前：const books = await booksApi.getMyBooks();
+      // ✅ 修改后：把 user.id 传进去！
+      const books = await booksApi.getMyBooks(user.id);
+      
       setMyBooks(books); 
     } catch (error) {
       console.error('Failed to load books:', error);

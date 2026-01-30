@@ -86,12 +86,15 @@ export const booksApi = {
 
   // ... 原有的 getAll, getById ...
 
-  // 🔥 新增：只获取当前登录用户的书
-  getMyBooks: async (): Promise<Book[]> => {
-    const userId = localStorage.getItem('novelhub_user');
-    if (!userId) return []; // 没登录就返回空
-    // 假设后端支持通过 ?author_id=xxx 筛选
-    return apiCall<Book[]>(`/books?author_id=${userId}`);
+// 🔥 修改后：支持传入 authorId 参数
+  getMyBooks: async (authorId?: string): Promise<Book[]> => {
+    // 逻辑：优先用传进来的 ID；如果没传，再尝试从 localStorage 拿
+    const targetId = authorId || localStorage.getItem('novelhub_user');
+    
+    if (!targetId) return []; // 如果都找不到 ID，直接返回空数组
+
+    // 发送请求，带上 author_id 参数
+    return apiCall<Book[]>(`/books?author_id=${targetId}`);
   },
 
   // 🔥 新增：删除书籍

@@ -149,18 +149,28 @@ app.get('/api/users/:userId/profile', async (req, res) => {
 
 // ================= Books API =================
 
-// 获取书籍列表
+// server/index.js
+
 app.get('/api/books', async (req, res) => {
     try {
-      const { orderBy = 'views', order = 'desc', limit } = req.query;
+      // 1. ✅ 新增 author_id 参数
+      const { orderBy = 'views', order = 'desc', limit, author_id } = req.query;
       
-      // ✅ 这里现在会去 'users' 表查找 author_id，因为 Book 模型 ref 指向 'User'
-      let query = Book.find().populate('author_id', 'username email id');
+      // 2. ✅ 构建过滤条件
+      const filter = {};
+      if (author_id) {
+          filter.author_id = author_id;
+      }
+
+      // 3. ✅ 把 filter 传给 find()
+      let query = Book.find(filter).populate('author_id', 'username email id');
       
       const sortOrder = order === 'asc' ? 1 : -1;
       query = query.sort({ [orderBy]: sortOrder });
       
-      if (limit) query = query.limit(parseInt(limit));
+      if (limit) {
+        query = query.limit(parseInt(limit));
+      }
       
       const books = await query.exec();
   
