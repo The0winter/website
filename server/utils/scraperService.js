@@ -1,9 +1,22 @@
-import puppeteer from 'puppeteer';
+//import puppeteer from 'puppeteer';
 import Book from '../models/Book.js';       
 import Chapter from '../models/Chapter.js';
 
 // 辅助函数：睡眠
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+export const scrapeAndSaveBook = async (bookIndexUrl, customBookId) => {
+    // 2. 在需要用到的时候再加载，并加上 try-catch 防止生产环境误触发崩溃
+    let puppeteer;
+    try {
+        // 动态导入
+        puppeteer = (await import('puppeteer')).default; 
+    } catch (error) {
+        console.log("当前环境未安装 Puppeteer，跳过爬虫逻辑");
+        return; // 如果在服务器上误调用了此函数，直接返回，不报错
+    }
+
+    console.log(`🚀 [爬虫服务] 启动... ${bookIndexUrl}`);
 
 /**
  * 核心爬虫函数：智能单线程稳定版
