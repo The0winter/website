@@ -16,6 +16,11 @@ const categories = [
   { name: '都市', icon: Building2, slug: 'urban' },
   { name: '历史', icon: History, slug: 'history' },
   { name: '科幻', icon: Rocket, slug: 'sci-fi' },
+  // 👇 新增这几个，确保你在后台选的分类这里也有
+  { name: '奇幻', icon: Sparkles, slug: 'magic' },
+  { name: '体育', icon: Rocket, slug: 'sports' },
+  { name: '军事', icon: Sword, slug: 'military' },
+  { name: '悬疑', icon: History, slug: 'mystery' },
 ];
 
 // 为了使用 useSearchParams，我们需要包裹一层 Suspense，这是 Next.js 的规范
@@ -59,14 +64,21 @@ function HomeContent() {
     return () => window.clearInterval(intervalId);
   }, [featuredBooks, isPaused, activeBookIndex]);
 
-  // 筛选逻辑
+// 筛选逻辑
   const filteredBooks = allBooks.filter((book) => {
+    // 1. 先找到当前选中的分类配置对象
+    // 比如：你选中了 'fantasy'，这里就会找到 { name: '玄幻', slug: 'fantasy' ... }
+    const targetCategory = categories.find(c => c.slug === selectedCategory);
+
+    // 2. 比对逻辑
     const matchesCategory =
-      selectedCategory === 'all' ||
-      book.category?.toLowerCase() === selectedCategory.toLowerCase();
+      selectedCategory === 'all' || // 如果选的是“全部”，直接通过
+      (targetCategory && book.category === targetCategory.name); // 否则：比对数据库里的中文名 ("玄幻") 和配置里的中文名 ("玄幻")
+
     const matchesSearch =
       !searchQuery ||
       book.title.toLowerCase().includes(searchQuery.toLowerCase());
+      
     return matchesCategory && matchesSearch;
   });
 

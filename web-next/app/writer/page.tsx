@@ -33,8 +33,17 @@ export default function WriterDashboard() {
   // 表单数据
   const [formBookTitle, setFormBookTitle] = useState('');
   const [formBookDescription, setFormBookDescription] = useState('');
-  const CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻'];
-  const [formBookCategory, setFormBookCategory] = useState(CATEGORIES[0]);
+const ALL_CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻', '奇幻', '体育', '军事', '悬疑'];
+  
+  // 取前4个作为直接显示的
+  const visibleCategories = ALL_CATEGORIES.slice(0, 4);
+  // 剩下的作为隐藏的
+  const hiddenCategories = ALL_CATEGORIES.slice(4);
+
+  const [formBookCategory, setFormBookCategory] = useState(ALL_CATEGORIES[0]);
+  
+  // 新增：控制下拉菜单是否显示的 state
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [formChapterTitle, setFormChapterTitle] = useState('');
   const [formChapterContent, setFormChapterContent] = useState('');
 
@@ -198,7 +207,8 @@ const handleCreateBook = async (e: React.FormEvent) => {
         setFormBookDescription('');
         
         // ✅ 重置分类为默认值
-        setFormBookCategory(CATEGORIES[0]); 
+        setFormBookCategory(ALL_CATEGORIES[0]);
+        setShowCategoryDropdown(false);
         
         setToast({ msg: '新书创建成功！', type: 'success' });
         fetchMyData();
@@ -426,24 +436,71 @@ const handleCreateBook = async (e: React.FormEvent) => {
                     />
                  </div>
 
-                 {/* ✅ 3. 新增：分类选择区域 */}
-                 <div>
+                 {/* ✅ 3. 全新的分类选择区域 UI */}
+                 <div className="relative"> {/* 添加 relative 用于定位下拉菜单 */}
                     <label className="block text-sm font-bold text-gray-700 mb-2">选择分类</label>
                     <div className="flex flex-wrap gap-2">
-                        {CATEGORIES.map((cat) => (
+                        {/* 1. 渲染前 4 个主要分类 */}
+                        {visibleCategories.map((cat) => (
                             <button
                                 key={cat}
-                                type="button" // 必须写 type="button"，否则会触发表单提交
-                                onClick={() => setFormBookCategory(cat)}
+                                type="button"
+                                onClick={() => {
+                                    setFormBookCategory(cat);
+                                    setShowCategoryDropdown(false); // 选中主要分类时关闭下拉框
+                                }}
                                 className={`px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 border ${
                                     formBookCategory === cat
-                                        ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-105'
+                                        ? 'bg-blue-600 text-white border-blue-600 shadow-md'
                                         : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-500'
                                 }`}
                             >
                                 {cat}
                             </button>
                         ))}
+
+                        {/* 2. 如果有更多分类，渲染 "..." 按钮 */}
+                        {hiddenCategories.length > 0 && (
+                            <div className="relative inline-block">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                                    className={`px-3 py-2 rounded-lg text-sm font-bold transition-all duration-200 border ${
+                                        // 如果选中的分类不在可见列表中，高亮这个 "..." 按钮
+                                        !visibleCategories.includes(formBookCategory) && showCategoryDropdown
+                                            ? 'bg-blue-100 text-blue-600 border-blue-300' // 下拉打开时
+                                        : !visibleCategories.includes(formBookCategory)
+                                            ? 'bg-blue-600 text-white border-blue-600 shadow-md' // 选中项在里面时
+                                            : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-500' // 默认
+                                    }`}
+                                >
+                                    ...
+                                </button>
+                                
+                                {/* 3. 下拉菜单浮层 */}
+                                {showCategoryDropdown && (
+                                    <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-xl p-2 z-50 grid grid-cols-2 gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                                        {hiddenCategories.map((cat) => (
+                                            <button
+                                                key={cat}
+                                                type="button"
+                                                onClick={() => {
+                                                    setFormBookCategory(cat);
+                                                    setShowCategoryDropdown(false); // 选中后关闭下拉菜单
+                                                }}
+                                                className={`px-3 py-2 rounded-lg text-sm font-bold transition-all duration-200 border text-center ${
+                                                    formBookCategory === cat
+                                                        ? 'bg-blue-50 text-blue-600 border-blue-200'
+                                                        : 'bg-white text-gray-600 border-transparent hover:bg-gray-50 hover:text-blue-500'
+                                                }`}
+                                            >
+                                                {cat}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                  </div>
 
