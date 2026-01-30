@@ -33,6 +33,8 @@ export default function WriterDashboard() {
   // 表单数据
   const [formBookTitle, setFormBookTitle] = useState('');
   const [formBookDescription, setFormBookDescription] = useState('');
+  const CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻'];
+  const [formBookCategory, setFormBookCategory] = useState(CATEGORIES[0]);
   const [formChapterTitle, setFormChapterTitle] = useState('');
   const [formChapterContent, setFormChapterContent] = useState('');
 
@@ -175,29 +177,31 @@ export default function WriterDashboard() {
     }
   };
 
-  const handleCreateBook = async (e: React.FormEvent) => {
+const handleCreateBook = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formBookTitle.trim()) return;
-
     try {
-        // ✅ 修改后的代码：显式加上 author_id
-        // 在 handleCreateBook 函数里
         await booksApi.create({
             title: formBookTitle,
             description: formBookDescription,
             cover_image: '',
-            category: '未分类',
-            // 👇 关键：直接把名字发过去！
+            
+            // ✅ 2. 修改：使用选中的分类
+            category: formBookCategory, 
+            
             author: user.username || '匿名作家', 
-            // 👇 ID 也要发，为了后续权限验证
             author_id: user.id, 
         } as any);
         
         setShowCreateBookModal(false);
         setFormBookTitle('');
         setFormBookDescription('');
+        
+        // ✅ 重置分类为默认值
+        setFormBookCategory(CATEGORIES[0]); 
+        
         setToast({ msg: '新书创建成功！', type: 'success' });
-        fetchMyData(); 
+        fetchMyData();
     } catch (e) {
         console.error(e);
         setToast({ msg: '创建失败', type: 'error' });
@@ -421,6 +425,28 @@ export default function WriterDashboard() {
                         autoFocus 
                     />
                  </div>
+
+                 {/* ✅ 3. 新增：分类选择区域 */}
+                 <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">选择分类</label>
+                    <div className="flex flex-wrap gap-2">
+                        {CATEGORIES.map((cat) => (
+                            <button
+                                key={cat}
+                                type="button" // 必须写 type="button"，否则会触发表单提交
+                                onClick={() => setFormBookCategory(cat)}
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 border ${
+                                    formBookCategory === cat
+                                        ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-105'
+                                        : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-500'
+                                }`}
+                            >
+                                {cat}
+                            </button>
+                        ))}
+                    </div>
+                 </div>
+
                  <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">简介</label>
                     <textarea 
@@ -430,6 +456,7 @@ export default function WriterDashboard() {
                         placeholder="简介..."
                     ></textarea>
                  </div>
+                 {/* ... 底部按钮保持不变 ... */}
                  <div className="flex gap-4 mt-8">
                     <button type="button" onClick={() => setShowCreateBookModal(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl">取消</button>
                     <button type="submit" className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg">立即创建</button>
