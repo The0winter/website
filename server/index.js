@@ -64,6 +64,8 @@ const authMiddleware = (req, res, next) => {
 // ================= Auth API (用户系统) =================
 
 // 注册
+// server/index.js
+
 app.post('/api/auth/signup', async (req, res) => {
   try {
     const { email, password, username, role } = req.body;
@@ -71,11 +73,12 @@ app.post('/api/auth/signup', async (req, res) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ error: 'Email already exists' });
 
-    // 生成一个前端用的 String ID
-    const userId = new mongoose.Types.ObjectId().toString();
+    // ✅ 修复点：生成一个 ObjectId，同时赋值给 _id 和 id
+    const newId = new mongoose.Types.ObjectId(); 
     
     const newUser = new User({
-      id: userId,
+      _id: newId,            // 1. 强制 MongoDB 使用这个 ID
+      id: newId.toString(),  // 2. 我们的字符串 ID 也用这个
       email,
       password, 
       username,
@@ -84,10 +87,8 @@ app.post('/api/auth/signup', async (req, res) => {
     
     await newUser.save();
     
-    // 返回时去掉密码
     const { password: _, ...userWithoutPassword } = newUser.toObject();
-    // 统一返回结构
-    res.json({ user: { id: userId, email }, profile: userWithoutPassword });
+    res.json({ user: { id: newId.toString(), email }, profile: userWithoutPassword });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

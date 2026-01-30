@@ -55,22 +55,20 @@ useEffect(() => {
             // 🔍 调试大法：先看看拿到了什么
             console.log("All books fetched:", allBooks); 
 
-            const filteredBooks = allBooks.filter(b => {
-                // 🛑 第一步：先检查 author_id 是否存在
-                // 如果是 null 或 undefined，直接扔掉，防止报错
+                const filteredBooks = allBooks.filter(b => {
                 if (!b.author_id) return false;
+                
+                    // ✅ 修复点：优先比对 id (字符串)，如果不行再比对 _id
+                    const authorObj = b.author_id as any;
+                    
+                    // 如果是对象（Populate 成功），我们优先取它的 .id (也就是 session 里的那个 id)
+                    // 如果 .id 不存在，再取 ._id
+                    const bookAuthorId = typeof b.author_id === 'object' 
+                        ? (authorObj.id || authorObj._id) 
+                        : b.author_id;
 
-                // 🛡️ 第二步：安全地提取 ID
-                // 不管它是对象还是字符串，都统一转成 String 来对比
-                const bookAuthorId = typeof b.author_id === 'object' 
-                    ? (b.author_id as any)._id 
-                    : b.author_id;
-
-                // 🔍 可以在这里打印一下，看看每一本书的 ID 对不对
-                // console.log(`Comparing book author ${bookAuthorId} with page author ${authorId}`);
-
-                return String(bookAuthorId) === String(authorId);
-            });
+                    return String(bookAuthorId) === String(authorId);
+                });
             
             console.log("Filtered books:", filteredBooks); // 看看筛选剩下了什么
             setBooks(filteredBooks);
