@@ -18,6 +18,7 @@ export interface Book {
   category?: string;
   status?: 'ongoing' | 'completed';
   views?: number;
+  updated_at?: string; // 或者 Date，取决于后端返回的是字符串还是日期对象
   created_at?: string;
   profiles?: Profile;
 }
@@ -38,6 +39,7 @@ export interface Bookmark {
   user_id: string;
   // ✅ 修改 2: 对应后端的 bookId 字段
   bookId: string; 
+  updated_at?: string; // 或者 Date，取决于后端返回的是字符串还是日期对象
   created_at?: string;
 }
 

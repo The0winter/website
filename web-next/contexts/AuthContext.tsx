@@ -9,7 +9,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, username: string, role: 'reader' | 'writer') => Promise<{ error: Error | null }>;
   register: (username: string, email: string, password: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  logout: () => Promise<void>; // ✅ 已修改：重命名 signOut -> logout
+  logout: () => Promise<void>; // ✅ 已修改：重命名 logout -> logout
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

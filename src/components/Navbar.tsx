@@ -7,7 +7,7 @@ import { useReadingSettings } from '../contexts/ReadingSettingsContext';
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, logout } = useAuth();
   const { theme } = useReadingSettings();
   const navigate = useNavigate();
 
@@ -19,11 +19,11 @@ export default function Navbar() {
   const searchBgClass = isDark ? 'bg-gray-700' : 'bg-gray-100';
   const searchTextClass = isDark ? 'text-gray-200 placeholder-gray-400' : 'text-gray-700 placeholder-gray-500';
 
-  const handleSignOut = async () => {
+  const handlelogout = async () => {
     if (!window.confirm('Are you sure you want to sign out?')) {
       return;
     }
-    await signOut();
+    await logout();
     navigate('/');
     setMobileMenuOpen(false);
   };
@@ -76,7 +76,7 @@ export default function Navbar() {
               <div className="flex items-center space-x-4">
                 <span className={`${textPrimary} font-medium`}>{profile?.username}</span>
                 <button
-                  onClick={handleSignOut}
+                  onClick={handlelogout}
                   className={`flex items-center space-x-1 ${textPrimary} hover:text-red-600`}
                 >
                   <LogOut className="h-4 w-4" />
@@ -151,7 +151,7 @@ export default function Navbar() {
               <div className="pt-2 border-t border-gray-200">
                 <p className={`${textPrimary} font-medium mb-2`}>{profile?.username}</p>
                 <button
-                  onClick={handleSignOut}
+                  onClick={handlelogout}
                   className="text-red-600 hover:text-red-700 font-medium"
                 >
                   Sign out
