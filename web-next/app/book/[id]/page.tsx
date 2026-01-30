@@ -7,7 +7,7 @@ async function getBookData(id: string) {
   // 注意：如果是服务端 fetching，建议用完整的 URL，或者直接调用数据库逻辑（如果可以直接连库）
   // 这里假设你用 API 方式
   try {
-    const res = await fetch(`https://website-production-565f.up.railway.app/api/books/${id}`, {
+    const res = await fetch(`https://website-production-6edf.up.railway.app/api/books/${id}`, {
       cache: 'no-store', // 保证每次都获取最新数据
     });
     if (!res.ok) return null;
@@ -21,7 +21,7 @@ async function getBookData(id: string) {
 async function getChaptersData(id: string) {
   try {
     // ✅ 修正：路由地址改为 /api/books/${id}/chapters
-    const res = await fetch(`https://website-production-565f.up.railway.app/api/books/${id}/chapters`, {
+    const res = await fetch(`https://website-production-6edf.up.railway.app/api/books/${id}/chapters`, {
       cache: 'no-store',
     });
     
