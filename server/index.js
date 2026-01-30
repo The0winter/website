@@ -13,16 +13,24 @@ dotenv.config(); // 读取 .env
 
 const app = express();
 
-// 👇 必须用这个增强配置，替换掉原来的 app.use(cors());
-app.use(cors({
-    origin: '*', 
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'], // 👈 这一行是解决你当前报错的关键
-    credentials: true
-}));
+// 👇 1. 定义统一的配置对象
+const corsOptions = {
+  // ⚠️ 关键修改：不能用 '*'，必须写具体的域名！
+  origin: [
+    'https://website-6el3.vercel.app', // 你的 Vercel 前端地址 (去掉末尾的斜杠)
+    'http://localhost:3000',           // 本地开发地址 (以防万一)
+    'http://localhost:5173'            // 如果你本地是用 Vite 启动的，也加上
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
+  credentials: true // 允许携带凭证
+};
 
-// 额外加这一行处理预检请求
-app.options('*', cors());
+// 👇 2. 应用配置到所有请求
+app.use(cors(corsOptions));
+
+// 👇 3. 同时也应用到预检请求 (OPTIONS)
+app.options('*', cors(corsOptions));
 
 //app.use(cors());
 app.use(express.json());
