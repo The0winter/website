@@ -1,9 +1,10 @@
 // backend/scripts/addBook.js
+import 'dotenv/config';
 import mongoose from 'mongoose';
 import { scrapeAndSaveBook } from '../utils/scraperService.js'; // 引入刚才封装好的爬虫服务
 
 // 🔴 配置：你的数据库地址
-const MONGO_URI = 'mongodb://127.0.0.1:27017/novel-website'; 
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/novel-website'; 
 
 // 获取命令行传入的 URL
 const targetUrl = process.argv[2]; 

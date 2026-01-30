@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import mongoose from 'mongoose';
 import fs from 'fs';
 import path from 'path';
