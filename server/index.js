@@ -16,7 +16,7 @@ const app = express();
 // 👇 定义更灵活的配置
 const corsOptions = {
   origin: function (origin, callback) {
-    // 1. 允许没有 origin 的请求 (比如 Postman 测试或后端互相调用)
+    // 1. 允许没有 origin 的请求 
     if (!origin) return callback(null, true);
 
     // 2. 允许本地开发 (localhost)
