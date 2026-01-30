@@ -4,33 +4,24 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import './models/User.js'; 
+
+// ✅ 1. 引入统一的模型 (不再在 index.js 里定义 Schema)
+import User from './models/User.js'; 
 import Book from './models/Book.js';
 import Chapter from './models/Chapter.js';
-import { scrapeAndSaveBook } from './utils/scraperService.js'; // 路径根据你实际情况调整
+// import { scrapeAndSaveBook } from './utils/scraperService.js'; 
 
-dotenv.config(); // 读取 .env
+dotenv.config();
 
 const app = express();
 
-// 👇 定义更灵活的配置
+// ================= CORS 配置 =================
 const corsOptions = {
   origin: function (origin, callback) {
-    // 1. 允许没有 origin 的请求 
     if (!origin) return callback(null, true);
-
-    // 2. 允许本地开发 (localhost)
-    if (origin.includes('localhost')) {
-      return callback(null, true);
-    }
-
-    // 3. 允许所有 Vercel 部署的网址 (不管是正式版还是预览版)
-    // 只要是以 .vercel.app 结尾的都放行
-    if (origin.endsWith('.vercel.app')) {
-      return callback(null, true);
-    }
-
-    // 否则拒绝
+    if (origin.includes('localhost')) return callback(null, true);
+    if (origin.endsWith('.vercel.app')) return callback(null, true);
+    
     console.log('🚫 CORS 拦截了请求来源:', origin);
     callback(new Error('Not allowed by CORS'));
   },
@@ -39,68 +30,136 @@ const corsOptions = {
   credentials: true
 };
 
-// 应用配置
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
-
-//app.use(cors());
 app.use(express.json());
 
-// 连接数据库// 连接数据库
+// ================= 数据库连接 =================
 const MONGO_URL = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/novel-site';
 
 mongoose.connect(MONGO_URL)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
-// ================= 定义 Schemas (已修改 bookId) =================
-
-
-
+// ================= Inline Schemas (书签暂留在此) =================
+// 书签比较简单，可以先留在这里，以后也可以移到 models/Bookmark.js
 const BookmarkSchema = new mongoose.Schema({
-  user_id: String,
-  // ✨ 修改：统一为 bookId
+  user_id: String, // 对应 User.id (String)
   bookId: { type: mongoose.Schema.Types.ObjectId, ref: 'Book', required: true },
   created_at: { type: Date, default: Date.now },
 }, { timestamps: true });
 
-const ProfileSchema = new mongoose.Schema({
-  id: String,
-  username: String,
-  email: String,
-  password: String, 
-  role: { type: String, enum: ['reader', 'writer'], default: 'reader' },
-  created_at: { type: Date, default: Date.now },
-}, { timestamps: true });
-
-// 防止模型重复编译报错
 const Bookmark = mongoose.models.Bookmark || mongoose.model('Bookmark', BookmarkSchema);
-const Profile = mongoose.models.Profile || mongoose.model('Profile', ProfileSchema);
 
-// Auth Middleware
+// ================= 中间件 =================
 const authMiddleware = (req, res, next) => {
   const userId = req.headers['x-user-id'] || req.query.userId;
   if (!userId) {
-    return res.status(401).json({ error: 'User ID is required. Please provide x-user-id header or userId query parameter' });
+    return res.status(401).json({ error: 'User ID is required.' });
   }
   req.user = { id: userId };
   next();
 };
 
+// ================= Auth API (用户系统) =================
 
-// ================= Books API 路由 =================
+// 注册
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { email, password, username, role } = req.body;
+    
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(400).json({ error: 'Email already exists' });
 
+    // 生成一个前端用的 String ID
+    const userId = new mongoose.Types.ObjectId().toString();
+    
+    const newUser = new User({
+      id: userId,
+      email,
+      password, 
+      username,
+      role: role || 'reader',
+    });
+    
+    await newUser.save();
+    
+    // 返回时去掉密码
+    const { password: _, ...userWithoutPassword } = newUser.toObject();
+    // 统一返回结构
+    res.json({ user: { id: userId, email }, profile: userWithoutPassword });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 登录
+app.post('/api/auth/signin', async (req, res) => {
+  try {
+    const { email, username, password } = req.body;
+    const identifier = email || username;
+
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'Please provide account and password' });
+    }
+    
+    const user = await User.findOne({ 
+      $or: [{ email: identifier }, { username: identifier }],
+      password: password 
+    });
+
+    if (!user) return res.status(401).json({ error: 'Invalid account or password' });
+    
+    const { password: _, ...userWithoutPassword } = user.toObject();
+    res.json({ user: { id: user.id, email: user.email }, profile: userWithoutPassword });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 获取当前用户信息 (Session)
+app.get('/api/auth/session', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'] || req.query.userId;
+    if (!userId) return res.json({ user: null, profile: null });
+    
+    const user = await User.findOne({ id: userId });
+    if (!user) return res.json({ user: null, profile: null });
+    
+    const { password: _, ...userWithoutPassword } = user.toObject();
+    res.json({ user: { id: user.id, email: user.email, username: user.username }, profile: userWithoutPassword });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 获取指定用户信息 (Profile)
+app.get('/api/users/:userId/profile', async (req, res) => {
+  try {
+    const user = await User.findOne({ id: req.params.userId });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const { password, ...userWithoutPassword } = user.toObject();
+    res.json(userWithoutPassword);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ================= Books API =================
+
+// 获取书籍列表
 app.get('/api/books', async (req, res) => {
     try {
       const { orderBy = 'views', order = 'desc', limit } = req.query;
+      
+      // ✅ 这里现在会去 'users' 表查找 author_id，因为 Book 模型 ref 指向 'User'
       let query = Book.find().populate('author_id', 'username email id');
       
       const sortOrder = order === 'asc' ? 1 : -1;
       query = query.sort({ [orderBy]: sortOrder });
       
-      if (limit) {
-        query = query.limit(parseInt(limit));
-      }
+      if (limit) query = query.limit(parseInt(limit));
       
       const books = await query.exec();
   
@@ -115,12 +174,12 @@ app.get('/api/books', async (req, res) => {
     }
 });
 
+// 获取单本书
 app.get('/api/books/:id', async (req, res) => {
     try {
-      const book = await Book.findById(req.params.id).populate('author_id', 'username email');
-      if (!book) {
-        return res.status(404).json({ error: 'Book not found' });
-      }
+      // ✅ 同样，populate 会正常工作
+      const book = await Book.findById(req.params.id).populate('author_id', 'username email id');
+      if (!book) return res.status(404).json({ error: 'Book not found' });
       
       const formattedBook = {
         ...book.toObject(),
@@ -133,31 +192,26 @@ app.get('/api/books/:id', async (req, res) => {
     }
 });
 
-// ✅ 修改后的创建书籍接口
+// 创建书籍 (核心修复点)
 app.post('/api/books', authMiddleware, async (req, res) => {
   try {
-    // 1. 解构时加上 author
     const { title, description, cover_image, category, status, views, author } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.id; // 这是 header 里的 string ID
     
-    if (!title) {
-      return res.status(400).json({ error: 'Title is required' });
-    }
+    if (!title) return res.status(400).json({ error: 'Title is required' });
     
-    // 查找用户 Profile (为了获取 _id 作为 author_id)
-    const profile = await Profile.findOne({ id: userId });
-    if (!profile) {
-      return res.status(404).json({ error: 'User profile not found.' });
+    // ✅ 关键：通过 String ID 找到 User 文档
+    const user = await User.findOne({ id: userId });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found. Cannot create book.' });
     }
     
     const bookData = {
       title: title.trim(),
-      // 2. 关键修改：把名字存进去！
-      // 如果前端没传 author，就用 profile 里的 username 兜底
-      author: profile.username || author || 'Unknown',
-      
-      // 3. 关联 ID (这是给 populate 用的)
-      author_id: profile._id, 
+      // 存名字（冗余备份）
+      author: user.username || author || 'Unknown', 
+      // ✅ 存 MongoDB 的 ObjectId，这样 .populate() 才能生效！
+      author_id: user._id, 
       
       description: description?.trim() || '',
       cover_image: cover_image || '',
@@ -169,7 +223,6 @@ app.post('/api/books', authMiddleware, async (req, res) => {
     const newBook = new Book(bookData);
     await newBook.save();
 
-    // 4. 返回时带上作者信息
     const populatedBook = await Book.findById(newBook._id).populate('author_id', 'username email id');
     const formattedBook = {
       ...populatedBook.toObject(),
@@ -186,25 +239,7 @@ app.post('/api/books', authMiddleware, async (req, res) => {
 app.patch('/api/books/:id', async (req, res) => {
   try {
     const book = await Book.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!book) {
-      return res.status(404).json({ error: 'Book not found' });
-    }
-    res.json(book);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/books/:id/views', async (req, res) => {
-  try {
-    const book = await Book.findByIdAndUpdate(
-      req.params.id,
-      { $inc: { views: 1 } },
-      { new: true }
-    );
-    if (!book) {
-      return res.status(404).json({ error: 'Book not found' });
-    }
+    if (!book) return res.status(404).json({ error: 'Book not found' });
     res.json(book);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -213,179 +248,74 @@ app.post('/api/books/:id/views', async (req, res) => {
 
 app.delete('/api/books/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const deletedBook = await Book.findByIdAndDelete(id);
-    
-    if (!deletedBook) {
-      return res.status(404).json({ error: 'Book not found' });
-    }
-    // 可选：级联删除章节
-    // await Chapter.deleteMany({ bookId: id }); 
-
+    const deletedBook = await Book.findByIdAndDelete(req.params.id);
+    if (!deletedBook) return res.status(404).json({ error: 'Book not found' });
+    // 可选：await Chapter.deleteMany({ bookId: req.params.id }); 
     res.json({ message: 'Book deleted successfully' });
   } catch (error) {
-    console.error('Error deleting book:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// ================= Chapters API 路由 (已修改 bookId) =================
+// ================= Chapters API =================
 
 app.get('/api/books/:bookId/chapters', async (req, res) => {
   try {
     const { bookId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(bookId)) return res.status(400).json({ error: 'Invalid book ID' });
     
-    if (!mongoose.Types.ObjectId.isValid(bookId)) {
-      return res.status(400).json({ error: 'Invalid book ID format' });
-    }
-    
-    // ✨ 修改：查询条件改为 bookId
     const chapters = await Chapter.find({ bookId: new mongoose.Types.ObjectId(bookId) })
       .sort({ chapter_number: 1 })
       .lean();
     
-    const formattedChapters = chapters.map(chapter => ({
-      id: chapter._id.toString(),
-      // ✨ 修改：返回字段改为 bookId
-      bookId: chapter.bookId.toString(),
-      title: chapter.title,
-      content: chapter.content,
-      chapter_number: chapter.chapter_number,
-      published_at: chapter.published_at ? chapter.published_at.toISOString() : undefined,
+    const formattedChapters = chapters.map(c => ({
+      ...c, id: c._id.toString(), bookId: c.bookId.toString()
     }));
-    
     res.json(formattedChapters);
   } catch (error) {
-    console.error('Error fetching chapters:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.get('/api/chapters/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ error: 'Invalid chapter ID format' });
-    }
-    
-    const chapter = await Chapter.findById(id).lean();
-    if (!chapter) {
-      return res.status(404).json({ error: 'Chapter not found' });
-    }
-    
-    const formattedChapter = {
-      id: chapter._id.toString(),
-      // ✨ 修改：返回字段改为 bookId
-      bookId: chapter.bookId.toString(),
-      title: chapter.title,
-      content: chapter.content,
-      chapter_number: chapter.chapter_number,
-      published_at: chapter.published_at ? chapter.published_at.toISOString() : undefined,
-    };
-    
-    res.json(formattedChapter);
+    const chapter = await Chapter.findById(req.params.id).lean();
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+    res.json({ ...chapter, id: chapter._id.toString(), bookId: chapter.bookId.toString() });
   } catch (error) {
-    console.error('Error fetching chapter:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-app.delete('/api/chapters/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const deletedChapter = await Chapter.findByIdAndDelete(id);
-    
-    if (!deletedChapter) {
-      return res.status(404).json({ error: 'Chapter not found' });
-    }
-    
-    res.json({ message: 'Chapter deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting chapter:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// POST /api/chapters - 创建新章节
 app.post('/api/chapters', async (req, res) => {
     try {
-      // ✨ 修改：直接解构 bookId
       const { bookId, title, content, chapterNumber, chapter_number } = req.body;
-      
-      // 兼容一下 chapterNumber (前端习惯) 和 chapter_number (后端习惯)
       const finalChapterNum = chapterNumber || chapter_number;
 
-      if (!bookId) return res.status(400).json({ error: 'bookId is required' });
-      if (!title) return res.status(400).json({ error: 'title is required' });
-      if (!content) return res.status(400).json({ error: 'content is required' });
-      if (finalChapterNum === undefined) return res.status(400).json({ error: 'chapterNumber is required' });
-      
-      if (!mongoose.Types.ObjectId.isValid(bookId)) {
-        return res.status(400).json({ error: 'Invalid bookId format' });
+      if (!bookId || !title || !content || finalChapterNum === undefined) {
+        return res.status(400).json({ error: 'Missing required fields' });
       }
       
-      const book = await Book.findById(bookId);
-      if (!book) {
-        return res.status(404).json({ error: 'Book not found' });
-      }
-      
-      const chapterData = {
-        // ✨ 修改：存入数据库的字段是 bookId
+      const newChapter = new Chapter({
         bookId: new mongoose.Types.ObjectId(bookId),
         title: title.trim(),
         content: content.trim(),
         chapter_number: parseInt(finalChapterNum),
-      };
+      });
 
-      const newChapter = new Chapter(chapterData);
       await newChapter.save();
-      
-      const formattedChapter = {
-        id: newChapter._id.toString(),
-        // ✨ 修改：返回字段是 bookId
-        bookId: newChapter.bookId.toString(),
-        title: newChapter.title,
-        content: newChapter.content,
-        chapter_number: newChapter.chapter_number,
-        published_at: newChapter.published_at ? newChapter.published_at.toISOString() : undefined,
-      };
-      
-      res.status(201).json(formattedChapter);
+      res.status(201).json({ ...newChapter.toObject(), id: newChapter._id.toString() });
     } catch (error) {
-      console.error('Error creating chapter:', error);
       res.status(500).json({ error: error.message });
     }
 });
 
-// ================= Bookmarks API 路由 (已修改 bookId) =================
+// ================= Bookmarks API =================
 
 app.get('/api/users/:userId/bookmarks', async (req, res) => {
   try {
-    // ✨ 修改：populate 关联字段改为 bookId
-    const bookmarks = await Bookmark.find({ user_id: req.params.userId })
-      .populate('bookId');
+    const bookmarks = await Bookmark.find({ user_id: req.params.userId }).populate('bookId');
     res.json(bookmarks);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/users/:userId/bookmarks/:bookId', async (req, res) => {
-  try {
-    const bookId = mongoose.Types.ObjectId.isValid(req.params.bookId) 
-      ? new mongoose.Types.ObjectId(req.params.bookId)
-      : req.params.bookId;
-    
-    // ✨ 修改：查询字段改为 bookId
-    const bookmark = await Bookmark.findOne({
-      user_id: req.params.userId,
-      bookId: bookId,
-    });
-    if (!bookmark) {
-      return res.status(404).json({ error: 'Bookmark not found' });
-    }
-    res.json(bookmark);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -393,22 +323,14 @@ app.get('/api/users/:userId/bookmarks/:bookId', async (req, res) => {
 
 app.post('/api/users/:userId/bookmarks', async (req, res) => {
   try {
-    // ✨ 修改：直接使用 bookId，不再做兼容判断
     const { bookId } = req.body;
+    if (!bookId) return res.status(400).json({ error: 'bookId is required' });
 
-    if (!bookId) {
-        return res.status(400).json({ error: 'bookId is required' });
-    }
-
-    const bookmarkData = {
+    const bookmark = new Bookmark({
       user_id: req.params.userId,
-      // ✨ 修改：存入 bookId 字段
-      bookId: mongoose.Types.ObjectId.isValid(bookId) 
-        ? new mongoose.Types.ObjectId(bookId)
-        : bookId,
-    };
+      bookId: mongoose.Types.ObjectId.isValid(bookId) ? new mongoose.Types.ObjectId(bookId) : bookId,
+    });
     
-    const bookmark = new Bookmark(bookmarkData);
     await bookmark.save();
     res.json(bookmark);
   } catch (error) {
@@ -422,108 +344,14 @@ app.delete('/api/users/:userId/bookmarks/:bookId', async (req, res) => {
       ? new mongoose.Types.ObjectId(req.params.bookId)
       : req.params.bookId;
       
-    // ✨ 修改：查询字段改为 bookId
-    await Bookmark.findOneAndDelete({
-      user_id: req.params.userId,
-      bookId: bookId,
-    });
+    await Bookmark.findOneAndDelete({ user_id: req.params.userId, bookId: bookId });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// ================= Users/Profiles API 路由 =================
-
-app.get('/api/users/:userId/profile', async (req, res) => {
-  try {
-    const profile = await Profile.findOne({ id: req.params.userId });
-    if (!profile) {
-      return res.status(404).json({ error: 'Profile not found' });
-    }
-    const { password, ...profileWithoutPassword } = profile.toObject();
-    res.json(profileWithoutPassword);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/auth/signup', async (req, res) => {
-  try {
-    const { email, password, username, role } = req.body;
-    
-    const existingProfile = await Profile.findOne({ email });
-    if (existingProfile) {
-      return res.status(400).json({ error: 'Email already exists' });
-    }
-
-    const userId = new mongoose.Types.ObjectId().toString();
-    
-    const profile = new Profile({
-      id: userId,
-      email,
-      password, 
-      username,
-      role: role || 'reader',
-    });
-    
-    await profile.save();
-    
-    const { password: _, ...profileWithoutPassword } = profile.toObject();
-    res.json({ user: { id: userId, email }, profile: profileWithoutPassword });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/auth/signin', async (req, res) => {
-  try {
-    const { email, username, password } = req.body;
-    const identifier = email || username;
-
-    if (!identifier || !password) {
-      return res.status(400).json({ error: 'Please provide account and password' });
-    }
-    
-    const profile = await Profile.findOne({ 
-      $or: [
-        { email: identifier },
-        { username: identifier }
-      ],
-      password: password 
-    });
-
-    if (!profile) {
-      return res.status(401).json({ error: 'Invalid account or password' });
-    }
-    
-    const { password: _, ...profileWithoutPassword } = profile.toObject();
-    res.json({ user: { id: profile.id, email: profile.email }, profile: profileWithoutPassword });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/auth/session', async (req, res) => {
-  try {
-    const userId = req.headers['x-user-id'] || req.query.userId;
-    if (!userId) {
-      return res.json({ user: null, profile: null });
-    }
-    
-    const profile = await Profile.findOne({ id: userId });
-    if (!profile) {
-      return res.json({ user: null, profile: null });
-    }
-    
-    const { password: _, ...profileWithoutPassword } = profile.toObject();
-    res.json({ user: { id: profile.id, email: profile.email,username: profile.username }, profile: profileWithoutPassword });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ✅ 修改后的代码 (利用环境变量)
+// ================= 启动服务 =================
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
