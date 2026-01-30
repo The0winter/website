@@ -13,23 +13,34 @@ dotenv.config(); // 读取 .env
 
 const app = express();
 
-// 👇 1. 定义统一的配置对象
+// 👇 定义更灵活的配置
 const corsOptions = {
-  // ⚠️ 关键修改：不能用 '*'，必须写具体的域名！
-  origin: [
-    'https://website-6el3.vercel.app', // 你的 Vercel 前端地址 (去掉末尾的斜杠)
-    'http://localhost:3000',           // 本地开发地址 (以防万一)
-    'http://localhost:5173'            // 如果你本地是用 Vite 启动的，也加上
-  ],
+  origin: function (origin, callback) {
+    // 1. 允许没有 origin 的请求 (比如 Postman 测试或后端互相调用)
+    if (!origin) return callback(null, true);
+
+    // 2. 允许本地开发 (localhost)
+    if (origin.includes('localhost')) {
+      return callback(null, true);
+    }
+
+    // 3. 允许所有 Vercel 部署的网址 (不管是正式版还是预览版)
+    // 只要是以 .vercel.app 结尾的都放行
+    if (origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+
+    // 否则拒绝
+    console.log('🚫 CORS 拦截了请求来源:', origin);
+    callback(new Error('Not allowed by CORS'));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
-  credentials: true // 允许携带凭证
+  credentials: true
 };
 
-// 👇 2. 应用配置到所有请求
+// 应用配置
 app.use(cors(corsOptions));
-
-// 👇 3. 同时也应用到预检请求 (OPTIONS)
 app.options('*', cors(corsOptions));
 
 //app.use(cors());
