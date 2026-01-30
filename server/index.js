@@ -88,7 +88,7 @@ app.post('/api/auth/signup', async (req, res) => {
     await newUser.save();
     
     const { password: _, ...userWithoutPassword } = newUser.toObject();
-    res.json({ user: { id: newId.toString(), email }, profile: userWithoutPassword });
+    res.json({ user: { id: newId.toString(), email, username: newUser.username }, profile: userWithoutPassword });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
