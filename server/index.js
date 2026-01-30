@@ -13,25 +13,7 @@ dotenv.config(); // 读取 .env
 
 const app = express();
 
-// 👇👇👇 删掉刚才的手动代码，换成这一段 👇👇👇
-
-// 1. 引入 cors 包 (确保顶部已经 import cors form 'cors')
-// 如果没有 import，请加上： import cors from 'cors';
-
-// 2. 配置万能 CORS
-app.use(cors({
-  origin: true, // ✨ 自动允许任何来源（反射 Origin 头），比 '*' 更兼容
-  credentials: true, // 允许携带 Cookie
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id']
-}));
-
-// 3. 🛡️ 强制处理所有 OPTIONS 预检请求 (这一步很关键！)
-app.options('*', cors()); 
-
-// 👆👆👆 替换结束 👆👆👆
-
-//app.use(cors());
+app.use(cors());
 app.use(express.json());
 
 // 连接数据库// 连接数据库
@@ -511,7 +493,8 @@ app.get('/api/auth/session', async (req, res) => {
   }
 });
 
-const PORT = 5000;
+// ✅ 修改后的代码 (利用环境变量)
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
