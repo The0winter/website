@@ -7,6 +7,7 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   signUp: (email: string, password: string, username: string, role: 'reader' | 'writer') => Promise<{ error: Error | null }>;
+  register: (username: string, email: string, password: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   logout: () => Promise<void>; // ✅ 已修改：重命名 signOut -> logout
 }
@@ -68,6 +69,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const register = async (username: string, email: string, password: string) => {
+    // 这里我们自动补上 'reader' 作为默认角色，因为你的注册页面没有选角色的地方
+    // 注意这里调用 signUp 时，参数顺序调整为了正确的顺序 (email, password, username, role)
+    return signUp(email, password, username, 'reader');
+  };
+
   const signIn = async (email: string, password: string) => {
     try {
       const { user: sessionUser, profile: sessionProfile } = await authApi.signIn(email, password);
@@ -89,7 +96,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     // ✅ 已修改：Value 中传入 logout
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, logout, register}}>
       {children}
     </AuthContext.Provider>
   );
