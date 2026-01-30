@@ -13,7 +13,18 @@ dotenv.config(); // 读取 .env
 
 const app = express();
 
-app.use(cors());
+// 👇 必须用这个增强配置，替换掉原来的 app.use(cors());
+app.use(cors({
+    origin: '*', 
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'], // 👈 这一行是解决你当前报错的关键
+    credentials: true
+}));
+
+// 额外加这一行处理预检请求
+app.options('*', cors());
+
+//app.use(cors());
 app.use(express.json());
 
 // 连接数据库// 连接数据库
