@@ -445,6 +445,115 @@ app.delete('/api/users/:userId/bookmarks/:bookId', async (req, res) => {
   }
 });
 
+// ================= ✂️ 从这里开始粘贴新代码 ✂️ =================
+
+// 1. 定义辅助函数：帮我们在 Users 集合里找作者，找不到就创建
+async function ensureAuthorExists(authorName) {
+    // 过滤无效名字
+    if (!authorName || authorName === '未知') return null;
+
+    try {
+        // 先去数据库查
+        let user = await User.findOne({ username: authorName });
+        if (user) return user;
+
+        // 没查到，说明是新作者，创建一个
+        console.log(`🆕 上传检测到新作者，正在创建账号: ${authorName}`);
+        
+        const timestamp = Date.now();
+        const randomNum = Math.floor(Math.random() * 1000);
+        
+        // 这里的逻辑和 scraperService.js 里一模一样，确保数据结构一致
+        user = await User.create({
+            username: authorName,
+            email: `author_${timestamp}_${randomNum}@auto.generated`,
+            password: '123456', 
+            role: 'writer',
+            created_at: new Date()
+        });
+        
+        return user;
+    } catch (e) {
+        console.error(`⚠️ 作者创建失败: ${e.message}`);
+        return null;
+    }
+}
+
+// 2. 定义上传接口：这是 upload_to_railway.js 要敲的门
+app.post('/api/admin/upload-book', async (req, res) => {
+    try {
+        // 简单的密码验证
+        const clientSecret = req.headers['x-admin-secret'];
+        const mySecret = process.env.ADMIN_SECRET || 'wo_de_pa_chong_mi_ma_123';
+        
+        if (clientSecret !== mySecret) {
+            return res.status(403).json({ error: '🚫 密码错误' });
+        }
+
+        const bookData = req.body; // 拿到上传的大包裹
+        console.log(`📥 开始接收: 《${bookData.title}》`);
+
+        // --- 步骤 A: 处理作者 (放入 users 集合) ---
+        let authorId = null;
+        if (bookData.author) {
+            const authorUser = await ensureAuthorExists(bookData.author);
+            if (authorUser) {
+                authorId = authorUser._id; // 拿到作者的身份证号
+            }
+        }
+
+        // --- 步骤 B: 处理书籍 (放入 books 集合) ---
+        let book = await Book.findOne({ title: bookData.title });
+        if (!book) {
+            book = await Book.create({
+                title: bookData.title,
+                bookId: 'auto_' + Date.now(),
+                author: bookData.author,
+                author_id: authorId, // 🔥 关键：把书和刚才找到的作者关联起来
+                description: '离线爬虫上传',
+                status: '连载',
+                sourceUrl: bookData.sourceUrl,
+                chapterCount: bookData.chapters.length
+            });
+            console.log(`📚 新书入库: ${book.title}`);
+        } else {
+            // 如果书已经在库里，就更新一下作者关联
+            if (!book.author_id && authorId) {
+                book.author_id = authorId;
+                await book.save();
+            }
+        }
+
+        // --- 步骤 C: 处理章节 (放入 chapters 集合) ---
+        const chaptersToInsert = [];
+        for (const chap of bookData.chapters) {
+            // 检查章节是否已存在 (避免重复)
+            const exists = await Chapter.exists({ bookId: book._id, title: chap.title });
+            if (!exists) {
+                chaptersToInsert.push({
+                    bookId: book._id, // 这一章属于刚才那本书
+                    title: chap.title,
+                    content: chap.content,
+                    chapter_number: chap.chapter_number
+                });
+            }
+        }
+
+        // 批量一次性插入，速度极快
+        if (chaptersToInsert.length > 0) {
+            await Chapter.insertMany(chaptersToInsert);
+        }
+
+        res.json({ success: true, message: `成功入库！新增 ${chaptersToInsert.length} 章` });
+
+    } catch (error) {
+        console.error('上传出错:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ================= ✂️ 粘贴结束 ✂️ =================
+
 // ================= 启动服务 ================
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
