@@ -47,7 +47,7 @@ export default function Navbar() {
             <Link href="/" className="flex items-center">
               <BookOpen className="h-8 w-8 text-blue-600" />
               <span className={`ml-2 text-xl font-bold ${textPrimary}`}>
-                小说站
+                域外小说
               </span>
             </Link>
           </div>
