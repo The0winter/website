@@ -79,6 +79,51 @@ const authMiddleware = (req, res, next) => {
 };
 
 // ================= Admin API (上传接口) =================
+// 🆕 新增：差异化同步检查接口 (接收清单，返回缺少的章节)
+app.post('/api/admin/check-sync', async (req, res) => {
+    try {
+        const clientSecret = req.headers['x-admin-secret'];
+        const mySecret = process.env.ADMIN_SECRET || 'wo_de_pa_chong_mi_ma_123';
+        if (clientSecret !== mySecret) return res.status(403).json({ error: '🚫 密码错误' });
+
+        const { title, simpleChapters } = req.body; // simpleChapters 只有 title 和 chapter_number
+        console.log(`🔍 正在核对书籍同步状态: 《${title}》`);
+
+        // 1. 找书
+        const book = await Book.findOne({ title });
+        
+        // 2. 如果书都没创建，说明全是新的，直接告诉前端“全部上传”
+        if (!book) {
+            return res.json({ 
+                needsFullUpload: true, 
+                missingTitles: [] 
+            });
+        }
+
+        // 3. 如果书存在，查出数据库里这本书所有章节的标题 (只查 title 字段，速度极快)
+        // 使用 .select('title') 减少内存消耗
+        const existingChapters = await Chapter.find({ bookId: book._id }).select('title').lean();
+        
+        // 转成 Set 集合，方便 O(1) 复杂度快速查找
+        const existingTitlesSet = new Set(existingChapters.map(c => c.title));
+
+        // 4. 对比清单，找出缺少的
+        const missingTitles = simpleChapters
+            .filter(c => !existingTitlesSet.has(c.title))
+            .map(c => c.title);
+
+        console.log(`📋 核对结果: 本地 ${simpleChapters.length} 章 vs 云端 ${existingTitlesSet.size} 章 -> 需上传 ${missingTitles.length} 章`);
+
+        res.json({ 
+            needsFullUpload: false, 
+            missingTitles: missingTitles 
+        });
+
+    } catch (error) {
+        console.error('核对出错:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
 // 唯一且正确的上传接口
 app.post('/api/admin/upload-book', async (req, res) => {
@@ -107,7 +152,7 @@ app.post('/api/admin/upload-book', async (req, res) => {
                 author: bookData.author,
                 author_id: authorId,
                 category: bookData.category || '搬运', // 读取分类
-                description: '离线爬虫上传',
+                description: '无',
                 status: '连载',
                 sourceUrl: bookData.sourceUrl,
                 chapterCount: bookData.chapters.length

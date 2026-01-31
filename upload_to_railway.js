@@ -1,15 +1,12 @@
 // upload_to_railway.js
-// 进阶版：支持分批上传和进度显示的搬运脚本
-
+// 旗舰版：支持“差异化极速同步”的上传脚本
 import fs from 'fs';
 import path from 'path';
 
-// ⚠️ 你的 Railway 域名 (保持不变)
+// ⚠️ 你的 Railway 域名
 const RAILWAY_URL = 'https://website-production-6edf.up.railway.app'; 
 const SECRET_KEY = 'wo_de_pa_chong_mi_ma_123';
-
-// ⭐ 设置每次上传多少章 (建议 50-100)
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 50; // 每批传50章
 
 async function uploadFiles() {
     const downloadDir = path.join(process.cwd(), 'downloads');
@@ -20,62 +17,91 @@ async function uploadFiles() {
     }
 
     const files = fs.readdirSync(downloadDir).filter(f => f.endsWith('.json'));
-    console.log(`📦 扫描到 ${files.length} 本书，准备开始分批搬运...`);
+    console.log(`📦 扫描到 ${files.length} 本书，准备开始极速同步...`);
     console.log(`🔗 目标地址: ${RAILWAY_URL}\n`);
 
     for (const file of files) {
-        console.log(`📖 正在处理文件: ${file}`);
-        
         try {
             const filePath = path.join(downloadDir, file);
-            // 读取原始大文件
+            // 读取本地大文件
             const originalData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
             const allChapters = originalData.chapters;
-            const totalChapters = allChapters.length;
+            
+            console.log(`📘 正在处理: 《${originalData.title}》 (本地共 ${allChapters.length} 章)`);
 
-            console.log(`   - 书名: 《${originalData.title}》`);
-            console.log(`   - 总章节数: ${totalChapters} 章`);
-            console.log(`   - 模式: 每批上传 ${BATCH_SIZE} 章`);
+            // --- 第一步：制作“轻量级清单” (不含正文，只有标题) ---
+            const simpleList = allChapters.map(c => ({
+                title: c.title,
+                chapter_number: c.chapter_number
+            }));
 
-            // --- 开始分批循环 ---
-            for (let i = 0; i < totalChapters; i += BATCH_SIZE) {
-                // 切割出一小块章节 (例如 0-50, 50-100)
-                const chunk = allChapters.slice(i, i + BATCH_SIZE);
+            // --- 第二步：发送清单给后端核对 ---
+            console.log(`   📡 正在与云端核对章节清单...`);
+            const checkResponse = await fetch(`${RAILWAY_URL}/api/admin/check-sync`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-admin-secret': SECRET_KEY },
+                body: JSON.stringify({ 
+                    title: originalData.title, 
+                    simpleChapters: simpleList 
+                })
+            });
+
+            if (!checkResponse.ok) throw new Error(`核对接口报错: ${checkResponse.statusText}`);
+            
+            const checkResult = await checkResponse.json();
+            
+            let chaptersToUpload = [];
+
+            if (checkResult.needsFullUpload) {
+                console.log(`   🆕 云端无此书，准备【全量上传】...`);
+                chaptersToUpload = allChapters;
+            } else {
+                const missingCount = checkResult.missingTitles.length;
+                if (missingCount === 0) {
+                    console.log(`   ✅ 云端数据已完整，无需上传！\n`);
+                    continue; // 直接跳过这本书，去处理下一本
+                }
                 
-                // 构造这一批的请求数据 (保留书籍元数据，但章节只放这一小块)
+                console.log(`   ⚡ 差异对比完成: 仅需上传 ${missingCount} 章`);
+                
+                // 过滤出真正需要上传的章节 (带正文)
+                // 使用 Set 来加速查找
+                const missingSet = new Set(checkResult.missingTitles);
+                chaptersToUpload = allChapters.filter(c => missingSet.has(c.title));
+            }
+
+            // --- 第三步：只上传需要的部分 ---
+            const totalToUpload = chaptersToUpload.length;
+            
+            // 构造上传用的 payload (基础信息 + 过滤后的章节)
+            const payloadBase = { ...originalData }; 
+            
+            for (let i = 0; i < totalToUpload; i += BATCH_SIZE) {
+                const chunk = chaptersToUpload.slice(i, i + BATCH_SIZE);
+                
+                // 组装最终发送的数据
                 const payload = {
-                    ...originalData,
+                    ...payloadBase,
                     chapters: chunk
                 };
 
-                // 发送请求
-                // console.log(`   ⏳ 正在上传第 ${i + 1} - ${i + chunk.length} 章...`);
-                
                 const response = await fetch(`${RAILWAY_URL}/api/admin/upload-book`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-admin-secret': SECRET_KEY
-                    },
+                    headers: { 'Content-Type': 'application/json', 'x-admin-secret': SECRET_KEY },
                     body: JSON.stringify(payload)
                 });
 
-                if (!response.ok) {
-                    throw new Error(`服务器返回错误: ${response.status} ${response.statusText}`);
-                }
+                if (!response.ok) throw new Error(`上传失败: ${response.status} ${response.statusText}`);
 
-                // 计算进度百分比
-                const progress = Math.min(100, Math.round(((i + chunk.length) / totalChapters) * 100));
-                
-                // ✨ 打印漂亮的进度条
-                // \r 可以让光标回到行首，实现“原地刷新”效果，而不是刷屏
-                process.stdout.write(`   🚀 进度: [${progress}%] 已上传 ${i + chunk.length}/${totalChapters} 章 \r`);
+                // 进度条
+                const progress = Math.min(100, Math.round(((i + chunk.length) / totalToUpload) * 100));
+                process.stdout.write(`   🚀 同步进度: [${progress}%] 已传输 ${i + chunk.length}/${totalToUpload} 章 \r`);
             }
 
-            console.log(`\n   ✅ 《${originalData.title}》 全部上传完毕！\n`);
+            console.log(`\n   🎉 《${originalData.title}》 同步完毕！\n`);
 
         } catch (error) {
-            console.error(`\n   💥 上传失败: ${error.message}`);
+            console.error(`\n   💥 处理失败: ${error.message}\n`);
         }
     }
 }
