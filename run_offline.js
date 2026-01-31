@@ -105,16 +105,34 @@ console.log('📂 启动【新书爬取模式 - 隐身增强版】...');
         if (!targetUrl) throw new Error("未找到该书籍");
         if (page.url() !== targetUrl) await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
 
-        // 4. 抓取基础信息
+// 4. 抓取基础信息 (强力净化版)
         const basicInfo = await page.evaluate(() => {
             let title = document.querySelector('h1')?.innerText.trim() || '未知';
             title = title.replace(/\?.*$/, '').replace(/最新章节.*/, '').trim();
+            
             let author = '未知';
             const els = document.querySelectorAll('p,div,span,td');
             for (let el of els) {
-                if (el.innerText.includes('作者：')) {
-                    author = el.innerText.split(/作者[:：]/)[1]?.trim().split(' ')[0] || '未知';
-                    break;
+                const text = el.innerText;
+                if (text.includes('作者：') && text.length < 100) { // 放宽一点长度限制，防止漏抓
+                    // 1. 先切掉“作者：”前面的东西
+                    let temp = text.split(/作者[:：]/)[1];
+                    
+                    // 2. 🔥 关键修复：只要看到“分类”、“字数”或“连载”，直接切断！
+                    if (temp) {
+                        temp = temp.split(/分类[:：]/)[0]; // 切掉分类
+                        temp = temp.split(/\d+万字/)[0];   // 切掉字数
+                        temp = temp.split(/连载/)[0];      // 切掉状态
+                        temp = temp.split(/完结/)[0];
+                        
+                        // 3. 最后去空格，取第一段
+                        author = temp.trim().split(/\s+/)[0]; 
+                        
+                        // 4. 再次兜底清洗 (防止残留特殊符号)
+                        author = author.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, ''); 
+                        
+                        if (author) break; // 找到干净的名字就收工
+                    }
                 }
             }
             return { title, author };

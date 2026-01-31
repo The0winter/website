@@ -338,21 +338,33 @@ app.patch('/api/books/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/users/:userId/bookmarks/:bookId', async (req, res) => {
+// server/index.js (修改 DELETE 接口)
+
+app.delete('/api/books/:id', async (req, res) => {
   try {
-    const userId = req.params.userId;
-    const bookId = mongoose.Types.ObjectId.isValid(req.params.bookId) 
-      ? new mongoose.Types.ObjectId(req.params.bookId)
-      : req.params.bookId;
-      
-    // 🔥 关键修复步骤 2：使用 deleteMany 而不是 findOneAndDelete
-    // 这样如果之前因为 bug 产生了多条重复记录，这里会一次性全删掉，清理干净
-    const result = await Bookmark.deleteMany({ user_id: userId, bookId: bookId });
+    const bookId = req.params.id;
+    console.log(`🗑️ [删除调试] 收到请求，目标ID: ${bookId}`);
+
+    // 1. 先尝试只查询，看看能不能找到
+    const checkBook = await Book.findById(bookId);
+    if (!checkBook) {
+        console.log(`⚠️ [删除调试] 失败：数据库里根本找不到这本书！`);
+        console.log(`   -> 请检查 Railway 环境变量 MONGO_URI 是否连对了数据库`);
+        return res.status(404).json({ error: 'Book not found in DB' });
+    }
+
+    console.log(`✅ [删除调试] 找到了书: 《${checkBook.title}》，正在执行删除...`);
+
+    // 2. 执行删除
+    await Book.findByIdAndDelete(bookId);
     
-    console.log(`🗑️ 删除了 ${result.deletedCount} 条收藏记录`);
-    res.json({ success: true });
+    // 3. 顺手删掉章节，防止残留
+    const deleteChapters = await Chapter.deleteMany({ bookId: bookId });
+    console.log(`🧹 [删除调试] 关联章节已清理: ${deleteChapters.deletedCount} 章`);
+
+    res.json({ message: 'Book deleted successfully' });
   } catch (error) {
-    console.error('Delete bookmark error:', error);
+    console.error(`💥 [删除调试] 报错:`, error);
     res.status(500).json({ error: error.message });
   }
 });
