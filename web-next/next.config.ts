@@ -14,6 +14,7 @@ const nextConfig = {
     // 忽略 TS 报错
     ignoreBuildErrors: true,
   },
+  transpilePackages: ['react-window'],
   eslint: {
     // 忽略 ESLint 报错
     ignoreDuringBuilds: true,

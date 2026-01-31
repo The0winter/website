@@ -293,11 +293,40 @@ app.patch('/api/books/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/books/:id', async (req, res) => {
+app.delete('/api/users/:userId/bookmarks/:bookId', async (req, res) => {
   try {
-    const deletedBook = await Book.findByIdAndDelete(req.params.id);
-    if (!deletedBook) return res.status(404).json({ error: 'Book not found' });
-    res.json({ message: 'Book deleted successfully' });
+    const userId = req.params.userId;
+    const bookId = mongoose.Types.ObjectId.isValid(req.params.bookId) 
+      ? new mongoose.Types.ObjectId(req.params.bookId)
+      : req.params.bookId;
+      
+    // 🔥 关键修复步骤 2：使用 deleteMany 而不是 findOneAndDelete
+    // 这样如果之前因为 bug 产生了多条重复记录，这里会一次性全删掉，清理干净
+    const result = await Bookmark.deleteMany({ user_id: userId, bookId: bookId });
+    
+    console.log(`🗑️ 删除了 ${result.deletedCount} 条收藏记录`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete bookmark error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 新增：专门检查某本书是否被某用户收藏
+app.get('/api/users/:userId/bookmarks/:bookId/check', async (req, res) => {
+  try {
+    const bookId = mongoose.Types.ObjectId.isValid(req.params.bookId) 
+      ? new mongoose.Types.ObjectId(req.params.bookId)
+      : req.params.bookId;
+
+    // countDocuments 比 find 更快，只返回数量
+    const count = await Bookmark.countDocuments({ 
+      user_id: req.params.userId, 
+      bookId: bookId 
+    });
+
+    // 返回 boolean
+    res.json({ isBookmarked: count > 0 });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -380,27 +409,34 @@ app.post('/api/users/:userId/bookmarks', async (req, res) => {
     const { bookId } = req.body;
     if (!bookId) return res.status(400).json({ error: 'bookId is required' });
 
+    const userId = req.params.userId;
+    // 统一转成 ObjectId 格式，防止字符串匹配问题
+    const targetBookId = mongoose.Types.ObjectId.isValid(bookId) 
+      ? new mongoose.Types.ObjectId(bookId) 
+      : bookId;
+
+    // 🔥 关键修复步骤 1：先查是否存在！
+    const existing = await Bookmark.findOne({ 
+      user_id: userId, 
+      bookId: targetBookId 
+    });
+
+    // 如果已经存在，直接返回这一条，不要创建新的！
+    if (existing) {
+      console.log('⚠️ 收藏已存在，跳过创建');
+      return res.json(existing);
+    }
+
+    // 不存在才创建
     const bookmark = new Bookmark({
-      user_id: req.params.userId,
-      bookId: mongoose.Types.ObjectId.isValid(bookId) ? new mongoose.Types.ObjectId(bookId) : bookId,
+      user_id: userId,
+      bookId: targetBookId,
     });
     
     await bookmark.save();
     res.json(bookmark);
   } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/users/:userId/bookmarks/:bookId', async (req, res) => {
-  try {
-    const bookId = mongoose.Types.ObjectId.isValid(req.params.bookId) 
-      ? new mongoose.Types.ObjectId(req.params.bookId)
-      : req.params.bookId;
-      
-    await Bookmark.findOneAndDelete({ user_id: req.params.userId, bookId: bookId });
-    res.json({ success: true });
-  } catch (error) {
+    console.error('Add bookmark error:', error);
     res.status(500).json({ error: error.message });
   }
 });
