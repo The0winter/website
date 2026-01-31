@@ -1,5 +1,5 @@
 // run_offline.js
-// 离线爬虫修正版：采用“模拟打字”搜索，彻底解决空白页问题
+// 离线爬虫 V3.0：交互式分类版
 import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
@@ -8,14 +8,15 @@ import readline from 'readline';
 const loadPuppeteer = async () => (await import('puppeteer')).default;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
+// 🔥 新增：Promise 版的提问工具，方便用 await 等待用户输入
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const askQuestion = (query) => new Promise(resolve => rl.question(query, resolve));
 
-console.log('📂 启动【离线爬取模式 - 模拟打字版】...');
+console.log('📂 启动【离线爬取模式 - 交互分类版】...');
 
-rl.question('请输入你想爬取的书籍名称: ', async (bookName) => {
+// 主流程
+(async () => {
+    const bookName = await askQuestion('请输入你想爬取的书籍名称: ');
     if (!bookName.trim()) {
         console.log('❌ 书名不能为空');
         process.exit(0);
@@ -27,94 +28,93 @@ rl.question('请输入你想爬取的书籍名称: ', async (bookName) => {
         browser = await puppeteer.launch({
             headless: false,
             defaultViewport: null,
-            userDataDir: './browser_data', // 保持记忆
+            userDataDir: './browser_data',
             args: ['--start-maximized', '--no-sandbox']
         });
 
         const page = await browser.newPage();
-        // 伪装
         await page.evaluateOnNewDocument(() => { Object.defineProperty(navigator, 'webdriver', { get: () => false }); });
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-        // --- 1. 进入首页并打字搜索 (核心修改) ---
+        // --- 1. 搜索书籍 ---
         console.log(`🔍 正在前往 69书吧首页...`);
         await page.goto('https://www.69shuba.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
 
         console.log('⌨️ 正在输入书名...');
         const searchInputSelector = 'input[name="searchkey"]';
-        
-        // 等待搜索框出现
         await page.waitForSelector(searchInputSelector, { timeout: 15000 });
-        
-        // 清空并输入 (模拟打字延迟)
         await page.evaluate((sel) => { document.querySelector(sel).value = ''; }, searchInputSelector);
-        await page.type(searchInputSelector, bookName, { delay: 200 }); // 每个字停顿200毫秒
-        await sleep(500);
-
-        console.log('👆 点击搜索...');
+        await page.type(searchInputSelector, bookName, { delay: 100 });
         await page.keyboard.press('Enter');
 
-        // 等待页面跳转
-        try {
-            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 });
-        } catch (e) {
-            console.log("⚠️ 页面跳转超时或已在当前页刷新，继续解析...");
-        }
+        // 等待跳转
+        try { await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }); } catch (e) {}
 
-        // --- 2. 寻找书籍链接 ---
+        // --- 2. 寻找目标链接 ---
         let targetUrl = null;
         let checks = 0;
         console.log('⏳ 正在寻找书籍链接...');
-
         while (!targetUrl && checks < 60) {
             checks++;
             targetUrl = await page.evaluate((name) => {
-                // 情况A: 直接跳进书页
                 if (window.location.href.includes('/book/') && window.location.href.endsWith('.htm')) return window.location.href;
-                
-                // 情况B: 在搜索列表里
                 const links = Array.from(document.querySelectorAll('a'));
                 for (let link of links) {
-                    // 只要链接文字包含书名，且是书籍链接
                     if (link.innerText.includes(name) && link.href.includes('/book/')) return link.href;
                 }
                 return null;
             }, bookName);
-
             if (targetUrl) break;
-            
-            // 每5次提示一次
-            if (checks % 5 === 0) console.log(`⚠️ 还没找到书 (第 ${checks}/60 次)，如果出现验证码请手动点击...`);
-            await sleep(3000);
+            if (checks % 5 === 0) console.log(`⚠️ 还没找到书 (第 ${checks}/60 次)，如果有验证码请手动点击...`);
+            await sleep(2000);
         }
 
-        if (!targetUrl) throw new Error("搜索超时，未找到书籍。");
+        if (!targetUrl) throw new Error("搜索超时");
         console.log(`✅ 锁定书籍主页: ${targetUrl}`);
 
-        // --- 3. 进入目录页并展开 ---
         if (page.url() !== targetUrl) await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 0 });
+
+        // --- 3. 提取基础信息 ---
+        console.log('📊 正在分析书籍信息...');
+        const basicInfo = await page.evaluate(() => {
+            let title = document.querySelector('h1')?.innerText.trim() || '未知书籍';
+            title = title.replace(/\?.*$/, '').replace(/最新章节.*/, '').trim();
+            
+            // 暴力找作者
+            let author = '未知';
+            const potentialElements = document.querySelectorAll('p, div, span, td, h1, h2');
+            for (let el of potentialElements) {
+                const text = el.innerText;
+                if (text.includes('作者：') && text.length < 50) {
+                    const parts = text.split(/作者[:：]/);
+                    if (parts.length > 1) { author = parts[1].trim().split(/\s+/)[0]; break; }
+                }
+            }
+            return { title, author };
+        });
+
+        // 🔥🔥🔥【关键修改：暂停并询问分类】🔥🔥🔥
+        console.log('\n==========================================');
+        console.log(`📖 书名: 《${basicInfo.title}》`);
+        console.log(`👤 作者:  ${basicInfo.author}`);
+        console.log('==========================================\n');
         
+        // 这里的 await 会让程序停下来等你打字！
+        const userCategory = await askQuestion(`👉 请输入这本书的分类 (例如 玄幻/都市/仙侠，直接回车默认为'搬运'): `);
+        const finalCategory = userCategory.trim() || '搬运';
+        
+        console.log(`✅ 已分类为: [${finalCategory}]，准备开始爬取目录...`);
+
+        // --- 4. 点击展开并获取目录 ---
         console.log('point👉 正在点击“完整目录”...');
         const isExpanded = await page.evaluate(() => {
             const btn = Array.from(document.querySelectorAll('a')).find(a => a.innerText.includes('完整目录') || a.innerText.includes('点击查看'));
             if (btn) { btn.click(); return true; }
             return false;
         });
-        
-        if (isExpanded) {
-            console.log('✅ 已点击展开，等待列表加载...');
-            await sleep(3000);
-        }
+        if (isExpanded) await sleep(3000);
 
-        // --- 4. 提取书籍信息 ---
         const bookData = await page.evaluate(() => {
-            const title = document.querySelector('h1')?.innerText.trim() || '未知书籍';
-            // 尝试多种方式获取作者
-            let author = '未知';
-            const pTags = Array.from(document.querySelectorAll('p'));
-            const authorTag = pTags.find(p => p.innerText.includes('作者：'));
-            if (authorTag) author = authorTag.innerText.split('作者：')[1]?.split(' ')[0] || '未知';
-
             const links = Array.from(document.querySelectorAll('li a, dd a'));
             const chapters = links.filter(a => {
                 const t = a.innerText.trim();
@@ -122,28 +122,29 @@ rl.question('请输入你想爬取的书籍名称: ', async (bookName) => {
                 return h && !h.includes('javascript') && (t.includes('章') || /^\d+/.test(t));
             }).map(a => ({ title: a.innerText.trim(), link: a.href }));
             
-            // 去重
             const unique = [];
             const seen = new Set();
             for (const c of chapters) {
                 if(!seen.has(c.link)) { seen.add(c.link); unique.push(c); }
             }
-            return { title, author, chapters: unique };
+            return { chapters: unique };
         });
 
-        console.log(`📖 书名: ${bookData.title} | 作者: ${bookData.author} | 章节数: ${bookData.chapters.length}`);
-
-        // 准备文件
-        const downloadDir = path.join(process.cwd(), 'downloads');
-        if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir);
-        const fileName = path.join(downloadDir, `${bookData.title}.json`);
-        
-        let finalData = {
-            title: bookData.title,
-            author: bookData.author,
+        // 合并信息
+        const finalData = {
+            title: basicInfo.title,
+            author: basicInfo.author,
+            category: finalCategory, // <--- 把分类存进去
             sourceUrl: targetUrl,
             chapters: []
         };
+
+        console.log(`📚 准备爬取 ${bookData.chapters.length} 章...`);
+        
+        // 准备文件
+        const downloadDir = path.join(process.cwd(), 'downloads');
+        if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir);
+        const fileName = path.join(downloadDir, `${basicInfo.title}.json`);
 
         // --- 5. 循环爬取 ---
         for (let i = 0; i < bookData.chapters.length; i++) {
@@ -164,8 +165,6 @@ rl.question('请输入你想爬取的书籍名称: ', async (bookName) => {
                         content: content
                     });
                     console.log(`💾 [${i+1}/${bookData.chapters.length}] 已缓存: ${chap.title}`);
-                } else {
-                    console.log(`⚠️ 内容过短: ${chap.title}`);
                 }
             } catch (err) {
                 console.error(`❌ 跳过: ${chap.title}`);
@@ -176,7 +175,7 @@ rl.question('请输入你想爬取的书籍名称: ', async (bookName) => {
         }
 
         fs.writeFileSync(fileName, JSON.stringify(finalData, null, 2));
-        console.log(`🎉 爬取完成！文件已保存: ${fileName}`);
+        console.log(`🎉 爬取完成！文件: ${fileName}`);
 
     } catch (error) {
         console.error('💥 错误:', error);
@@ -184,4 +183,4 @@ rl.question('请输入你想爬取的书籍名称: ', async (bookName) => {
         if (browser) await browser.close();
         process.exit(0);
     }
-});
+})();

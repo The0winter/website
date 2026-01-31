@@ -510,6 +510,7 @@ app.post('/api/admin/upload-book', async (req, res) => {
                 bookId: 'auto_' + Date.now(),
                 author: bookData.author,
                 author_id: authorId, // 🔥 关键：把书和刚才找到的作者关联起来
+                category: bookData.category || '搬运',
                 description: '离线爬虫上传',
                 status: '连载',
                 sourceUrl: bookData.sourceUrl,
