@@ -32,10 +32,11 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
-app.use(express.json());
-
+app.use(express.json({ limit: '50mb' })); 
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // ================= 数据库连接 =================
 const MONGO_URL = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/novel-site';
+const ADMIN_SECRET = process.env.ADMIN_SECRET || 'wo_de_pa_chong_mi_ma_123';
 
 mongoose.connect(MONGO_URL)
   .then(() => console.log('✅ MongoDB Connected'))
@@ -92,6 +93,88 @@ app.post('/api/auth/signup', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+app.post('/api/admin/upload-book', async (req, res) => {
+    try {
+        // --- 安全检查 ---
+        const clientSecret = req.headers['x-admin-secret'];
+        if (clientSecret !== ADMIN_SECRET) {
+            return res.status(403).json({ error: '🚫 密码错误，禁止上传！' });
+        }
+
+        const bookData = req.body; // 从 HTTP 请求体里拿数据
+        console.log(`📥 收到上传请求: 《${bookData.title}》`);
+
+        // --- 1. 处理作者 (User) ---
+        let authorId = null;
+        if (bookData.author && bookData.author !== '未知') {
+            let user = await User.findOne({ username: bookData.author });
+            if (!user) {
+                // 简单创建作者
+                user = await User.create({
+                    username: bookData.author,
+                    email: `author_${Date.now()}_${Math.floor(Math.random()*1000)}@auto.com`,
+                    password: '123456', // 默认密码
+                    role: 'writer'
+                });
+            }
+            authorId = user._id;
+        }
+
+        // --- 2. 处理书籍 (Book) ---
+        let book = await Book.findOne({ title: bookData.title });
+        if (!book) {
+            book = await Book.create({
+                title: bookData.title,
+                bookId: 'auto_' + Date.now(),
+                author: bookData.author,
+                author_id: authorId,
+                description: '离线爬虫上传',
+                status: '连载',
+                sourceUrl: bookData.sourceUrl,
+                chapterCount: bookData.chapters.length
+            });
+            console.log(`📚 新书创建: ${book.title}`);
+        } else {
+            // 更新现有书
+            book.chapterCount = Math.max(book.chapterCount, bookData.chapters.length);
+            if (!book.sourceUrl) book.sourceUrl = bookData.sourceUrl;
+            await book.save();
+            console.log(`🔄 更新书籍: ${book.title}`);
+        }
+
+        // --- 3. 处理章节 (Chapter) ---
+        // 批量写入比循环写入快得多
+        const chaptersToInsert = [];
+        for (const chap of bookData.chapters) {
+            // 检查章节是否存在 (为了性能，这里可以优化，但先保持简单)
+            const exists = await Chapter.exists({ bookId: book._id, title: chap.title });
+            if (!exists) {
+                chaptersToInsert.push({
+                    bookId: book._id,
+                    title: chap.title,
+                    content: chap.content,
+                    chapter_number: chap.chapter_number
+                });
+            }
+        }
+
+        if (chaptersToInsert.length > 0) {
+            await Chapter.insertMany(chaptersToInsert);
+        }
+
+        console.log(`✅ 《${book.title}》处理完毕，新增 ${chaptersToInsert.length} 章`);
+        
+        res.json({ 
+            success: true, 
+            message: `上传成功！书籍：${book.title}，新增章节：${chaptersToInsert.length}` 
+        });
+
+    } catch (error) {
+        console.error('💥 上传接口报错:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // 登录

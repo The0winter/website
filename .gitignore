@@ -35,3 +35,16 @@ Desktop.ini
 # Crawler outputs (prevent uploading scraped data)
 *.png
 *.jpg
+
+# --- 爬虫专用配置 (新增) ---
+# Puppeteer 的浏览器缓存 (包含你的登录状态和Cookies，绝对不能传)
+browser_data/
+
+# 离线爬取的书籍数据文件夹
+downloads/
+
+# 如果你的 .env 文件在 server 文件夹下，建议显式加上这行以防万一
+server/.env
+
+# 防止错误截图上传 (虽然你已经有了 *.png，但加个备注更清晰)
+error_screenshot.png

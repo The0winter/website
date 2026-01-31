@@ -6,7 +6,7 @@ const bookSchema = new mongoose.Schema({
   description: { type: String, default: '暂无简介' },
   cover_image: { type: String, default: '' },
   category: { type: String, default: '未分类' },
-  status: { type: String, default: 'ongoing' },
+  status: { type: String, enum: ['连载', '完结'], default: '连载' },
   
   // 冗余存储的作者名（直接显示字符串）
   author: { type: String },
