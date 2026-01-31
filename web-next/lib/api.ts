@@ -167,27 +167,27 @@ export const chaptersApi = {
 };
 
 // Bookmarks API
+// Bookmarks API
 export const bookmarksApi = {
   // Get all bookmarks for a user
   getByUserId: async (userId: string): Promise<Bookmark[]> => {
     return apiCall<Bookmark[]>(`/users/${userId}/bookmarks`);
   },
 
-  // Check if a book is bookmarked
+  // 🔥 修复重点：检查是否收藏
   check: async (userId: string, bookId: string): Promise<boolean> => {
-    try {
-      await apiCall<Bookmark>(`/users/${userId}/bookmarks/${bookId}`);
-      return true;
-    } catch {
-      return false;
-    }
+    // 1. URL 必须加上 /check，和后端对应
+    // 2. 泛型改为 { isBookmarked: boolean }，因为后端返回的是这个结构
+    const response = await apiCall<{ isBookmarked: boolean }>(`/users/${userId}/bookmarks/${bookId}/check`);
+    
+    // 3. 直接返回后端给出的结果，不再依赖 try-catch
+    return response.isBookmarked; 
   },
 
   // Create a bookmark
   create: async (userId: string, bookId: string): Promise<Bookmark> => {
     return apiCall<Bookmark>(`/users/${userId}/bookmarks`, {
       method: 'POST',
-      // ✅ 修改 3: 发送的 JSON 键名改成 bookId 
       body: JSON.stringify({ bookId }), 
     });
   },
