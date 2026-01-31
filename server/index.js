@@ -312,6 +312,17 @@ app.delete('/api/users/:userId/bookmarks/:bookId', async (req, res) => {
   }
 });
 
+app.post('/api/books/:id/views', async (req, res) => {
+  try {
+    // 数据库原子操作：浏览量 +1
+    await Book.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update views error:', error);
+    res.json({ success: false }); 
+  }
+});
+
 // 新增：专门检查某本书是否被某用户收藏
 app.get('/api/users/:userId/bookmarks/:bookId/check', async (req, res) => {
   try {
