@@ -509,6 +509,33 @@ app.post('/api/users/:userId/bookmarks', async (req, res) => {
   }
 });
 
+// server/index.js (补充在 POST bookmarks 之后，PORT 之前)
+
+app.delete('/api/users/:userId/bookmarks/:bookId', async (req, res) => {
+  try {
+    const { userId, bookId } = req.params;
+
+    // 统一转成 ObjectId，防止因格式问题删不掉
+    const targetBookId = mongoose.Types.ObjectId.isValid(bookId) 
+      ? new mongoose.Types.ObjectId(bookId)
+      : bookId;
+
+    const result = await Bookmark.findOneAndDelete({ 
+      user_id: userId, 
+      bookId: targetBookId 
+    });
+
+    if (!result) {
+      return res.status(404).json({ error: 'Bookmark not found' });
+    }
+
+    res.json({ success: true, message: 'Removed from bookshelf' });
+  } catch (error) {
+    console.error('Delete bookmark error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
