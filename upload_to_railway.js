@@ -1,60 +1,81 @@
 // upload_to_railway.js
-// 专门负责把本地 JSON 发送给 Railway 后端的脚本
+// 进阶版：支持分批上传和进度显示的搬运脚本
 
 import fs from 'fs';
 import path from 'path';
 
-// ⚠️ 配置你的 Railway 后端地址 (注意不是 mongodb 地址，是你的网站地址！)
-// 格式通常是: https://web-production-xxxx.up.railway.app
-// 你可以在 Railway Dashboard 看到这个 Domain
+// ⚠️ 你的 Railway 域名 (保持不变)
 const RAILWAY_URL = 'https://website-production-6edf.up.railway.app'; 
-
-// ⚠️ 刚才在后端设置的密码
 const SECRET_KEY = 'wo_de_pa_chong_mi_ma_123';
+
+// ⭐ 设置每次上传多少章 (建议 50-100)
+const BATCH_SIZE = 50;
 
 async function uploadFiles() {
     const downloadDir = path.join(process.cwd(), 'downloads');
     
     if (!fs.existsSync(downloadDir)) {
-        console.log('❌ 没有 downloads 文件夹，请先跑离线爬虫！');
+        console.log('❌ 没有 downloads 文件夹');
         return;
     }
 
     const files = fs.readdirSync(downloadDir).filter(f => f.endsWith('.json'));
-    console.log(`📦 发现 ${files.length} 个文件，准备上传到: ${RAILWAY_URL}`);
+    console.log(`📦 扫描到 ${files.length} 本书，准备开始分批搬运...`);
+    console.log(`🔗 目标地址: ${RAILWAY_URL}\n`);
 
     for (const file of files) {
-        console.log(`\n🚀 正在上传: ${file} ...`);
+        console.log(`📖 正在处理文件: ${file}`);
         
         try {
-            // 1. 读取本地数据
             const filePath = path.join(downloadDir, file);
-            const bookData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+            // 读取原始大文件
+            const originalData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+            const allChapters = originalData.chapters;
+            const totalChapters = allChapters.length;
 
-            // 2. 发送 HTTP POST 请求 (就像浏览器提交表单一样)
-            // Node 18+ 原生支持 fetch，不需要安装额外的库
-            const response = await fetch(`${RAILWAY_URL}/api/admin/upload-book`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-admin-secret': SECRET_KEY // 带上密码
-                },
-                body: JSON.stringify(bookData) // 把大大的 JSON 塞进去
-            });
+            console.log(`   - 书名: 《${originalData.title}》`);
+            console.log(`   - 总章节数: ${totalChapters} 章`);
+            console.log(`   - 模式: 每批上传 ${BATCH_SIZE} 章`);
 
-            // 3. 处理结果
-            const result = await response.json();
-            
-            if (response.ok) {
-                console.log(`✅ 成功! ${result.message}`);
-                // 可选：上传成功后把文件改名，标记为已上传
-                // fs.renameSync(filePath, filePath + '.uploaded');
-            } else {
-                console.error(`❌ 失败 (状态码 ${response.status}):`, result);
+            // --- 开始分批循环 ---
+            for (let i = 0; i < totalChapters; i += BATCH_SIZE) {
+                // 切割出一小块章节 (例如 0-50, 50-100)
+                const chunk = allChapters.slice(i, i + BATCH_SIZE);
+                
+                // 构造这一批的请求数据 (保留书籍元数据，但章节只放这一小块)
+                const payload = {
+                    ...originalData,
+                    chapters: chunk
+                };
+
+                // 发送请求
+                // console.log(`   ⏳ 正在上传第 ${i + 1} - ${i + chunk.length} 章...`);
+                
+                const response = await fetch(`${RAILWAY_URL}/api/admin/upload-book`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-admin-secret': SECRET_KEY
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`服务器返回错误: ${response.status} ${response.statusText}`);
+                }
+
+                // 计算进度百分比
+                const progress = Math.min(100, Math.round(((i + chunk.length) / totalChapters) * 100));
+                
+                // ✨ 打印漂亮的进度条
+                // \r 可以让光标回到行首，实现“原地刷新”效果，而不是刷屏
+                process.stdout.write(`   🚀 进度: [${progress}%] 已上传 ${i + chunk.length}/${totalChapters} 章 \r`);
             }
 
+            console.log(`\n   ✅ 《${originalData.title}》 全部上传完毕！\n`);
+
         } catch (error) {
-            console.error(`💥 网络错误 (是不是地址填错了?):`, error.message);
+            console.error(`\n   💥 上传失败: ${error.message}`);
         }
     }
 }
