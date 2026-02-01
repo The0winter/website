@@ -410,27 +410,32 @@ app.get('/api/users/:userId/bookmarks/:bookId/check', async (req, res) => {
 
 // ================= Chapters API =================
 
+// server/index.js
+
 app.get('/api/books/:bookId/chapters', async (req, res) => {
   try {
     const { bookId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(bookId)) return res.status(400).json({ error: 'Invalid book ID' });
     
-    // 🔥 核心优化：加上 .select('title chapter_number published_at')
-    // 或者用 .select('-content') 排除内容
-    // 这样数据量会从 "几MB" 瞬间变成 "几KB"
+    // ✅ 修复重点：
+    // 1. .select() 里必须加上 'bookId'，否则后面 c.bookId 拿不到数据会报错！
     const chapters = await Chapter.find({ bookId: new mongoose.Types.ObjectId(bookId) })
-      .select('title chapter_number published_at') // 👈 只取这几个字段
+      .select('title chapter_number published_at bookId') // 👈 加上了 bookId
       .sort({ chapter_number: 1 })
       .lean();
     
     const formattedChapters = chapters.map(c => ({
-      ...c, id: c._id.toString(), bookId: c.bookId.toString()
+      ...c, 
+      id: c._id.toString(), 
+      // 双重保险：如果有 bookId 字段就转 string，万一没有就用 URL 参数里的 bookId
+      bookId: c.bookId ? c.bookId.toString() : bookId 
     }));
     res.json(formattedChapters);
   } catch (error) {
+    console.error('获取章节出错:', error); // 加上日志方便调试
     res.status(500).json({ error: error.message });
   }
-});
+}); 
 
 app.get('/api/chapters/:id', async (req, res) => {
   try {
