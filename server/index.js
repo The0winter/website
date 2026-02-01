@@ -417,32 +417,37 @@ app.get('/api/books/:bookId/chapters', async (req, res) => {
     const { bookId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(bookId)) return res.status(400).json({ error: 'Invalid book ID' });
     
-    // ✅ 修复重点：
-    // 1. .select() 里必须加上 'bookId'，否则后面 c.bookId 拿不到数据会报错！
     const chapters = await Chapter.find({ bookId: new mongoose.Types.ObjectId(bookId) })
-      .select('title chapter_number published_at bookId') // 👈 加上了 bookId
+      .select('title chapter_number published_at bookId') // ❌ 千万别加 content
       .sort({ chapter_number: 1 })
       .lean();
     
     const formattedChapters = chapters.map(c => ({
       ...c, 
       id: c._id.toString(), 
-      // 双重保险：如果有 bookId 字段就转 string，万一没有就用 URL 参数里的 bookId
       bookId: c.bookId ? c.bookId.toString() : bookId 
     }));
     res.json(formattedChapters);
   } catch (error) {
-    console.error('获取章节出错:', error); // 加上日志方便调试
+    console.error('获取目录失败:', error);
     res.status(500).json({ error: error.message });
   }
-}); 
+});
 
 app.get('/api/chapters/:id', async (req, res) => {
   try {
+    // ✅ 这里直接 findById，默认会查出 content (正文)
     const chapter = await Chapter.findById(req.params.id).lean();
+    
     if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
-    res.json({ ...chapter, id: chapter._id.toString(), bookId: chapter.bookId.toString() });
+    
+    res.json({ 
+        ...chapter, 
+        id: chapter._id.toString(), 
+        bookId: chapter.bookId.toString() 
+    });
   } catch (error) {
+    console.error('获取章节详情失败:', error);
     res.status(500).json({ error: error.message });
   }
 });

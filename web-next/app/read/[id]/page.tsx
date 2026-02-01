@@ -75,10 +75,18 @@ function ReaderContent() {
   };
 
   // 初始化数据
+// 1. 核心数据加载 (只依赖 bookId，不受用户登录状态影响，保证只跑一次)
   useEffect(() => {
     if (bookId) {
       initData();
-      if (user) checkBookmark();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookId]); 
+
+  // 2. 用户状态检查 (依赖 user，用户登录后再查书签)
+  useEffect(() => {
+    if (bookId && user) {
+      checkBookmark();
     }
   }, [bookId, user]);
 
@@ -98,17 +106,41 @@ function ReaderContent() {
 
   // ...
 
-  // 监听 URL 变化切换章节
+// 🔥 核心修复：监听 URL 变化，每次切换章节都去服务器单独“取字”
   useEffect(() => {
-    if (allChapters.length > 0) {
+    const fetchChapterContent = async () => {
+      // 1. 如果目录还没加载完，先不动作
+      if (allChapters.length === 0) return;
+
       const targetId = chapterIdParam || allChapters[0].id;
-      const targetChapter = allChapters.find(c => c.id === targetId);
-      if (targetChapter) setChapter(targetChapter);
-    }
+      
+      // 2. 开启加载状态（用户会看到转圈，而不是空白或上一章的残影）
+      setLoading(true);
+
+      try {
+        // 3. 调用后端“单章详情接口”（这个接口我们专门保留了 content，是有字的！）
+        // 请确保你的后端 server/index.js 里有 app.get('/api/chapters/:id') 这个接口
+        const res = await fetch(`https://website-production-6edf.up.railway.app/api/chapters/${targetId}`);
+        
+        if (res.ok) {
+          const fullChapter = await res.json();
+          setChapter(fullChapter); // ✅ 把带字的完整章节放进去
+        } else {
+          console.error('章节内容获取失败');
+        }
+      } catch (error) {
+        console.error('网络请求出错:', error);
+      } finally {
+        // 4. 关掉加载动画，显示正文
+        setLoading(false);
+      }
+    };
+
+    fetchChapterContent();
   }, [chapterIdParam, allChapters]);
 
-  const initData = async () => {
-    setLoading(true);
+const initData = async () => {
+    // setLoading(true); // 默认已经是 true 了
     try {
       const [bookData, chaptersData] = await Promise.all([
         booksApi.getById(bookId),
@@ -116,11 +148,18 @@ function ReaderContent() {
       ]);
       if (bookData) setBook(bookData);
       if (chaptersData) setAllChapters(chaptersData);
+      
+      // 🔥 核心修复：接力棒逻辑
+      // 如果书里有章节，就不要在这里结束 Loading！
+      // 让下面的 useEffect (fetchChapterContent) 去负责结束 Loading
+      if (!chaptersData || chaptersData.length === 0) {
+          setLoading(false); // 只有真的是空书，才在这里结束
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
+      setLoading(false); // 出错了，必须结束 Loading 以显示错误页
     }
+    // ❌ 删掉之前的 finally { setLoading(false) }，绝对不能在这里无条件取消 loading！
   };
 
   const checkBookmark = async () => {
