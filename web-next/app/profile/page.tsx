@@ -76,7 +76,8 @@ export default function ProfilePage() {
                             <Mail className="h-4 w-4" /> {user.email}
                         </p>
                         <p className="text-gray-400 text-sm mt-1 flex items-center gap-2">
-                            <Calendar className="h-4 w-4" /> ID: {user.id.slice(0, 8)}... {/* ID太长了，截取一下比较美观 */}
+                            <Calendar className="h-4 w-4" /> 
+ID: {                       (user.id || (user as any)._id || '').toString().slice(0, 8)}... {/* ID太长了，截取一下比较美观 */}
                         </p>
                     </div>
 
