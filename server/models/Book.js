@@ -16,6 +16,17 @@ const bookSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User' // 关键！告诉 Mongoose 去 'User' 表里找人
   },
+  // 👇👇👇 新增评分系统字段 👇👇👇
+  rating: { 
+    type: Number, 
+    default: 0,
+    min: 0,
+    max: 5
+  },
+  numReviews: { 
+    type: Number, 
+    default: 0 
+  },
 
   // --- 爬虫专用字段 (已保留) ---
   sourceUrl: { type: String },

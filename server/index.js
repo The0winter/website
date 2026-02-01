@@ -4,6 +4,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { createReview, getReviews } from './controllers/reviewController.js';
 
 // 引入模型
 import User from './models/User.js'; 
@@ -263,6 +264,13 @@ app.get('/api/users/:userId/profile', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// 获取某本书的评论 (公开)
+app.get('/api/books/:id/reviews', getReviews);
+
+// 发表评论 (需要登录)
+// 注意：这里用到了你现有的 authMiddleware 
+app.post('/api/books/:id/reviews', authMiddleware, createReview);
 
 // ================= Books API =================
 
