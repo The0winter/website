@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Search, User, LogOut, BookOpen, PenTool } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 // ✅ 1. 解除注释，引入设置 Context
@@ -11,12 +11,18 @@ import { useReadingSettings } from '@/contexts/ReadingSettingsContext';
 export default function Navbar() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [searchQuery, setSearchQuery] = useState('');
 
   // ✅ 2. 获取全局主题 (theme)
   // 假设你的 Context 里提供了 theme 状态 ('light' | 'dark')
   const { theme } = useReadingSettings(); 
   const isDark = theme === 'dark'; // 判断是否为夜间模式
+
+  // ✅ 3. 在阅读页面时不渲染导航栏
+  if (pathname?.startsWith('/read/')) {
+    return null;
+  }
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

@@ -3,19 +3,27 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-// 🔥 1. 新增 AlertTriangle (警告图标) 和 X (关闭图标)
 import { Bookmark, BookOpen, Eye, Trash2, AlertTriangle, X } from 'lucide-react';
 import { bookmarksApi, booksApi, Book } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+// ✅ 1. 引入设置 Context (用来重置主题)
+import { useReadingSettings } from '@/contexts/ReadingSettingsContext'; 
 
 export default function Library() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  
+  // ✅ 2. 获取 setTheme
+  const { setTheme } = useReadingSettings();
+
   const [bookmarkedBooks, setBookmarkedBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // 🔥 2. 新增状态：用来记录当前正准备删除哪本书
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+
+  // ✅ 3. 强制重置为白天模式 (进入页面瞬间执行)
+  useEffect(() => {
+    setTheme('light');
+  }, [setTheme]);
 
   // --- 认证检查 ---
   useEffect(() => {
@@ -40,7 +48,6 @@ export default function Library() {
       if (bookmarks && bookmarks.length > 0) {
         const bookPromises = bookmarks.map((bookmark) => {
           if (!bookmark || !bookmark.bookId) return Promise.resolve(null);
-
           let bookId: string;
           if (typeof bookmark.bookId === 'object') {
                 const bookObj = bookmark.bookId as any; 
@@ -48,11 +55,9 @@ export default function Library() {
           } else {
                 bookId = String(bookmark.bookId);
           }
-
           if (!bookId || bookId === 'null') return Promise.resolve(null);
           return booksApi.getById(bookId);
         });
-
         const books = (await Promise.all(bookPromises)).filter((book): book is Book => book !== null);
         setBookmarkedBooks(books);
       } else {
@@ -65,51 +70,41 @@ export default function Library() {
     }
   };
 
-  // 🔥 3. 第一步：点击垃圾桶，只是打开弹窗，不删
   const openDeleteModal = (e: React.MouseEvent, bookId: string) => {
     e.preventDefault(); 
     e.stopPropagation();
-    setDeleteTargetId(bookId); // 把要删的 ID 存起来，弹窗显示
+    setDeleteTargetId(bookId);
   };
 
-  // 🔥 4. 第二步：用户在弹窗里点了“确认”，才真的删
   const executeDelete = async () => {
     if (!deleteTargetId || !user) return;
-
-    // 先存个临时变量，方便后面处理
     const bookId = deleteTargetId;
-    
     try {
-        // 乐观更新：先从界面删掉
         setBookmarkedBooks(prev => prev.filter(b => b.id !== bookId));
-        // 关闭弹窗
         setDeleteTargetId(null);
-
-        // 发请求
         const res = await fetch(`https://website-production-6edf.up.railway.app/api/users/${user.id}/bookmarks/${bookId}`, {
             method: 'DELETE'
         });
-
-        if (!res.ok) {
-            throw new Error('删除失败');
-        }
+        if (!res.ok) throw new Error('删除失败');
     } catch (error) {
         console.error('移除失败:', error);
-        alert('移除失败，请刷新页面重试'); // 如果真的出错了，再弹丑的也没事
-        fetchBookmarkedBooks(); // 滚回原状
+        alert('移除失败，请刷新页面重试');
+        fetchBookmarkedBooks();
     }
   };
 
   if (authLoading || loading) {
+    // 🔥🔥 核心修复在这里：加上 bg-gray-50 🔥🔥
+    // 之前是透明的，所以会漏出底下的黑色背景
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <BookOpen className="h-12 w-12 text-blue-600 animate-pulse" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 relative"> {/* relative 用于定位弹窗 */}
+    <div className="min-h-screen bg-gray-50 relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center space-x-3 mb-8">
           <Bookmark className="h-8 w-8 text-blue-600" />
@@ -140,7 +135,6 @@ export default function Library() {
                 key={book.id}
                 className="group relative bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
               >
-                {/* 🗑️ 这里的点击只触发 openDeleteModal */}
                 <button
                     onClick={(e) => openDeleteModal(e, book.id)}
                     className="absolute top-2 right-2 z-10 p-2 bg-black/60 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-lg backdrop-blur-sm"
@@ -191,38 +185,29 @@ export default function Library() {
         )}
       </div>
 
-      {/* 🔥🔥🔥 5. 全新的自定义弹窗 UI 🔥🔥🔥 */}
       {deleteTargetId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* 黑色半透明背景遮罩 */}
             <div 
                 className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
-                onClick={() => setDeleteTargetId(null)} // 点击背景关闭
+                onClick={() => setDeleteTargetId(null)}
             ></div>
-
-            {/* 弹窗主体 */}
             <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-100">
-                {/* 关闭按钮 */}
                 <button 
                     onClick={() => setDeleteTargetId(null)}
                     className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
                 >
                     <X size={20} />
                 </button>
-
                 <div className="flex flex-col items-center text-center">
-                    {/* 警告图标 */}
                     <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
                         <AlertTriangle size={24} />
                     </div>
-
                     <h3 className="text-xl font-bold text-gray-900 mb-2">
                         确定要移出书架吗？
                     </h3>
                     <p className="text-gray-500 mb-6">
                         这本书将从你的收藏列表中移除，但你可以随时再次添加回来。
                     </p>
-
                     <div className="flex gap-3 w-full">
                         <button 
                             onClick={() => setDeleteTargetId(null)}

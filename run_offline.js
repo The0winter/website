@@ -169,13 +169,23 @@ console.log('📂 启动【新书爬取模式 - 隐身增强版】...');
             if(!seen.has(c.link)) { seen.add(c.link); uniqueChapters.push(c); }
         }
 
-        // 🔥🔥🔥【新增】强力排序修复：防止“最新章节”排在最前面 🔥🔥🔥
-        // 提取标题里的数字进行排序 (支持 "第10章" 和 "10.xxx" 格式)
+// 🔥🔥🔥【增强版】排序修复：处理空格和特殊格式 🔥🔥🔥
         uniqueChapters.sort((a, b) => {
             const getNum = (str) => {
-                // 优先找 "第xxx章"，找不到就找第一串数字
-                const match = str.match(/第(\d+)章/) || str.match(/(\d+)/);
-                return match ? parseInt(match[1]) : 0;
+                // 1. 预处理：去掉标题里的所有空格，防止 "第 1 章" 这种格式导致匹配失败
+                const cleanStr = str.replace(/\s+/g, '');
+                
+                // 2. 优先匹配 "第xxx章"
+                const matchChapter = cleanStr.match(/第(\d+)章/);
+                if (matchChapter) return parseInt(matchChapter[1]);
+                
+                // 3. 再次尝试匹配开头的纯数字 (比如 "1. 开始")
+                const matchStartNum = cleanStr.match(/^(\d+)/);
+                if (matchStartNum) return parseInt(matchStartNum[1]);
+
+                // 4. 最后的兜底：在字符串里找任何数字
+                const matchAnyNum = cleanStr.match(/(\d+)/);
+                return matchAnyNum ? parseInt(matchAnyNum[1]) : 999999; // 没数字的放最后
             };
             return getNum(a.title) - getNum(b.title);
         });
@@ -186,6 +196,9 @@ console.log('📂 启动【新书爬取模式 - 隐身增强版】...');
             author: basicInfo.author,
             category: finalCategory,
             sourceUrl: targetUrl,
+            // 🔥 新增这一行：初始化阅读量为 0
+            views: 0, 
+            rating: 0,
             chapters: [] // 待填充
         };
 

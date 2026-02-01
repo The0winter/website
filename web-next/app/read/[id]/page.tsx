@@ -34,18 +34,20 @@ function ReaderContent() {
   const [showCatalog, setShowCatalog] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [catalogReversed, setCatalogReversed] = useState(false);
+
+  // 🔥 新增：导航栏状态
+  const [showNav, setShowNav] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
   
   // ⚙️ 全局设置 (Context)
-  // theme 这里只负责 'light' 或 'dark' (夜间模式开关)
   const { theme, setTheme } = useReadingSettings();
 
   // 📖 本地阅读偏好 (Local State)
-  // themeColor 负责白天的皮肤 (羊皮纸、绿、蓝等)
   const [themeColor, setThemeColor] = useState<'gray' | 'cream' | 'green' | 'blue'>('cream');
   const [fontFamily, setFontFamily] = useState<'sans' | 'serif' | 'kai'>('sans');
   const [fontSizeNum, setFontSizeNum] = useState(20);
-  const [lineHeight, setLineHeight] = useState(1.8);      // 新增：行间距
-  const [paraSpacing, setParaSpacing] = useState(4);      // 新增：段间距
+  const [lineHeight, setLineHeight] = useState(1.8);
+  const [paraSpacing, setParaSpacing] = useState(4);
   const [pageWidth, setPageWidth] = useState<'auto' | '640' | '800' | '900' | '1000' | '1280'>('900');
   const [autoSubscribe, setAutoSubscribe] = useState(false);
   const [chapterSay, setChapterSay] = useState(true);
@@ -56,17 +58,12 @@ function ReaderContent() {
     gray:   { name: '雅致灰', bg: '#f0f0f0', text: '#222222', line: '#dcdcdc' },
     green:  { name: '护眼绿', bg: '#dcedc8', text: '#222222', line: '#c5e1a5' },
     blue:   { name: '极光蓝', bg: '#e3edfc', text: '#222222', line: '#d0e0f8' },
-    // 夜间模式的参数独立定义
     dark:   { name: '夜间',   bg: '#1a1a1a', text: '#d0d0d0', line: '#333333' },
   };
 
-  // 🛠️ 核心逻辑：计算当前"真实"生效的颜色
-  // 如果全局开了夜间模式 (dark)，就强制用 dark 配色
-  // 否则，使用用户选中的 themeColor 配色
   const isActuallyDark = theme === 'dark';
   const activeTheme = isActuallyDark ? themeMap.dark : themeMap[themeColor];
 
-  // 段间距映射表（数值 -> 像素）
   const paraSpacingMap: Record<number, string> = {
     2: '0.5rem',
     4: '1rem',
@@ -75,7 +72,6 @@ function ReaderContent() {
   };
 
   // 初始化数据
-// 1. 核心数据加载 (只依赖 bookId，不受用户登录状态影响，保证只跑一次)
   useEffect(() => {
     if (bookId) {
       initData();
@@ -83,17 +79,34 @@ function ReaderContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId]); 
 
-  // 2. 用户状态检查 (依赖 user，用户登录后再查书签)
+  // 🔥🔥🔥 新增：有效阅读统计 (停留 10 秒以上才 +1) 🔥🔥🔥
+  useEffect(() => {
+    if (!bookId) return;
+
+    // 1. 设置一个 10 秒的定时器
+    const timer = setTimeout(() => {
+      console.log(`⏳ 读者已停留 10 秒，正在记录阅读量... (BookID: ${bookId})`);
+      
+      booksApi.incrementViews(bookId)
+        .then(() => console.log('✅ 阅读量 +1 成功'))
+        .catch(e => console.error('统计阅读量失败:', e));
+        
+    }, 10000); // 10000 毫秒 = 10 秒
+
+    // 2. 关键点：如果用户在 10 秒内离开 (组件卸载) 或切换了书，
+    // React 会自动运行这个清理函数，取消上面的定时器。
+    // 结果：请求永远不会发出。
+    return () => clearTimeout(timer);
+  }, [bookId]);
+
   useEffect(() => {
     if (bookId && user) {
       checkBookmark();
     }
   }, [bookId, user]);
 
-  // 🔥 新增：监听目录打开，自动滚动到当前章节
   useEffect(() => {
     if (showCatalog) {
-      // 稍微延迟一点点，确保 DOM 已经渲染出来
       const timer = setTimeout(() => {
         const activeElement = document.getElementById('active-chapter-anchor');
         if (activeElement) {
@@ -104,34 +117,51 @@ function ReaderContent() {
     }
   }, [showCatalog]);
 
-  // ...
+  // 🔥 新增：滚动监听，控制导航栏显示/隐藏
+  useEffect(() => {
+    const SCROLL_THRESHOLD = 10;
 
-// 🔥 核心修复：监听 URL 变化，每次切换章节都去服务器单独“取字”
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      const diff = currentScrollY - lastScrollY;
+
+      if (Math.abs(diff) < SCROLL_THRESHOLD) return;
+
+      if (currentScrollY > lastScrollY && currentScrollY > 80) {
+        setShowNav(false);
+      } else {
+        setShowNav(true);
+      }
+
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [lastScrollY]);
+
   useEffect(() => {
     const fetchChapterContent = async () => {
-      // 1. 如果目录还没加载完，先不动作
       if (allChapters.length === 0) return;
 
       const targetId = chapterIdParam || allChapters[0].id;
-      
-      // 2. 开启加载状态（用户会看到转圈，而不是空白或上一章的残影）
       setLoading(true);
 
       try {
-        // 3. 调用后端“单章详情接口”（这个接口我们专门保留了 content，是有字的！）
-        // 请确保你的后端 server/index.js 里有 app.get('/api/chapters/:id') 这个接口
         const res = await fetch(`https://website-production-6edf.up.railway.app/api/chapters/${targetId}`);
         
         if (res.ok) {
           const fullChapter = await res.json();
-          setChapter(fullChapter); // ✅ 把带字的完整章节放进去
+          setChapter(fullChapter);
         } else {
           console.error('章节内容获取失败');
         }
       } catch (error) {
         console.error('网络请求出错:', error);
       } finally {
-        // 4. 关掉加载动画，显示正文
         setLoading(false);
       }
     };
@@ -139,8 +169,7 @@ function ReaderContent() {
     fetchChapterContent();
   }, [chapterIdParam, allChapters]);
 
-const initData = async () => {
-    // setLoading(true); // 默认已经是 true 了
+  const initData = async () => {
     try {
       const [bookData, chaptersData] = await Promise.all([
         booksApi.getById(bookId),
@@ -149,17 +178,13 @@ const initData = async () => {
       if (bookData) setBook(bookData);
       if (chaptersData) setAllChapters(chaptersData);
       
-      // 🔥 核心修复：接力棒逻辑
-      // 如果书里有章节，就不要在这里结束 Loading！
-      // 让下面的 useEffect (fetchChapterContent) 去负责结束 Loading
       if (!chaptersData || chaptersData.length === 0) {
-          setLoading(false); // 只有真的是空书，才在这里结束
+        setLoading(false);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
-      setLoading(false); // 出错了，必须结束 Loading 以显示错误页
+      setLoading(false);
     }
-    // ❌ 删掉之前的 finally { setLoading(false) }，绝对不能在这里无条件取消 loading！
   };
 
   const checkBookmark = async () => {
@@ -182,23 +207,19 @@ const initData = async () => {
     } catch (error) {}
   };
 
-  // 切换夜间模式
   const toggleNightMode = () => {
     setTheme(isActuallyDark ? 'light' : 'dark');
   };
 
-  // 跳转章节
   const goToChapter = (targetChapterId: string) => {
     router.push(`/read/${bookId}?chapterId=${targetChapterId}`);
     window.scrollTo(0, 0);
   };
 
-  // 上一章/下一章计算
   const currentChapterIndex = allChapters.findIndex((ch) => ch.id === chapter?.id);
   const prevChapter = currentChapterIndex > 0 ? allChapters[currentChapterIndex - 1] : null;
   const nextChapter = currentChapterIndex < allChapters.length - 1 ? allChapters[currentChapterIndex + 1] : null;
 
-  // 字体映射
   const fontFamilyValue = {
     sans: '"PingFang SC", "Microsoft YaHei", sans-serif',
     serif: '"Songti SC", "SimSun", serif',
@@ -229,12 +250,53 @@ const initData = async () => {
       className="min-h-screen w-full transition-colors duration-300"
       style={{ backgroundColor: activeTheme.bg }}
     >
+      {/* 🔥 新增：自定义导航栏 */}
+      <nav
+        className="fixed top-0 left-1/2 z-40 h-14 flex items-center justify-between px-6 border-b shadow-sm transition-all duration-300"
+        style={{
+          backgroundColor: activeTheme.bg,
+          color: activeTheme.text,
+          borderColor: activeTheme.line,
+          maxWidth: pageWidth === 'auto' ? '800px' : `${pageWidth}px`,
+          width: '100%',
+          transform: `translate(-50%, ${showNav ? '0' : '-100%'})`,
+        }}
+      >
+        {/* 左侧：返回首页 */}
+        <Link href="/" className="flex items-center gap-1 hover:opacity-70 transition-opacity">
+          <ChevronLeft className="w-5 h-5" />
+          <span className="text-sm">首页</span>
+        </Link>
+
+        {/* 中间：书名 */}
+        <div className="absolute left-1/2 -translate-x-1/2 text-sm font-medium truncate max-w-[40%] text-center">
+          {book?.title}
+        </div>
+
+        {/* 右侧：返回详情 & 书架 */}
+        <div className="flex items-center gap-4">
+          <Link 
+            href={`/book/${bookId}`} 
+            className="text-sm hover:opacity-70 transition-opacity"
+          >
+            详情
+          </Link>
+          <Link 
+            href="/library" 
+            className="flex items-center gap-1 text-sm hover:opacity-70 transition-opacity"
+          >
+            <BookIcon className="w-4 h-4" />
+            <span>书架</span>
+          </Link>
+        </div>
+      </nav>
+
       <div 
         className="mx-auto relative transition-all duration-300"
         style={{ maxWidth: pageWidth === 'auto' ? '800px' : `${pageWidth}px` }} 
       >
         <article 
-          className="w-full min-h-screen px-10 py-20 shadow-xl transition-colors duration-300"
+          className="w-full min-h-screen px-10 pt-24 pb-20 shadow-xl transition-colors duration-300"
           style={{ backgroundColor: activeTheme.bg, color: activeTheme.text }}
         >
           {/* 标题区 */}
@@ -257,12 +319,11 @@ const initData = async () => {
             style={{ 
               fontFamily: fontFamilyValue, 
               fontSize: `${fontSizeNum}px`,
-              lineHeight: lineHeight  // 应用行间距
+              lineHeight: lineHeight
             }}
           >
             {(chapter.content || '').split('\n').map((para, i) => {
               const text = para.trim();
-              // 脏数据过滤
               if (!text || text.includes('作者：') || /^\d{4}-\d{2}-\d{2}/.test(text)) return null;
               if (text === chapter.title.trim()) return null;
               
@@ -271,7 +332,7 @@ const initData = async () => {
                   key={i} 
                   style={{ 
                     textIndent: '2em',
-                    marginBottom: paraSpacingMap[paraSpacing] || '1rem'  // 应用段间距
+                    marginBottom: paraSpacingMap[paraSpacing] || '1rem'
                   }}
                 >
                   {text}
@@ -347,14 +408,12 @@ const initData = async () => {
               </div>
             </div>
             
-            {/* 👇 增加了 gap-y-6 让两列之间上下拉开距离 */}
             <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 content-start custom-scrollbar">
               {displayChapters.map(ch => {
                 const isActive = ch.id === chapter.id;
                 return (
                   <button 
                     key={ch.id} 
-                    // 🔥 新增这一行：如果是当前章节，就给它打个标记
                     id={isActive ? 'active-chapter-anchor' : undefined}
                     onClick={() => { goToChapter(ch.id); setShowCatalog(false); }}
                     className={`text-left py-4 border-b border-dashed text-lg truncate flex justify-between items-center group transition-all
@@ -390,7 +449,7 @@ const initData = async () => {
               <button onClick={() => setShowSettings(false)}><X /></button>
             </div>
             
-            {/* 1. 主题选择 (夜间模式下禁用并置灰) */}
+            {/* 1. 主题选择 */}
             <div className="flex items-center gap-6">
               <span className="w-20 font-medium opacity-60">阅读主题</span>
               <div className="flex gap-4">
@@ -404,7 +463,7 @@ const initData = async () => {
                     style={{ 
                       backgroundColor: val.bg, 
                       borderColor: isActuallyDark ? '#444' : '#ddd',
-                      opacity: isActuallyDark ? 0.3 : 1, // 夜间模式下变淡
+                      opacity: isActuallyDark ? 0.3 : 1,
                       cursor: isActuallyDark ? 'not-allowed' : 'pointer'
                     }}
                   >
