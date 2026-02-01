@@ -18,6 +18,10 @@ const bookSchema = new mongoose.Schema({
   },
 
   views: { type: Number, default: 0 },
+  views: { type: Number, default: 0 },          // 总阅读 (已有)
+  daily_views: { type: Number, default: 0 },    // 日阅读 (新增)
+  weekly_views: { type: Number, default: 0 },   // 周阅读 (新增)
+  monthly_views: { type: Number, default: 0 },   // 月阅读 (新增)
   // 👇👇👇 新增评分系统字段 👇👇👇
   rating: { 
     type: Number, 

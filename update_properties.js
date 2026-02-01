@@ -2,7 +2,7 @@
 // 用法：修改这里的配置，然后运行 node update_rating.js
 
 // 1. 填入你要修改的书籍 ID
-const BOOK_ID = '697f61ee7bc451c7c65d4611'; 
+const BOOK_ID = '697f7cbe7bc451c7c65d4bb9'; 
 
 // 2. 填入你想设定的数值 (这里只改阅读量)
 const NEW_DATA = {

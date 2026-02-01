@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { createReview, getReviews } from './controllers/reviewController.js';
+import cron from 'node-cron';
 
 // 引入模型
 import User from './models/User.js'; 
@@ -290,15 +291,36 @@ app.get('/api/books', async (req, res) => {
       const filter = {};
       if (author_id) filter.author_id = author_id;
 
-      let query = Book.find(filter).populate('author_id', 'username email id');
+      // 获取书籍 (lean() 可以提高查询速度)
+      let books = await Book.find(filter).populate('author_id', 'username email id').lean();
+
+      // 🔥 核心排序逻辑
+      if (orderBy === 'composite') {
+          // 1. 综合推荐算法：评分(60%) + 周热度(40%)
+          books.sort((a, b) => {
+              const scoreA = ((a.rating || 0) * 100 * 0.6) + ((a.weekly_views || 0) * 0.4);
+              const scoreB = ((b.rating || 0) * 100 * 0.6) + ((b.weekly_views || 0) * 0.4);
+              return scoreB - scoreA; // 降序
+          });
+      } else {
+          // 2. 普通榜单排序 (周榜、月榜、日榜、更新榜)
+          books.sort((a, b) => {
+              const valA = a[orderBy] || 0;
+              const valB = b[orderBy] || 0;
+              
+              // 如果是时间排序
+              if (orderBy === 'updatedAt' || orderBy === 'createdAt') {
+                  return new Date(order === 'asc' ? valA : valB) - new Date(order === 'asc' ? valB : valA);
+              }
+              // 如果是数字排序
+              return order === 'asc' ? valA - valB : valB - valA;
+          });
+      }
       
-      const sortOrder = order === 'asc' ? 1 : -1;
-      query = query.sort({ [orderBy]: sortOrder });
-      if (limit) query = query.limit(parseInt(limit));
+      if (limit) books = books.slice(0, parseInt(limit));
       
-      const books = await query.exec();
       const formattedBooks = books.map(book => ({
-        ...book.toObject(),
+        ...book,
         id: book._id.toString(),
       }));
       res.json(formattedBooks);
@@ -387,10 +409,17 @@ app.delete('/api/books/:id', async (req, res) => {
   }
 });
 
+// 修改后的阅读量接口：同时增加 4 个计数器
 app.post('/api/books/:id/views', async (req, res) => {
   try {
-    // 数据库原子操作：浏览量 +1
-    await Book.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } });
+    await Book.findByIdAndUpdate(req.params.id, { 
+        $inc: { 
+            views: 1, 
+            daily_views: 1, 
+            weekly_views: 1, 
+            monthly_views: 1 
+        } 
+    });
     res.json({ success: true });
   } catch (error) {
     console.error('Update views error:', error);
@@ -566,6 +595,26 @@ app.delete('/api/users/:userId/bookmarks/:bookId', async (req, res) => {
     console.error('Delete bookmark error:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// ================= 定时任务 (Cron Jobs) =================
+
+// 1. 日榜重置：每天凌晨 00:00
+cron.schedule('0 0 * * *', async () => {
+    console.log('⏰ 执行日榜重置...');
+    await Book.updateMany({}, { daily_views: 0 });
+});
+
+// 2. 周榜重置：每周四晚上 23:00 (星期四=4)
+cron.schedule('0 23 * * 4', async () => {
+    console.log('⏰ 执行周榜重置 (周四晚)...');
+    await Book.updateMany({}, { weekly_views: 0 });
+});
+
+// 3. 月榜重置：每月 1 号凌晨 00:00
+cron.schedule('0 0 1 * *', async () => {
+    console.log('⏰ 执行月榜重置...');
+    await Book.updateMany({}, { monthly_views: 0 });
 });
 
 const PORT = process.env.PORT || 5000;
