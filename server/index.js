@@ -47,20 +47,29 @@ mongoose.connect(MONGO_URL)
 /**
  * 确保作者存在：在 Users 集合里找作者，找不到就创建
  */
+const generateRandomPassword = () => {
+  return Math.random().toString(36).slice(-8);
+};
+
 async function ensureAuthorExists(authorName) {
     if (!authorName || authorName === '未知') return null;
     try {
         let user = await User.findOne({ username: authorName });
         if (user) return user;
 
+        // 🔥 生成随机密码
+        const randomPassword = generateRandomPassword();
+
         console.log(`🆕 上传检测到新作者，正在创建账号: ${authorName}`);
+        console.log(`🔑 自动生成的密码: ${randomPassword}`); // (可选) 在后台日志里显示一下密码
+
         const timestamp = Date.now();
         const randomNum = Math.floor(Math.random() * 1000);
         
         user = await User.create({
             username: authorName,
             email: `author_${timestamp}_${randomNum}@auto.generated`,
-            password: '123456', 
+            password: randomPassword, // 👈 这里改成了随机密码
             role: 'writer',
             created_at: new Date()
         });

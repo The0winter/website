@@ -104,6 +104,15 @@ console.log('📂 启动【书籍批量更新模式 - 隐身增强版】...');
                 for (const c of list) { if(!seen.has(c.link)) { seen.add(c.link); unique.push(c); } }
                 return unique;
             });
+            // 【新增】强力排序修复 
+            webChapters.sort((a, b) => {
+                const getNum = (str) => {
+                    const match = str.match(/第(\d+)章/) || str.match(/(\d+)/);
+                    return match ? parseInt(match[1]) : 0;
+                };
+                return getNum(a.title) - getNum(b.title);
+            });
+            // 【结束】
 
             // 3. 对比逻辑 (保持不变)
             const newChapters = [];

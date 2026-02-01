@@ -169,6 +169,18 @@ console.log('📂 启动【新书爬取模式 - 隐身增强版】...');
             if(!seen.has(c.link)) { seen.add(c.link); uniqueChapters.push(c); }
         }
 
+        // 🔥🔥🔥【新增】强力排序修复：防止“最新章节”排在最前面 🔥🔥🔥
+        // 提取标题里的数字进行排序 (支持 "第10章" 和 "10.xxx" 格式)
+        uniqueChapters.sort((a, b) => {
+            const getNum = (str) => {
+                // 优先找 "第xxx章"，找不到就找第一串数字
+                const match = str.match(/第(\d+)章/) || str.match(/(\d+)/);
+                return match ? parseInt(match[1]) : 0;
+            };
+            return getNum(a.title) - getNum(b.title);
+        });
+        // 🔥🔥🔥【结束】🔥🔥🔥
+
         const finalData = {
             title: basicInfo.title,
             author: basicInfo.author,
