@@ -415,7 +415,11 @@ app.get('/api/books/:bookId/chapters', async (req, res) => {
     const { bookId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(bookId)) return res.status(400).json({ error: 'Invalid book ID' });
     
+    // 🔥 核心优化：加上 .select('title chapter_number published_at')
+    // 或者用 .select('-content') 排除内容
+    // 这样数据量会从 "几MB" 瞬间变成 "几KB"
     const chapters = await Chapter.find({ bookId: new mongoose.Types.ObjectId(bookId) })
+      .select('title chapter_number published_at') // 👈 只取这几个字段
       .sort({ chapter_number: 1 })
       .lean();
     
