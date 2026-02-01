@@ -79,25 +79,17 @@ function ReaderContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId]); 
 
-  // 🔥🔥🔥 新增：有效阅读统计 (停留 10 秒以上才 +1) 🔥🔥🔥
+// 🔥🔥🔥 修改后：进入章节立即 +1 (切换章节也算) 🔥🔥🔥
   useEffect(() => {
-    if (!bookId) return;
-
-    // 1. 设置一个 10 秒的定时器
-    const timer = setTimeout(() => {
-      console.log(`⏳ 读者已停留 10 秒，正在记录阅读量... (BookID: ${bookId})`);
-      
-      booksApi.incrementViews(bookId)
-        .then(() => console.log('✅ 阅读量 +1 成功'))
-        .catch(e => console.error('统计阅读量失败:', e));
-        
-    }, 10000); // 10000 毫秒 = 10 秒
-
-    // 2. 关键点：如果用户在 10 秒内离开 (组件卸载) 或切换了书，
-    // React 会自动运行这个清理函数，取消上面的定时器。
-    // 结果：请求永远不会发出。
-    return () => clearTimeout(timer);
-  }, [bookId]);
+    if (bookId) {
+      // 直接发送请求，不需要等待
+      booksApi.incrementViews(bookId).catch(e => console.error('统计阅读量失败:', e));
+    }
+    
+    // 💡 关键点：这里加了 chapterIdParam
+    // 只要你点击“下一章”或“上一章”，URL 里的 chapterId 变了，
+    // 这个 useEffect 就会重新运行，阅读量就会再 +1。
+  }, [bookId, chapterIdParam]);
 
   useEffect(() => {
     if (bookId && user) {

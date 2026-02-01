@@ -16,6 +16,8 @@ const bookSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User' // 关键！告诉 Mongoose 去 'User' 表里找人
   },
+
+  views: { type: Number, default: 0 },
   // 👇👇👇 新增评分系统字段 👇👇👇
   rating: { 
     type: Number, 

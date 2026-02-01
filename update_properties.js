@@ -1,25 +1,24 @@
 // update_rating.js
 // 用法：修改这里的配置，然后运行 node update_rating.js
 
-// 1. 填入你要修改的书籍 ID (从你的截图里复制 _id)
-// 比如截图里的《天才游乐场》ID
-const BOOK_ID = '697f7cbe7bc451c7c65d4bb9'; 
+// 1. 填入你要修改的书籍 ID
+const BOOK_ID = '697f61ee7bc451c7c65d4611'; 
 
-// 2. 填入你想设定的数值
+// 2. 填入你想设定的数值 (这里只改阅读量)
 const NEW_DATA = {
-    rating: 0,       // 评分 (比如 9.5)
-    numReviews: 0    // 评价人数 (比如 128 人)
+    views: 0,          // 初始化阅读量为 0
 };
 
 const API_URL = 'https://website-production-6edf.up.railway.app/api/books';
 
 (async () => {
     console.log(`📝 正在修改书籍 ID: ${BOOK_ID}...`);
-    console.log(`   目标数据: 评分 ${NEW_DATA.rating} / 人数 ${NEW_DATA.numReviews}`);
+    // 👇 日志改对了，显示你要改的阅读量
+    console.log(`   目标数据: 阅读量设为 ${NEW_DATA.views}`); 
 
     try {
         const res = await fetch(`${API_URL}/${BOOK_ID}`, {
-            method: 'PATCH', // 使用 PATCH 方法进行局部更新
+            method: 'PATCH', // 局部更新
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(NEW_DATA)
         });
@@ -29,8 +28,9 @@ const API_URL = 'https://website-production-6edf.up.railway.app/api/books';
             console.log('✅ 修改成功！');
             console.log('-----------------------------------');
             console.log(`书名: 《${updatedBook.title}》`);
-            console.log(`最新评分: ${updatedBook.rating}`);
-            console.log(`最新评价数: ${updatedBook.numReviews}`);
+            // 👇 关键：打印返回的 views，确认数据库真的有了！
+            console.log(`当前阅读量 (views): ${updatedBook.views}`); 
+            console.log(`当前评分: ${updatedBook.rating}`);
         } else {
             console.log(`❌ 修改失败: ${res.status} ${res.statusText}`);
         }

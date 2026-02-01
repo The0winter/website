@@ -165,7 +165,8 @@ app.post('/api/admin/upload-book', async (req, res) => {
                 description: '无',
                 status: '连载',
                 sourceUrl: bookData.sourceUrl,
-                chapterCount: bookData.chapters.length
+                chapterCount: bookData.chapters.length,
+                views: bookData.views || 0
             });
             console.log(`📚 新书入库: ${book.title}`);
         } else {

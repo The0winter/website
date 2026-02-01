@@ -43,6 +43,7 @@ interface Book {
   rating?: number;       
   numReviews?: number;   
   lastUpdated?: string; 
+  views?: number;
 }
 
 interface Chapter {
@@ -370,6 +371,13 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
                      <div className="flex items-center">
                         <span className="text-gray-500 w-16">更新:</span>
                         <span className="text-gray-900">{book.lastUpdated ? new Date(book.lastUpdated).toLocaleDateString() : '近期'}</span>
+                     </div>
+                     {/* 🔥🔥🔥 新增：显示阅读量 🔥🔥🔥 */}
+                     <div className="flex items-center">
+                        <span className="text-gray-500 w-16">阅读量:</span>
+                        <span className="text-gray-900 font-medium">
+                            {(book.views || 0).toLocaleString()}
+                        </span>
                      </div>
                  </div>
                  
