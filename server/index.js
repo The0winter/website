@@ -54,9 +54,11 @@ mongoose.connect(MONGO_URL)
               console.log(`🔧 发现 ${usersToFix.length} 个用户缺少 id 字段，正在修复...`);
               
               for (const u of usersToFix) {
-                  // 把 _id 转成字符串赋值给 id
-                  u.id = u._id.toString(); 
-                  await u.save();
+                await User.updateOne(
+                { _id: u._id }, 
+                { $set: { id: u._id.toString() } },
+                { strict: false } // 🔥 关键：允许写入 Schema 中未定义的字段
+            );
                   console.log(`   -> 修复用户: ${u.username}`);
               }
               console.log('✨ 所有用户数据修复完成！');
