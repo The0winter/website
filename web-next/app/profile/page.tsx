@@ -6,9 +6,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
   User, Mail, Calendar, LogOut, 
-  BookOpen, PenTool, Shield, Lock, X, CheckCircle2, AlertCircle // 👈 新增图标
+  BookOpen, PenTool, Shield, Lock, X, CheckCircle2, AlertCircle 
 } from 'lucide-react';
-import { authApi } from '@/lib/api'; // 👈 记得导入 authApi
+import { authApi } from '@/lib/api';
 
 export default function ProfilePage() {
   const { user, profile, loading, logout } = useAuth();
@@ -18,6 +18,9 @@ export default function ProfilePage() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  // 🔥 新增：确认密码的状态
+  const [confirmPassword, setConfirmPassword] = useState('');
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
 
@@ -29,7 +32,6 @@ export default function ProfilePage() {
     }
   }, [user, loading, router]);
 
-  // Toast 自动消失
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(null), 3000);
@@ -48,25 +50,42 @@ export default function ProfilePage() {
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!oldPassword || !newPassword) {
+    
+    // 1. 基础非空校验
+    if (!oldPassword || !newPassword || !confirmPassword) {
         setToast({ msg: '请填写所有字段', type: 'error' });
         return;
     }
+
+    // 2. 长度校验
     if (newPassword.length < 6) {
         setToast({ msg: '新密码至少需要6位', type: 'error' });
         return;
     }
 
+    // 🔥 3. 核心校验：两次密码必须一致
+    if (newPassword !== confirmPassword) {
+        setToast({ msg: '两次输入的新密码不一致！', type: 'error' });
+        return;
+    }
+
+    // 4. 不能和旧密码一样（可选优化）
+    if (oldPassword === newPassword) {
+        setToast({ msg: '新密码不能和旧密码相同', type: 'error' });
+        return;
+    }
+
     setIsSubmitting(true);
     try {
-        // 调用我们刚刚在 api.ts 里写的方法
         const res = await authApi.changePassword(user.id, oldPassword, newPassword);
         
         if (res.success) {
             setToast({ msg: '密码修改成功！', type: 'success' });
             setShowPasswordModal(false);
+            // 清空所有状态
             setOldPassword('');
             setNewPassword('');
+            setConfirmPassword('');
         } else {
             setToast({ msg: res.error || '修改失败', type: 'error' });
         }
@@ -110,16 +129,13 @@ export default function ProfilePage() {
         {/* 顶部：个人信息卡片 */}
         <div className="bg-white shadow-sm rounded-2xl overflow-hidden border border-gray-100">
             <div className="h-32 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
-            
             <div className="px-8 pb-8 relative">
-                {/* 头像 */}
                 <div className="relative -mt-16 mb-6">
                     <div className="h-32 w-32 rounded-full border-4 border-white bg-white shadow-md flex items-center justify-center text-4xl font-bold text-indigo-600 select-none overflow-hidden">
                         {(user.username || 'User').substring(0, 1).toUpperCase()}
                     </div>
                 </div>
 
-                {/* 文字信息 */}
                 <div className="flex justify-between items-start">
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
@@ -181,7 +197,7 @@ export default function ProfilePage() {
             </Link>
         </div>
 
-        {/* 底部：账户安全 (✅ 已解锁) */}
+        {/* 底部：账户安全 */}
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
             <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                 <Shield className="h-5 w-5 text-blue-600" /> 账户安全
@@ -189,7 +205,6 @@ export default function ProfilePage() {
             <div className="space-y-4">
                 <div className="flex justify-between items-center py-2 border-b border-gray-100">
                     <span className="text-gray-600">登录密码</span>
-                    {/* ✅ 点击按钮触发弹窗 */}
                     <button 
                         onClick={() => setShowPasswordModal(true)}
                         className="text-blue-600 text-sm font-bold hover:text-blue-800 hover:bg-blue-50 px-3 py-1 rounded-lg transition"
@@ -244,6 +259,28 @@ export default function ProfilePage() {
                             required
                             minLength={6}
                         />
+                    </div>
+                    {/* 🔥 新增：确认密码输入框 */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">确认新密码</label>
+                        <input 
+                            type="password" 
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:bg-white focus:ring-2 outline-none text-gray-900 transition ${
+                                // 输入过程中如果不一致，红框提示（可选体验优化）
+                                confirmPassword && newPassword !== confirmPassword 
+                                ? 'border-red-300 focus:ring-red-500' 
+                                : 'border-gray-200 focus:ring-blue-500'
+                            }`}
+                            placeholder="请再次输入新密码"
+                            required
+                            minLength={6}
+                        />
+                         {/* 实时提示 */}
+                        {confirmPassword && newPassword !== confirmPassword && (
+                             <p className="text-xs text-red-500 mt-1 pl-1">两次输入的密码不一致</p>
+                        )}
                     </div>
 
                     <div className="pt-2 flex gap-3">
