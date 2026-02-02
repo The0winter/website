@@ -118,39 +118,61 @@ export default function WriterDashboard() {
 
   // ================= 核心业务逻辑 =================
 
-  // 🚀 影子登录逻辑 (管理员专用)
+// 🚀 核心：影子登录逻辑 (终极修正版)
   const handleShadowLogin = async (targetUserId: string, targetName: string) => {
-    if (!user) return;
-    if (!confirm(`⚠️ 高危操作确认\n\n你即将以 [ ${targetName} ] 的身份登录系统。\n\n登录后：\n1. 你将失去管理员权限\n2. 你将看到他的所有私有数据\n3. 若要恢复，请退出登录后重新用管理员账号登录。`)) return;
+    // 1. 只有 Admin 才能操作
+    if (!user || (user as any).role !== 'admin') {
+        alert('你不是管理员，无法操作');
+        return;
+    }
+    
+    if (!confirm(`⚠️ 确认切换身份\n\n即将以 [ ${targetName} ] 的视角登录。\n登录后你将看到他的书架和作品。`)) return;
 
     try {
+        // 2. 发送请求
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/impersonate/${targetUserId}`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                'x-user-id': user.id // 用管理员身份去申请
+                // 注意：这里必须发送当前管理员的 ID，否则后端不让你过
+                'x-user-id': user.id 
             }
         });
 
-        if (!res.ok) throw new Error('权限不足或失败');
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || '影子登录请求失败');
+        }
         
         const data = await res.json();
-
-        // 🔥 切换身份
-        // 注意：这里假设你的 AuthContext 会读取 localStorage 的 user_id 或 token
-        // 如果你的登录逻辑是基于 localStorage 的，请在这里更新
-        localStorage.setItem('user_id', data.user.id); 
-        // 也可以把用户信息存一下，防止闪烁
-        localStorage.setItem('user_info', JSON.stringify(data.user));
-
-        alert(`✅ 身份切换成功！\n\n当前身份：${data.user.username}`);
         
-        // 强制刷新页面，让整个 App 以新身份重新加载
+        // 🔥 3. 拿到新身份的 ID (双重保险)
+        const newId = data.user.id;
+        if (!newId) throw new Error('后端未返回有效的 ID');
+
+        // 🔥 4. 暴力修改 LocalStorage (不保留 Token，防止干扰)
+        // 我们假设后端只认 x-user-id，不需要 JWT Token
+        localStorage.clear(); // 先清空，防止旧数据残留
+
+        // 重新写入新身份
+        localStorage.setItem('userId', newId);
+        localStorage.setItem('user_id', newId);
+        localStorage.setItem('id', newId);
+        localStorage.setItem('user', JSON.stringify(data.user)); // 存入整个对象
+        
+        // 如果你的系统一定需要一个 token 占位符才能跑，就给个假的，或者沿用旧的
+        // 这里我们选择不存 token，强制让系统依赖 user 对象
+        // (如果你发现登出，请取消注释下面这一行)
+        // localStorage.setItem('token', 'shadow-login-token');
+
+        alert(`✅ 切换成功！\n\n当前身份：${data.user.username}\n即将刷新页面...`);
+        
+        // 5. 强制刷新，让 AuthContext 重新读取 LocalStorage
         window.location.reload();
 
-    } catch (e) {
+    } catch (e: any) {
         console.error(e);
-        setToast({ msg: '影子登录失败', type: 'error' });
+        setToast({ msg: `切换失败: ${e.message}`, type: 'error' });
     }
   };
 

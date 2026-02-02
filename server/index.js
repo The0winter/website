@@ -145,6 +145,7 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
     }
 });
 
+
 // 🚀 影子登录接口：管理员假扮成目标用户
 app.post('/api/admin/impersonate/:userId', authMiddleware, adminMiddleware, async (req, res) => {
     try {
@@ -158,13 +159,15 @@ app.post('/api/admin/impersonate/:userId', authMiddleware, adminMiddleware, asyn
 
         console.log(`🕵️‍♂️ 管理员 [${req.user.id}] 正在影子登录目标: [${targetUser.username}]`);
 
-        // 2. 构造登录返回数据 (和 signin 接口保持一致)
+        // 2. 构造数据
+        // 🔥 重点修复：强制使用 _id.toString()，确保 ID 绝对存在！
+        const safeId = targetUser._id.toString(); 
         const { password: _, ...userWithoutPassword } = targetUser.toObject();
         
-        // 3. 返回数据，前端拿到后会误以为是“正常登录成功”
+        // 3. 返回给前端
         res.json({ 
             user: { 
-                id: targetUser.id, 
+                id: safeId,  // 👈 绝对稳健的 ID
                 email: targetUser.email, 
                 username: targetUser.username, 
                 role: targetUser.role 
