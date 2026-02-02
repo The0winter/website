@@ -1,16 +1,16 @@
 'use client';
 
-import { useEffect, useState, useMemo, Suspense } from 'react';
+import { useEffect, useState, useMemo, Suspense, useCallback } from 'react';
 import Link from 'next/link';
 // 引入图标
 import { 
   BookOpen, TrendingUp, Star, Zap, ChevronRight,
   Sparkles, Sword, Building2, History, Rocket, ImageOff,
-  Search, User, Library // 👈 新增图标
+  Search, User, Library
 } from 'lucide-react';
 import { booksApi, Book } from '@/lib/api';
 
-// --- 0. 分类配置 ---
+// --- 0. 分类配置 (保持不变) ---
 const categories = [
   { name: '全部', icon: BookOpen, slug: 'all' },
   { name: '玄幻', icon: Sparkles, slug: 'fantasy' },
@@ -24,13 +24,11 @@ const categories = [
   { name: '悬疑', icon: History, slug: 'mystery' },
 ];
 
-// --- 1. 单个榜单子组件 (🔥 已针对移动端深度优化) ---
+// --- 1. 单个榜单子组件 (保持不变) ---
 const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }: any) => (
   <div className="bg-white md:rounded-xl shadow-sm md:border border-gray-100 flex flex-col h-full overflow-hidden">
     
-    {/* 🔥 优化点 3：手机端隐藏榜单头部 (综合强推 Top10)，直接和 Tab 连在一起节约空间 
-       hidden md:flex -> 手机隐藏，电脑显示
-    */}
+    {/* 手机端隐藏榜单头部 */}
     <div className="hidden md:flex p-5 border-b border-gray-50 items-center justify-between bg-gradient-to-r from-gray-50 to-white">
       <div className="flex items-center gap-3">
         <Icon className={`w-6 h-6 ${rankColor}`} />
@@ -80,8 +78,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
             {/* C. 书籍信息 */}
             <div className="flex-1 min-w-0 flex flex-col justify-between h-20 md:h-28 py-0.5 md:py-1">
               <div>
-                  {/* 🔥 优化点 4：书名改小，避免换行 */}
-                  {/* text-sm (手机) md:text-[16px] (电脑) */}
+                  {/* 书名改小，避免换行 */}
                   <h4 className="text-sm md:text-[16px] font-extrabold text-gray-800 leading-snug line-clamp-1 md:line-clamp-2 group-hover:text-blue-600 transition-colors mb-1 md:mb-2">
                     {book.title}
                   </h4>
@@ -91,7 +88,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                         {book.author || (book.author_id as any)?.username || '未知'}
                     </span>
                     
-                    {/* 🔥 优化点 4：手机端删掉分类标签 (hidden md:block) */}
+                    {/* 手机端删掉分类标签 */}
                     <span className="hidden md:block w-px h-3 bg-gray-300"></span>
                     <span className="hidden md:block bg-gray-100 px-2.5 py-1 rounded-md text-xs text-gray-600">
                         {book.category || '综合'}
@@ -99,7 +96,6 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                   </div>
               </div>
 
-              {/* 🔥 优化点 4：改为“浏览” */}
               <div className="text-xs text-gray-400 flex items-center mt-auto">
                   <span>{(book.views || 0).toLocaleString()} 浏览</span>
               </div>
@@ -132,44 +128,17 @@ function HomeContent() {
   const [allBooks, setAllBooks] = useState<Book[]>([]); 
   const [featuredBooks, setFeaturedBooks] = useState<Book[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all'); 
-  const [activeBookIndex, setActiveBookIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  // --- 新增：轮播图手势滑动逻辑 ---
-  const [touchStart, setTouchStart] = useState(0);
-  const [touchEnd, setTouchEnd] = useState(0);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-      setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-      setTouchEnd(e.targetTouches[0].clientX);
-  };
-
-  const handleTouchEnd = () => {
-      if (!touchStart || !touchEnd) return;
-      const distance = touchStart - touchEnd;
-      const minSwipeDistance = 50; // 滑动阈值
-
-      // 左滑 (下一张)
-      if (distance > minSwipeDistance) {
-          setActiveBookIndex((prev) => (prev + 1) % featuredBooks.length);
-      }
-      // 右滑 (上一张)
-      if (distance < -minSwipeDistance) {
-          setActiveBookIndex((prev) => (prev - 1 + featuredBooks.length) % featuredBooks.length);
-      }
-      // 重置
-      setTouchStart(0);
-      setTouchEnd(0);
-  };
-
   
   // 移动端 Tab 状态
   const [mobileTab, setMobileTab] = useState<'rec' | 'week' | 'day'>('rec');
 
+  // 🔥 新增：轮播图专用状态 (实现无限循环)
+  const [activeBookIndex, setActiveBookIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(true); // 控制动画开关
+
+  // 1. 获取数据 (🔥 修改：只取前3本)
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -178,7 +147,8 @@ function HomeContent() {
         setAllBooks(books);
         
         const sortedForFeature = [...books].sort((a: any, b: any) => (b.views || 0) - (a.views || 0));
-        setFeaturedBooks(sortedForFeature.slice(0, 5));
+        // 🔥 只取前3本
+        setFeaturedBooks(sortedForFeature.slice(0, 3));
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -188,6 +158,75 @@ function HomeContent() {
     fetchData();
   }, []);
 
+  // 2. 构造“视觉欺骗”的列表 (A, B, C -> A, B, C, A')
+  const sliderList = useMemo(() => {
+      if (featuredBooks.length === 0) return [];
+      // 在末尾追加第一本书作为克隆体
+      return [...featuredBooks, featuredBooks[0]];
+  }, [featuredBooks]);
+
+  // 3. 处理轮播“下一张”
+  const handleNext = useCallback(() => {
+      if (featuredBooks.length === 0) return;
+      setActiveBookIndex(prev => prev + 1);
+  }, [featuredBooks.length]);
+
+  // 4. 处理轮播“上一张”
+  const handlePrev = () => {
+      if (featuredBooks.length === 0) return;
+      setActiveBookIndex(prev => {
+          if (prev === 0) {
+              // 从第一张往左滑，先不处理复杂逻辑，简单跳到最后
+              return featuredBooks.length - 1;
+          }
+          return prev - 1;
+      });
+  };
+
+  // 5. 监听索引变化，处理“瞬间回弹”
+  useEffect(() => {
+      // 当滑到了克隆体 (index = length)
+      if (activeBookIndex === featuredBooks.length && featuredBooks.length > 0) {
+          // 等待 500ms 动画播完
+          const timer = setTimeout(() => {
+              // 关闭动画，瞬间跳回 index 0
+              setIsTransitioning(false);
+              setActiveBookIndex(0);
+              
+              // 下一帧恢复动画
+              requestAnimationFrame(() => {
+                  requestAnimationFrame(() => {
+                      setIsTransitioning(true);
+                  });
+              });
+          }, 500);
+          return () => clearTimeout(timer);
+      }
+  }, [activeBookIndex, featuredBooks.length]);
+
+  // 6. 自动轮播
+  useEffect(() => {
+    if (isPaused || featuredBooks.length <= 1) return;
+    const intervalId = window.setInterval(handleNext, 3000);
+    return () => window.clearInterval(intervalId);
+  }, [handleNext, isPaused, featuredBooks.length]);
+
+  // 7. 触摸滑动逻辑
+  const [touchStart, setTouchStart] = useState(0);
+  const [touchEnd, setTouchEnd] = useState(0);
+
+  const handleTouchStart = (e: React.TouchEvent) => setTouchStart(e.targetTouches[0].clientX);
+  const handleTouchMove = (e: React.TouchEvent) => setTouchEnd(e.targetTouches[0].clientX);
+  const handleTouchEnd = () => {
+      if (!touchStart || !touchEnd) return;
+      const distance = touchStart - touchEnd;
+      if (distance > 50) handleNext(); // 左滑
+      if (distance < -50) handlePrev(); // 右滑
+      setTouchStart(0);
+      setTouchEnd(0);
+  };
+
+  // 8. 计算榜单 (保持不变)
   const { recList, weekList, dayList } = useMemo(() => {
     const targetCategory = categories.find(c => c.slug === selectedCategory);
     const filtered = allBooks.filter(book => {
@@ -195,41 +234,23 @@ function HomeContent() {
         return targetCategory && book.category === targetCategory.name;
     });
 
-    // 1. 综合强推
     const rec = [...filtered].sort((a: any, b: any) => {
         const scoreA = ((a.rating || 0) * 100 * 0.6) + ((a.weekly_views || 0) * 0.4);
         const scoreB = ((b.rating || 0) * 100 * 0.6) + ((b.weekly_views || 0) * 0.4);
         return scoreB - scoreA;
     }).slice(0, 10);
 
-    // 2. 本周热度
     const week = [...filtered].sort((a: any, b: any) => (b.weekly_views || 0) - (a.weekly_views || 0)).slice(0, 10);
 
-    // 3. 今日上升
     const day = [...filtered].sort((a: any, b: any) => (b.daily_views || 0) - (a.daily_views || 0)).slice(0, 10);
 
     return { recList: rec, weekList: week, dayList: day };
   }, [allBooks, selectedCategory]);
 
-  useEffect(() => {
-    if (isPaused || featuredBooks.length <= 1) return;
-    const intervalId = window.setInterval(() => {
-      setActiveBookIndex((prevIndex) => (prevIndex + 1) % featuredBooks.length);
-    }, 3000);
-    return () => window.clearInterval(intervalId);
-  }, [featuredBooks, isPaused, activeBookIndex]);
-
-  const activeBook = featuredBooks[activeBookIndex] || featuredBooks[0];
-
   return (
     <div className="min-h-screen bg-[#f8f9fa] pb-12">
       
-      {/* 🔥 优化点 1：顶部导航栏 
-         电脑端 (hidden md:block)：保持原样黑色长条
-         手机端 (md:hidden)：白色背景，图标代替文字
-      */}
-      
-      {/* 电脑端导航 (PC ONLY) */}
+      {/* 顶部导航栏 (保持不变) */}
       <div className="hidden md:block w-full bg-[#3e3d43] h-[40px]">
         <div className="max-w-6xl mx-auto h-full flex justify-between items-center text-white text-[14px] px-4">
           <div className="flex gap-6 overflow-x-auto no-scrollbar">
@@ -243,14 +264,30 @@ function HomeContent() {
         </div>
       </div>
 
+      {/* 手机端导航 (保持不变) */}
+      <div className="md:hidden sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm px-4 h-[50px] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+             <BookOpen className="w-5 h-5 text-blue-600" />
+             <span className="font-black text-lg text-gray-900 tracking-tighter">九天</span>
+          </div>
+          <div className="flex items-center gap-5 text-gray-600">
+             <Search className="w-5 h-5" />
+             <Link href="/library"><Library className="w-5 h-5" /></Link>
+             <Link href="/login">
+                <div className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center text-gray-500">
+                    <User className="w-4 h-4" />
+                </div>
+             </Link>
+          </div>
+      </div>
+
       <div className="max-w-[1400px] mx-auto md:px-4 md:py-8 flex flex-col gap-0 md:gap-10">
       
-{/* === 轮播图区域 (支持滑动动画) === */}
+        {/* === 轮播图区域 (支持无限循环) === */}
         <section className="w-full" onMouseLeave={() => setIsPaused(false)}>
           {featuredBooks.length > 0 ? (
             <div className="bg-white md:rounded-2xl shadow-sm border-b md:border border-gray-200 overflow-hidden w-full">
               
-              {/* 1. 视窗容器：限制高度，隐藏溢出 */}
               <div 
                 className="relative h-[220px] md:h-[380px] w-full overflow-hidden group"
                 onMouseEnter={() => setIsPaused(true)}
@@ -258,20 +295,23 @@ function HomeContent() {
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
               >
-                {/* 2. 核心滑动轨道：Flex布局 + Translate位移 + 过渡动画 */}
+                {/* 🔥 核心滑动轨道 
+                    1. 渲染 sliderList (包含克隆体)
+                    2. 根据 isTransitioning 动态控制 duration
+                */}
                 <div 
-                    className="flex h-full transition-transform duration-500 ease-out"
+                    className={`flex h-full ease-out ${isTransitioning ? 'transition-transform duration-500' : ''}`}
                     style={{ transform: `translateX(-${activeBookIndex * 100}%)` }}
                 >
-                    {featuredBooks.map((book) => (
+                    {sliderList.map((book, index) => (
                         <Link 
-                            key={book.id} 
+                            // 注意 key 的唯一性
+                            key={`${book.id}-${index}`} 
                             href={`/book/${book.id}`} 
-                            className="min-w-full h-full relative block" // min-w-full 强制占满一行
-                            draggable={false} // 防止拖拽图片干扰滑动
+                            className="min-w-full h-full relative block"
+                            draggable={false}
                         >
                             <div className="relative h-full bg-gradient-to-br from-gray-900 to-black select-none">
-                                {/* 背景图 */}
                                 {book.cover_image && (
                                     <div className="absolute inset-0">
                                         <img src={book.cover_image} alt={book.title} className="w-full h-full object-cover opacity-40 blur-2xl scale-110" draggable={false} />
@@ -279,9 +319,7 @@ function HomeContent() {
                                     </div>
                                 )}
                                 
-                                {/* 内容区域 */}
                                 <div className="relative h-full flex items-center p-5 md:p-10 gap-10 max-w-6xl mx-auto">
-                                    {/* 封面 (PC显示) */}
                                     {book.cover_image && (
                                         <img src={book.cover_image} alt={book.title} className="w-48 h-72 object-cover rounded-lg shadow-2xl border-2 border-white/10 flex-shrink-0 hidden md:block transform hover:scale-105 transition-transform duration-500" />
                                     )}
@@ -314,17 +352,19 @@ function HomeContent() {
                     ))}
                 </div>
 
-                {/* 3. 底部指示条 (绝对定位在视窗之上) */}
+                {/* 指示条：只渲染真实的数量 (3个) */}
                 <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2 z-20">
                     {featuredBooks.map((_, index) => (
                         <button
                             key={index}
                             onClick={(e) => {
                                 e.preventDefault(); 
+                                setIsTransitioning(true); // 点击指示点时开启滑动动画
                                 setActiveBookIndex(index);
                             }}
                             className={`h-1.5 rounded-full transition-all duration-300 ${
-                                index === activeBookIndex 
+                                // 取模运算，确保当处在“克隆体”(index=3)时，第0个指示点也是亮的
+                                (activeBookIndex % featuredBooks.length) === index 
                                 ? 'w-6 bg-white shadow-sm' 
                                 : 'w-1.5 bg-white/40 hover:bg-white/60'
                             }`}
@@ -333,21 +373,27 @@ function HomeContent() {
                 </div>
               </div>
 
-              {/* 4. PC端底部列表导航 (保持不变) */}
+              {/* PC端底部列表导航 (保持不变) */}
               <div className="bg-[#1a1a1a] border-t border-white/5 hidden lg:block">
-                 <div className="max-w-6xl mx-auto grid grid-cols-5 divide-x divide-white/5">
+                 {/* 因为只有3本书，改为 grid-cols-3 */}
+                 <div className="max-w-6xl mx-auto grid grid-cols-3 divide-x divide-white/5">
                   {featuredBooks.map((book, index) => (
                     <button
                       key={book.id}
-                      onClick={() => setActiveBookIndex(index)}
+                      onClick={() => {
+                          setIsTransitioning(true);
+                          setActiveBookIndex(index);
+                      }}
                       className={`px-4 py-5 text-sm transition-all relative overflow-hidden group text-left ${
-                        index === activeBookIndex ? 'bg-white/5' : 'hover:bg-white/5'
+                        (activeBookIndex % featuredBooks.length) === index ? 'bg-white/5' : 'hover:bg-white/5'
                       }`}
                     >
-                      {index === activeBookIndex && (
+                      {(activeBookIndex % featuredBooks.length) === index && (
                           <div className="absolute top-0 left-0 w-full h-0.5 bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.8)]"></div>
                       )}
-                      <span className={`block font-bold mb-0.5 line-clamp-1 ${index === activeBookIndex ? 'text-white' : 'text-gray-400 group-hover:text-gray-200'}`}>
+                      <span className={`block font-bold mb-0.5 line-clamp-1 ${
+                          (activeBookIndex % featuredBooks.length) === index ? 'text-white' : 'text-gray-400 group-hover:text-gray-200'
+                      }`}>
                         {book.title}
                       </span>
                       <span className="text-xs text-gray-600 group-hover:text-gray-500">{book.category || '综合'}</span>
@@ -363,9 +409,7 @@ function HomeContent() {
           )}
         </section>
 
-        {/* 🔥 优化点 2：隐藏分类筛选栏 (手机端)
-           hidden md:block -> 手机隐藏，电脑显示
-        */}
+        {/* === 分类筛选栏 (保持不变) === */}
         <section className="w-full hidden md:block">
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
               <nav className="flex flex-wrap items-center gap-4">
@@ -391,11 +435,8 @@ function HomeContent() {
             </div>
         </section>
 
-        {/* === 三大榜单区域 === */}
+        {/* === 三大榜单区域 (保持不变) === */}
         <section className="w-full">
-            {/* 🔥 优化点 2：隐藏“xx热门排行”这行大字 (手机端)
-                hidden md:flex -> 手机隐藏，电脑显示
-            */}
             <div className="hidden md:flex mb-6 items-center justify-between gap-4">
                 <h2 className="text-2xl font-black text-gray-900 flex items-center gap-3">
                     <span className="text-3xl">🔥</span>
@@ -406,10 +447,7 @@ function HomeContent() {
                 </span>
             </div>
 
-            {/* 🔥 优化点 2：Tab 栏紧贴轮播图 (手机端)
-               lg:hidden -> 只在手机/平板显示
-               改了 padding 和背景色，让它看起来更像原生 App 的 Tab
-            */}
+            {/* 移动端 Tab 栏 */}
             <div className="flex border-b border-gray-100 bg-white lg:hidden sticky top-[50px] z-40">
                 {[
                     { id: 'rec', label: '综合强推' },
@@ -435,7 +473,7 @@ function HomeContent() {
                     {[1,2,3].map(i => <div key={i} className="h-[700px] bg-gray-200 rounded-2xl animate-pulse"></div>)}
                 </div>
             ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-3 md:gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     
                     {/* 1. 综合强推 */}
                     <div className={`${mobileTab === 'rec' ? 'block' : 'hidden'} lg:block`}>
