@@ -433,7 +433,7 @@ app.post('/api/books', authMiddleware, async (req, res) => {
       description: description?.trim() || '',
       cover_image: cover_image || '',
       category: category || '',
-      status: status || 'ongoing',
+      status: status || '连载',
       views: views || 0,
     });
     
