@@ -118,7 +118,7 @@ export default function WriterDashboard() {
 
   // ================= 核心业务逻辑 =================
 
-// 🚀 核心：影子登录逻辑 (终极修正版)
+// 🚀 核心：影子登录逻辑 (最终完美版)
   const handleShadowLogin = async (targetUserId: string, targetName: string) => {
     // 1. 只有 Admin 才能操作
     if (!user || (user as any).role !== 'admin') {
@@ -126,53 +126,57 @@ export default function WriterDashboard() {
         return;
     }
     
-    if (!confirm(`⚠️ 确认切换身份\n\n即将以 [ ${targetName} ] 的视角登录。\n登录后你将看到他的书架和作品。`)) return;
+    if (!confirm(`⚠️ 确认切换身份\n\n即将以 [ ${targetName} ] 的视角登录。`)) return;
 
     try {
-        // 2. 发送请求
+        // 2. 发送请求 (带上管理员ID作为通行证)
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/impersonate/${targetUserId}`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                // 注意：这里必须发送当前管理员的 ID，否则后端不让你过
                 'x-user-id': user.id 
             }
         });
 
         if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error || '影子登录请求失败');
+            // 尝试读取错误信息，如果限流了会在这里被捕获
+            const errText = await res.text(); 
+            throw new Error(errText || '请求失败');
         }
         
         const data = await res.json();
+        const newId = data.user.id; // 此时已经是字符串格式
+
+        // 🔥 3. 暴力覆盖：不留任何旧数据的痕迹
+        // 既然系统是基于 ID 的，我们不需要保留 Admin 的任何东西
+        localStorage.clear(); 
         
-        // 🔥 3. 拿到新身份的 ID (双重保险)
-        const newId = data.user.id;
-        if (!newId) throw new Error('后端未返回有效的 ID');
-
-        // 🔥 4. 暴力修改 LocalStorage (不保留 Token，防止干扰)
-        // 我们假设后端只认 x-user-id，不需要 JWT Token
-        localStorage.clear(); // 先清空，防止旧数据残留
-
-        // 重新写入新身份
+        // 4. 建立新身份 (全方位覆盖)
         localStorage.setItem('userId', newId);
         localStorage.setItem('user_id', newId);
         localStorage.setItem('id', newId);
-        localStorage.setItem('user', JSON.stringify(data.user)); // 存入整个对象
         
-        // 如果你的系统一定需要一个 token 占位符才能跑，就给个假的，或者沿用旧的
-        // 这里我们选择不存 token，强制让系统依赖 user 对象
-        // (如果你发现登出，请取消注释下面这一行)
-        // localStorage.setItem('token', 'shadow-login-token');
+        // 关键点：如果 AuthContext 需要 token，我们就给它 ID 作为 token
+        // 这样既满足了“有值”的要求，又不会因为存了 Admin 的 token 而导致错乱
+        localStorage.setItem('token', newId); 
+        
+        // 存入完整的用户对象
+        localStorage.setItem('user', JSON.stringify(data.user));
 
         alert(`✅ 切换成功！\n\n当前身份：${data.user.username}\n即将刷新页面...`);
         
-        // 5. 强制刷新，让 AuthContext 重新读取 LocalStorage
+        // 5. 刷新，AuthContext 会读取上面的新 ID，向后端发起 session 请求
+        // 只要后端限流解除了，session 请求就会成功，页面就稳住了！
         window.location.reload();
 
     } catch (e: any) {
         console.error(e);
-        setToast({ msg: `切换失败: ${e.message}`, type: 'error' });
+        // 如果是 429 错误，提示用户
+        if (e.message.includes('Too Many Requests') || e.message.includes('频繁')) {
+             alert('❌ 切换失败：操作太频繁，后端限流了。请等待几分钟或按教程解除后端限流。');
+        } else {
+             setToast({ msg: `切换失败: ${e.message}`, type: 'error' });
+        }
     }
   };
 
