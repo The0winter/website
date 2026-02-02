@@ -1,20 +1,18 @@
-'use client'; // 👈 必须放在第一行
+'use client'; 
 
-import { useEffect, useState, Suspense, useRef } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { 
   ChevronLeft, Settings, BookOpen, List, 
   Bookmark, BookmarkCheck, Moon, X, 
-  ArrowUpDown, Check, Sun, Type, AlignLeft, MoveHorizontal
+  ArrowUpDown, Check, Sun, AlignLeft, MoveHorizontal
 } from 'lucide-react';
 import { booksApi, chaptersApi, bookmarksApi, Book, Chapter } from '@/lib/api';
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
 
-// 1. 阅读器核心组件
 function ReaderContent() {
-  // 获取路由参数
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -22,7 +20,6 @@ function ReaderContent() {
   const bookId = params.id as string;
   const chapterIdParam = searchParams.get('chapterId');
 
-  // 用户与数据状态
   const { user } = useAuth();
   const [book, setBook] = useState<Book | null>(null);
   const [chapter, setChapter] = useState<Chapter | null>(null);
@@ -30,19 +27,16 @@ function ReaderContent() {
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  // UI 开关状态
   const [showCatalog, setShowCatalog] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [catalogReversed, setCatalogReversed] = useState(false);
 
-  // 导航栏状态
+  // 导航栏显示状态
   const [showNav, setShowNav] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
   
-  // ⚙️ 全局设置 (Context)
   const { theme, setTheme } = useReadingSettings();
 
-  // 📖 本地阅读偏好 (Local State)
   const [themeColor, setThemeColor] = useState<'gray' | 'cream' | 'green' | 'blue'>('cream');
   const [fontFamily, setFontFamily] = useState<'sans' | 'serif' | 'kai'>('sans');
   const [fontSizeNum, setFontSizeNum] = useState(20);
@@ -50,42 +44,29 @@ function ReaderContent() {
   const [paraSpacing, setParaSpacing] = useState(4);
   const [pageWidth, setPageWidth] = useState<'auto' | '640' | '800' | '900' | '1000' | '1280'>('900');
 
-  // 🎨 配色方案配置表
   const themeMap = {
-    cream:  { name: '羊皮纸', bg: '#f6f1e7', text: '#333333', line: '#d4cbb3', panel: '#fffbf0' },
-    gray:   { name: '雅致灰', bg: '#f0f0f0', text: '#222222', line: '#dcdcdc', panel: '#ffffff' },
-    green:  { name: '护眼绿', bg: '#dcedc8', text: '#222222', line: '#c5e1a5', panel: '#e8f5e9' },
-    blue:   { name: '极光蓝', bg: '#e3edfc', text: '#222222', line: '#d0e0f8', panel: '#f0f7ff' },
-    dark:   { name: '夜间',   bg: '#1a1a1a', text: '#a0a0a0', line: '#333333', panel: '#252525' },
+    cream:  { name: '羊皮纸', bg: '#f6f1e7', text: '#333333', line: '#d4cbb3' },
+    gray:   { name: '雅致灰', bg: '#f0f0f0', text: '#222222', line: '#dcdcdc' },
+    green:  { name: '护眼绿', bg: '#dcedc8', text: '#222222', line: '#c5e1a5' },
+    blue:   { name: '极光蓝', bg: '#e3edfc', text: '#222222', line: '#d0e0f8' },
+    dark:   { name: '夜间',   bg: '#1a1a1a', text: '#a0a0a0', line: '#333333' },
   };
 
   const isActuallyDark = theme === 'dark';
   const activeTheme = isActuallyDark ? themeMap.dark : themeMap[themeColor];
 
   const paraSpacingMap: Record<number, string> = {
-    2: '0.5rem',
-    4: '1rem',
-    6: '1.5rem',
-    8: '2rem',
+    2: '0.5rem', 4: '1rem', 6: '1.5rem', 8: '2rem',
   };
 
-  // --- 初始化数据 ---
-  useEffect(() => {
-    if (bookId) initData();
-  }, [bookId]); 
+  useEffect(() => { if (bookId) initData(); }, [bookId]); 
 
-  // 统计阅读量
   useEffect(() => {
-    if (bookId) {
-      booksApi.incrementViews(bookId).catch(e => console.error(e));
-    }
+    if (bookId) booksApi.incrementViews(bookId).catch(e => console.error(e));
   }, [bookId, chapterIdParam]);
 
-  useEffect(() => {
-    if (bookId && user) checkBookmark();
-  }, [bookId, user]);
+  useEffect(() => { if (bookId && user) checkBookmark(); }, [bookId, user]);
 
-  // 目录定位
   useEffect(() => {
     if (showCatalog) {
       setTimeout(() => {
@@ -108,20 +89,18 @@ function ReaderContent() {
       }
       setLastScrollY(currentScrollY);
     };
-
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, [lastScrollY]);
 
-  // 🔥 点击屏幕中央切换导航栏
+  // 🔥 点击屏幕中央呼出/隐藏菜单 (Mobile First)
   const handleContentClick = (e: React.MouseEvent) => {
-    // 如果正在选中文本，不触发
-    const selection = window.getSelection();
-    if (selection && selection.toString().length > 0) return;
-
+    // 防止选中文本时触发
+    if (window.getSelection()?.toString().length) return;
+    
     const width = window.innerWidth;
     const x = e.clientX;
-    // 点击屏幕中间 40% 区域触发
+    // 点击中间 40% 区域触发
     if (x > width * 0.3 && x < width * 0.7) {
       setShowNav(prev => !prev);
     }
@@ -135,14 +114,10 @@ function ReaderContent() {
       try {
         const res = await fetch(`https://website-production-6edf.up.railway.app/api/chapters/${targetId}`);
         if (res.ok) {
-          const fullChapter = await res.json();
-          setChapter(fullChapter);
+          setChapter(await res.json());
         }
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
-      }
+      } catch (error) { console.error(error); } 
+      finally { setLoading(false); }
     };
     fetchChapterContent();
   }, [chapterIdParam, allChapters]);
@@ -156,9 +131,7 @@ function ReaderContent() {
       if (bookData) setBook(bookData);
       if (chaptersData) setAllChapters(chaptersData);
       setLoading(false);
-    } catch (error) {
-      setLoading(false);
-    }
+    } catch (error) { setLoading(false); }
   };
 
   const checkBookmark = async () => {
@@ -198,79 +171,63 @@ function ReaderContent() {
 
   const displayChapters = catalogReversed ? [...allChapters].reverse() : allChapters;
 
-  // --- 渲染部分 ---
-
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: activeTheme.bg }}>
       <BookOpen className="h-12 w-12 opacity-50 animate-pulse" style={{ color: activeTheme.text }} />
     </div>
   );
 
-  if (!book || !chapter) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: activeTheme.bg }}>
-       <div className="text-center">
-         <h2 className="text-xl font-bold mb-4" style={{ color: activeTheme.text }}>加载失败</h2>
-         <Link href={`/book/${bookId}`} className="text-blue-500 underline">返回详情</Link>
-       </div>
-    </div>
-  );
+  if (!book || !chapter) return null;
 
   return (
     <div 
       className="min-h-screen w-full transition-colors duration-300"
       style={{ backgroundColor: activeTheme.bg }}
     >
-      {/* 🔥 导航栏 (集成设置与目录) */}
+      {/* === 导航栏 (Navbar) === */}
       <nav
         className="fixed top-0 left-1/2 z-40 h-14 flex items-center justify-between px-4 sm:px-6 border-b shadow-sm transition-all duration-300"
         style={{
           backgroundColor: activeTheme.bg,
           color: activeTheme.text,
           borderColor: activeTheme.line,
-          maxWidth: pageWidth === 'auto' ? '100%' : `${pageWidth}px`, // 宽度跟随页面设置
+          maxWidth: pageWidth === 'auto' ? '100%' : `${pageWidth}px`, // 跟随页面宽度
           width: '100%',
           transform: `translate(-50%, ${showNav ? '0' : '-100%'})`,
         }}
       >
-        {/* 左侧：Logo + 九天 */}
+        {/* 🔥 修改点 5：左侧改为 图标 + 九天 */}
         <Link href="/" className="flex items-center gap-2 hover:opacity-70 transition-opacity">
           <BookOpen className="w-5 h-5 text-blue-600" />
           <span className="font-bold text-lg tracking-tight">九天</span>
         </Link>
 
-        {/* 右侧：功能按钮组 */}
-        <div className="flex items-center gap-2 sm:gap-4">
-          <button 
-            onClick={() => setShowCatalog(true)}
-            className="p-2 hover:bg-black/5 rounded-full transition-colors"
-            title="目录"
-          >
-            <List className="w-5 h-5" />
+        {/* 🔥 修改点 6：删除了中间的书名 (空间留白) */}
+
+        {/* 右侧：功能区 (PC端的设置在侧边栏，这里只留详情和书架) */}
+        <div className="flex items-center gap-4">
+          {/* 手机端可以在这里放一个简单的目录入口，或者完全依赖点击呼出 */}
+          <button onClick={() => setShowCatalog(true)} className="md:hidden p-2">
+             <List className="w-5 h-5"/>
           </button>
           
-          <button 
-            onClick={() => setShowSettings(!showSettings)}
-            className={`p-2 hover:bg-black/5 rounded-full transition-colors ${showSettings ? 'bg-black/5 text-blue-500' : ''}`}
-            title="设置"
-          >
-            <Settings className="w-5 h-5" />
+          {/* 手机端设置入口 */}
+          <button onClick={() => setShowSettings(true)} className="md:hidden p-2">
+             <Settings className="w-5 h-5"/>
           </button>
 
-          <Link 
-            href="/library" 
-            className="flex items-center gap-1 px-3 py-1.5 text-xs sm:text-sm font-medium border rounded-full hover:bg-black/5 transition-all"
-            style={{ borderColor: activeTheme.line }}
-          >
-            书架
+          <Link href={`/book/${bookId}`} className="text-sm hover:opacity-70 transition-opacity hidden sm:block">详情</Link>
+          <Link href="/library" className="flex items-center gap-1 text-sm hover:opacity-70 transition-opacity">
+            <span>书架</span>
           </Link>
         </div>
       </nav>
 
-      {/* 主体内容容器 */}
+      {/* === 主体内容 === */}
       <div 
         className="mx-auto relative transition-all duration-300 min-h-screen"
         style={{ maxWidth: pageWidth === 'auto' ? '800px' : `${pageWidth}px` }} 
-        onClick={handleContentClick}
+        onClick={handleContentClick} // 🔥 核心交互：点击正文呼出菜单
       >
         <article 
           className="w-full min-h-screen px-4 md:px-8 lg:px-12 pt-20 pb-20 transition-colors duration-300"
@@ -288,7 +245,7 @@ function ReaderContent() {
             </div>
           </div>
 
-          {/* 正文内容 */}
+          {/* 正文 */}
           <div 
             className="text-justify break-words"
             style={{ 
@@ -299,28 +256,31 @@ function ReaderContent() {
           >
             {(chapter.content || '').split('\n').map((para, i) => {
               const text = para.trim();
-              if (!text) return null;
-              
-              return (
-                <p 
-                  key={i} 
-                  style={{ 
-                    textIndent: '2em',
-                    marginBottom: paraSpacingMap[paraSpacing] || '1rem'
-                  }}
-                >
-                  {text}
-                </p>
-              );
-            })}
+              // ✅ 1. 恢复过滤逻辑：
+                // 过滤掉：空行、包含“作者：”的行、日期格式的行 (如 2026-01-29)
+                if (!text || text.includes('作者：') || /^\d{4}-\d{2}-\d{2}/.test(text)) return null;
+                
+                // ✅ 2. 恢复过滤逻辑：
+                // 过滤掉：内容完全等于章节标题的行
+                if (text === chapter.title.trim()) return null;
+
+                return (
+                  <p 
+                    key={i} 
+                    style={{ textIndent: '2em', marginBottom: paraSpacingMap[paraSpacing] || '1rem' }}
+                  >
+                    {text}
+                  </p>
+                );
+              })}
           </div>
 
-          {/* 底部导航 (优化按钮样式) */}
+          {/* 🔥 修改点 4：底部按钮优化 (更和谐的圆角和高度) */}
           <div className="mt-16 flex items-center justify-between gap-4">
             <button 
               disabled={!prevChapter}
               onClick={(e) => { e.stopPropagation(); prevChapter && goToChapter(prevChapter.id); }}
-              className="flex-1 py-3 rounded-lg border text-sm font-medium hover:bg-black/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+              className="flex-1 py-3 rounded-xl border text-sm font-bold shadow-sm active:scale-95 transition-all disabled:opacity-30 disabled:active:scale-100 hover:bg-black/5"
               style={{ borderColor: activeTheme.line }}
             >
               上一章
@@ -329,12 +289,31 @@ function ReaderContent() {
             <button 
               disabled={!nextChapter}
               onClick={(e) => { e.stopPropagation(); nextChapter && goToChapter(nextChapter.id); }}
-              className="flex-1 py-3 rounded-lg bg-blue-600 text-white text-sm font-medium shadow-md hover:bg-blue-700 disabled:opacity-50 disabled:bg-gray-400 transition-all"
+              className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-md shadow-blue-200 active:scale-95 transition-all disabled:opacity-50 disabled:bg-gray-400 disabled:shadow-none disabled:active:scale-100"
             >
               {nextChapter ? '下一章' : '已是最新'}
             </button>
           </div>
         </article>
+
+        {/* ✅ 恢复：PC端侧边工具栏 (Sidebar) - 用户要求改回上一版 */}
+        <aside 
+          className="fixed right-10 top-1/3 hidden xl:flex flex-col gap-4 p-3 rounded-xl shadow-lg border transition-all duration-300" 
+          style={{ backgroundColor: activeTheme.bg, borderColor: activeTheme.line }}
+        >
+          <button onClick={() => setShowCatalog(true)} className="p-3 hover:bg-black/5 rounded-lg tooltip-right" title="目录">
+            <List style={{ color: activeTheme.text }} />
+          </button>
+          <button onClick={toggleBookmark} className="p-3 hover:bg-black/5 rounded-lg" title="书签">
+            {isBookmarked ? <BookmarkCheck className="text-red-500" /> : <Bookmark style={{ color: activeTheme.text }} />}
+          </button>
+          <button onClick={() => setTheme(isActuallyDark ? 'light' : 'dark')} className="p-3 hover:bg-black/5 rounded-lg" title="夜间模式">
+            {isActuallyDark ? <Sun className="text-yellow-500" /> : <Moon style={{ color: activeTheme.text }} />}
+          </button>
+          <button onClick={() => setShowSettings(true)} className="p-3 hover:bg-black/5 rounded-lg" title="设置">
+            <Settings style={{ color: activeTheme.text }} />
+          </button>
+        </aside>
       </div>
 
       {/* 目录弹窗 */}
@@ -342,7 +321,7 @@ function ReaderContent() {
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end" onClick={() => setShowCatalog(false)}>
           <div 
             className="w-[85%] max-w-sm h-full shadow-2xl flex flex-col transition-colors animate-in slide-in-from-right" 
-            style={{ backgroundColor: activeTheme.panel, color: activeTheme.text }} 
+            style={{ backgroundColor: isActuallyDark ? '#222' : '#fff', color: activeTheme.text }} 
             onClick={e => e.stopPropagation()}
           >
             <div className="p-4 border-b flex justify-between items-center shrink-0" style={{ borderColor: activeTheme.line }}>
@@ -351,15 +330,12 @@ function ReaderContent() {
                  <span className="text-xs opacity-60">({allChapters.length}章)</span>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setCatalogReversed(!catalogReversed)} className="p-1.5 hover:bg-black/5 rounded" title="排序">
+                <button onClick={() => setCatalogReversed(!catalogReversed)} className="p-1.5 hover:bg-black/5 rounded">
                    <ArrowUpDown className="w-4 h-4"/>
                 </button>
-                <button onClick={() => setShowCatalog(false)} className="p-1.5 hover:bg-black/5 rounded">
-                   <X className="w-5 h-5"/>
-                </button>
+                <button onClick={() => setShowCatalog(false)} className="p-1.5 hover:bg-black/5 rounded"><X className="w-5 h-5"/></button>
               </div>
             </div>
-            
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
               {displayChapters.map(ch => {
                 const isActive = ch.id === chapter.id;
@@ -380,101 +356,93 @@ function ReaderContent() {
         </div>
       )}
 
-      {/* 设置弹窗 (紧凑型，位于顶部导航栏下方) */}
+      {/* ✅ 恢复：PC端居中大设置弹窗 (用户要求保留大面板) */}
       {showSettings && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setShowSettings(false)} />
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowSettings(false)}>
           <div 
-            className="fixed top-16 right-4 sm:right-10 z-50 w-[320px] rounded-xl shadow-xl border p-5 animate-in fade-in zoom-in-95 origin-top-right"
-            style={{ 
-              backgroundColor: activeTheme.panel, 
-              color: activeTheme.text,
-              borderColor: activeTheme.line 
-            }}
+            className="w-full max-w-[500px] max-h-[85vh] overflow-y-auto p-6 md:p-8 rounded-2xl shadow-2xl space-y-6 transition-colors animate-in zoom-in-95" 
+            style={{ backgroundColor: isActuallyDark ? '#222' : '#fff', color: isActuallyDark ? '#eee' : '#333' }} 
+            onClick={e => e.stopPropagation()}
           >
-            <div className="space-y-5">
-              
-              {/* 1. 主题与夜间模式 */}
-              <div className="flex justify-between items-center">
-                 <span className="text-sm font-bold opacity-80">阅读主题</span>
-                 <button 
-                    onClick={() => setTheme(isActuallyDark ? 'light' : 'dark')}
-                    className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border hover:bg-black/5"
-                    style={{ borderColor: activeTheme.line }}
-                 >
-                    {isActuallyDark ? <Sun className="w-3 h-3"/> : <Moon className="w-3 h-3"/>}
-                    {isActuallyDark ? '日间' : '夜间'}
-                 </button>
+            <div className="flex justify-between border-b pb-4" style={{ borderColor: isActuallyDark ? '#444' : '#eee' }}>
+              <div>
+                  <h2 className="text-xl font-bold">阅读设置</h2>
+                  {/* 🔥 修改点 6：书名集成到这里显示 */}
+                  <p className="text-xs opacity-50 mt-1">当前书籍：{book.title}</p>
               </div>
-              <div className="flex justify-between gap-2">
+              <button onClick={() => setShowSettings(false)}><X /></button>
+            </div>
+            
+            {/* 1. 主题 */}
+            <div className="flex flex-col gap-3">
+              <span className="text-sm font-bold opacity-60">阅读主题</span>
+              <div className="flex gap-4 overflow-x-auto pb-2">
                 {Object.entries(themeMap).filter(([k]) => k !== 'dark').map(([key, val]) => (
                   <button 
                     key={key} 
                     disabled={isActuallyDark}
                     onClick={() => setThemeColor(key as any)}
-                    className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all ${themeColor === key && !isActuallyDark ? 'ring-2 ring-blue-500' : ''}`}
-                    style={{ backgroundColor: val.bg, borderColor: activeTheme.line }}
+                    className={`w-12 h-12 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${themeColor === key && !isActuallyDark ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}
+                    style={{ backgroundColor: val.bg, borderColor: isActuallyDark ? '#444' : '#ddd', opacity: isActuallyDark ? 0.3 : 1 }}
                   >
-                    {themeColor === key && !isActuallyDark && <Check className="w-4 h-4 text-green-600" />}
+                    {themeColor === key && !isActuallyDark && <Check className="w-5 h-5 text-green-600" />}
                   </button>
                 ))}
               </div>
-
-              {/* 2. 字号 */}
-              <div className="space-y-2">
-                 <div className="flex justify-between text-xs opacity-60">
-                    <span>字号</span>
-                    <span>{fontSizeNum}px</span>
-                 </div>
-                 <div className="flex items-center gap-3 bg-black/5 rounded-lg p-1">
-                    <button onClick={() => setFontSizeNum(Math.max(12, fontSizeNum - 2))} className="flex-1 py-1 hover:bg-white/50 rounded text-xs">A-</button>
-                    <div className="w-px h-3 bg-gray-300"></div>
-                    <button onClick={() => setFontSizeNum(Math.min(48, fontSizeNum + 2))} className="flex-1 py-1 hover:bg-white/50 rounded text-sm font-bold">A+</button>
-                 </div>
-              </div>
-
-              {/* 3. 字体 */}
-              <div className="space-y-2">
-                 <span className="text-xs opacity-60">字体</span>
-                 <div className="flex gap-2">
-                    {['sans', 'serif', 'kai'].map(f => (
-                       <button
-                          key={f}
-                          onClick={() => setFontFamily(f as any)}
-                          className={`flex-1 py-1.5 text-xs border rounded-md transition-colors ${fontFamily === f ? 'border-blue-500 text-blue-500' : 'border-transparent bg-black/5 hover:bg-black/10'}`}
-                       >
-                          {f === 'sans' ? '黑体' : f === 'serif' ? '宋体' : '楷体'}
-                       </button>
-                    ))}
-                 </div>
-              </div>
-
-              {/* 4. 排版 (行高 & 宽度) */}
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                    <span className="text-xs opacity-60">行间距</span>
-                    <button onClick={() => setLineHeight(lineHeight === 1.8 ? 2.2 : 1.8)} className="w-full py-1.5 text-xs bg-black/5 rounded-md hover:bg-black/10 flex items-center justify-center gap-2">
-                       <AlignLeft className="w-3 h-3"/> {lineHeight === 1.8 ? '适中' : '宽松'}
-                    </button>
-                 </div>
-                 <div className="space-y-2">
-                    <span className="text-xs opacity-60">页宽</span>
-                    <button onClick={() => setPageWidth(pageWidth === '900' ? 'auto' : '900')} className="w-full py-1.5 text-xs bg-black/5 rounded-md hover:bg-black/10 flex items-center justify-center gap-2">
-                       <MoveHorizontal className="w-3 h-3"/> {pageWidth === 'auto' ? '全屏' : '居中'}
-                    </button>
-                 </div>
-              </div>
-
             </div>
-          </div>
-        </>
-      )}
 
+            {/* 2. 字号 */}
+            <div className="flex flex-col gap-3">
+              <span className="text-sm font-bold opacity-60">字号大小</span>
+              <div className="flex items-center gap-4 rounded-xl px-4 py-2 transition-colors" style={{ backgroundColor: isActuallyDark ? '#333' : '#f3f4f6' }}>
+                <button onClick={() => setFontSizeNum(Math.max(12, fontSizeNum - 2))} className="p-2 hover:text-blue-500 font-bold">A-</button>
+                <div className="flex-1 h-1 bg-gray-300 rounded-full mx-4 overflow-hidden">
+                    <div className="h-full bg-blue-500" style={{ width: `${(fontSizeNum - 12) / (48 - 12) * 100}%` }}></div>
+                </div>
+                <button onClick={() => setFontSizeNum(Math.min(48, fontSizeNum + 2))} className="p-2 hover:text-blue-500 font-bold">A+</button>
+              </div>
+            </div>
+
+            {/* 3. 字体 */}
+            <div className="flex flex-col gap-3">
+              <span className="text-sm font-bold opacity-60">正文字体</span>
+              <div className="flex gap-2 p-1 rounded-xl w-full transition-colors" style={{ backgroundColor: isActuallyDark ? '#333' : '#f3f4f6' }}>
+                {['sans', 'serif', 'kai'].map((f) => (
+                  <button 
+                    key={f} 
+                    onClick={() => setFontFamily(f as any)}
+                    className={`flex-1 py-2 rounded-lg text-sm transition-all ${fontFamily === f ? 'bg-white shadow text-blue-600 font-bold' : 'opacity-60 hover:opacity-100'}`}
+                    style={{ backgroundColor: fontFamily === f ? (isActuallyDark ? '#555' : '#fff') : 'transparent' }}
+                  >
+                    {f === 'sans' ? '黑体' : f === 'serif' ? '宋体' : '楷体'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* 4. 间距控制 */}
+            <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                    <span className="text-sm font-bold opacity-60">行间距</span>
+                    <button onClick={() => setLineHeight(lineHeight === 1.8 ? 2.2 : 1.8)} className="w-full py-2 bg-black/5 rounded-lg hover:bg-black/10 flex items-center justify-center gap-2 text-sm">
+                       <AlignLeft className="w-4 h-4"/> {lineHeight === 1.8 ? '适中' : '宽松'}
+                    </button>
+                 </div>
+                 <div className="space-y-2">
+                    <span className="text-sm font-bold opacity-60">页宽 (PC)</span>
+                    <button onClick={() => setPageWidth(pageWidth === '900' ? 'auto' : '900')} className="w-full py-2 bg-black/5 rounded-lg hover:bg-black/10 flex items-center justify-center gap-2 text-sm">
+                       <MoveHorizontal className="w-4 h-4"/> {pageWidth === 'auto' ? '全屏' : '居中'}
+                    </button>
+                 </div>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// 2. 导出组件
 export default function ReaderPage() {
   return (
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center">加载中...</div>}>
