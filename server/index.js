@@ -41,6 +41,34 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET || 'wo_de_pa_chong_mi_ma_123';
 
 mongoose.connect(MONGO_URL)
   .then(() => console.log('✅ MongoDB Connected'))
+  .catch(err => console.error('❌ MongoDB Connection Error:', err))
+  .then(async () => {
+      console.log('✅ MongoDB Connected');
+      
+      // ================= 临时修复脚本开始 =================
+      try {
+          // 查找所有缺少 'id' 字段的用户
+          const usersToFix = await User.find({ id: { $exists: false } });
+          
+          if (usersToFix.length > 0) {
+              console.log(`🔧 发现 ${usersToFix.length} 个用户缺少 id 字段，正在修复...`);
+              
+              for (const u of usersToFix) {
+                  // 把 _id 转成字符串赋值给 id
+                  u.id = u._id.toString(); 
+                  await u.save();
+                  console.log(`   -> 修复用户: ${u.username}`);
+              }
+              console.log('✨ 所有用户数据修复完成！');
+          } else {
+              console.log('👍 所有用户数据正常，无需修复。');
+          }
+      } catch (err) {
+          console.error('❌ 修复数据脚本出错:', err);
+      }
+      // ================= 临时修复脚本结束 =================
+      
+  })
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
 // ================= 辅助函数 (Helpers) =================
@@ -68,6 +96,8 @@ async function ensureAuthorExists(authorName) {
         const randomNum = Math.floor(Math.random() * 1000);
         
         user = await User.create({
+            _id: newId,                // 2. 显式赋值给 _id
+            id: newId.toString(),
             username: authorName,
             email: `author_${timestamp}_${randomNum}@auto.generated`,
             password: randomPassword, // 👈 这里改成了随机密码
