@@ -118,9 +118,10 @@ export default function WriterDashboard() {
 
   // ================= 核心业务逻辑 =================
 
-// 🚀 核心：影子登录逻辑 (最终完美版)
+// 🚀 核心：影子登录逻辑 (修复版)
   const handleShadowLogin = async (targetUserId: string, targetName: string) => {
-    // 1. 只有 Admin 才能操作
+    // 1. 安全检查：如果 user 为空或者是 null，直接拦截
+    // 这里的判断能让 TS 知道后续 user 一定存在
     if (!user || (user as any).role !== 'admin') {
         alert('你不是管理员，无法操作');
         return;
@@ -129,12 +130,13 @@ export default function WriterDashboard() {
     if (!confirm(`⚠️ 确认切换身份\n\n即将以 [ ${targetName} ] 的视角登录。`)) return;
 
     try {
-        // 2. 发送请求 (带上管理员ID作为通行证)
+        // 2. 发送请求
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/impersonate/${targetUserId}`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                'x-user-id': user.id 
+                // 🛠️ 修复 1：加个 ! 告诉 TS "我确信 user 存在"
+                'x-user-id': user!.id 
             }
         });
 
@@ -144,36 +146,24 @@ export default function WriterDashboard() {
         }
         
         const data = await res.json();
-        const newId = data.user.id; // 此时已经是字符串格式
+        const newId = data.user.id; 
 
-        // 🔥 3. 暴力覆盖：不留任何旧数据的痕迹
-        localStorage.clear(); 
+        // 🛠️ 修复 2 (最关键)：必须使用 'novelhub_user' 这个 Key！
+        // 你的 api.txt 和 AuthContext 里都只认这个名字。
+        // 如果名字不对，刷新页面后 api 就会读不到 ID，导致掉线。
+        localStorage.setItem('novelhub_user', newId);
         
-        // 4. 建立新身份 (全方位覆盖)
-        localStorage.setItem('userId', newId);
-        localStorage.setItem('user_id', newId);
-        localStorage.setItem('id', newId);
-        
-        // ⚡️ 关键点：把 token 也设置成 ID。
-        // 这样 AuthContext 检查 token 时有值，发给后端 x-user-id 也是这个值，完美闭环。
-        localStorage.setItem('token', newId); 
-        
-        // 存入完整的用户对象
+        // 顺便更新一下 user 对象，防止闪烁
         localStorage.setItem('user', JSON.stringify(data.user));
 
         alert(`✅ 切换成功！\n\n当前身份：${data.user.username}\n即将刷新页面...`);
         
-        // 5. 刷新页面
+        // 3. 刷新页面，让 AuthContext 重新通过 novelhub_user 读取新身份
         window.location.reload();
 
     } catch (e: any) {
         console.error(e);
-        // 如果再次出现 429 错误，提示用户
-        if (e.message && (e.message.includes('Too Many Requests') || e.message.includes('频繁'))) {
-             alert('❌ 切换失败：后端限流了。请等待几分钟，或者确认后端代码已更新。');
-        } else {
-             setToast({ msg: `切换失败: ${e.message}`, type: 'error' });
-        }
+        setToast({ msg: `切换失败: ${e.message}`, type: 'error' });
     }
   };
 

@@ -245,4 +245,25 @@ export const authApi = {
   getSession: async (userId: string): Promise<{ user: AuthUser | null; profile: Profile | null }> => {
     return apiCall<{ user: AuthUser | null; profile: Profile | null }>(`/auth/session?userId=${userId}`);
   },
+
+  // 🔥 新增：修改密码
+  changePassword: async (userId: string, oldPass: string, newPass: string): Promise<{ success: boolean; error?: string }> => {
+    // 复用你已有的 apiCall 逻辑
+    const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': userId // 确保带上 ID
+      },
+      body: JSON.stringify({ oldPassword: oldPass, newPassword: newPass }),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { success: false, error: data.error || '修改失败' };
+    }
+    
+    return { success: true };
+  },
 };

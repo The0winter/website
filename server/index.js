@@ -362,6 +362,43 @@ app.post('/api/auth/signin', async (req, res) => {
   }
 });
 
+
+app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+    const userId = req.user.id; // authMiddleware 解析出来的 ID
+
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ error: '请提供旧密码和新密码' });
+    }
+
+    // 1. 找人
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: '用户不存在' });
+
+    // 2. 验证旧密码
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ error: '旧密码错误，请重试' });
+    }
+
+    // 3. 加密新密码
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // 4. 更新数据库
+    user.password = hashedPassword;
+    await user.save();
+
+    console.log(`🔐 用户 [${user.username}] 修改了密码`);
+    res.json({ success: true, message: '密码修改成功' });
+
+  } catch (error) {
+    console.error('修改密码失败:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/auth/session', async (req, res) => {
   try {
     const userId = req.headers['x-user-id'] || req.query.userId;
