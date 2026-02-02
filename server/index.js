@@ -41,36 +41,6 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET || 'wo_de_pa_chong_mi_ma_123';
 
 mongoose.connect(MONGO_URL)
   .then(() => console.log('✅ MongoDB Connected'))
-  .catch(err => console.error('❌ MongoDB Connection Error:', err))
-  .then(async () => {
-      console.log('✅ MongoDB Connected');
-      
-      // ================= 临时修复脚本开始 =================
-      try {
-          // 查找所有缺少 'id' 字段的用户
-          const usersToFix = await User.find({ id: { $exists: false } });
-          
-          if (usersToFix.length > 0) {
-              console.log(`🔧 发现 ${usersToFix.length} 个用户缺少 id 字段，正在修复...`);
-              
-              for (const u of usersToFix) {
-                await User.updateOne(
-                { _id: u._id }, 
-                { $set: { id: u._id.toString() } },
-                { strict: false } // 🔥 关键：允许写入 Schema 中未定义的字段
-            );
-                  console.log(`   -> 修复用户: ${u.username}`);
-              }
-              console.log('✨ 所有用户数据修复完成！');
-          } else {
-              console.log('👍 所有用户数据正常，无需修复。');
-          }
-      } catch (err) {
-          console.error('❌ 修复数据脚本出错:', err);
-      }
-      // ================= 临时修复脚本结束 =================
-      
-  })
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
 // ================= 辅助函数 (Helpers) =================
@@ -247,7 +217,7 @@ app.post('/api/auth/signup', async (req, res) => {
     const newId = new mongoose.Types.ObjectId(); 
     const newUser = new User({
       _id: newId,         
-      id: newId.toString(),
+      //id: newId.toString(),
       email,
       password, 
       username,
@@ -287,7 +257,8 @@ app.get('/api/auth/session', async (req, res) => {
     const userId = req.headers['x-user-id'] || req.query.userId;
     if (!userId) return res.json({ user: null, profile: null });
     
-    const user = await User.findOne({ id: userId });
+    //const user = await User.findOne({ id: userId });
+    const user = await User.findById(userId);
     if (!user) return res.json({ user: null, profile: null });
     
     const { password: _, ...userWithoutPassword } = user.toObject();
@@ -299,7 +270,9 @@ app.get('/api/auth/session', async (req, res) => {
 
 app.get('/api/users/:userId/profile', async (req, res) => {
   try {
-    const user = await User.findOne({ id: req.params.userId });
+    //const user = await User.findOne({ id: req.params.userId });
+    const user = await User.findById(req.params.userId);
+
     if (!user) return res.status(404).json({ error: 'User not found' });
     const { password, ...userWithoutPassword } = user.toObject();
     res.json(userWithoutPassword);
@@ -378,7 +351,10 @@ app.post('/api/books', authMiddleware, async (req, res) => {
     
     if (!title) return res.status(400).json({ error: 'Title is required' });
     
-    const user = await User.findOne({ id: userId });
+    //const user = await User.findOne({ id: userId });
+
+    const user = await User.findById(userId);
+
     if (!user) return res.status(404).json({ error: 'User not found' });
     
     const newBook = new Book({
