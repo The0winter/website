@@ -245,69 +245,95 @@ function HomeContent() {
 
       <div className="max-w-[1400px] mx-auto md:px-4 md:py-8 flex flex-col gap-0 md:gap-10">
       
-        {/* === 轮播图区域 === */}
+{/* === 轮播图区域 (支持滑动动画) === */}
         <section className="w-full" onMouseLeave={() => setIsPaused(false)}>
-          {featuredBooks.length > 0 && activeBook ? (
+          {featuredBooks.length > 0 ? (
             <div className="bg-white md:rounded-2xl shadow-sm border-b md:border border-gray-200 overflow-hidden w-full">
-              <Link href={`/book/${activeBook.id}`} className="block w-full h-full">
-                {/* 手机高度 h-[220px]，平板以上 h-[380px] */}
+              
+              {/* 1. 视窗容器：限制高度，隐藏溢出 */}
+              <div 
+                className="relative h-[220px] md:h-[380px] w-full overflow-hidden group"
+                onMouseEnter={() => setIsPaused(true)}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+              >
+                {/* 2. 核心滑动轨道：Flex布局 + Translate位移 + 过渡动画 */}
                 <div 
-                    className="relative h-[220px] md:h-[380px] bg-gradient-to-br from-gray-900 to-black" 
-                    onMouseEnter={() => setIsPaused(true)}
-                    onTouchStart={handleTouchStart}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
+                    className="flex h-full transition-transform duration-500 ease-out"
+                    style={{ transform: `translateX(-${activeBookIndex * 100}%)` }}
                 >
-                    {/* 1. 背景模糊大图 (这是原本的代码，帮你补全了) */}
-                    {activeBook.cover_image && (
-                        <div className="absolute inset-0">
-                            <img src={activeBook.cover_image} alt={activeBook.title} className="w-full h-full object-cover opacity-40 blur-2xl scale-110" />
-                            <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent"></div>
-                        </div>
-                    )}
-                    
-                    {/* 2. 内容区域 (这是原本的代码，帮你补全了) */}
-                    <div className="relative h-full flex items-center p-5 md:p-10 gap-10 max-w-6xl mx-auto">
-                        {/* 封面图：只在 md(平板) 以上显示 */}
-                        {activeBook.cover_image && (
-                                <img src={activeBook.cover_image} alt={activeBook.title} className="w-48 h-72 object-cover rounded-lg shadow-2xl border-2 border-white/10 flex-shrink-0 hidden md:block transform hover:scale-105 transition-transform duration-500" />
-                        )}
-                        <div className="flex-1 text-white">
-                            <span className="inline-block bg-red-600 text-white text-[10px] md:text-xs font-bold px-2 py-0.5 md:px-3 md:py-1 rounded-full mb-2 md:mb-4 tracking-wide shadow-lg shadow-red-900/50">重磅推荐</span>
-                            <h3 className="text-2xl md:text-5xl font-black mb-2 md:mb-4 tracking-tight drop-shadow-lg line-clamp-1">{activeBook.title}</h3>
-                            
-                            <p className="flex items-center gap-4 text-white/80 text-xs md:text-sm mb-2 md:mb-6 font-medium">
-                                <span className="flex items-center gap-2"><span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-400"></span>{activeBook.author || '未知'}</span>
-                                <span className="text-white/20">|</span>
-                                <span className="bg-white/10 px-2 py-0.5 md:px-3 rounded-full backdrop-blur-sm">{activeBook.category || '综合'}</span>
-                            </p>
-                            
-                            <p className="text-gray-300 text-xs md:text-base leading-relaxed line-clamp-2 md:line-clamp-3 max-w-2xl font-light">
-                                {activeBook.description || '暂无简介'}
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* 🔥 3. 底部指示条 (这是新加的功能) */}
-                    <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2 z-20">
-                        {featuredBooks.map((_, index) => (
-                            <button
-                                key={index}
-                                onClick={(e) => {
-                                    e.preventDefault(); 
-                                    setActiveBookIndex(index);
-                                }}
-                                className={`h-1.5 rounded-full transition-all duration-300 ${
-                                    index === activeBookIndex 
-                                    ? 'w-6 bg-white shadow-sm' 
-                                    : 'w-1.5 bg-white/40 hover:bg-white/60'
-                                }`}
-                            />
-                        ))}
-                    </div>
+                    {featuredBooks.map((book) => (
+                        <Link 
+                            key={book.id} 
+                            href={`/book/${book.id}`} 
+                            className="min-w-full h-full relative block" // min-w-full 强制占满一行
+                            draggable={false} // 防止拖拽图片干扰滑动
+                        >
+                            <div className="relative h-full bg-gradient-to-br from-gray-900 to-black select-none">
+                                {/* 背景图 */}
+                                {book.cover_image && (
+                                    <div className="absolute inset-0">
+                                        <img src={book.cover_image} alt={book.title} className="w-full h-full object-cover opacity-40 blur-2xl scale-110" draggable={false} />
+                                        <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent"></div>
+                                    </div>
+                                )}
+                                
+                                {/* 内容区域 */}
+                                <div className="relative h-full flex items-center p-5 md:p-10 gap-10 max-w-6xl mx-auto">
+                                    {/* 封面 (PC显示) */}
+                                    {book.cover_image && (
+                                        <img src={book.cover_image} alt={book.title} className="w-48 h-72 object-cover rounded-lg shadow-2xl border-2 border-white/10 flex-shrink-0 hidden md:block transform hover:scale-105 transition-transform duration-500" />
+                                    )}
+                                    <div className="flex-1 text-white">
+                                        <span className="inline-block bg-red-600 text-white text-[10px] md:text-xs font-bold px-2 py-0.5 md:px-3 md:py-1 rounded-full mb-2 md:mb-4 tracking-wide shadow-lg shadow-red-900/50">
+                                            重磅推荐
+                                        </span>
+                                        <h3 className="text-2xl md:text-5xl font-black mb-2 md:mb-4 tracking-tight drop-shadow-lg line-clamp-1">
+                                            {book.title}
+                                        </h3>
+                                        
+                                        <p className="flex items-center gap-4 text-white/80 text-xs md:text-sm mb-2 md:mb-6 font-medium">
+                                            <span className="flex items-center gap-2">
+                                                <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-400"></span>
+                                                {book.author || '未知'}
+                                            </span>
+                                            <span className="text-white/20">|</span>
+                                            <span className="bg-white/10 px-2 py-0.5 md:px-3 rounded-full backdrop-blur-sm">
+                                                {book.category || '综合'}
+                                            </span>
+                                        </p>
+                                        
+                                        <p className="text-gray-300 text-xs md:text-base leading-relaxed line-clamp-2 md:line-clamp-3 max-w-2xl font-light">
+                                            {book.description || '暂无简介'}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </Link>
+                    ))}
                 </div>
-              </Link>
-              {/* PC端列表导航 (保留) */}
+
+                {/* 3. 底部指示条 (绝对定位在视窗之上) */}
+                <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2 z-20">
+                    {featuredBooks.map((_, index) => (
+                        <button
+                            key={index}
+                            onClick={(e) => {
+                                e.preventDefault(); 
+                                setActiveBookIndex(index);
+                            }}
+                            className={`h-1.5 rounded-full transition-all duration-300 ${
+                                index === activeBookIndex 
+                                ? 'w-6 bg-white shadow-sm' 
+                                : 'w-1.5 bg-white/40 hover:bg-white/60'
+                            }`}
+                        />
+                    ))}
+                </div>
+              </div>
+
+              {/* 4. PC端底部列表导航 (保持不变) */}
               <div className="bg-[#1a1a1a] border-t border-white/5 hidden lg:block">
                  <div className="max-w-6xl mx-auto grid grid-cols-5 divide-x divide-white/5">
                   {featuredBooks.map((book, index) => (
