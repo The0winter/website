@@ -135,6 +135,37 @@ function HomeContent() {
   const [activeBookIndex, setActiveBookIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // --- 新增：轮播图手势滑动逻辑 ---
+  const [touchStart, setTouchStart] = useState(0);
+  const [touchEnd, setTouchEnd] = useState(0);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+      setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+      setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+      if (!touchStart || !touchEnd) return;
+      const distance = touchStart - touchEnd;
+      const minSwipeDistance = 50; // 滑动阈值
+
+      // 左滑 (下一张)
+      if (distance > minSwipeDistance) {
+          setActiveBookIndex((prev) => (prev + 1) % featuredBooks.length);
+      }
+      // 右滑 (上一张)
+      if (distance < -minSwipeDistance) {
+          setActiveBookIndex((prev) => (prev - 1 + featuredBooks.length) % featuredBooks.length);
+      }
+      // 重置
+      setTouchStart(0);
+      setTouchEnd(0);
+  };
+
   
   // 移动端 Tab 状态
   const [mobileTab, setMobileTab] = useState<'rec' | 'week' | 'day'>('rec');
@@ -220,34 +251,60 @@ function HomeContent() {
             <div className="bg-white md:rounded-2xl shadow-sm border-b md:border border-gray-200 overflow-hidden w-full">
               <Link href={`/book/${activeBook.id}`} className="block w-full h-full">
                 {/* 手机高度 h-[220px]，平板以上 h-[380px] */}
-                <div className="relative h-[220px] md:h-[380px] bg-gradient-to-br from-gray-900 to-black" onMouseEnter={() => setIsPaused(true)}>
-                  {activeBook.cover_image && (
-                    <div className="absolute inset-0">
-                        <img src={activeBook.cover_image} alt={activeBook.title} className="w-full h-full object-cover opacity-40 blur-2xl scale-110" />
-                        <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent"></div>
+                <div 
+                    className="relative h-[220px] md:h-[380px] bg-gradient-to-br from-gray-900 to-black" 
+                    onMouseEnter={() => setIsPaused(true)}
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                >
+                    {/* 1. 背景模糊大图 (这是原本的代码，帮你补全了) */}
+                    {activeBook.cover_image && (
+                        <div className="absolute inset-0">
+                            <img src={activeBook.cover_image} alt={activeBook.title} className="w-full h-full object-cover opacity-40 blur-2xl scale-110" />
+                            <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent"></div>
+                        </div>
+                    )}
+                    
+                    {/* 2. 内容区域 (这是原本的代码，帮你补全了) */}
+                    <div className="relative h-full flex items-center p-5 md:p-10 gap-10 max-w-6xl mx-auto">
+                        {/* 封面图：只在 md(平板) 以上显示 */}
+                        {activeBook.cover_image && (
+                                <img src={activeBook.cover_image} alt={activeBook.title} className="w-48 h-72 object-cover rounded-lg shadow-2xl border-2 border-white/10 flex-shrink-0 hidden md:block transform hover:scale-105 transition-transform duration-500" />
+                        )}
+                        <div className="flex-1 text-white">
+                            <span className="inline-block bg-red-600 text-white text-[10px] md:text-xs font-bold px-2 py-0.5 md:px-3 md:py-1 rounded-full mb-2 md:mb-4 tracking-wide shadow-lg shadow-red-900/50">重磅推荐</span>
+                            <h3 className="text-2xl md:text-5xl font-black mb-2 md:mb-4 tracking-tight drop-shadow-lg line-clamp-1">{activeBook.title}</h3>
+                            
+                            <p className="flex items-center gap-4 text-white/80 text-xs md:text-sm mb-2 md:mb-6 font-medium">
+                                <span className="flex items-center gap-2"><span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-400"></span>{activeBook.author || '未知'}</span>
+                                <span className="text-white/20">|</span>
+                                <span className="bg-white/10 px-2 py-0.5 md:px-3 rounded-full backdrop-blur-sm">{activeBook.category || '综合'}</span>
+                            </p>
+                            
+                            <p className="text-gray-300 text-xs md:text-base leading-relaxed line-clamp-2 md:line-clamp-3 max-w-2xl font-light">
+                                {activeBook.description || '暂无简介'}
+                            </p>
+                        </div>
                     </div>
-                  )}
-                  
-                  <div className="relative h-full flex items-center p-5 md:p-10 gap-10 max-w-6xl mx-auto">
-                      {/* 封面图：只在 md(平板) 以上显示 */}
-                      {activeBook.cover_image && (
-                           <img src={activeBook.cover_image} alt={activeBook.title} className="w-48 h-72 object-cover rounded-lg shadow-2xl border-2 border-white/10 flex-shrink-0 hidden md:block transform hover:scale-105 transition-transform duration-500" />
-                      )}
-                      <div className="flex-1 text-white">
-                        <span className="inline-block bg-red-600 text-white text-[10px] md:text-xs font-bold px-2 py-0.5 md:px-3 md:py-1 rounded-full mb-2 md:mb-4 tracking-wide shadow-lg shadow-red-900/50">重磅推荐</span>
-                        <h3 className="text-2xl md:text-5xl font-black mb-2 md:mb-4 tracking-tight drop-shadow-lg line-clamp-1">{activeBook.title}</h3>
-                        
-                        <p className="flex items-center gap-4 text-white/80 text-xs md:text-sm mb-2 md:mb-6 font-medium">
-                            <span className="flex items-center gap-2"><span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-400"></span>{activeBook.author || '未知'}</span>
-                            <span className="text-white/20">|</span>
-                            <span className="bg-white/10 px-2 py-0.5 md:px-3 rounded-full backdrop-blur-sm">{activeBook.category || '综合'}</span>
-                        </p>
-                        
-                        <p className="text-gray-300 text-xs md:text-base leading-relaxed line-clamp-2 md:line-clamp-3 max-w-2xl font-light">
-                            {activeBook.description || '暂无简介'}
-                        </p>
-                      </div>
-                  </div>
+
+                    {/* 🔥 3. 底部指示条 (这是新加的功能) */}
+                    <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2 z-20">
+                        {featuredBooks.map((_, index) => (
+                            <button
+                                key={index}
+                                onClick={(e) => {
+                                    e.preventDefault(); 
+                                    setActiveBookIndex(index);
+                                }}
+                                className={`h-1.5 rounded-full transition-all duration-300 ${
+                                    index === activeBookIndex 
+                                    ? 'w-6 bg-white shadow-sm' 
+                                    : 'w-1.5 bg-white/40 hover:bg-white/60'
+                                }`}
+                            />
+                        ))}
+                    </div>
                 </div>
               </Link>
               {/* PC端列表导航 (保留) */}
