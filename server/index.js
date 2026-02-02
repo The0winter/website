@@ -314,7 +314,11 @@ app.post('/api/auth/signin', async (req, res) => {
     
     // 登录成功
     const { password: _, ...userWithoutPassword } = user.toObject();
-    res.json({ user: { id: user.id, email: user.email }, profile: userWithoutPassword });
+    // ✅ 加上 role: user.role
+    res.json({ 
+      user: { id: user.id, email: user.email, username: user.username, role: user.role }, 
+      profile: userWithoutPassword 
+});
 
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -331,7 +335,9 @@ app.get('/api/auth/session', async (req, res) => {
     if (!user) return res.json({ user: null, profile: null });
     
     const { password: _, ...userWithoutPassword } = user.toObject();
-    res.json({ user: { id: user.id, email: user.email, username: user.username }, profile: userWithoutPassword });
+    res.json({ 
+    user: { id: user.id, email: user.email, username: user.username, role: user.role }, 
+    profile: userWithoutPassword });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
