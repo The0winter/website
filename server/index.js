@@ -145,6 +145,39 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
     }
 });
 
+// 🚀 影子登录接口：管理员假扮成目标用户
+app.post('/api/admin/impersonate/:userId', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const targetUserId = req.params.userId;
+        
+        // 1. 找到目标用户
+        const targetUser = await User.findById(targetUserId);
+        if (!targetUser) {
+            return res.status(404).json({ error: '找不到该用户' });
+        }
+
+        console.log(`🕵️‍♂️ 管理员 [${req.user.id}] 正在影子登录目标: [${targetUser.username}]`);
+
+        // 2. 构造登录返回数据 (和 signin 接口保持一致)
+        const { password: _, ...userWithoutPassword } = targetUser.toObject();
+        
+        // 3. 返回数据，前端拿到后会误以为是“正常登录成功”
+        res.json({ 
+            user: { 
+                id: targetUser.id, 
+                email: targetUser.email, 
+                username: targetUser.username, 
+                role: targetUser.role 
+            }, 
+            profile: userWithoutPassword 
+        });
+
+    } catch (e) {
+        console.error('影子登录失败:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // 🆕 新增：差异化同步检查接口 (接收清单，返回缺少的章节)
 app.post('/api/admin/check-sync', async (req, res) => {
     try {
