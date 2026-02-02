@@ -17,6 +17,7 @@ import Chapter from './models/Chapter.js';
 
 dotenv.config();
 const app = express();
+app.set('trust proxy', 1);
 
 // ================= CORS & Middleware 配置 =================
 const corsOptions = {
