@@ -5,7 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { 
   PenTool, BookOpen, BarChart3, 
-  Plus, Upload, X, Edit3, Save, Settings, AlertCircle, CheckCircle2, Sparkles, Trash2
+  Plus, Upload, X, Edit3, Save, Settings, AlertCircle, CheckCircle2, Sparkles, Trash2,
+  Shield, LogIn // 👈 新增图标
 } from 'lucide-react';
 import { booksApi, chaptersApi, Book, Chapter } from '@/lib/api';
 
@@ -13,55 +14,51 @@ export default function WriterDashboard() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   
-  // --- 1. 所有的 State 必须放在最前面 ---
+  // ================= State 定义区域 =================
+  
+  // 1. 基础数据
   const [myBooks, setMyBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeChapters, setActiveChapters] = useState<Chapter[]>([]);
 
-  // 弹窗开关
+  // 2. 弹窗控制
   const [showCreateBookModal, setShowCreateBookModal] = useState(false);
   const [showChapterEditor, setShowChapterEditor] = useState(false);
   const [showBookManager, setShowBookManager] = useState(false);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
+  const [chapterToDelete, setChapterToDelete] = useState<string | null>(null);
+  
+  // 👮 管理员专用 State
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [userList, setUserList] = useState<any[]>([]); 
 
-  // 选中项
+  // 3. 选中项与表单
   const [currentBookId, setCurrentBookId] = useState<string>('');
   const [currentChapterId, setCurrentChapterId] = useState<string | null>(null);
-  const [chapterToDelete, setChapterToDelete] = useState<string | null>(null); // 🗑️ 新增：专门控制删除弹窗
 
-  // 🔥 修复点：把 activeChapters 移到这里，放在 return 之前！
-  const [activeChapters, setActiveChapters] = useState<Chapter[]>([]);
-
-  // 表单数据
   const [formBookTitle, setFormBookTitle] = useState('');
   const [formBookDescription, setFormBookDescription] = useState('');
-const ALL_CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻', '奇幻', '体育', '军事', '悬疑'];
   
-  // 取前4个作为直接显示的
+  // 分类逻辑
+  const ALL_CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻', '奇幻', '体育', '军事', '悬疑'];
   const visibleCategories = ALL_CATEGORIES.slice(0, 4);
-  // 剩下的作为隐藏的
   const hiddenCategories = ALL_CATEGORIES.slice(4);
-
   const [formBookCategory, setFormBookCategory] = useState(ALL_CATEGORIES[0]);
-  
-  // 新增：控制下拉菜单是否显示的 state
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+
   const [formChapterTitle, setFormChapterTitle] = useState('');
   const [formChapterContent, setFormChapterContent] = useState('');
 
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'info' | 'error'} | null>(null);
 
-  // --- 获取数据 ---
-// inside WriterDashboard component...
+  // ================= 数据获取逻辑 =================
 
   const fetchMyData = useCallback(async () => {
     if (!user) return;
     try {
       setLoading(true);
-      
-      // 🔴 修改前：const books = await booksApi.getMyBooks();
-      // ✅ 修改后：把 user.id 传进去！
+      // 获取当前登录用户（可能是管理员影子登录后的身份）的书籍
       const books = await booksApi.getMyBooks(user.id);
-      
       setMyBooks(books); 
     } catch (error) {
       console.error('Failed to load books:', error);
@@ -70,8 +67,31 @@ const ALL_CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻', '奇�
     }
   }, [user]);
 
+  // 👮 加载用户列表 (只有打开管理员弹窗时才调用)
+  const fetchUserList = async () => {
+    if (!user) return;
+    try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users`, {
+            headers: { 
+                'Authorization': `Bearer ${localStorage.getItem('token') || ''}`, // 如果你有token的话
+                'x-user-id': user.id 
+            }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            setUserList(data);
+        } else {
+            setToast({ msg: '获取用户列表失败 (权限不足?)', type: 'error' });
+        }
+    } catch (e) {
+        console.error(e);
+        setToast({ msg: '网络错误', type: 'error' });
+    }
+  };
+
+  // ================= Effect 监听 =================
+
   useEffect(() => {
-    // Wait for loading to finish before checking user
     if (authLoading) return;
     if (!user) {
         router.push('/login');
@@ -83,7 +103,6 @@ const ALL_CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻', '奇�
   // 监听打开书籍管理器，加载章节
   useEffect(() => {
     if (showBookManager && currentBookId) {
-        // 加载该书的章节
         chaptersApi.getByBookId(currentBookId)
             .then(setActiveChapters)
             .catch(console.error);
@@ -97,12 +116,44 @@ const ALL_CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻', '奇�
     }
   }, [toast]);
 
-  // ⚠️ 只有所有 Hook 都声明完了，才能进行提前返回
-  // Show loading spinner while checking auth
-  if (authLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  if (!user) return null;
+  // ================= 核心业务逻辑 =================
 
-  // --- 逻辑处理函数 ---
+  // 🚀 影子登录逻辑 (管理员专用)
+  const handleShadowLogin = async (targetUserId: string, targetName: string) => {
+    if (!user) return;
+    if (!confirm(`⚠️ 高危操作确认\n\n你即将以 [ ${targetName} ] 的身份登录系统。\n\n登录后：\n1. 你将失去管理员权限\n2. 你将看到他的所有私有数据\n3. 若要恢复，请退出登录后重新用管理员账号登录。`)) return;
+
+    try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/impersonate/${targetUserId}`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-user-id': user.id // 用管理员身份去申请
+            }
+        });
+
+        if (!res.ok) throw new Error('权限不足或失败');
+        
+        const data = await res.json();
+
+        // 🔥 切换身份
+        // 注意：这里假设你的 AuthContext 会读取 localStorage 的 user_id 或 token
+        // 如果你的登录逻辑是基于 localStorage 的，请在这里更新
+        localStorage.setItem('user_id', data.user.id); 
+        // 也可以把用户信息存一下，防止闪烁
+        localStorage.setItem('user_info', JSON.stringify(data.user));
+
+        alert(`✅ 身份切换成功！\n\n当前身份：${data.user.username}`);
+        
+        // 强制刷新页面，让整个 App 以新身份重新加载
+        window.location.reload();
+
+    } catch (e) {
+        console.error(e);
+        setToast({ msg: '影子登录失败', type: 'error' });
+    }
+  };
+
   const activeBook = myBooks.find(b => b.id === currentBookId);
 
   const openChapterEditor = (type: 'new' | 'edit', chapter?: Chapter) => {
@@ -130,7 +181,6 @@ const ALL_CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻', '奇�
             content: formChapterContent,
             bookId: currentBookId,
             chapter_number: 1, // 后端需自动处理递增
-            // status: status 
         };
 
         if (currentChapterId) {
@@ -139,14 +189,11 @@ const ALL_CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻', '奇�
             await chaptersApi.create(chapterData);
         }
         
-        // 刷新书籍列表（更新字数等）
         fetchMyData(); 
-        // 同时也刷新当前的章节列表（以便在管理器中立即看到）
         if (currentBookId) {
             const updatedChapters = await chaptersApi.getByBookId(currentBookId);
             setActiveChapters(updatedChapters);
         }
-        
         return true;
     } catch (err) {
         console.error(err);
@@ -174,43 +221,33 @@ const ALL_CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻', '奇�
     }
   };
 
-// 1. 点击列表里的垃圾桶图标时触发
   const handleDeleteChapter = (chapterId: string) => {
-    // 不再用 window.confirm，而是直接设置状态，唤起自定义弹窗
     setChapterToDelete(chapterId); 
   };
 
-  // 2. 在弹窗里点击“确认删除”时触发
   const executeDeleteChapter = async () => {
     if (!chapterToDelete) return;
-
     try {
         await chaptersApi.delete(chapterToDelete);
         setToast({ msg: '删除成功', type: 'success' });
-        
-        // 刷新列表
         setActiveChapters(prev => prev.filter(c => c.id !== chapterToDelete));
         fetchMyData(); 
     } catch (e) {
         setToast({ msg: '删除失败，请重试', type: 'error' });
     } finally {
-        // 无论成功失败，都关闭弹窗
         setChapterToDelete(null);
     }
   };
 
-const handleCreateBook = async (e: React.FormEvent) => {
+  const handleCreateBook = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formBookTitle.trim()) return;
+    if (!formBookTitle.trim() || !user) return;
     try {
         await booksApi.create({
             title: formBookTitle,
             description: formBookDescription,
             cover_image: '',
-            
-            // ✅ 2. 修改：使用选中的分类
             category: formBookCategory, 
-            
             author: user.username || '匿名作家', 
             author_id: user.id, 
         } as any);
@@ -218,8 +255,6 @@ const handleCreateBook = async (e: React.FormEvent) => {
         setShowCreateBookModal(false);
         setFormBookTitle('');
         setFormBookDescription('');
-        
-        // ✅ 重置分类为默认值
         setFormBookCategory(ALL_CATEGORIES[0]);
         setShowCategoryDropdown(false);
         
@@ -246,9 +281,13 @@ const handleCreateBook = async (e: React.FormEvent) => {
     }
   };
 
+  if (authLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (!user) return null;
+
   return (
     <div className="min-h-screen bg-gray-100 flex font-sans">
       
+      {/* Toast 提示 */}
       {toast && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-top-4">
           <div className={`px-6 py-3 rounded-full shadow-lg text-white font-medium flex items-center gap-2 ${
@@ -272,20 +311,33 @@ const handleCreateBook = async (e: React.FormEvent) => {
           <button className="w-full flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-50 rounded-lg font-medium">
             <BookOpen className="h-5 w-5" /> 作品管理
           </button>
+          
+          {/* 👇👇👇 管理员入口 (只有 Admin 可见) 👇👇👇 */}
+          {(user as any).role === 'admin' && (
+            <button 
+                onClick={() => { setShowAdminModal(true); fetchUserList(); }}
+                className="w-full flex items-center gap-3 px-4 py-3 text-purple-600 hover:bg-purple-50 rounded-lg font-medium transition mt-2"
+            >
+                <Shield className="h-5 w-5" /> 用户管理 (Admin)
+            </button>
+          )}
         </nav>
         <div className="p-4 border-t border-gray-100">
            <div className="flex items-center gap-3 px-4 py-2">
-              <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+              <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold ${
+                  (user as any).role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+              }`}>
                 {((user as any).username || 'U')[0].toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">{(user as any).username || '未命名用户'}</p>
-                <p className="text-xs text-gray-500">作家</p>
+                <p className="text-xs text-gray-500">{(user as any).role === 'admin' ? '超级管理员' : '作家'}</p>
               </div>
            </div>
         </div>
       </aside>
 
+      {/* 主内容区 */}
       <main className="flex-1 md:ml-64 p-8">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center">
@@ -336,7 +388,9 @@ const handleCreateBook = async (e: React.FormEvent) => {
         </div>
       </main>
 
-      {/* 书籍管理器 */}
+      {/* ===================== 弹窗区域 ===================== */}
+
+      {/* 1. 书籍管理器 */}
       {showBookManager && activeBook && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
@@ -345,7 +399,6 @@ const handleCreateBook = async (e: React.FormEvent) => {
                  <button onClick={() => setShowBookManager(false)}><X className="h-5 w-5 text-gray-500" /></button>
               </div>
               <div className="flex-1 overflow-y-auto p-6 bg-white space-y-3">
-                 {/* 渲染 activeChapters */}
                  {activeChapters.length === 0 ? (
                      <div className="text-center text-gray-400 py-8">暂无章节</div>
                  ) : (
@@ -370,7 +423,7 @@ const handleCreateBook = async (e: React.FormEvent) => {
         </div>
       )}
 
-      {/* 章节编辑器 */}
+      {/* 2. 章节编辑器 */}
       {showChapterEditor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in zoom-in-95 duration-200">
            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden">
@@ -413,7 +466,7 @@ const handleCreateBook = async (e: React.FormEvent) => {
         </div>
       )}
 
-      {/* 发布确认弹窗 */}
+      {/* 3. 发布确认弹窗 */}
       {showPublishConfirm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center">
@@ -429,7 +482,7 @@ const handleCreateBook = async (e: React.FormEvent) => {
         </div>
       )}
 
-      {/* 创建新书弹窗 */}
+      {/* 4. 创建新书弹窗 (含分类优化) */}
       {showCreateBookModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
@@ -449,18 +502,16 @@ const handleCreateBook = async (e: React.FormEvent) => {
                     />
                  </div>
 
-                 {/* ✅ 3. 全新的分类选择区域 UI */}
-                 <div className="relative"> {/* 添加 relative 用于定位下拉菜单 */}
+                 <div className="relative">
                     <label className="block text-sm font-bold text-gray-700 mb-2">选择分类</label>
                     <div className="flex flex-wrap gap-2">
-                        {/* 1. 渲染前 4 个主要分类 */}
                         {visibleCategories.map((cat) => (
                             <button
                                 key={cat}
                                 type="button"
                                 onClick={() => {
                                     setFormBookCategory(cat);
-                                    setShowCategoryDropdown(false); // 选中主要分类时关闭下拉框
+                                    setShowCategoryDropdown(false);
                                 }}
                                 className={`px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 border ${
                                     formBookCategory === cat
@@ -472,25 +523,22 @@ const handleCreateBook = async (e: React.FormEvent) => {
                             </button>
                         ))}
 
-                        {/* 2. 如果有更多分类，渲染 "..." 按钮 */}
                         {hiddenCategories.length > 0 && (
                             <div className="relative inline-block">
                                 <button
                                     type="button"
                                     onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
                                     className={`px-3 py-2 rounded-lg text-sm font-bold transition-all duration-200 border ${
-                                        // 如果选中的分类不在可见列表中，高亮这个 "..." 按钮
                                         !visibleCategories.includes(formBookCategory) && showCategoryDropdown
-                                            ? 'bg-blue-100 text-blue-600 border-blue-300' // 下拉打开时
+                                            ? 'bg-blue-100 text-blue-600 border-blue-300'
                                         : !visibleCategories.includes(formBookCategory)
-                                            ? 'bg-blue-600 text-white border-blue-600 shadow-md' // 选中项在里面时
-                                            : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-500' // 默认
+                                            ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                                            : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-500'
                                     }`}
                                 >
                                     ...
                                 </button>
                                 
-                                {/* 3. 下拉菜单浮层 */}
                                 {showCategoryDropdown && (
                                     <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-xl p-2 z-50 grid grid-cols-2 gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
                                         {hiddenCategories.map((cat) => (
@@ -499,7 +547,7 @@ const handleCreateBook = async (e: React.FormEvent) => {
                                                 type="button"
                                                 onClick={() => {
                                                     setFormBookCategory(cat);
-                                                    setShowCategoryDropdown(false); // 选中后关闭下拉菜单
+                                                    setShowCategoryDropdown(false);
                                                 }}
                                                 className={`px-3 py-2 rounded-lg text-sm font-bold transition-all duration-200 border text-center ${
                                                     formBookCategory === cat
@@ -526,7 +574,6 @@ const handleCreateBook = async (e: React.FormEvent) => {
                         placeholder="简介..."
                     ></textarea>
                  </div>
-                 {/* ... 底部按钮保持不变 ... */}
                  <div className="flex gap-4 mt-8">
                     <button type="button" onClick={() => setShowCreateBookModal(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl">取消</button>
                     <button type="submit" className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg">立即创建</button>
@@ -536,7 +583,7 @@ const handleCreateBook = async (e: React.FormEvent) => {
         </div>
       )}
 
-        {/* 🗑️ 全新的删除确认弹窗 (红色警告风) */}
+      {/* 5. 章节删除确认弹窗 (红色警告风) */}
       {chapterToDelete && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center">
@@ -560,6 +607,64 @@ const handleCreateBook = async (e: React.FormEvent) => {
                     </button>
                 </div>
             </div>
+        </div>
+      )}
+
+      {/* 6. 👇👇👇 👮 管理员：用户列表弹窗 👇👇👇 */}
+      {showAdminModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+              <div className="p-6 border-b border-gray-100 bg-purple-50 flex justify-between items-center">
+                 <h3 className="text-xl font-bold text-purple-900 flex items-center gap-2">
+                    <Shield className="h-6 w-6" /> 超级管理员控制台
+                 </h3>
+                 <button onClick={() => setShowAdminModal(false)}><X className="h-6 w-6 text-gray-500" /></button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-6 bg-white">
+                 <table className="w-full text-left border-collapse">
+                    <thead>
+                        <tr className="text-sm text-gray-500 border-b border-gray-100">
+                            <th className="py-3 font-medium">用户名</th>
+                            <th className="py-3 font-medium">邮箱</th>
+                            <th className="py-3 font-medium">角色</th>
+                            <th className="py-3 font-medium">注册时间</th>
+                            <th className="py-3 font-medium text-right">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                        {userList.map(u => (
+                            <tr key={u.id || u._id} className="hover:bg-gray-50 group">
+                                <td className="py-4 font-bold text-gray-900">{u.username}</td>
+                                <td className="py-4 text-gray-500 text-sm">{u.email}</td>
+                                <td className="py-4">
+                                    <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                        u.role === 'admin' ? 'bg-purple-100 text-purple-700' :
+                                        u.role === 'writer' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                                    }`}>
+                                        {u.role === 'admin' ? '管理员' : u.role === 'writer' ? '作家' : '读者'}
+                                    </span>
+                                </td>
+                                <td className="py-4 text-gray-400 text-xs">
+                                    {new Date(u.created_at).toLocaleDateString()}
+                                </td>
+                                <td className="py-4 text-right">
+                                    {/* 不能登录自己，也不能登录其他管理员 */}
+                                    {u.id !== user!.id && u.role !== 'admin' && (
+                                        <button 
+                                            onClick={() => handleShadowLogin(u.id || u._id, u.username)}
+                                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 shadow-md shadow-purple-200 transition"
+                                        >
+                                            <LogIn className="h-3 w-3" /> 登入他
+                                        </button>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                 </table>
+              </div>
+           </div>
         </div>
       )}
 

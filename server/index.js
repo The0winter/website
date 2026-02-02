@@ -114,7 +114,36 @@ const authMiddleware = (req, res, next) => {
   next();
 };
 
+const adminMiddleware = async (req, res, next) => {
+    try {
+        // req.user.id 是从 authMiddleware 解析出来的（也就是你当前的 ID）
+        const user = await User.findById(req.user.id);
+        
+        // 如果找不到人，或者角色不是 admin，直接轰出去
+        if (!user || user.role !== 'admin') {
+            return res.status(403).json({ error: '🚫 权限不足：只有管理员可以使用影子登录' });
+        }
+        next(); // 是管理员，放行
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+};
 // ================= Admin API (上传接口) =================
+
+// 获取所有用户列表 (仅管理员)
+app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        // 只查 id, username, email, role, created_at，不查密码
+        const users = await User.find()
+            .select('username email role created_at')
+            .sort({ created_at: -1 })
+            .limit(100); // 限制100个防止数据太大，你可以以后做分页
+        res.json(users);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // 🆕 新增：差异化同步检查接口 (接收清单，返回缺少的章节)
 app.post('/api/admin/check-sync', async (req, res) => {
     try {
