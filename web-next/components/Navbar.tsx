@@ -3,9 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { Search, User, LogOut, BookOpen, PenTool } from 'lucide-react';
+import { Search, User, LogOut, BookOpen, PenTool, Library } from 'lucide-react'; // 👈 记得补上 Library 图标
 import { useAuth } from '@/contexts/AuthContext';
-// ✅ 1. 解除注释，引入设置 Context
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext'; 
 
 export default function Navbar() {
@@ -14,12 +13,9 @@ export default function Navbar() {
   const pathname = usePathname();
   const [searchQuery, setSearchQuery] = useState('');
 
-  // ✅ 2. 获取全局主题 (theme)
-  // 假设你的 Context 里提供了 theme 状态 ('light' | 'dark')
   const { theme } = useReadingSettings(); 
-  const isDark = theme === 'dark'; // 判断是否为夜间模式
+  const isDark = theme === 'dark';
 
-  // ✅ 3. 在阅读页面时不渲染导航栏
   if (pathname?.startsWith('/read/')) {
     return null;
   }
@@ -36,7 +32,6 @@ export default function Navbar() {
     router.push('/');
   };
 
-  // 定义动态样式变量
   const navBg = isDark ? 'bg-[#1a1a1a]' : 'bg-white';
   const navBorder = isDark ? 'border-[#333333]' : 'border-gray-200';
   const textPrimary = isDark ? 'text-gray-200' : 'text-gray-900';
@@ -46,9 +41,10 @@ export default function Navbar() {
   return (
     <nav className={`${navBg} border-b ${navBorder} sticky top-0 z-50 transition-colors duration-300`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          
-          {/* Logo 区域 */}
+        
+        {/* ==================== 1. 电脑端布局 (hidden md:flex) ==================== */}
+        <div className="hidden md:flex justify-between h-16">
+          {/* Logo */}
           <div className="flex items-center">
             <Link href="/" className="flex items-center">
               <BookOpen className="h-8 w-8 text-blue-600" />
@@ -66,11 +62,6 @@ export default function Navbar() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="搜索书籍、作者..."
-                // ✅ 3. 核心修改：
-                // - bg-transparent: 让背景适应深色
-                // - text-gray-900 / text-gray-100: 解决字体太淡的问题
-                // - placeholder: 调整提示文字颜色
-                // - border: 调整边框颜色
                 className={`w-full pl-10 pr-4 py-2 rounded-full border transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500
                   ${isDark 
                     ? 'bg-[#2a2a2a] border-[#444] text-gray-100 placeholder-gray-500 focus:border-blue-500' 
@@ -113,31 +104,44 @@ export default function Navbar() {
                   <span className={`${textSecondary} font-medium`}>{user.username}</span>
                 </Link>
                 
-                <button
-                  onClick={handleLogout}
-                  className={`p-2 transition-colors hover:text-red-600 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
-                >
+                <button onClick={handleLogout} className={`p-2 transition-colors hover:text-red-600 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   <LogOut className="h-5 w-5" />
                 </button>
               </div>
             ) : (
               <div className="flex items-center space-x-2">
-                <Link 
-                  href="/login"
-                  className={`${textSecondary} ${hoverText} px-3 py-2 rounded-md text-sm font-medium transition-colors`}
-                >
-                  登录
-                </Link>
-                <Link
-                  href="/register"
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
-                >
-                  注册
-                </Link>
+                <Link href="/login" className={`${textSecondary} ${hoverText} px-3 py-2 rounded-md text-sm font-medium`}>登录</Link>
+                <Link href="/register" className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700">注册</Link>
               </div>
             )}
           </div>
         </div>
+
+        {/* ==================== 2. 手机端布局 (md:hidden) ==================== */}
+        <div className="flex md:hidden justify-between items-center h-14">
+            {/* 左侧：精简 Logo */}
+            <Link href="/" className="flex items-center gap-2">
+               <BookOpen className="w-5 h-5 text-blue-600" />
+               <span className={`font-black text-lg tracking-tighter ${textPrimary}`}>九天</span>
+            </Link>
+
+            {/* 右侧：图标组 */}
+            <div className={`flex items-center gap-5 ${textSecondary}`}>
+               {/* 搜索图标 (点击跳转搜索页) */}
+               <Link href="/search"><Search className="w-5 h-5" /></Link>
+               
+               {/* 书架图标 */}
+               <Link href="/library"><Library className="w-5 h-5" /></Link>
+               
+               {/* 用户头像 (未登录显示 User 图标，已登录显示头像或跳转) */}
+               <Link href={user ? "/profile" : "/login"}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center ${isDark ? 'bg-[#333]' : 'bg-gray-100'}`}>
+                      <User className="w-4 h-4" />
+                  </div>
+               </Link>
+            </div>
+        </div>
+
       </div>
     </nav>
   );

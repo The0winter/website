@@ -212,26 +212,6 @@ function HomeContent() {
         </div>
       </div>
 
-      {/* 手机端导航 (MOBILE ONLY) */}
-      <div className="md:hidden sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm px-4 h-[50px] flex items-center justify-between">
-          {/* Logo 简化 */}
-          <div className="flex items-center gap-2">
-             <BookOpen className="w-5 h-5 text-blue-600" />
-             <span className="font-black text-lg text-gray-900 tracking-tighter">九天</span>
-          </div>
-          
-          {/* 图标集成：搜索 + 书架 + 用户头像 */}
-          <div className="flex items-center gap-5 text-gray-600">
-             <Search className="w-5 h-5" />
-             <Link href="/library"><Library className="w-5 h-5" /></Link>
-             <Link href="/login">
-                <div className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center text-gray-500">
-                    <User className="w-4 h-4" />
-                </div>
-             </Link>
-          </div>
-      </div>
-
       <div className="max-w-[1400px] mx-auto md:px-4 md:py-8 flex flex-col gap-0 md:gap-10">
       
         {/* === 轮播图区域 === */}
