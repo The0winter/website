@@ -457,8 +457,6 @@ app.get('/api/users/:userId/bookmarks/:bookId/check', async (req, res) => {
 
 // ================= Chapters API =================
 
-// server/index.js
-
 app.get('/api/books/:bookId/chapters', async (req, res) => {
   try {
     const { bookId } = req.params;
@@ -520,6 +518,24 @@ app.post('/api/chapters', async (req, res) => {
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
+});
+
+app.delete('/api/chapters/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // 执行删除
+    const result = await Chapter.findByIdAndDelete(id);
+
+    if (!result) {
+      return res.status(404).json({ error: 'Chapter not found' });
+    }
+
+    res.json({ message: 'Chapter deleted successfully' });
+  } catch (error) {
+    console.error('删除章节失败:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // ================= Bookmarks API =================
