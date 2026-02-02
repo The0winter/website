@@ -166,12 +166,13 @@ app.post('/api/admin/impersonate/:userId', authMiddleware, adminMiddleware, asyn
         
         // 3. 返回给前端
         res.json({ 
-            user: { 
-                id: safeId,  // 👈 绝对稳健的 ID
-                email: targetUser.email, 
-                username: targetUser.username, 
-                role: targetUser.role 
-            }, 
+         user: { 
+          // 🔥 强制转成字符串，防止 mongoose 对象导致前端存储异常
+          id: targetUser._id.toString(), 
+          email: targetUser.email, 
+          username: targetUser.username, 
+          role: targetUser.role 
+    }, 
             profile: userWithoutPassword 
         });
 

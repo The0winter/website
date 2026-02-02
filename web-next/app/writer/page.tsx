@@ -139,7 +139,6 @@ export default function WriterDashboard() {
         });
 
         if (!res.ok) {
-            // 尝试读取错误信息，如果限流了会在这里被捕获
             const errText = await res.text(); 
             throw new Error(errText || '请求失败');
         }
@@ -148,7 +147,6 @@ export default function WriterDashboard() {
         const newId = data.user.id; // 此时已经是字符串格式
 
         // 🔥 3. 暴力覆盖：不留任何旧数据的痕迹
-        // 既然系统是基于 ID 的，我们不需要保留 Admin 的任何东西
         localStorage.clear(); 
         
         // 4. 建立新身份 (全方位覆盖)
@@ -156,8 +154,8 @@ export default function WriterDashboard() {
         localStorage.setItem('user_id', newId);
         localStorage.setItem('id', newId);
         
-        // 关键点：如果 AuthContext 需要 token，我们就给它 ID 作为 token
-        // 这样既满足了“有值”的要求，又不会因为存了 Admin 的 token 而导致错乱
+        // ⚡️ 关键点：把 token 也设置成 ID。
+        // 这样 AuthContext 检查 token 时有值，发给后端 x-user-id 也是这个值，完美闭环。
         localStorage.setItem('token', newId); 
         
         // 存入完整的用户对象
@@ -165,15 +163,14 @@ export default function WriterDashboard() {
 
         alert(`✅ 切换成功！\n\n当前身份：${data.user.username}\n即将刷新页面...`);
         
-        // 5. 刷新，AuthContext 会读取上面的新 ID，向后端发起 session 请求
-        // 只要后端限流解除了，session 请求就会成功，页面就稳住了！
+        // 5. 刷新页面
         window.location.reload();
 
     } catch (e: any) {
         console.error(e);
-        // 如果是 429 错误，提示用户
-        if (e.message.includes('Too Many Requests') || e.message.includes('频繁')) {
-             alert('❌ 切换失败：操作太频繁，后端限流了。请等待几分钟或按教程解除后端限流。');
+        // 如果再次出现 429 错误，提示用户
+        if (e.message && (e.message.includes('Too Many Requests') || e.message.includes('频繁'))) {
+             alert('❌ 切换失败：后端限流了。请等待几分钟，或者确认后端代码已更新。');
         } else {
              setToast({ msg: `切换失败: ${e.message}`, type: 'error' });
         }
