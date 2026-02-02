@@ -289,6 +289,8 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 });
 
+// server/index.js (修复后的登录接口)
+
 app.post('/api/auth/signin', async (req, res) => {
   try {
     const { email, username, password } = req.body;
@@ -296,21 +298,24 @@ app.post('/api/auth/signin', async (req, res) => {
     const identifier = email || username;
     if (!identifier || !password) return res.status(400).json({ error: 'Provide account/password' });
     
+    // 🔥 修复步骤 1：查找时，千万不要带上 password！只查人！
     const user = await User.findOne({ 
-      $or: [{ email: identifier }, { username: identifier }],
-      password: password 
+      $or: [{ email: identifier }, { username: identifier }]
     });
 
+    // 如果查无此人，直接报 401
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
     
-    // 🔥 核心修改：使用 bcrypt.compare 进行比对
-    // 它会自动把用户输入的明文 password 加密，然后和数据库里的密文 user.password 比对
+    // 🔥 修复步骤 2：人找到了，现在用 bcrypt 来比对密码
+    // (bcrypt 会负责把你的 123456 加密后，去跟数据库里的 $2b$ 进行比对)
     const isMatch = await bcrypt.compare(password, user.password);
     
-    if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' }); // 密码错误
+    if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' }); // 密码错
     
+    // 登录成功
     const { password: _, ...userWithoutPassword } = user.toObject();
     res.json({ user: { id: user.id, email: user.email }, profile: userWithoutPassword });
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
