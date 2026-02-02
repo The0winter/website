@@ -47,7 +47,7 @@ export default function Login() {
         <div className="text-center">
           <Link href="/" className="inline-flex items-center justify-center space-x-2">
             <BookOpen className="h-10 w-10 text-blue-600" />
-            <span className="text-2xl font-bold text-gray-900">域外小说</span>
+            <span className="text-2xl font-bold text-gray-900">九天小说</span>
           </Link>
           <h2 className="mt-6 text-3xl font-bold text-gray-900">欢迎回来</h2>
           <p className="mt-2 text-gray-600">登录你的账户</p>

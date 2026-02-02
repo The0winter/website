@@ -1,11 +1,14 @@
 // server/index.js
 import 'dotenv/config';
+import bcrypt from 'bcryptjs';
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { createReview, getReviews } from './controllers/reviewController.js';
 import cron from 'node-cron';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
 
 // 引入模型
 import User from './models/User.js'; 
@@ -32,8 +35,25 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
-app.use(express.json({ limit: '50mb' })); 
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: '5mb' })); 
+app.use(express.urlencoded({ limit: '5mb', extended: true }));
+app.use(helmet());
+
+//  全局限流 (防止普通爬虫刷崩服务器)
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15分钟窗口
+  max: 500, // 每个 IP 允许 500 次请求 (根据你的访问量调整)
+  message: '请求过于频繁，请稍后再试'
+});
+app.use('/api/', globalLimiter);
+
+//4. 针对注册/登录接口的严格限流 (防止暴力破解)
+const authLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1小时
+  max: 10, // 每个 IP 只能尝试 10 次注册/登录
+  message: '尝试次数过多，请一小时后再试'
+});
+app.use('/api/auth/', authLimiter);
 
 // ================= 数据库连接 =================
 const MONGO_URL = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/novel-site';
@@ -52,30 +72,33 @@ const generateRandomPassword = () => {
   return Math.random().toString(36).slice(-8);
 };
 
+
 async function ensureAuthorExists(authorName) {
     if (!authorName || authorName === '未知') return null;
     try {
         let user = await User.findOne({ username: authorName });
         if (user) return user;
 
-        // 🔥 生成随机密码
+        // 1. 生成随机密码并加密
         const randomPassword = generateRandomPassword();
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(randomPassword, salt);
 
         console.log(`🆕 上传检测到新作者，正在创建账号: ${authorName}`);
-        console.log(`🔑 自动生成的密码: ${randomPassword}`); // (可选) 在后台日志里显示一下密码
+        console.log(`🔑 自动生成的密码: ${randomPassword}`); 
 
         const timestamp = Date.now();
         const randomNum = Math.floor(Math.random() * 1000);
         
+        // 2. 创建用户 (只需要这一段！不需要手动生成 _id，Mongoose 会自动处理)
         user = await User.create({
-            _id: newId,                // 2. 显式赋值给 _id
-            id: newId.toString(),
             username: authorName,
             email: `author_${timestamp}_${randomNum}@auto.generated`,
-            password: randomPassword, // 👈 这里改成了随机密码
+            password: hashedPassword, // ✅ 必须存密文
             role: 'writer',
             created_at: new Date()
         });
+        
         return user;
     } catch (e) {
         console.error(`⚠️ 作者创建失败: ${e.message}`);
@@ -214,12 +237,16 @@ app.post('/api/auth/signup', async (req, res) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ error: 'Email already exists' });
 
+    // 🔥 新增：加密用户输入的密码
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    
     const newId = new mongoose.Types.ObjectId(); 
     const newUser = new User({
       _id: newId,         
       //id: newId.toString(),
       email,
-      password, 
+      password: hashedPassword,
       username,
       role: role || 'reader',
     });
@@ -235,6 +262,7 @@ app.post('/api/auth/signup', async (req, res) => {
 app.post('/api/auth/signin', async (req, res) => {
   try {
     const { email, username, password } = req.body;
+
     const identifier = email || username;
     if (!identifier || !password) return res.status(400).json({ error: 'Provide account/password' });
     
@@ -244,6 +272,12 @@ app.post('/api/auth/signin', async (req, res) => {
     });
 
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    
+    // 🔥 核心修改：使用 bcrypt.compare 进行比对
+    // 它会自动把用户输入的明文 password 加密，然后和数据库里的密文 user.password 比对
+    const isMatch = await bcrypt.compare(password, user.password);
+    
+    if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' }); // 密码错误
     
     const { password: _, ...userWithoutPassword } = user.toObject();
     res.json({ user: { id: user.id, email: user.email }, profile: userWithoutPassword });
@@ -481,6 +515,17 @@ app.get('/api/books/:bookId/chapters', async (req, res) => {
 
 app.get('/api/chapters/:id', async (req, res) => {
   try {
+
+    // 🔥 简单的防盗链检查
+  const referer = req.headers.referer || '';
+  const allowedDomains = ['localhost', 'vercel.app', 'railway.app']; // 你的域名白名单
+  // 如果 Referer 存在且不包含白名单域名，拒绝访问
+  if (referer && !allowedDomains.some(domain => referer.includes(domain))) {
+     // 可以返回假数据，或者直接 403
+
+     return res.status(403).json({ error: 'Forbidden' });
+  }
+
     // ✅ 这里直接 findById，默认会查出 content (正文)
     const chapter = await Chapter.findById(req.params.id).lean();
     

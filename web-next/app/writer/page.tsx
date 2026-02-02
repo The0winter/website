@@ -26,6 +26,7 @@ export default function WriterDashboard() {
   // 选中项
   const [currentBookId, setCurrentBookId] = useState<string>('');
   const [currentChapterId, setCurrentChapterId] = useState<string | null>(null);
+  const [chapterToDelete, setChapterToDelete] = useState<string | null>(null); // 🗑️ 新增：专门控制删除弹窗
 
   // 🔥 修复点：把 activeChapters 移到这里，放在 return 之前！
   const [activeChapters, setActiveChapters] = useState<Chapter[]>([]);
@@ -173,16 +174,28 @@ const ALL_CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻', '奇�
     }
   };
 
-  const handleDeleteChapter = async (chapterId: string) => {
-    if (!confirm('确定删除?')) return;
+// 1. 点击列表里的垃圾桶图标时触发
+  const handleDeleteChapter = (chapterId: string) => {
+    // 不再用 window.confirm，而是直接设置状态，唤起自定义弹窗
+    setChapterToDelete(chapterId); 
+  };
+
+  // 2. 在弹窗里点击“确认删除”时触发
+  const executeDeleteChapter = async () => {
+    if (!chapterToDelete) return;
+
     try {
-        await chaptersApi.delete(chapterId);
+        await chaptersApi.delete(chapterToDelete);
         setToast({ msg: '删除成功', type: 'success' });
-        // 刷新当前章节列表
-        setActiveChapters(prev => prev.filter(c => c.id !== chapterId));
-        fetchMyData(); // 刷新总数据
+        
+        // 刷新列表
+        setActiveChapters(prev => prev.filter(c => c.id !== chapterToDelete));
+        fetchMyData(); 
     } catch (e) {
-        alert('删除失败');
+        setToast({ msg: '删除失败，请重试', type: 'error' });
+    } finally {
+        // 无论成功失败，都关闭弹窗
+        setChapterToDelete(null);
     }
   };
 
@@ -520,6 +533,33 @@ const handleCreateBook = async (e: React.FormEvent) => {
                  </div>
               </form>
            </div>
+        </div>
+      )}
+
+        {/* 🗑️ 全新的删除确认弹窗 (红色警告风) */}
+      {chapterToDelete && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center">
+                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600">
+                    <Trash2 className="h-8 w-8" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">确定删除章节？</h3>
+                <p className="text-sm text-gray-500 mb-6">此操作将永久删除该章节的内容，<br/>删除后无法恢复，请慎重操作。</p>
+                <div className="flex gap-3">
+                    <button 
+                        onClick={() => setChapterToDelete(null)} 
+                        className="flex-1 py-2.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition"
+                    >
+                        我再想想
+                    </button>
+                    <button 
+                        onClick={executeDeleteChapter} 
+                        className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 shadow-lg shadow-red-500/30 transition"
+                    >
+                        确认删除
+                    </button>
+                </div>
+            </div>
         </div>
       )}
 
