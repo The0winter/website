@@ -49,10 +49,21 @@ function ReaderContent() {
   const [lastScrollY, setLastScrollY] = useState(0);
   const { theme, setTheme } = useReadingSettings();
 
+  // --- 修复：桌面端逻辑 (进场/切章节时自动显示导航栏) ---
+  useEffect(() => {
+    if (isDesktop) {
+      // 电脑端：只要是进页面或切章节，强制显示导航栏
+      setShowNav(true);
+    } else {
+      // 移动端：切章节时确保菜单收起 (保持沉浸体验)
+      setShowNav(false);
+    }
+  }, [isDesktop, chapterIdParam]); // 依赖项：设备变了 或 章节变了 都触发
+
   const [themeColor, setThemeColor] = useState<'gray' | 'cream' | 'green' | 'blue'>('cream');
   const [fontFamily, setFontFamily] = useState<'sans' | 'serif' | 'kai'>('sans');
   const [fontSizeNum, setFontSizeNum] = useState(20);
-  const [lineHeight, setLineHeight] = useState(1.8);
+  const [lineHeight, setLineHeight] = useState(1.6);
   const [paraSpacing, setParaSpacing] = useState(4); 
 
   const [showHint, setShowHint] = useState(false); // 新手引导提示
@@ -112,7 +123,6 @@ function ReaderContent() {
   const paraSpacingMap: Record<number, string> = {
     2: '0.5rem', 4: '1rem', 6: '1.5rem', 8: '2rem',
   };
-  useEffect(() => { if (bookId) initData(); }, [bookId]); 
 
   useEffect(() => {
     if (bookId) booksApi.incrementViews(bookId).catch(e => console.error(e));
@@ -175,60 +185,99 @@ function ReaderContent() {
     }
   };
 
+// --- 极速加载逻辑 (优化版：切章节不显示Loading，原地等待瞬间切换) ---
   useEffect(() => {
-    // 1. 定义一个标记，用来判断当前请求是否有效
     let isActive = true;
 
-    const fetchChapterContent = async () => {
-      if (allChapters.length === 0) return;
-      
-      const targetId = chapterIdParam || allChapters[0].id;
-      
-      // 开始加载
-      setLoading(true);
+    const loadData = async () => {
+      let targetId = chapterIdParam;
 
-      try {
-        const res = await fetch(`https://website-production-6edf.up.railway.app/api/chapters/${targetId}`);
-        
-        if (res.ok) {
-          const data = await res.json();
-          // 2. 只有当组件还没被卸载/重置时，才更新数据
-          if (isActive) {
-            setChapter(data);
-            window.scrollTo(0, 0); 
-          }
+      // === 场景 A: 快速通道 (URL 里有 ID) ===
+      if (targetId) {
+        // [核心修改点]
+        // 只有当当前没有任何章节内容时（比如刷新页面或第一次进），才显示全屏Loading。
+        // 如果已经有章节了（chapter 存在），说明用户正在阅读并切换到了下一章：
+        // 此时我们不开启 Loading，让页面保持“原地不动”，用户几乎无感，
+        // 等数据请求回来后，直接瞬间替换内容并滚到顶部。
+        if (!chapter) {
+            setLoading(true);
         }
-      } catch (error) { 
-        console.error("加载失败:", error); 
+
+        try {
+          // [第一步] 并行加载
+          const [chapterRes, bookRes] = await Promise.all([
+            fetch(`https://website-production-6edf.up.railway.app/api/chapters/${targetId}`),
+            !book ? booksApi.getById(bookId) : Promise.resolve(null)
+          ]);
+
+          if (isActive) {
+            // 1.1 立即显示内容
+            if (chapterRes.ok) {
+              const chData = await chapterRes.json();
+              setChapter(chData);
+              window.scrollTo(0, 0); // 数据到了，瞬间滚回顶部
+            }
+            // 1.2 更新书名
+            if (bookRes) {
+              setBook(bookRes);
+            }
+            
+            // 1.3 无论原本有没有 Loading，这里都确保关闭它
+            setLoading(false); 
+          }
+
+          // [第二步] 后台默默加载目录
+          if (allChapters.length === 0) {
+            const chaptersRes = await chaptersApi.getByBookId(bookId);
+            if (isActive && chaptersRes) {
+              setAllChapters(chaptersRes);
+            }
+          }
+
+        } catch (e) {
+          console.error("快速加载失败", e);
+          setLoading(false);
+        }
       } 
-      finally { 
-        // 3. 无论成功失败，只要组件还活跃，就关闭 loading
-        if (isActive) {
-          setLoading(false); 
+      
+      // === 场景 B: 慢速通道 (URL 没 ID，默认进第一章) ===
+      else {
+        // 这种情况通常是刚进书，必须显示 Loading，否则是白屏
+        setLoading(true);
+        try {
+          const [bookRes, chaptersRes] = await Promise.all([
+             !book ? booksApi.getById(bookId) : Promise.resolve(null),
+             chaptersApi.getByBookId(bookId)
+          ]);
+
+          if (isActive) {
+             if (bookRes) setBook(bookRes);
+             if (chaptersRes) {
+               setAllChapters(chaptersRes);
+               if (chaptersRes.length > 0) {
+                 const firstId = chaptersRes[0].id;
+                 const chRes = await fetch(`https://website-production-6edf.up.railway.app/api/chapters/${firstId}`);
+                 if (chRes.ok) {
+                   const chData = await chRes.json();
+                   setChapter(chData);
+                   window.scrollTo(0, 0);
+                 }
+               }
+             }
+             setLoading(false);
+          }
+        } catch (e) {
+          console.error("初始化加载失败", e);
+          setLoading(false);
         }
       }
     };
 
-    fetchChapterContent();
+    loadData();
 
-    // 4. 清理函数：如果组件更新了，把上一次的标记设为 false
-    return () => {
-      isActive = false;
-    };
-    
-  }, [chapterIdParam, allChapters]);
+    return () => { isActive = false; };
+  }, [bookId, chapterIdParam]); // 依赖项
 
-  const initData = async () => {
-    try {
-      const [bookData, chaptersData] = await Promise.all([
-        booksApi.getById(bookId),
-        chaptersApi.getByBookId(bookId),
-      ]);
-      if (bookData) setBook(bookData);
-      if (chaptersData) setAllChapters(chaptersData);
-      setLoading(false);
-    } catch (error) { setLoading(false); }
-  };
   const checkBookmark = async () => {
     try {
       const bookmarked = await bookmarksApi.check(user!.id, bookId);
@@ -256,6 +305,33 @@ function ReaderContent() {
   const currentChapterIndex = allChapters.findIndex((ch) => ch.id === chapter?.id);
   const prevChapter = currentChapterIndex > 0 ? allChapters[currentChapterIndex - 1] : null;
   const nextChapter = currentChapterIndex < allChapters.length - 1 ? allChapters[currentChapterIndex + 1] : null;
+
+  // ============================================================
+  // ▼▼▼ 新增：键盘左右键翻页 (← 上一章 / → 下一章) ▼▼▼
+  // ============================================================
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. 如果用户正在输入框(评论)里打字，按方向键是为了移动光标，不要翻页
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+        return;
+      }
+
+      // 2. 左键 -> 上一章
+      if (e.key === 'ArrowLeft' && prevChapter) {
+        goToChapter(prevChapter.id);
+      }
+      // 3. 右键 -> 下一章
+      else if (e.key === 'ArrowRight' && nextChapter) {
+        goToChapter(nextChapter.id);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [prevChapter, nextChapter]); // 依赖项：当上一章/下一章变化时，重新绑定
+  
+  // ... 下面是 const fontFamilyValue = ...
+
   const fontFamilyValue = {
     sans: '"PingFang SC", "Microsoft YaHei", sans-serif',
     serif: '"Songti SC", "SimSun", serif',
@@ -263,9 +339,15 @@ function ReaderContent() {
   }[fontFamily];
   const displayChapters = catalogReversed ? [...allChapters].reverse() : allChapters;
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: activeTheme.bg }}>
-      <BookOpen className="h-12 w-12 opacity-50 animate-pulse" style={{ color: activeTheme.text }} />
+if (loading) return (
+    <div 
+      className="min-h-screen flex items-center justify-center transition-colors duration-300" 
+      style={{ backgroundColor: activeTheme.bg }} // <--- 关键：Loading 背景色必须和阅读背景一致
+    >
+      <div className="flex flex-col items-center gap-3">
+         <BookOpen className="h-10 w-10 animate-pulse opacity-50" style={{ color: activeTheme.text }} />
+         <span className="text-xs opacity-50" style={{ color: activeTheme.text }}>加载中...</span>
+      </div>
     </div>
   );
   if (!book || !chapter) return null;
@@ -344,13 +426,14 @@ function ReaderContent() {
           transform: `translateY(${showNav ? '0' : '-100%'})`,
         }}
       >
-        {/* 左侧：返回按钮 */}
-        <button onClick={() => router.back()} className="p-2 -ml-2 hover:bg-black/5 rounded-full relative z-10">
-           <ChevronLeft className="w-6 h-6" />
-        </button>
+        {/* 左侧：Logo 和 名称 (点击回首页) */}
+        <Link href="/" className="flex items-center gap-2 -ml-1 p-1 relative z-10 active:opacity-60">
+           <BookOpen className="w-5 h-5 text-blue-600" />
+           <span className="font-bold text-lg tracking-tight">九天</span>
+        </Link>
 
-        {/* 中间：章节标题 (新增：绝对定位居中) */}
-        <div className="absolute left-1/2 -translate-x-1/2 text-sm font-bold max-w-[60%] truncate opacity-90">
+        {/* 中间：章节标题 (绝对定位居中) */}
+        <div className="absolute left-1/2 -translate-x-1/2 text-sm font-bold max-w-[50%] truncate opacity-90">
             {chapter.title}
         </div>
 
@@ -368,20 +451,47 @@ function ReaderContent() {
 
 
       {/* ===========================================
-        2.5 移动端 新·底部工具栏 (只在小屏显示 lg:hidden)
-        [引用: 下方工具栏，目录在中间，其他删掉只留夜间和设置]
+        2.5 移动端 新·底部工具栏
+        顺序：[设置] - [详情] - [目录] - [夜间]
         ===========================================
       */}
       <div
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-8 border-t transition-all duration-300 pb-safe"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6 border-t transition-all duration-300 pb-safe"
         style={{
             backgroundColor: activeTheme.bg,
             color: activeTheme.text,
             borderColor: activeTheme.line,
-            transform: `translateY(${showNav ? '0' : '100%'})`, // 随 showNav 显隐
+            transform: `translateY(${showNav ? '0' : '100%'})`,
         }}
       >
-          {/* 左侧：夜间模式 */}
+          {/* 1. 设置 (原在右，现移至左) */}
+          <button 
+            onClick={() => setShowSettings(!showSettings)} 
+            className={`flex flex-col items-center gap-1 opacity-80 active:opacity-100 ${showSettings ? 'text-blue-500' : ''}`}
+          >
+             <Settings className="w-5 h-5"/>
+             <span className="text-[10px]">设置</span>
+          </button>
+
+          {/* 2. 书籍详情 (新增) */}
+          <Link 
+            href={`/book/${bookId}`}
+            className="flex flex-col items-center gap-1 opacity-80 active:opacity-100"
+          >
+             <Info className="w-5 h-5"/>
+             <span className="text-[10px]">详情</span>
+          </Link>
+
+          {/* 3. 目录 */}
+          <button 
+            onClick={() => setShowCatalog(true)} 
+            className="flex flex-col items-center gap-1 opacity-90 active:opacity-100"
+          >
+             <List className="w-5 h-5"/> {/* 图标稍微改小一点点以适配4个按钮 */}
+             <span className="text-[10px]">目录</span>
+          </button>
+
+          {/* 4. 夜间模式 (原在左，现移至右) */}
           <button 
             onClick={() => setTheme(isActuallyDark ? 'light' : 'dark')}
             className="flex flex-col items-center gap-1 opacity-80 active:opacity-100"
@@ -390,24 +500,6 @@ function ReaderContent() {
              <span className="text-[10px]">
                 {isActuallyDark ? '日间' : '夜间'}
              </span>
-          </button>
-
-          {/* 中间：目录 (重点) */}
-          <button 
-            onClick={() => setShowCatalog(true)} 
-            className="flex flex-col items-center gap-1 opacity-90 active:opacity-100 scale-110"
-          >
-             <List className="w-6 h-6"/>
-             <span className="text-[10px] font-bold">目录</span>
-          </button>
-
-          {/* 右侧：设置 */}
-          <button 
-            onClick={() => setShowSettings(!showSettings)} 
-            className={`flex flex-col items-center gap-1 opacity-80 active:opacity-100 ${showSettings ? 'text-blue-500' : ''}`}
-          >
-             <Settings className="w-5 h-5"/>
-             <span className="text-[10px]">设置</span>
           </button>
       </div>
 
@@ -774,7 +866,7 @@ function ReaderContent() {
               <div className="flex items-center gap-2">
                  <span className="text-xs opacity-50 font-bold w-10">间距</span>
                  <div className="flex flex-1 gap-2 bg-black/5 rounded-lg p-1">
-                    {[1.6, 1.8, 2.0, 2.4].map((lh) => (
+                    {[1.4, 1.6, 1.8, 2.0].map((lh) => (
                       <button 
                         key={lh}
                         onClick={() => setLineHeight(lh)}
