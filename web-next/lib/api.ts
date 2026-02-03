@@ -216,6 +216,7 @@ export interface AuthUser {
   username: string; // 👈 补上这一行！告诉 TS 用户确实有名字
   role: 'reader' | 'writer';
   token?: string;
+  avatar?: string;
   // 如果还有其他字段比如 avatar 等，也可以加在这里
 }
 
