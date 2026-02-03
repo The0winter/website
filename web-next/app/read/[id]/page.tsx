@@ -257,6 +257,10 @@ function ReaderContent() {
         [引用: 上方为导航栏，移除订阅月票等，左侧返回，右侧头像]
         ===========================================
       */}
+      {/* ===========================================
+        2. 移动端 新·顶部导航栏
+        ===========================================
+      */}
       <nav
         className="lg:hidden fixed top-0 left-0 right-0 z-50 h-14 flex items-center justify-between px-4 shadow-sm transition-all duration-300"
         style={{
@@ -264,19 +268,21 @@ function ReaderContent() {
           color: activeTheme.text,
           borderColor: activeTheme.line,
           borderBottomWidth: '1px',
-          transform: `translateY(${showNav ? '0' : '-100%'})`, // 控制显隐
+          transform: `translateY(${showNav ? '0' : '-100%'})`,
         }}
       >
         {/* 左侧：返回按钮 */}
-        <button onClick={() => router.back()} className="p-2 -ml-2 hover:bg-black/5 rounded-full">
+        <button onClick={() => router.back()} className="p-2 -ml-2 hover:bg-black/5 rounded-full relative z-10">
            <ChevronLeft className="w-6 h-6" />
         </button>
 
-        {/* 中间：留空 (保持起点极简风格) 或 显示章节标题 */}
-        {/* <div className="font-bold text-sm truncate px-4">{chapter.title}</div> */}
+        {/* 中间：章节标题 (新增：绝对定位居中) */}
+        <div className="absolute left-1/2 -translate-x-1/2 text-sm font-bold max-w-[60%] truncate opacity-90">
+            {chapter.title}
+        </div>
 
         {/* 右侧：用户头像 */}
-        <Link href={user ? `/user/${user.id}` : '/login'} className="rounded-full overflow-hidden border border-black/10">
+        <Link href={user ? `/user/${user.id}` : '/login'} className="rounded-full overflow-hidden border border-black/10 relative z-10">
             {(user as any)?.avatar ? (
                 <img src={(user as any).avatar} alt="avatar" className="w-8 h-8 object-cover" />
             ) : (
@@ -344,7 +350,9 @@ function ReaderContent() {
       >
         <article 
           className={`
-            w-full min-h-screen px-4 md:px-8 pt-20 pb-20 transition-colors duration-300
+            w-full min-h-screen px-4 md:px-8 
+            pt-16 pb-20  /* 修改这里：pt-20 改为 pt-16，让内容整体往上挪 */
+            transition-colors duration-300
             lg:max-w-[850px] lg:mx-auto lg:mt-16 lg:mb-10 lg:rounded-b-sm lg:rounded-t-none lg:pt-8 lg:px-12
             ${isDesktop ? 'shadow-[0_4px_20px_rgba(0,0,0,0.04)]' : ''} 
           `}
@@ -353,16 +361,12 @@ function ReaderContent() {
             color: activeTheme.text 
           }}
         >
-          {/* 标题区 */}
-          <div className="mb-8 border-b pb-4" style={{ borderColor: activeTheme.line }}>
-            <h1 className="text-2xl md:text-3xl font-bold mb-3">
-              {chapter.title.startsWith('第') ? chapter.title : `第${chapter.chapter_number}章 ${chapter.title}`}
+        {/* 标题区 (修改：间距更紧凑) */}
+          <div className="mb-5 px-2"> {/* mb-10 改为 mb-5，拉近标题和正文的距离 */}
+            <h1 className="text-3xl md:text-4xl font-bold tracking-wide leading-tight" style={{ color: activeTheme.text }}>
+              {chapter.title.startsWith('第') ?
+                chapter.title : `第${chapter.chapter_number}章 ${chapter.title}`}
             </h1>
-            <div className="text-xs opacity-60 flex flex-wrap gap-3">
-              <span>{book.title}</span>
-              <span>{book.author || '未知'}</span>
-              <span>字数：{chapter.content?.length || 0}</span>
-            </div>
           </div>
 
           {/* 正文 */}
@@ -441,45 +445,48 @@ function ReaderContent() {
         </aside>
       </div>
 
-      {/* 5. 目录弹窗 */}
+      {/* 5. 目录弹窗 (完美兼容版) */}
       {showCatalog && (
         <div 
-          className={`fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex ${isDesktop ? 'items-center justify-center' : 'justify-end'}`} 
+          className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={() => setShowCatalog(false)}
         >
           <div 
             className={`
-               flex flex-col transition-colors animate-in shadow-2xl
-               ${isDesktop ? 'w-[960px] h-[80vh] rounded-xl zoom-in-95' : 'w-[85%] max-w-sm h-full slide-in-from-right'}
+               flex flex-col rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200
+               ${isDesktop 
+                  ? 'w-[960px] h-[80vh]'  /* 网页端：保持宽屏大尺寸 */
+                  : 'w-[90%] max-w-[320px] h-[70vh] rounded-2xl' /* 移动端：居中精致小卡片 */
+               }
             `}
             style={{ 
-              backgroundColor: isActuallyDark ? '#222' : activeTheme.panel, 
+              backgroundColor: isActuallyDark ? '#1f1f1f' : (isDesktop ? activeTheme.panel : '#fff'), 
               color: activeTheme.text 
             }} 
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="px-6 py-5 border-b flex justify-between items-end shrink-0" style={{ borderColor: activeTheme.line }}>
-              <div className="flex items-baseline gap-3">
-                 <h2 className="text-2xl font-bold">目录</h2>
-                 <span className="text-sm opacity-60">共 {allChapters.length} 章</span>
+            <div className="px-5 py-4 border-b flex justify-between items-center shrink-0 bg-black/5" style={{ borderColor: activeTheme.line }}>
+              <div className="flex items-baseline gap-2">
+                 <h2 className="text-lg font-bold">目录</h2>
+                 <span className="text-xs opacity-50">共 {allChapters.length} 章</span>
               </div>
-              <div className="flex gap-4 items-center">
+              <div className="flex gap-2">
                 <button 
                   onClick={() => setCatalogReversed(!catalogReversed)} 
-                  className="flex items-center gap-1 text-sm opacity-70 hover:opacity-100 hover:text-blue-600 transition-colors"
+                  className="px-3 py-1.5 text-xs font-medium rounded-full bg-black/5 hover:bg-black/10 transition-colors flex items-center gap-1 active:scale-95"
                 >
-                   <ArrowUpDown className="w-4 h-4"/> <span>{catalogReversed ? '正序' : '倒序'}</span>
+                   <ArrowUpDown className="w-3 h-3"/> {catalogReversed ? '正序' : '倒序'}
                 </button>
-                <button onClick={() => setShowCatalog(false)} className="p-1 hover:bg-black/5 rounded text-gray-500">
-                  <X className="w-6 h-6"/>
+                <button onClick={() => setShowCatalog(false)} className="p-1.5 hover:bg-black/10 rounded-full bg-black/5 active:scale-95">
+                  <X className="w-4 h-4 opacity-60"/>
                 </button>
               </div>
             </div>
             
             {/* List */}
-            <div className="flex-1 overflow-y-auto px-6 py-2 custom-scrollbar">
-              <div className={`${isDesktop ? 'grid grid-cols-2 gap-x-12' : 'flex flex-col'}`}>
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+              <div className={`${isDesktop ? 'grid grid-cols-2 gap-x-12 gap-y-2' : 'flex flex-col gap-1'}`}>
                 {displayChapters.map(ch => {
                   const isActive = ch.id === chapter.id;
                   return (
@@ -488,17 +495,24 @@ function ReaderContent() {
                       id={isActive ? 'active-chapter-anchor' : undefined}
                       onClick={() => { goToChapter(ch.id); setShowCatalog(false); }}
                       className={`
-                        text-left py-4 px-2 text-base font-medium border-b border-dashed truncate transition-all group flex items-center justify-between rounded-lg
-                        ${isActive ? 'font-bold' : 'hover:bg-black/5 hover:text-blue-600'}
+                        text-left transition-all flex items-center justify-between
+                        ${isDesktop 
+                            /* 网页端样式：保留原来的虚线风格，或者微调得整齐一点 */
+                            ? `py-3 px-2 text-base border-b border-dashed ${isActive ? 'font-bold' : 'hover:text-blue-600'}`
+                            /* 移动端样式：块状胶囊风格 */
+                            : `py-3 px-4 text-sm rounded-xl ${isActive ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-black/5'}`
+                        }
                       `}
                       style={{ 
-                        borderColor: isActuallyDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.1)', 
-                        color: isActive ? '#d32f2f' : activeTheme.text 
+                         borderColor: isDesktop ? (isActuallyDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)') : undefined,
+                         color: isActive ? '#3b82f6' : activeTheme.text
                       }} 
                     >
                       <span className="truncate w-full">
                         {ch.title.startsWith('第') ? ch.title : `第${ch.chapter_number}章 ${ch.title}`}
                       </span>
+                      {/* 移动端高亮时显示小圆点 */}
+                      {!isDesktop && isActive && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 ml-2"></div>}
                     </button>
                   );
                 })}
