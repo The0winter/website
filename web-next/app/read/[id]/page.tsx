@@ -93,28 +93,28 @@ function ReaderContent() {
   }, [showCatalog]);
 
   // 滚动监听 (仅影响移动端导航栏显隐)
+  // 滚动监听 (修改：仅下滑隐藏，去掉上滑呼出，只能点击呼出)
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
       const diff = currentScrollY - lastScrollY;
+      
+      // 只有当滚动距离超过一定阈值才触发
       if (Math.abs(diff) < 10) return;
-      // 只在移动端或滚动距离较大时隐藏
-      // [引用: 下滑隐藏，上滑/点击呼出]
-      if (currentScrollY > lastScrollY && currentScrollY > 80) {
+
+      // 逻辑修改：只有向下滑动(diff > 0)且不在顶部时，才隐藏菜单
+      // 删掉了 else { setShowNav(true) }，也就是上滑不再自动呼出
+      if (diff > 0 && currentScrollY > 80) {
         setShowNav(false);
-        // 同时关闭设置面板，优化体验
-        setShowSettings(false); 
-      } else {
-        // 上滑时呼出
-        setShowNav(true);
+        setShowSettings(false); // 滚动时顺便把设置关掉
       }
-    
+      
       setLastScrollY(currentScrollY);
     };
+
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, [lastScrollY]);
-
   // 点击内容显隐菜单
   const handleContentClick = (e: React.MouseEvent) => {
     if (isDesktop) return;
@@ -626,104 +626,80 @@ function ReaderContent() {
             // 注意：这里我们保留原有的顶部弹出样式，如果你想改为底部弹出(Bottom Sheet)，需要大幅改动 CSS。
             // 鉴于要求“不影响网页端且基于此代码”，维持原样但在视觉上与底部栏配合。
             <div 
-                className="fixed top-20 right-4 sm:right-10 z-50 w-[340px] rounded-xl shadow-2xl border p-5 animate-in fade-in zoom-in-95 origin-top-right"
-                style={{ 
-                backgroundColor: isActuallyDark ? '#2a2a2a' : '#fff',
-                color: activeTheme.text,
-                borderColor: activeTheme.line 
-                }}
-            >
-                <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-lg">设置</h3>
-                    <button onClick={() => setShowSettings(false)} className="p-1 hover:bg-black/5 rounded-full">
-                    <X className="w-5 h-5 opacity-60"/>
-                    </button>
-                </div>
-
-                <div className="space-y-6">
-                
-                {/* 阅读主题 */}
-                <div>
-                    <div className="text-xs opacity-60 mb-2">阅读主题</div>
-                    <div className="flex justify-between gap-2 px-1">
-                        <button 
-                        onClick={() => setTheme(isActuallyDark ? 'light' : 'dark')}
-                        className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${isActuallyDark ? 'ring-2 ring-blue-500' : ''}`}
-                        style={{ backgroundColor: '#222', borderColor: '#444' }}
-                        title="夜间模式"
-                        >
-                        <Moon className="w-4 h-4 text-gray-400"/>
-                        </button>
-                        {Object.entries(themeMap).filter(([k]) => k !== 'dark').map(([key, val]) => (
-                        <button 
-                            key={key} 
-                            disabled={isActuallyDark}
-                            onClick={() => setThemeColor(key as any)}
-                            className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all ${themeColor === key && !isActuallyDark ? 'ring-2 ring-blue-500 scale-110' : ''}`}
-                            style={{ backgroundColor: val.bg, borderColor: 'transparent', opacity: isActuallyDark ? 0.3 : 1 }}
-                        >
-                            {themeColor === key && !isActuallyDark && <Check className="w-5 h-5 text-green-700" />}
-                        </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* 正文字体 */}
-                <div>
-                    <div className="text-xs opacity-60 mb-2">正文字体</div>
-                    <div className="flex gap-3">
-                        {['sans', 'serif', 'kai'].map(f => (
-                        <button
-                            key={f}
-                            onClick={() => setFontFamily(f as any)}
-                            className={`flex-1 py-2 text-sm rounded-lg border transition-all ${fontFamily === f ? 'bg-blue-50 text-blue-600 border-blue-500' : 'bg-black/5 border-transparent hover:bg-black/10'}`}
-                        >
-                            {f === 'sans' ? '黑体' : f === 'serif' ? '宋体' : '楷体'}
-                        </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* 字体大小 */}
-                <div>
-                    <div className="flex justify-between text-xs opacity-60 mb-2">
-                        <span>字体大小</span>
-                        <span>{fontSizeNum}px</span>
-                    </div>
-                    <div className="flex items-center gap-1 bg-black/5 rounded-lg p-1.5">
-                        <button onClick={() => setFontSizeNum(Math.max(12, fontSizeNum - 2))} className="w-12 py-1.5 hover:bg-white/60 rounded text-sm">A-</button>
-                        <div className="flex-1 flex justify-center text-sm font-bold opacity-80">{fontSizeNum}</div>
-                        <button onClick={() => setFontSizeNum(Math.min(48, fontSizeNum + 2))} className="w-12 py-1.5 hover:bg-white/60 rounded text-lg">A+</button>
-                    </div>
-                </div>
-
-                {/* 间距 */}
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <div className="text-xs opacity-60 mb-2">行间距</div>
-                        <div className="flex bg-black/5 rounded-lg p-1">
-                            {[1.6, 1.8, 2.0, 2.2].map((lh) => (
-                            <button 
-                                key={lh}
-                                onClick={() => setLineHeight(lh)}
-                                className={`flex-1 py-1.5 text-xs rounded transition-all ${lineHeight === lh ? 'bg-white shadow-sm font-bold text-blue-600' : 'hover:bg-black/5'}`}
-                            >
-                                {lh}
-                            </button>
-                            ))}
-                        </div>
-                    </div>
-                    <div>
-                        <div className="text-xs opacity-60 mb-2">段间距</div>
-                        <div className="flex bg-black/5 rounded-lg p-1">
-                        <button onClick={() => setParaSpacing(4)} className={`flex-1 py-1.5 text-xs rounded transition-all ${paraSpacing === 4 ? 'bg-white shadow-sm font-bold text-blue-600' : ''}`}>标准</button>
-                        <button onClick={() => setParaSpacing(8)} className={`flex-1 py-1.5 text-xs rounded transition-all ${paraSpacing === 8 ? 'bg-white shadow-sm font-bold text-blue-600' : ''}`}>超大</button>
-                        </div>
-                    </div>
-                </div>
-
-                </div>
+            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-[320px] rounded-xl shadow-2xl border p-4 animate-in slide-in-from-bottom-5 fade-in duration-200"
+            style={{ 
+              backgroundColor: isActuallyDark ? 'rgba(40,40,40,0.95)' : 'rgba(255,255,255,0.95)',
+              backdropFilter: 'blur(10px)',
+              color: activeTheme.text,
+              borderColor: activeTheme.line 
+            }}
+          >
+            {/* 紧凑排版：字号调整 (放在最上面方便操作) */}
+            <div className="flex items-center gap-3 mb-4 bg-black/5 rounded-lg p-2">
+                <button onClick={() => setFontSizeNum(Math.max(12, fontSizeNum - 2))} className="px-3 font-serif hover:bg-black/10 rounded">A-</button>
+                <div className="flex-1 text-center text-sm font-bold opacity-80">{fontSizeNum}</div>
+                <button onClick={() => setFontSizeNum(Math.min(48, fontSizeNum + 2))} className="px-3 font-serif text-lg hover:bg-black/10 rounded">A+</button>
             </div>
+
+            <div className="space-y-4">
+              {/* 主题颜色 (用圆圈表示，省空间) */}
+              <div className="flex justify-between items-center px-1">
+                 <span className="text-xs opacity-50 font-bold w-10">主题</span>
+                 <div className="flex gap-3">
+                    <button 
+                      onClick={() => setTheme(isActuallyDark ? 'light' : 'dark')}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center border ${isActuallyDark ? 'ring-2 ring-blue-500' : ''}`}
+                      style={{ backgroundColor: '#222', borderColor: '#444' }}
+                    >
+                      <Moon className="w-4 h-4 text-gray-400"/>
+                    </button>
+                    {Object.entries(themeMap).filter(([k]) => k !== 'dark').map(([key, val]) => (
+                      <button 
+                        key={key} 
+                        disabled={isActuallyDark}
+                        onClick={() => setThemeColor(key as any)}
+                        className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all ${themeColor === key && !isActuallyDark ? 'ring-2 ring-blue-500 scale-110' : ''}`}
+                        style={{ backgroundColor: val.bg, borderColor: 'transparent', opacity: isActuallyDark ? 0.3 : 1 }}
+                      >
+                        {themeColor === key && !isActuallyDark && <Check className="w-4 h-4 text-green-700" />}
+                      </button>
+                    ))}
+                 </div>
+              </div>
+
+              {/* 字体选择 (紧凑按钮) */}
+              <div className="flex items-center gap-2">
+                 <span className="text-xs opacity-50 font-bold w-10">字体</span>
+                 <div className="flex flex-1 gap-2">
+                    {['sans', 'serif', 'kai'].map(f => (
+                      <button
+                        key={f}
+                        onClick={() => setFontFamily(f as any)}
+                        className={`flex-1 py-1.5 text-xs rounded border transition-all ${fontFamily === f ? 'bg-blue-50 text-blue-600 border-blue-500' : 'bg-black/5 border-transparent'}`}
+                      >
+                        {f === 'sans' ? '黑体' : f === 'serif' ? '宋体' : '楷体'}
+                      </button>
+                    ))}
+                 </div>
+              </div>
+
+              {/* 间距 (合并在一行或者紧凑两行) */}
+              <div className="flex items-center gap-2">
+                 <span className="text-xs opacity-50 font-bold w-10">间距</span>
+                 <div className="flex flex-1 gap-2 bg-black/5 rounded-lg p-1">
+                    {[1.6, 1.8, 2.0, 2.4].map((lh) => (
+                      <button 
+                        key={lh}
+                        onClick={() => setLineHeight(lh)}
+                        className={`flex-1 py-1 text-xs rounded transition-all ${lineHeight === lh ? 'bg-white shadow-sm font-bold text-blue-600' : ''}`}
+                      >
+                        {lh}
+                      </button>
+                    ))}
+                 </div>
+              </div>
+            </div>
+          </div>
           )}
         </>
       )}
