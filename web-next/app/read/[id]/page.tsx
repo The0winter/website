@@ -63,6 +63,28 @@ function ReaderContent() {
     }
   }, []);
 
+  // --- 新增：监听安卓/小米的侧滑返回，实现“侧滑关闭目录” ---
+  useEffect(() => {
+    if (showCatalog) {
+      // 1. 当目录打开时，手动往历史记录推入一个状态
+      // 这样用户侧滑时，消耗的是这个状态，而不是直接退出页面
+      window.history.pushState({ catalogOpen: true }, '', window.location.href);
+
+      // 2. 定义处理函数：当检测到“后退”动作时
+      const handlePopState = () => {
+        setShowCatalog(false); // 关闭目录
+      };
+
+      // 3. 监听浏览器的 popstate 事件（侧滑、实体返回键都会触发）
+      window.addEventListener('popstate', handlePopState);
+
+      // 4. 清理函数
+      return () => {
+        window.removeEventListener('popstate', handlePopState);
+      };
+    }
+  }, [showCatalog]); // 依赖 showCatalog，只有它变化时才执行
+
   // 主题映射
   const themeMap = {
     cream:  { name: '羊皮纸', bg: '#f6f1e7', text: '#333333', line: '#d4cbb3', panel: '#fffbf0', desk: '#e8e4d9' },
@@ -129,21 +151,45 @@ function ReaderContent() {
   };
 
   useEffect(() => {
+    // 创建一个中断控制器
+    const controller = new AbortController();
+    const { signal } = controller;
+
     const fetchChapterContent = async () => {
       if (allChapters.length === 0) return;
+      
       const targetId = chapterIdParam || allChapters[0].id;
+      
+      // 如果ID没变（有时候React重渲染会导致ID看起来一样），可以加个判断跳过，但通常AbortController就够了
+      
       setLoading(true);
       try {
-        const res = await fetch(`https://website-production-6edf.up.railway.app/api/chapters/${targetId}`);
+        const res = await fetch(`https://website-production-6edf.up.railway.app/api/chapters/${targetId}`, {
+          signal // 绑定信号
+        });
+        
         if (res.ok) {
-          setChapter(await res.json());
+          const data = await res.json();
+          setChapter(data);
+          // 只有成功获取数据后才滚到顶部
+          window.scrollTo(0, 0); 
         }
-      } catch (error) { 
+      } catch (error: any) { 
+        // 如果是我们自己取消的请求，就不报错
+        if (error.name === 'AbortError') return;
         console.error(error); 
       } 
-      finally { setLoading(false); }
+      finally { 
+        // 如果信号没被中断，才关闭loading
+        if (!signal.aborted) setLoading(false); 
+      }
     };
+
     fetchChapterContent();
+
+    // 清理函数：如果组件卸载或依赖变了，取消正在进行的请求
+    return () => controller.abort();
+    
   }, [chapterIdParam, allChapters]);
 
   const initData = async () => {
