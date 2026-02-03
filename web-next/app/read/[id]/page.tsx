@@ -45,7 +45,7 @@ function ReaderContent() {
   const [catalogReversed, setCatalogReversed] = useState(false);
 
   // 导航栏显示状态 (移动端专用)
-  const [showNav, setShowNav] = useState(true);
+  const [showNav, setShowNav] = useState(false);
   const [lastScrollY, setLastScrollY] = useState(0);
   const { theme, setTheme } = useReadingSettings();
 
@@ -55,11 +55,23 @@ function ReaderContent() {
   const [lineHeight, setLineHeight] = useState(1.8);
   const [paraSpacing, setParaSpacing] = useState(4); 
 
+  const [showHint, setShowHint] = useState(false); // 新手引导提示
+
   // 网页端默认参数调整：加载时如果是大屏，调整默认字号 (改小了) 和行距
   useEffect(() => {
     if (window.innerWidth >= 1024) {
       setFontSizeNum(20); 
       setLineHeight(1.8); 
+    }
+  }, []);
+
+  // --- 新增：检查是否需要显示新手引导 (仅移动端 & 第一次) ---
+  useEffect(() => {
+    // 只有在客户端才执行
+    const hasSeen = localStorage.getItem('has-seen-reading-hint');
+    // 如果没看过，且当前是手机宽度 (<1024)，则显示提示
+    if (!hasSeen && window.innerWidth < 1024) {
+      setShowHint(true);
     }
   }, []);
 
@@ -114,21 +126,27 @@ function ReaderContent() {
     }
   }, [showCatalog]);
 
-  // 滚动监听 (仅影响移动端导航栏显隐)
-  // 滚动监听 (修改：仅下滑隐藏，去掉上滑呼出，只能点击呼出)
+// 滚动监听 (完美适配版：手机电脑逻辑分离)
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
       const diff = currentScrollY - lastScrollY;
       
-      // 只有当滚动距离超过一定阈值才触发
+      // 阈值检测，防抖动
       if (Math.abs(diff) < 10) return;
 
-      // 逻辑修改：只有向下滑动(diff > 0)且不在顶部时，才隐藏菜单
-      // 删掉了 else { setShowNav(true) }，也就是上滑不再自动呼出
+      // 1. 下滑隐藏逻辑 (手机、电脑通用)
+      // 向下滑动(diff > 0) 且 不在顶部时 -> 隐藏
       if (diff > 0 && currentScrollY > 80) {
         setShowNav(false);
-        setShowSettings(false); // 滚动时顺便把设置关掉
+        setShowSettings(false);
+      }
+      
+      // 2. 上滑显示逻辑 (电脑端专属)
+      // 如果是电脑端 (isDesktop) 且 向上滑动 (diff < 0) -> 自动显示
+      // 手机端不执行这一步，保持“只能点击呼出”
+      else if (isDesktop && diff < 0) {
+        setShowNav(true);
       }
       
       setLastScrollY(currentScrollY);
@@ -136,12 +154,19 @@ function ReaderContent() {
 
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [lastScrollY]);
+  }, [lastScrollY, isDesktop]);
   // 点击内容显隐菜单
   const handleContentClick = (e: React.MouseEvent) => {
     if (isDesktop) return;
     // 网页端不通过点击正文呼出菜单
     if (window.getSelection()?.toString().length) return;
+
+    // --- 新增：如果提示还在，点击任意位置就关闭它，并永久记录 ---
+    if (showHint) {
+      setShowHint(false);
+      localStorage.setItem('has-seen-reading-hint', 'true');
+    }
+
     const width = window.innerWidth;
     const x = e.clientX;
     // [引用: 点击屏幕中央才会呼出]
@@ -151,44 +176,45 @@ function ReaderContent() {
   };
 
   useEffect(() => {
-    // 创建一个中断控制器
-    const controller = new AbortController();
-    const { signal } = controller;
+    // 1. 定义一个标记，用来判断当前请求是否有效
+    let isActive = true;
 
     const fetchChapterContent = async () => {
       if (allChapters.length === 0) return;
       
       const targetId = chapterIdParam || allChapters[0].id;
       
-      // 如果ID没变（有时候React重渲染会导致ID看起来一样），可以加个判断跳过，但通常AbortController就够了
-      
+      // 开始加载
       setLoading(true);
+
       try {
-        const res = await fetch(`https://website-production-6edf.up.railway.app/api/chapters/${targetId}`, {
-          signal // 绑定信号
-        });
+        const res = await fetch(`https://website-production-6edf.up.railway.app/api/chapters/${targetId}`);
         
         if (res.ok) {
           const data = await res.json();
-          setChapter(data);
-          // 只有成功获取数据后才滚到顶部
-          window.scrollTo(0, 0); 
+          // 2. 只有当组件还没被卸载/重置时，才更新数据
+          if (isActive) {
+            setChapter(data);
+            window.scrollTo(0, 0); 
+          }
         }
-      } catch (error: any) { 
-        // 如果是我们自己取消的请求，就不报错
-        if (error.name === 'AbortError') return;
-        console.error(error); 
+      } catch (error) { 
+        console.error("加载失败:", error); 
       } 
       finally { 
-        // 如果信号没被中断，才关闭loading
-        if (!signal.aborted) setLoading(false); 
+        // 3. 无论成功失败，只要组件还活跃，就关闭 loading
+        if (isActive) {
+          setLoading(false); 
+        }
       }
     };
 
     fetchChapterContent();
 
-    // 清理函数：如果组件卸载或依赖变了，取消正在进行的请求
-    return () => controller.abort();
+    // 4. 清理函数：如果组件更新了，把上一次的标记设为 false
+    return () => {
+      isActive = false;
+    };
     
   }, [chapterIdParam, allChapters]);
 
@@ -222,10 +248,11 @@ function ReaderContent() {
       }
     } catch (error) {}
   };
-  const goToChapter = (targetChapterId: string) => {
-    router.push(`/read/${bookId}?chapterId=${targetChapterId}`);
-    window.scrollTo(0, 0);
-  };
+   const goToChapter = (targetChapterId: string) => {
+    // 核心修改：加上 { scroll: false }
+    // 这样路由跳转时页面会保持不动，直到数据加载完成后，我们的 useEffect 才会把它滚到顶部
+    router.push(`/read/${bookId}?chapterId=${targetChapterId}`, { scroll: false });
+    };
   const currentChapterIndex = allChapters.findIndex((ch) => ch.id === chapter?.id);
   const prevChapter = currentChapterIndex > 0 ? allChapters[currentChapterIndex - 1] : null;
   const nextChapter = currentChapterIndex < allChapters.length - 1 ? allChapters[currentChapterIndex + 1] : null;
@@ -251,8 +278,7 @@ function ReaderContent() {
       }}
     >
       {/* ===========================================
-        1. 网页端专属导航栏 (只在大屏显示 lg:flex) 
-        [引用: 保持网页端功能不变]
+        1. 网页端专属导航栏 (修复：固定显示，不再随滚动隐藏) 
         ===========================================
       */}
       <header 
@@ -277,7 +303,8 @@ function ReaderContent() {
 
             <div className="flex-1 text-center px-4 overflow-hidden">
               <div className="text-lg font-bold truncate opacity-90 text-gray-700" style={{ color: activeTheme.text }}>
-                {chapter.title.startsWith('第') ? chapter.title : `第${chapter.chapter_number}章 ${chapter.title}`}
+                {chapter.title.startsWith('第') ?
+                  chapter.title : `第${chapter.chapter_number}章 ${chapter.title}`}
               </div>
             </div>
 
@@ -397,7 +424,7 @@ function ReaderContent() {
         <article 
           className={`
             w-full min-h-screen px-4 md:px-8 
-            pt-16 pb-20  /* 修改这里：pt-20 改为 pt-16，让内容整体往上挪 */
+            pt-4 pb-20  /* 核心修改：pt-16 改为 pt-4。让第一行文字直接顶上去，不再留出导航栏的位置 */
             transition-colors duration-300
             lg:max-w-[850px] lg:mx-auto lg:mt-16 lg:mb-10 lg:rounded-b-sm lg:rounded-t-none lg:pt-8 lg:px-12
             ${isDesktop ? 'shadow-[0_4px_20px_rgba(0,0,0,0.04)]' : ''} 
@@ -763,6 +790,20 @@ function ReaderContent() {
           )}
         </>
       )}
+
+      {/* 7. 新手引导提示 (仅第一次出现，半透明浮层) */}
+      {showHint && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center pointer-events-none animate-in fade-in duration-500">
+            <div className="bg-black/70 backdrop-blur-sm text-white px-6 py-4 rounded-2xl shadow-xl flex flex-col items-center gap-2 animate-bounce">
+                {/* 圆圈点点图标 */}
+                <div className="w-8 h-8 rounded-full border-2 border-white/50 flex items-center justify-center">
+                    <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                </div>
+                <span className="text-sm font-bold tracking-wide">点击屏幕中央呼出菜单</span>
+            </div>
+        </div>
+      )}
+
     </div>
   );
 }
