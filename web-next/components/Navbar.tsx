@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 // 1. 引入 X 图标
-import { Search, User, LogOut, BookOpen, PenTool, Library, X } from 'lucide-react';
+import { Search, User, LogOut, BookOpen, PenTool, Library, X, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext'; 
 
@@ -30,6 +31,9 @@ export default function Navbar() {
       router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
       // 搜索提交后关闭移动端搜索框
       setIsMobileSearchOpen(false);
+
+      // 2. [新增] 修复：清空搜索框内容，确保下次打开是空的
+      setSearchQuery('');
     }
   };
 
@@ -159,28 +163,39 @@ export default function Navbar() {
                 </div>
             </div>
 
-            {/* 🔥 新增：移动端折叠搜索框 */}
+          {/* 🔥 新增：移动端折叠搜索框 (精装修版) */}
             {isMobileSearchOpen && (
-              <div className="pb-3 animate-in slide-in-from-top-5 fade-in duration-200">
-                <form onSubmit={handleSearch} className="relative">
+              <div className="pb-3 px-1 animate-in slide-in-from-top-2 fade-in duration-200">
+                <form onSubmit={handleSearch} className="relative flex items-center">
                   <input
-                    autoFocus // 自动聚焦
+                    autoFocus
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="搜索书籍、作者..."
-                    className={`w-full pl-10 pr-4 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm
+                    className={`w-full pl-10 pr-12 py-2.5 rounded-xl border-none transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm shadow-inner
                       ${isDark 
-                        ? 'bg-[#2a2a2a] border-[#444] text-gray-100 placeholder-gray-500' 
-                        : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-400'
+                        ? 'bg-[#2a2a2a] text-gray-100 placeholder-gray-600' 
+                        : 'bg-gray-100 text-gray-900 placeholder-gray-500'
                       }
                     `}
                   />
-                  <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
                   
-                  {/* 可选：输入框内的搜索按钮 */}
-                  <button type="submit" className="absolute right-2 top-1.5 bg-blue-600 text-white px-3 py-0.5 rounded text-xs">
-                    搜索
+                  {/* 左侧搜索镜图标 */}
+                  <Search className={`absolute left-3.5 w-4 h-4 pointer-events-none ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+                  
+                  {/* 右侧提交按钮 (有内容时变蓝，无内容时隐藏或变灰) */}
+                  <button 
+                    type="submit" 
+                    disabled={!searchQuery.trim()}
+                    className={`absolute right-1.5 p-1.5 rounded-lg transition-all duration-200 flex items-center justify-center
+                      ${searchQuery.trim() 
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-200 scale-100 opacity-100' 
+                        : 'bg-transparent text-gray-400 scale-90 opacity-0 pointer-events-none'
+                      }
+                    `}
+                  >
+                    <ArrowRight className="w-4 h-4" />
                   </button>
                 </form>
               </div>

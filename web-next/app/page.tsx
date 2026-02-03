@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { 
   BookOpen, TrendingUp, Star, Zap, ChevronRight,
   Sparkles, Sword, Building2, History, Rocket, ImageOff,
-  Search, User, Library
+  Search, User, Library, LayoutGrid, PenTool, Trophy
 } from 'lucide-react';
 import { booksApi, Book } from '@/lib/api';
 
@@ -28,7 +28,6 @@ const categories = [
 const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }: any) => (
   <div className="bg-white md:rounded-xl shadow-sm md:border border-gray-100 flex flex-col h-full overflow-hidden">
     
-    {/* 手机端隐藏榜单头部 */}
     <div className="hidden md:flex p-5 border-b border-gray-50 items-center justify-between bg-gradient-to-r from-gray-50 to-white">
       <div className="flex items-center gap-3">
         <Icon className={`w-6 h-6 ${rankColor}`} />
@@ -37,7 +36,6 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
       <span className="text-xs text-gray-400 uppercase tracking-wider font-medium bg-white px-2 py-1 rounded border border-gray-100">TOP 10</span>
     </div>
 
-    {/* 列表内容 */}
     <div className="flex-1 overflow-y-auto min-h-[600px] scrollbar-thin scrollbar-thumb-gray-200">
       {books.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-80 text-gray-400 text-sm gap-4">
@@ -53,7 +51,6 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
             href={`/book/${book.id}`}
             className="flex items-start gap-4 md:gap-5 p-4 md:p-5 hover:bg-blue-50/40 transition-all group relative border-b border-gray-100 last:border-b-0"
           >
-            {/* A. 排名数字 */}
             <div className={`
               w-6 h-6 md:w-7 md:h-7 flex-shrink-0 flex items-center justify-center rounded-lg text-xs md:text-sm font-extrabold mt-1
               ${index === 0 ? 'bg-red-500 text-white shadow-red-200 shadow-md transform scale-110' : ''}
@@ -64,7 +61,6 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
               {index + 1}
             </div>
 
-            {/* B. 书籍封面 */}
             <div className="relative w-16 h-20 md:w-20 md:h-28 flex-shrink-0 rounded-md shadow-sm border border-gray-200 overflow-hidden group-hover:shadow-lg transition-all duration-300 group-hover:-translate-y-1">
                {book.cover_image ? (
                  <img src={book.cover_image} alt={book.title} className="w-full h-full object-cover" />
@@ -75,10 +71,8 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                )}
             </div>
 
-            {/* C. 书籍信息 */}
             <div className="flex-1 min-w-0 flex flex-col justify-between h-20 md:h-28 py-0.5 md:py-1">
               <div>
-                  {/* 书名改小，避免换行 */}
                   <h4 className="text-sm md:text-[16px] font-extrabold text-gray-800 leading-snug line-clamp-1 md:line-clamp-2 group-hover:text-blue-600 transition-colors mb-1 md:mb-2">
                     {book.title}
                   </h4>
@@ -87,8 +81,6 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                     <span className="truncate max-w-[100px] hover:text-gray-900 font-medium">
                         {book.author || (book.author_id as any)?.username || '未知'}
                     </span>
-                    
-                    {/* 手机端删掉分类标签 */}
                     <span className="hidden md:block w-px h-3 bg-gray-300"></span>
                     <span className="hidden md:block bg-gray-100 px-2.5 py-1 rounded-md text-xs text-gray-600">
                         {book.category || '综合'}
@@ -101,7 +93,6 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
               </div>
             </div>
             
-            {/* D. 评分/箭头 */}
             <div className="self-center text-right pl-2">
                {showRating ? (
                  <div className="flex flex-col items-end">
@@ -124,26 +115,21 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
 );
 
 // --- 2. 主逻辑组件 ---
-// 找到 app/page.tsx 的 function HomeContent()
-// 用下面的代码替换 function HomeContent() { ... 到 return ( 之前的内容
 
 function HomeContent() {
-  // 1. 定义状态
   const [allBooks, setAllBooks] = useState<Book[]>([]); 
   const [featuredBooks, setFeaturedBooks] = useState<Book[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all'); 
   const [loading, setLoading] = useState(true);
   
-  // 移动端 Tab 状态
   const [mobileTab, setMobileTab] = useState<'rec' | 'week' | 'day'>('rec');
 
-  // 🔥 轮播图专用状态
+  // 轮播图状态
   const [activeBookIndex, setActiveBookIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false); // 鼠标悬停暂停
-  const [isTouching, setIsTouching] = useState(false); // 手指按压暂停
-  const [isTransitioning, setIsTransitioning] = useState(true); // 动画开关
+  const [isPaused, setIsPaused] = useState(false);
+  const [isTouching, setIsTouching] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(true);
 
-  // 2. 获取数据 (只取前3本)
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -162,23 +148,19 @@ function HomeContent() {
     fetchData();
   }, []);
 
-  // 3. 构造 sliderList (A, B, C -> A, B, C, A')
   const sliderList = useMemo(() => {
       if (featuredBooks.length === 0) return [];
       return [...featuredBooks, featuredBooks[0]];
   }, [featuredBooks]);
 
-  // 4. 下一张 (修复越界白屏 bug)
   const handleNext = useCallback(() => {
       if (featuredBooks.length === 0) return;
       setActiveBookIndex(prev => {
-          // 🛡️ 修复 Bug：如果已经是最后一张(克隆体)，禁止继续增加，防止白屏
           if (prev >= featuredBooks.length) return prev;
           return prev + 1;
       });
   }, [featuredBooks.length]);
 
-  // 5. 上一张
   const handlePrev = useCallback(() => {
       if (featuredBooks.length === 0) return;
       setActiveBookIndex(prev => {
@@ -189,41 +171,32 @@ function HomeContent() {
       });
   }, [featuredBooks.length]);
 
-  // 6. 瞬间回弹逻辑 (无缝循环核心)
   useEffect(() => {
       if (activeBookIndex === featuredBooks.length && featuredBooks.length > 0) {
           const timer = setTimeout(() => {
-              setIsTransitioning(false); // 关动画
-              setActiveBookIndex(0);     // 瞬移回第0张
-              
+              setIsTransitioning(false);
+              setActiveBookIndex(0);
               requestAnimationFrame(() => {
                   requestAnimationFrame(() => {
-                      setIsTransitioning(true); // 开动画
+                      setIsTransitioning(true);
                   });
               });
-          }, 500); // 必须等于 CSS duration
+          }, 500);
           return () => clearTimeout(timer);
       }
   }, [activeBookIndex, featuredBooks.length]);
 
-  // 7. 自动轮播定时器 (修复：手滑后重置时间)
   useEffect(() => {
-    // 如果鼠标悬停、手指按着、或者书太少，就不轮播
     if (isPaused || isTouching || featuredBooks.length <= 1) return;
-
     const intervalId = window.setInterval(handleNext, 3000);
-
-    // 🔥 关键修复：依赖项里加了 activeBookIndex
-    // 只要图片变了（无论是自动变的，还是你手滑的），这里都会清除旧定时器，重新计时 3秒
     return () => window.clearInterval(intervalId);
   }, [handleNext, isPaused, isTouching, featuredBooks.length, activeBookIndex]);
 
-  // 8. 触摸滑动逻辑 (增加 isTouching 控制)
   const [touchStart, setTouchStart] = useState(0);
   const [touchEnd, setTouchEnd] = useState(0);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-      setIsTouching(true); // 👇 按下时暂停轮播
+      setIsTouching(true);
       setTouchStart(e.targetTouches[0].clientX);
   };
   
@@ -232,175 +205,189 @@ function HomeContent() {
   };
 
   const handleTouchEnd = () => {
-      setIsTouching(false); // 👇 松开后恢复轮播
+      setIsTouching(false);
       if (!touchStart || !touchEnd) return;
       const distance = touchStart - touchEnd;
-      
-      if (distance > 50) handleNext(); // 左滑
-      if (distance < -50) handlePrev(); // 右滑
-      
+      if (distance > 50) handleNext();
+      if (distance < -50) handlePrev();
       setTouchStart(0);
       setTouchEnd(0);
   };
 
-  // 9. 计算榜单
   const { recList, weekList, dayList } = useMemo(() => {
-    const targetCategory = categories.find(c => c.slug === selectedCategory);
-    const filtered = allBooks.filter(book => {
-        if (selectedCategory === 'all') return true;
-        return targetCategory && book.category === targetCategory.name;
-    });
-
-    const rec = [...filtered].sort((a: any, b: any) => {
+    const rec = [...allBooks].sort((a: any, b: any) => {
         const scoreA = ((a.rating || 0) * 100 * 0.6) + ((a.weekly_views || 0) * 0.4);
         const scoreB = ((b.rating || 0) * 100 * 0.6) + ((b.weekly_views || 0) * 0.4);
         return scoreB - scoreA;
     }).slice(0, 10);
 
-    const week = [...filtered].sort((a: any, b: any) => (b.weekly_views || 0) - (a.weekly_views || 0)).slice(0, 10);
-
-    const day = [...filtered].sort((a: any, b: any) => (b.daily_views || 0) - (a.daily_views || 0)).slice(0, 10);
+    const week = [...allBooks].sort((a: any, b: any) => (b.weekly_views || 0) - (a.weekly_views || 0)).slice(0, 10);
+    const day = [...allBooks].sort((a: any, b: any) => (b.daily_views || 0) - (a.daily_views || 0)).slice(0, 10);
 
     return { recList: rec, weekList: week, dayList: day };
+  }, [allBooks]);
+
+  const categoryBooks = useMemo(() => {
+      const targetCategory = categories.find(c => c.slug === selectedCategory);
+      return allBooks.filter(book => {
+          if (selectedCategory === 'all') return true;
+          return targetCategory && book.category === targetCategory.name;
+      }).sort((a: any, b: any) => (b.views || 0) - (a.views || 0));
   }, [allBooks, selectedCategory]);
 
     return (
       <div className="min-h-screen bg-[#f8f9fa] pb-12">
         
-        {/* 顶部导航栏 (保持不变) */}
-        <div className="hidden md:block w-full bg-[#3e3d43] h-[40px]">
-          <div className="max-w-6xl mx-auto h-full flex justify-between items-center text-white text-[14px] px-4">
-            <div className="flex gap-6 overflow-x-auto no-scrollbar">
-              {['全部作品', '排行', '完本', '免费', 'VIP', '作家专区'].map((item) => (
-                  <Link key={item} href="#" className="hover:text-red-500 transition-colors whitespace-nowrap">
-                  {item}
-                  </Link>
-              ))}
-            </div>
-            <div className="text-gray-400 text-xs hidden sm:block">登录 | 注册</div>
-          </div>
-        </div>
+        {/* 🔥🔥🔥 修改点：彻底删除了顶部的黑色导航栏 div === */}
 
         <div className="max-w-[1400px] mx-auto md:px-4 md:py-8 flex flex-col gap-0 md:gap-10">
         
-          {/* === 轮播图区域 (支持无限循环) === */}
+          {/* === 轮播图区域 === */}
           <section className="w-full" onMouseLeave={() => setIsPaused(false)}>
             {featuredBooks.length > 0 ? (
-              <div className="bg-white md:rounded-2xl shadow-sm border-b md:border border-gray-200 overflow-hidden w-full">
+              // 🔥🔥🔥 修改点：增加 flex 布局，将轮播图和右侧图标栏并排 ===
+              <div className="bg-white md:rounded-2xl shadow-sm border-b md:border border-gray-200 overflow-hidden w-full flex">
                 
-                <div 
-                  className="relative h-[220px] md:h-[380px] w-full overflow-hidden group"
-                  onMouseEnter={() => setIsPaused(true)}
-                  onTouchStart={handleTouchStart}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={handleTouchEnd}
-                >
-                  {/* 🔥 核心滑动轨道 
-                      1. 渲染 sliderList (包含克隆体)
-                      2. 根据 isTransitioning 动态控制 duration
-                  */}
-                  <div 
-                      className={`flex h-full ease-out ${isTransitioning ? 'transition-transform duration-500' : ''}`}
-                      style={{ transform: `translateX(-${activeBookIndex * 100}%)` }}
-                  >
-                      {sliderList.map((book, index) => (
-                          <Link 
-                              // 注意 key 的唯一性
-                              key={`${book.id}-${index}`} 
-                              href={`/book/${book.id}`} 
-                              className="min-w-full h-full relative block"
-                              draggable={false}
-                          >
-                              <div className="relative h-full bg-gradient-to-br from-gray-900 to-black select-none">
-                                  {book.cover_image && (
-                                      <div className="absolute inset-0">
-                                          <img src={book.cover_image} alt={book.title} className="w-full h-full object-cover opacity-40 blur-2xl scale-110" draggable={false} />
-                                          <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent"></div>
-                                      </div>
-                                  )}
-                                  
-                                  <div className="relative h-full flex items-center p-5 md:p-10 gap-10 max-w-6xl mx-auto">
+                {/* --- 左侧：原有的轮播图 + 底部导航 (flex-1 占满剩余空间) --- */}
+                <div className="flex-1 flex flex-col min-w-0 border-r border-white/5 relative">
+                    <div 
+                      className="relative h-[220px] md:h-[380px] w-full overflow-hidden group"
+                      onMouseEnter={() => setIsPaused(true)}
+                      onTouchStart={handleTouchStart}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
+                    >
+                      <div 
+                          className={`flex h-full ease-out ${isTransitioning ? 'transition-transform duration-500' : ''}`}
+                          style={{ transform: `translateX(-${activeBookIndex * 100}%)` }}
+                      >
+                          {sliderList.map((book, index) => (
+                              <Link 
+                                  key={`${book.id}-${index}`} 
+                                  href={`/book/${book.id}`} 
+                                  className="min-w-full h-full relative block"
+                                  draggable={false}
+                              >
+                                  <div className="relative h-full bg-gradient-to-br from-gray-900 to-black select-none">
                                       {book.cover_image && (
-                                          <img src={book.cover_image} alt={book.title} className="w-48 h-72 object-cover rounded-lg shadow-2xl border-2 border-white/10 flex-shrink-0 hidden md:block transform hover:scale-105 transition-transform duration-500" />
+                                          <div className="absolute inset-0">
+                                              <img src={book.cover_image} alt={book.title} className="w-full h-full object-cover opacity-40 blur-2xl scale-110" draggable={false} />
+                                              <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent"></div>
+                                          </div>
                                       )}
-                                      <div className="flex-1 text-white">
-                                          <span className="inline-block bg-red-600 text-white text-[10px] md:text-xs font-bold px-2 py-0.5 md:px-3 md:py-1 rounded-full mb-2 md:mb-4 tracking-wide shadow-lg shadow-red-900/50">
-                                              重磅推荐
-                                          </span>
-                                          <h3 className="text-2xl md:text-5xl font-black mb-2 md:mb-4 tracking-tight drop-shadow-lg line-clamp-1">
-                                              {book.title}
-                                          </h3>
-                                          
-                                          <p className="flex items-center gap-4 text-white/80 text-xs md:text-sm mb-2 md:mb-6 font-medium">
-                                              <span className="flex items-center gap-2">
-                                                  <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-400"></span>
-                                                  {book.author || '未知'}
+                                      
+                                      <div className="relative h-full flex items-center p-5 md:p-10 gap-10 max-w-6xl mx-auto">
+                                          {book.cover_image && (
+                                              <img src={book.cover_image} alt={book.title} className="w-48 h-72 object-cover rounded-lg shadow-2xl border-2 border-white/10 flex-shrink-0 hidden md:block transform hover:scale-105 transition-transform duration-500" />
+                                          )}
+                                          <div className="flex-1 text-white">
+                                              <span className="inline-block bg-red-600 text-white text-[10px] md:text-xs font-bold px-2 py-0.5 md:px-3 md:py-1 rounded-full mb-2 md:mb-4 tracking-wide shadow-lg shadow-red-900/50">
+                                                  重磅推荐
                                               </span>
-                                              <span className="text-white/20">|</span>
-                                              <span className="bg-white/10 px-2 py-0.5 md:px-3 rounded-full backdrop-blur-sm">
-                                                  {book.category || '综合'}
-                                              </span>
-                                          </p>
-                                          
-                                          <p className="text-gray-300 text-xs md:text-base leading-relaxed line-clamp-2 md:line-clamp-3 max-w-2xl font-light">
-                                              {book.description || '暂无简介'}
-                                          </p>
+                                              <h3 className="text-2xl md:text-5xl font-black mb-2 md:mb-4 tracking-tight drop-shadow-lg line-clamp-1">
+                                                  {book.title}
+                                              </h3>
+                                              
+                                              <p className="flex items-center gap-4 text-white/80 text-xs md:text-sm mb-2 md:mb-6 font-medium">
+                                                  <span className="flex items-center gap-2">
+                                                      <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-400"></span>
+                                                      {book.author || '未知'}
+                                                  </span>
+                                                  <span className="text-white/20">|</span>
+                                                  <span className="bg-white/10 px-2 py-0.5 md:px-3 rounded-full backdrop-blur-sm">
+                                                      {book.category || '综合'}
+                                                  </span>
+                                              </p>
+                                              
+                                              <p className="text-gray-300 text-xs md:text-base leading-relaxed line-clamp-2 md:line-clamp-3 max-w-2xl font-light">
+                                                  {book.description || '暂无简介'}
+                                              </p>
+                                          </div>
                                       </div>
                                   </div>
-                              </div>
-                          </Link>
-                      ))}
-                  </div>
+                              </Link>
+                          ))}
+                      </div>
 
-                  {/* 指示条：只渲染真实的数量 (3个) */}
-                  <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2 z-20">
-                      {featuredBooks.map((_, index) => (
+                      <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2 z-20">
+                          {featuredBooks.map((_, index) => (
+                              <button
+                                  key={index}
+                                  onClick={(e) => {
+                                      e.preventDefault(); 
+                                      setIsTransitioning(true); 
+                                      setActiveBookIndex(index);
+                                  }}
+                                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                                      (activeBookIndex % featuredBooks.length) === index 
+                                      ? 'w-6 bg-white shadow-sm' 
+                                      : 'w-1.5 bg-white/40 hover:bg-white/60'
+                                  }`}
+                              />
+                          ))}
+                      </div>
+                    </div>
+
+                    <div className="bg-[#1a1a1a] border-t border-white/5 hidden lg:block flex-shrink-0">
+                      <div className="max-w-6xl mx-auto grid grid-cols-3 divide-x divide-white/5">
+                        {featuredBooks.map((book, index) => (
                           <button
-                              key={index}
-                              onClick={(e) => {
-                                  e.preventDefault(); 
-                                  setIsTransitioning(true); // 点击指示点时开启滑动动画
-                                  setActiveBookIndex(index);
-                              }}
-                              className={`h-1.5 rounded-full transition-all duration-300 ${
-                                  // 取模运算，确保当处在“克隆体”(index=3)时，第0个指示点也是亮的
-                                  (activeBookIndex % featuredBooks.length) === index 
-                                  ? 'w-6 bg-white shadow-sm' 
-                                  : 'w-1.5 bg-white/40 hover:bg-white/60'
-                              }`}
-                          />
-                      ))}
-                  </div>
+                            key={book.id}
+                            onClick={() => {
+                                setIsTransitioning(true);
+                                setActiveBookIndex(index);
+                            }}
+                            className={`px-4 py-5 text-sm transition-all relative overflow-hidden group text-left ${
+                              (activeBookIndex % featuredBooks.length) === index ? 'bg-white/5' : 'hover:bg-white/5'
+                            }`}
+                          >
+                            {(activeBookIndex % featuredBooks.length) === index && (
+                                <div className="absolute top-0 left-0 w-full h-0.5 bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.8)]"></div>
+                            )}
+                            <span className={`block font-bold mb-0.5 line-clamp-1 ${
+                                (activeBookIndex % featuredBooks.length) === index ? 'text-white' : 'text-gray-400 group-hover:text-gray-200'
+                            }`}>
+                              {book.title}
+                            </span>
+                            <span className="text-xs text-gray-600 group-hover:text-gray-500">{book.category || '综合'}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                 </div>
 
-                {/* PC端底部列表导航 (保持不变) */}
-                <div className="bg-[#1a1a1a] border-t border-white/5 hidden lg:block">
-                  {/* 因为只有3本书，改为 grid-cols-3 */}
-                  <div className="max-w-6xl mx-auto grid grid-cols-3 divide-x divide-white/5">
-                    {featuredBooks.map((book, index) => (
-                      <button
-                        key={book.id}
-                        onClick={() => {
-                            setIsTransitioning(true);
-                            setActiveBookIndex(index);
-                        }}
-                        className={`px-4 py-5 text-sm transition-all relative overflow-hidden group text-left ${
-                          (activeBookIndex % featuredBooks.length) === index ? 'bg-white/5' : 'hover:bg-white/5'
-                        }`}
-                      >
-                        {(activeBookIndex % featuredBooks.length) === index && (
-                            <div className="absolute top-0 left-0 w-full h-0.5 bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.8)]"></div>
-                        )}
-                        <span className={`block font-bold mb-0.5 line-clamp-1 ${
-                            (activeBookIndex % featuredBooks.length) === index ? 'text-white' : 'text-gray-400 group-hover:text-gray-200'
-                        }`}>
-                          {book.title}
-                        </span>
-                        <span className="text-xs text-gray-600 group-hover:text-gray-500">{book.category || '综合'}</span>
-                      </button>
-                    ))}
-                  </div>
+                {/* --- 🔥🔥🔥 右侧：新增的图标栏 (PC端显示) --- */}
+                {/* 改动说明：
+                    1. w-[80px] -> w-[110px]：加宽了，图标更舒展。
+                    2. 删除了 border-l border-white/10：去掉了生硬的白线。
+                    3. 新增 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]：用左侧阴影代替线条，过渡更自然。
+                    4. bg-[#222]：颜色微调，更有质感。
+                */}
+                <div className="hidden md:flex flex-col w-[110px] bg-[#222] shrink-0 z-10 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
+                    <Link href="#ranking" className="flex-1 flex flex-col items-center justify-center gap-3 group hover:bg-white/5 transition-all text-gray-400 hover:text-white relative overflow-hidden">
+                        <div className="p-3 rounded-full bg-white/5 group-hover:bg-yellow-500/20 transition-colors">
+                           <Trophy className="w-6 h-6 text-yellow-500/80 group-hover:text-yellow-400 group-hover:scale-110 transition-transform" />
+                        </div>
+                        <span className="text-xs font-bold tracking-widest opacity-80 group-hover:opacity-100">排行</span>
+                    </Link>
+                    
+                    <Link href="#category" onClick={() => {
+                        document.querySelector('.category-section')?.scrollIntoView({ behavior: 'smooth' });
+                    }} className="flex-1 flex flex-col items-center justify-center gap-3 group hover:bg-white/5 transition-all text-gray-400 hover:text-white relative overflow-hidden">
+                        <div className="p-3 rounded-full bg-white/5 group-hover:bg-blue-500/20 transition-colors">
+                            <LayoutGrid className="w-6 h-6 text-blue-400/80 group-hover:text-blue-300 group-hover:scale-110 transition-transform" />
+                        </div>
+                        <span className="text-xs font-bold tracking-widest opacity-80 group-hover:opacity-100">分类</span>
+                    </Link>
+                    
+                    <Link href="/authors" className="flex-1 flex flex-col items-center justify-center gap-3 group hover:bg-white/5 transition-all text-gray-400 hover:text-white relative overflow-hidden">
+                         <div className="p-3 rounded-full bg-white/5 group-hover:bg-pink-500/20 transition-colors">
+                            <PenTool className="w-6 h-6 text-pink-400/80 group-hover:text-pink-300 group-hover:scale-110 transition-transform" />
+                         </div>
+                        <span className="text-xs font-bold tracking-widest opacity-80 group-hover:opacity-100">作者</span>
+                    </Link>
                 </div>
+
               </div>
             ) : (
               <div className="h-[220px] md:h-[380px] bg-gray-200 md:rounded-xl animate-pulse flex items-center justify-center text-gray-400">
@@ -409,44 +396,9 @@ function HomeContent() {
             )}
           </section>
 
-          {/* === 分类筛选栏 (保持不变) === */}
-          <section className="w-full hidden md:block">
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-                <nav className="flex flex-wrap items-center gap-4">
-                  {categories.map((category) => {
-                    const Icon = category.icon;
-                    const isSelected = selectedCategory === category.slug;
-                    return (
-                      <button
-                        key={category.slug}
-                        onClick={() => setSelectedCategory(category.slug)}
-                        className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl text-sm transition-all cursor-pointer border flex-shrink-0 ${
-                            isSelected
-                            ? 'bg-gray-900 text-white font-bold border-gray-900 shadow-lg shadow-gray-200 scale-105'
-                            : 'text-gray-600 border-gray-100 hover:border-gray-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        <Icon className={`h-4 w-4 ${isSelected ? 'text-white' : 'text-gray-400'}`} />
-                        <span>{category.name}</span>
-                      </button>
-                    );
-                  })}
-                </nav>
-              </div>
-          </section>
-
-          {/* === 三大榜单区域 (保持不变) === */}
-          <section className="w-full">
-              <div className="hidden md:flex mb-6 items-center justify-between gap-4">
-                  <h2 className="text-2xl font-black text-gray-900 flex items-center gap-3">
-                      <span className="text-3xl">🔥</span>
-                      {categories.find(c => c.slug === selectedCategory)?.name}热门排行
-                  </h2>
-                  <span className="text-xs text-gray-400 font-medium bg-white px-4 py-2 rounded-full border border-gray-100 shadow-sm">
-                    榜单规则：日榜0点 · 周榜周四刷新
-                  </span>
-              </div>
-
+          {/* === 三大榜单区域 === */}
+          <section className="w-full" id="ranking">
+              
               {/* 移动端 Tab 栏 */}
               <div className="flex border-b border-gray-100 bg-white lg:hidden sticky top-[50px] z-40">
                   {[
@@ -507,6 +459,83 @@ function HomeContent() {
                       </div>
                   </div>
               )}
+          </section>
+
+          {/* === 分类浏览区域 === */}
+          <section className="w-full hidden md:block category-section">
+              <div className="flex items-center gap-3 mb-6">
+                <LayoutGrid className="w-6 h-6 text-gray-800" />
+                <h2 className="text-2xl font-black text-gray-900">分类书库</h2>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col gap-8 min-h-[500px]">
+                {/* 分类按钮 */}
+                <nav className="flex flex-wrap items-center gap-3 border-b border-gray-100 pb-6">
+                  {categories.map((category) => {
+                    const Icon = category.icon;
+                    const isSelected = selectedCategory === category.slug;
+                    return (
+                      <button
+                        key={category.slug}
+                        onClick={() => setSelectedCategory(category.slug)}
+                        className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm transition-all cursor-pointer border flex-shrink-0 ${
+                            isSelected
+                            ? 'bg-gray-900 text-white font-bold border-gray-900 shadow-lg shadow-gray-200'
+                            : 'text-gray-600 border-gray-100 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Icon className={`h-4 w-4 ${isSelected ? 'text-white' : 'text-gray-400'}`} />
+                        <span>{category.name}</span>
+                      </button>
+                    );
+                  })}
+                </nav>
+
+                {/* 分类下对应的书籍展示 (Grid 布局) */}
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                  {categoryBooks.length > 0 ? (
+                    categoryBooks.map((book: any) => (
+                      <Link 
+                        key={book.id}
+                        href={`/book/${book.id}`}
+                        className="group flex flex-col gap-3"
+                      >
+                        <div className="aspect-[3/4] rounded-lg overflow-hidden bg-gray-100 shadow-sm border border-gray-200 relative">
+                            {book.cover_image ? (
+                              <img 
+                                src={book.cover_image} 
+                                alt={book.title} 
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                <BookOpen className="w-10 h-10" />
+                              </div>
+                            )}
+                            <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                              {book.rating?.toFixed(1) || '0.0'}
+                            </div>
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-gray-900 line-clamp-1 group-hover:text-blue-600 transition-colors">
+                            {book.title}
+                          </h4>
+                          <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
+                            <span>{book.author || '未知'}</span>
+                            <span>{book.views > 10000 ? `${(book.views/10000).toFixed(1)}万` : book.views}热度</span>
+                          </div>
+                        </div>
+                      </Link>
+                    ))
+                  ) : (
+                    <div className="col-span-full py-20 flex flex-col items-center justify-center text-gray-400">
+                       <Search className="w-12 h-12 mb-4 text-gray-200" />
+                       <p>该分类下暂无书籍</p>
+                    </div>
+                  )}
+                </div>
+              </div>
           </section>
 
         </div>

@@ -215,10 +215,43 @@ console.log('📂 启动【新书爬取模式 - 隐身增强版】...');
                 // 偶尔有验证码，这里等待时间不用太长，失败就重试
                 try { await page.waitForSelector('.txtnav', { timeout: 5000 }); } catch(e) {}
                 
-                const content = await page.evaluate(() => {
-                    const el = document.querySelector('.txtnav') || document.querySelector('#content');
-                    return el ? el.innerText.replace(/69书吧/g, '').replace(/www\.69shuba\.com/g, '').trim() : '';
-                });
+                    const content = await page.evaluate((chapterTitle) => {
+                        const el = document.querySelector('.txtnav') || document.querySelector('#content');
+                        if (!el) return '';
+
+                        let text = el.innerText;
+                        
+                        // 基础清洗
+                        text = text.replace(/69书吧/g, '').replace(/www\.69shuba\.com/g, '');
+
+                        // 🔥 智能去重逻辑 🔥
+                        const lines = text.split('\n');
+                        const normTitle = chapterTitle.replace(/\s+/g, '');
+                        
+                        while (lines.length > 0) {
+                            const firstLine = lines[0].trim();
+                            const normLine = firstLine.replace(/\s+/g, '');
+
+                            if (!firstLine) { lines.shift(); continue; }
+                            
+                            // 如果行内包含标题，或者标题包含行（互相比对），删除
+                            if (normLine.includes(normTitle) || normTitle.includes(normLine)) {
+                                lines.shift();
+                                continue;
+                            }
+                            
+                            // 兜底：删除开头的短章节号
+                            if (/^第\d+章/.test(firstLine) && firstLine.length < 20) {
+                                lines.shift();
+                                continue;
+                            }
+
+                            break;
+                        }
+
+                        return lines.join('\n').trim();
+
+                    }, chap.title); // ⬅️ 🚨 别忘了这里也要传 chap.title
 
                 if (content.length > 50) {
                     finalData.chapters.push({
