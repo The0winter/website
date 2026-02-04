@@ -159,7 +159,7 @@ export const chaptersApi = {
     });
   },
 
-  // Create a new chapter
+  // Create new chapter
   create: async (chapter: Omit<Chapter, 'id' | 'published_at'>): Promise<Chapter> => {
     return apiCall<Chapter>('/chapters', {
       method: 'POST',
