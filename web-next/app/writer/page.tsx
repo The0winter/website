@@ -169,17 +169,50 @@ export default function WriterDashboard() {
 
   const activeBook = myBooks.find(b => b.id === currentBookId);
 
-  const openChapterEditor = (type: 'new' | 'edit', chapter?: Chapter) => {
+// 替换掉原来的 openChapterEditor 函数
+  const openChapterEditor = async (type: 'new' | 'edit', chapter?: Chapter) => {
+    // 1. 如果是新建章节
     if (type === 'new') {
         setCurrentChapterId(null);
         setFormChapterTitle('');
         setFormChapterContent('');
-    } else if (chapter) {
+        setShowChapterEditor(true);
+    } 
+    // 2. 如果是编辑已有章节
+    else if (chapter) {
         setCurrentChapterId(chapter.id);
         setFormChapterTitle(chapter.title);
-        setFormChapterContent(chapter.content);
+        
+        // --- 核心修改开始 ---
+        // 先显示加载中，防止用户看到空白不知所措
+        setFormChapterContent('正在从云端加载章节内容...'); 
+        setShowChapterEditor(true); // 先打开窗口
+
+        try {
+            // 单独请求这一章的详情（后端这个接口会返回 content）
+            // 注意：这里直接用 fetch 最稳妥，确保能连上你的后端
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/chapters/${chapter.id}`, {
+                headers: {
+                    // 如果你的后端开启了简单的防盗链检查，这里可能需要带上
+                    // 不过通常浏览器 fetch 会自动处理 referer
+                }
+            });
+            
+            if (!res.ok) throw new Error('加载失败');
+            
+            const data = await res.json();
+            
+            // 拿到真正的 content 后填进去
+            // 为了防止用户手快已经关了窗口，这里可以加个判断，或者直接设置
+            setFormChapterContent(data.content || ''); 
+            
+        } catch (e) {
+            console.error(e);
+            setFormChapterContent('❌ 内容加载失败，请检查网络后重试。');
+            setToast({ msg: '章节内容获取失败', type: 'error' });
+        }
+        // --- 核心修改结束 ---
     }
-    setShowChapterEditor(true);
   };
 
   const saveChapterCore = async (status: 'ongoing' | 'completed') => {

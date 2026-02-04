@@ -685,6 +685,47 @@ app.post('/api/chapters', async (req, res) => {
     }
 });
 
+// server/index.js
+
+// ... (在 POST /api/chapters 之后， DELETE /api/chapters/:id 之前加入)
+
+// 🆕 新增：更新章节接口 (修复 404 报错)
+app.patch('/api/chapters/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, content, chapter_number } = req.body;
+
+    // 构造更新数据
+    const updateData = {
+        title,
+        content,
+        // 记得更新字数
+        word_count: content ? content.length : 0, 
+    };
+
+    if (chapter_number) updateData.chapter_number = chapter_number;
+
+    // 执行更新
+    const updatedChapter = await Chapter.findByIdAndUpdate(
+        id, 
+        updateData, 
+        { new: true } // 返回更新后的数据
+    );
+
+    if (!updatedChapter) {
+        return res.status(404).json({ error: 'Chapter not found' });
+    }
+
+    res.json({ 
+        ...updatedChapter.toObject(), 
+        id: updatedChapter._id.toString() 
+    });
+  } catch (error) {
+    console.error('更新章节失败:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.delete('/api/chapters/:id', async (req, res) => {
   try {
     const { id } = req.params;
