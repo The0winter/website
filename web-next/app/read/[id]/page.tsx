@@ -545,8 +545,36 @@ if (loading) return (
           >
             {(chapter.content || '').split('\n').map((para, i) => {
               const text = para.trim();
-              if (!text || text.includes('作者：') || /^\d{4}-\d{2}-\d{2}/.test(text)) return null;
-              if (text === chapter.title.trim()) return null;
+              
+              // === 🧹 智能清洗逻辑 (新增) ===
+              
+              // 1. 空行直接跳过
+              if (!text) return null;
+
+              // 2. 过滤元数据 (日期、作者、来源网站广告)
+              // 匹配: "2025-12-10" 或 "作者：" 或 "69书吧"
+              if (/^\d{4}-\d{2}-\d{2}/.test(text) || text.includes('作者：') || text.includes('69书吧') || text.includes('www.')) {
+                return null;
+              }
+
+              // 3. 过滤重复标题 (核心修改)
+              // 将“当前行”和“章节标题”都去掉标点和空格，进行模糊比对
+              const cleanLine = text.replace(/\s+|[()（）]/g, '');
+              const cleanTitle = chapter.title.replace(/\s+|[()（）]/g, '');
+
+              // 如果这行字包含了标题，或者标题包含了这行字（且这行字长度大于3），视为重复标题
+              // 比如：Line="第500章 繁育税..." Title="第500章 繁育税" -> 匹配，隐藏
+              if ((cleanLine.includes(cleanTitle) || cleanTitle.includes(cleanLine)) && cleanLine.length > 3) {
+                 // 这里加一个保险：如果这行字特别长（比如超过50字），那可能是正文正好提到了标题，就不删
+                 if (text.length < 50) return null;
+              }
+
+              // 4. 过滤单纯的 "第xxx章" 这种只有两三个字的行 (通常是爬虫残留)
+              if (/^第\d+章$/.test(text)) {
+                 return null;
+              }
+
+              // === 清洗结束，渲染正文 ===
               return (
                 <p 
                   key={i} 

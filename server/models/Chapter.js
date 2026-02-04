@@ -11,6 +11,7 @@ const chapterSchema = new mongoose.Schema({
   title: { type: String, required: true },
   content: { type: String, required: true },
   chapter_number: { type: Number, required: true },
+  word_count: { type: Number, default: 0 },
   published_at: { type: Date, default: Date.now },
 }, { 
   timestamps: true 

@@ -277,11 +277,13 @@ app.post('/api/admin/upload-book', async (req, res) => {
             const exists = await Chapter.exists({ bookId: book._id, title: chap.title });
             if (!exists) {
                 chaptersToInsert.push({
-                    bookId: book._id,
-                    title: chap.title,
-                    content: chap.content,
-                    chapter_number: chap.chapter_number
-                });
+                bookId: book._id,
+                title: chap.title,
+                content: chap.content,
+                // ✅ 新增
+                word_count: chap.content.length, 
+                chapter_number: chap.chapter_number
+            });
             }
         }
 
@@ -612,7 +614,8 @@ app.get('/api/books/:bookId/chapters', async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(bookId)) return res.status(400).json({ error: 'Invalid book ID' });
     
     const chapters = await Chapter.find({ bookId: new mongoose.Types.ObjectId(bookId) })
-      .select('title chapter_number published_at bookId') // ❌ 千万别加 content
+      //.select('title chapter_number published_at bookId') // ❌ 千万别加 content
+      .select('title chapter_number published_at bookId word_count')
       .sort({ chapter_number: 1 })
       .lean();
     
@@ -666,12 +669,14 @@ app.post('/api/chapters', async (req, res) => {
         return res.status(400).json({ error: 'Missing required fields' });
       }
       
-      const newChapter = new Chapter({
-        bookId: new mongoose.Types.ObjectId(bookId),
-        title: title.trim(),
-        content: content.trim(),
-        chapter_number: parseInt(finalChapterNum),
-      });
+          const newChapter = new Chapter({
+          bookId: new mongoose.Types.ObjectId(bookId),
+          title: title.trim(),
+          content: content.trim(),
+          // ✅ 新增：保存时自动计算字数
+          word_count: content.trim().length, 
+          chapter_number: parseInt(finalChapterNum),
+        });
 
       await newChapter.save();
       res.status(201).json({ ...newChapter.toObject(), id: newChapter._id.toString() });

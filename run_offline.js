@@ -1,5 +1,5 @@
 // run_offline.js
-// 专注模式：只负责“搜索新书”并下载
+// 专注模式：直接输入URL并下载
 import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
@@ -16,12 +16,17 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const askQuestion = (query) => new Promise(resolve => rl.question(query, resolve));
 
-console.log('📂 启动【新书爬取模式 - 隐身增强版】...');
+console.log('📂 启动【新书爬取模式 - 直连版】...');
 
 (async () => {
-    // 1. 问书名
-    const bookName = await askQuestion('请输入新书名称: ');
-    if (!bookName.trim()) process.exit(0);
+    // 1. 改为直接问 URL
+    const inputUrl = await askQuestion('请输入书籍主页链接 (如 https://www.69shuba.com/book/xxxx.htm): ');
+    const targetUrl = inputUrl.trim();
+
+    if (!targetUrl || !targetUrl.startsWith('http')) {
+        console.error('❌ 链接格式不正确，程序退出');
+        process.exit(0);
+    }
 
     let browser;
     try {
@@ -33,79 +38,37 @@ console.log('📂 启动【新书爬取模式 - 隐身增强版】...');
             args: [
                 '--start-maximized', 
                 '--no-sandbox',
-                '--disable-blink-features=AutomationControlled', // 关键：禁用自动化特征
-                '--disable-infobars' // 隐藏“Chrome正在受到自动软件的控制”提示
+                '--disable-blink-features=AutomationControlled',
+                '--disable-infobars'
             ],
-            ignoreDefaultArgs: ['--enable-automation'] // 进一步隐藏
+            ignoreDefaultArgs: ['--enable-automation']
         });
 
         const page = await browser.newPage();
         
-        // ❌ 删除：Object.defineProperty... (插件已经替你做好了，手动加反而容易暴露)
-
         // 设置真人 User-Agent
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
         
-        // 2. 搜索
-        console.log(`🔍 正在前往 69书吧...`);
-        try {
-            await page.goto('https://www.69shuba.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
-        } catch (e) {
-            console.log("⚠️ 首页加载较慢，继续尝试...");
-        }
-
-        const searchInputSelector = 'input[name="searchkey"]';
-        // 增加容错：如果找不到搜索框，说明可能出了验证码
-        try {
-            await page.waitForSelector(searchInputSelector, { timeout: 15000 });
-        } catch (e) {
-            console.log("🔴 未找到搜索框！可能是出现了验证码，请手动点击验证...");
-            // 这里多等一会，给你手动点的时间
-            await page.waitForSelector(searchInputSelector, { timeout: 60000 }); 
-        }
-
-        await page.evaluate((sel) => { document.querySelector(sel).value = ''; }, searchInputSelector);
+        // 2. 直接访问目标页面
+        console.log(`🚀 正在直连书籍页面: ${targetUrl}`);
         
-        // 模拟更真实的打字速度 (随机延迟)
-        for (const char of bookName) {
-            await page.type(searchInputSelector, char, { delay: 100 + Math.random() * 100 });
-        }
-        
-        await sleep(500);
-        await page.keyboard.press('Enter');
-
-        // 等待跳转 (容错版)
-        try { 
-            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }); 
+        try {
+            await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
         } catch (e) {
-            console.log("⚠️ 跳转等待超时，可能页面已刷新或需手动介入，继续执行...");
+            console.log("⚠️ 页面加载较慢或超时，尝试继续解析...");
         }
 
-        // 3. 找链接
-        let targetUrl = null;
-        let checks = 0;
-        console.log('⏳ 正在寻找书籍...');
-        while (!targetUrl && checks < 60) { // 给你 2-3 分钟的时间处理可能出现的验证码
-            checks++;
-            targetUrl = await page.evaluate((name) => {
-                if (window.location.href.includes('/book/') && window.location.href.endsWith('.htm')) return window.location.href;
-                const links = Array.from(document.querySelectorAll('a'));
-                for (let link of links) {
-                    if (link.innerText.includes(name) && link.href.includes('/book/')) return link.href;
-                }
-                return null;
-            }, bookName);
-            
-            if (targetUrl) break;
-            
-            if (checks % 5 === 0) console.log(`👉 还没找到书 (第 ${checks} 次检查)... 如果有验证码请点一下！`);
-            await sleep(2000);
+        // 增加容错：如果刚进去遇到了 Cloudflare 验证，这里等待一下
+        // 检测是否有标题元素，如果没有，说明可能被拦截了
+        try {
+            await page.waitForSelector('h1', { timeout: 15000 });
+        } catch (e) {
+            console.log("🔴 未检测到书名，可能是遇到了验证码！请手动在浏览器中完成验证...");
+            await page.waitForSelector('h1', { timeout: 120000 }); // 给2分钟时间手动处理
         }
 
-        if (!targetUrl) throw new Error("未找到该书籍");
-        if (page.url() !== targetUrl) await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
-
-// 4. 抓取基础信息 (强力净化版)
+        // 3. 抓取基础信息 (强力净化版)
+        console.log('📖 正在解析书籍信息...');
         const basicInfo = await page.evaluate(() => {
             let title = document.querySelector('h1')?.innerText.trim() || '未知';
             title = title.replace(/\?.*$/, '').replace(/最新章节.*/, '').trim();
@@ -114,31 +77,23 @@ console.log('📂 启动【新书爬取模式 - 隐身增强版】...');
             const els = document.querySelectorAll('p,div,span,td');
             for (let el of els) {
                 const text = el.innerText;
-                if (text.includes('作者：') && text.length < 100) { // 放宽一点长度限制，防止漏抓
-                    // 1. 先切掉“作者：”前面的东西
+                if (text.includes('作者：') && text.length < 100) { 
                     let temp = text.split(/作者[:：]/)[1];
-                    
-                    // 2. 🔥 关键修复：只要看到“分类”、“字数”或“连载”，直接切断！
                     if (temp) {
-                        temp = temp.split(/分类[:：]/)[0]; // 切掉分类
-                        temp = temp.split(/\d+万字/)[0];   // 切掉字数
-                        temp = temp.split(/连载/)[0];      // 切掉状态
+                        temp = temp.split(/分类[:：]/)[0]; 
+                        temp = temp.split(/\d+万字/)[0];   
+                        temp = temp.split(/连载/)[0];      
                         temp = temp.split(/完结/)[0];
-                        
-                        // 3. 最后去空格，取第一段
                         author = temp.trim().split(/\s+/)[0]; 
-                        
-                        // 4. 再次兜底清洗 (防止残留特殊符号)
                         author = author.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, ''); 
-                        
-                        if (author) break; // 找到干净的名字就收工
+                        if (author) break; 
                     }
                 }
             }
             return { title, author };
         });
 
-        // 5. 交互：定分类
+        // 4. 交互：定分类
         console.log('\n==========================================');
         console.log(`📖 书名: 《${basicInfo.title}》`);
         console.log(`👤 作者:  ${basicInfo.author}`);
@@ -147,8 +102,8 @@ console.log('📂 启动【新书爬取模式 - 隐身增强版】...');
         const userCategory = await askQuestion(`👉 给这本书定个分类 (默认'搬运'): `);
         const finalCategory = userCategory.trim() || '搬运';
 
-        // 6. 展开目录
-        console.log('point👉 正在获取目录...');
+        // 5. 展开目录
+        console.log('📂 正在获取目录...');
         const isExpanded = await page.evaluate(() => {
             const btn = Array.from(document.querySelectorAll('a')).find(a => a.innerText.includes('完整目录') || a.innerText.includes('点击查看'));
             if (btn) { btn.click(); return true; }
@@ -162,47 +117,38 @@ console.log('📂 启动【新书爬取模式 - 隐身增强版】...');
                 .map(a => ({ title: a.innerText.trim(), link: a.href }));
         });
 
-        // 7. 去重并保存结构
+        // 6. 去重并保存结构
         const uniqueChapters = [];
         const seen = new Set();
         for (const c of chapters) {
             if(!seen.has(c.link)) { seen.add(c.link); uniqueChapters.push(c); }
         }
 
-// 🔥🔥🔥【增强版】排序修复：处理空格和特殊格式 🔥🔥🔥
+        // 🔥🔥🔥【增强版】排序修复 🔥🔥🔥
         uniqueChapters.sort((a, b) => {
             const getNum = (str) => {
-                // 1. 预处理：去掉标题里的所有空格，防止 "第 1 章" 这种格式导致匹配失败
                 const cleanStr = str.replace(/\s+/g, '');
-                
-                // 2. 优先匹配 "第xxx章"
                 const matchChapter = cleanStr.match(/第(\d+)章/);
                 if (matchChapter) return parseInt(matchChapter[1]);
-                
-                // 3. 再次尝试匹配开头的纯数字 (比如 "1. 开始")
                 const matchStartNum = cleanStr.match(/^(\d+)/);
                 if (matchStartNum) return parseInt(matchStartNum[1]);
-
-                // 4. 最后的兜底：在字符串里找任何数字
                 const matchAnyNum = cleanStr.match(/(\d+)/);
-                return matchAnyNum ? parseInt(matchAnyNum[1]) : 999999; // 没数字的放最后
+                return matchAnyNum ? parseInt(matchAnyNum[1]) : 999999; 
             };
             return getNum(a.title) - getNum(b.title);
         });
-        // 🔥🔥🔥【结束】🔥🔥🔥
 
         const finalData = {
             title: basicInfo.title,
             author: basicInfo.author,
             category: finalCategory,
             sourceUrl: targetUrl,
-            // 🔥 新增这一行：初始化阅读量为 0
             views: 0, 
             rating: 0,
-            chapters: [] // 待填充
+            chapters: [] 
         };
 
-        // 8. 循环下载
+        // 7. 循环下载
         console.log(`📚 准备下载 ${uniqueChapters.length} 章...`);
         const downloadDir = path.join(process.cwd(), 'downloads');
         if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir);
@@ -212,46 +158,33 @@ console.log('📂 启动【新书爬取模式 - 隐身增强版】...');
             const chap = uniqueChapters[i];
             try {
                 await page.goto(chap.link, { waitUntil: 'domcontentloaded', timeout: 30000 });
-                // 偶尔有验证码，这里等待时间不用太长，失败就重试
                 try { await page.waitForSelector('.txtnav', { timeout: 5000 }); } catch(e) {}
                 
-                    const content = await page.evaluate((chapterTitle) => {
-                        const el = document.querySelector('.txtnav') || document.querySelector('#content');
-                        if (!el) return '';
+                const content = await page.evaluate((chapterTitle) => {
+                    const el = document.querySelector('.txtnav') || document.querySelector('#content');
+                    if (!el) return '';
+                    let text = el.innerText;
+                    text = text.replace(/69书吧/g, '').replace(/www\.69shuba\.com/g, '');
 
-                        let text = el.innerText;
-                        
-                        // 基础清洗
-                        text = text.replace(/69书吧/g, '').replace(/www\.69shuba\.com/g, '');
-
-                        // 🔥 智能去重逻辑 🔥
-                        const lines = text.split('\n');
-                        const normTitle = chapterTitle.replace(/\s+/g, '');
-                        
-                        while (lines.length > 0) {
-                            const firstLine = lines[0].trim();
-                            const normLine = firstLine.replace(/\s+/g, '');
-
-                            if (!firstLine) { lines.shift(); continue; }
-                            
-                            // 如果行内包含标题，或者标题包含行（互相比对），删除
-                            if (normLine.includes(normTitle) || normTitle.includes(normLine)) {
-                                lines.shift();
-                                continue;
-                            }
-                            
-                            // 兜底：删除开头的短章节号
-                            if (/^第\d+章/.test(firstLine) && firstLine.length < 20) {
-                                lines.shift();
-                                continue;
-                            }
-
-                            break;
+                    // 智能去重逻辑
+                    const lines = text.split('\n');
+                    const normTitle = chapterTitle.replace(/\s+/g, '');
+                    while (lines.length > 0) {
+                        const firstLine = lines[0].trim();
+                        const normLine = firstLine.replace(/\s+/g, '');
+                        if (!firstLine) { lines.shift(); continue; }
+                        if (normLine.includes(normTitle) || normTitle.includes(normLine)) {
+                            lines.shift();
+                            continue;
                         }
-
-                        return lines.join('\n').trim();
-
-                    }, chap.title); // ⬅️ 🚨 别忘了这里也要传 chap.title
+                        if (/^第\d+章/.test(firstLine) && firstLine.length < 20) {
+                            lines.shift();
+                            continue;
+                        }
+                        break;
+                    }
+                    return lines.join('\n').trim();
+                }, chap.title);
 
                 if (content.length > 50) {
                     finalData.chapters.push({
@@ -265,13 +198,12 @@ console.log('📂 启动【新书爬取模式 - 隐身增强版】...');
             
             if (i % 20 === 0) fs.writeFileSync(fileName, JSON.stringify(finalData, null, 2));
             
-            // 🔥 增加一点点随机延迟，模拟真人阅读速度，减少封IP概率
             const randomSleep = 1500 + Math.random() * 1500; 
             await sleep(randomSleep);
         }
 
         fs.writeFileSync(fileName, JSON.stringify(finalData, null, 2));
-        console.log(`🎉 新书爬取完成！`);
+        console.log(`🎉 新书爬取完成！文件已保存至 downloads/${basicInfo.title}.json`);
 
     } catch (error) {
         console.error('💥', error);

@@ -29,6 +29,7 @@ export interface Chapter {
   bookId: string; 
   title: string;
   content: string;
+  word_count?: number;
   // 保持 chapter_number 不变，因为后端 schema 我们决定暂时不动它
   chapter_number: number;
   published_at?: string;
