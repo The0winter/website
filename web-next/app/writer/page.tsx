@@ -9,6 +9,10 @@ import {
   Shield, LogIn, Image as ImageIcon, Loader2// 👈 新增图标
 } from 'lucide-react';
 import { booksApi, chaptersApi, Book, Chapter } from '@/lib/api';
+// 添加 Cropper 引入
+import Cropper from 'react-easy-crop';
+import { getCroppedImg } from '@/lib/canvasUtils'; 
+
 
 export default function WriterDashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -56,6 +60,14 @@ export default function WriterDashboard() {
   const [formBookCover, setFormBookCover] = useState(''); // 编辑时的封面 URL
   const [newBookCoverFile, setNewBookCoverFile] = useState<File | null>(null); // 新建时的临时文件
   const [newBookCoverPreview, setNewBookCoverPreview] = useState(''); // 新建时的临时预览
+
+  // === ✂️ 裁剪相关 State ===
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
+  
+  const [cropperImgSrc, setCropperImgSrc] = useState<string | null>(null); // 裁剪弹窗显示的图
+  const [isCroppingFor, setIsCroppingFor] = useState<'new' | 'edit' | null>(null); // 记录当前是给“新书”还是“修改”裁剪
 
   // ================= 数据获取逻辑 =================
 
@@ -121,6 +133,65 @@ export default function WriterDashboard() {
     } catch (e) {
         console.error(e);
         setToast({ msg: '网络错误', type: 'error' });
+    }
+  };
+
+  // 1. 用户选择了文件，准备裁剪
+  const onSelectFile = (e: React.ChangeEvent<HTMLInputElement>, type: 'new' | 'edit') => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.addEventListener('load', () => {
+        setCropperImgSrc(reader.result?.toString() || '');
+        setIsCroppingFor(type); // 👈 记住是给谁裁的
+        setZoom(1); // 重置缩放
+        setCrop({ x: 0, y: 0 }); // 重置位置
+      });
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // 2. 裁剪区域变化回调
+  const onCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
+
+  // 3. 确定裁剪并上传
+  const handleSaveCrop = async () => {
+    if (!cropperImgSrc || !croppedAreaPixels) return;
+    
+    try {
+      setUploading(true);
+      // 生成裁剪后的 Blob 文件
+      const croppedBlob = await getCroppedImg(cropperImgSrc, croppedAreaPixels);
+      
+      if (!croppedBlob) throw new Error('Canvas create failed');
+
+      // 把 Blob 转成 File 对象以便上传
+      const file = new File([croppedBlob], "cover.jpg", { type: "image/jpeg" });
+      
+      // 上传到 Cloudinary
+      const url = await uploadImageToCloudinary(file);
+      
+      if (url) {
+        if (isCroppingFor === 'new') {
+            setNewBookCoverPreview(url); // 只是预览，不存文件对象了，直接存 Cloudinary URL
+            // 注意：这里需要微调 handleCreateBook 逻辑，下面会说
+        } else if (isCroppingFor === 'edit') {
+            setFormBookCover(url);
+        }
+        setToast({ msg: '裁剪并上传成功', type: 'success' });
+      }
+
+      // 关闭裁剪窗
+      setCropperImgSrc(null);
+      setIsCroppingFor(null);
+
+    } catch (e) {
+      console.error(e);
+      setToast({ msg: '裁剪失败', type: 'error' });
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -327,7 +398,6 @@ export default function WriterDashboard() {
     }
   };
 
-// ✅ 修改：handleCreateBook
   const handleCreateBook = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formBookTitle.trim() || !user) return;
@@ -335,12 +405,16 @@ export default function WriterDashboard() {
     try {
         let finalCoverUrl = '';
 
-        // 1. 如果用户选了图片，先上传
-        if (newBookCoverFile) {
-            const url = await uploadImageToCloudinary(newBookCoverFile);
-            if (url) finalCoverUrl = url;
-            else return; // 上传失败这就停止
-        }
+    // 1. 优先检查：是否已经有裁剪好的云端链接 (裁剪器直接返回的 URL)
+    if (newBookCoverPreview.startsWith('http')) {
+        finalCoverUrl = newBookCoverPreview;
+    } 
+    // 2. 备选方案：如果没有链接，但有本地文件 (防止万一你绕过了裁剪器)
+    else if (newBookCoverFile) {
+        const url = await uploadImageToCloudinary(newBookCoverFile);
+        if (url) finalCoverUrl = url;
+        else return; // 上传失败这就停止
+    }
 
         // 2. 创建书籍 (带上 cover_image)
         await booksApi.create({
@@ -600,7 +674,7 @@ export default function WriterDashboard() {
                                     <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center cursor-pointer text-white">
                                         <Upload className="h-8 w-8 mb-2 animate-bounce" />
                                         <span className="text-sm font-bold">点击更换</span>
-                                        <input type="file" className="hidden" accept="image/*" onChange={handleEditCoverUpload} />
+                                        <input type="file" className="hidden" accept="image/*" onChange={(e) => onSelectFile(e, 'edit')} />
                                     </label>
                                 </div>
                                 <p className="text-xs text-gray-400">支持 JPG, PNG</p>
@@ -783,13 +857,7 @@ export default function WriterDashboard() {
                             type="file" 
                             className="hidden" 
                             accept="image/*"
-                            onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                    setNewBookCoverFile(file);
-                                    setNewBookCoverPreview(URL.createObjectURL(file));
-                                }
-                            }}
+                            onChange={(e) => onSelectFile(e, 'edit')}
                         />
                     </label>
                 </div>
@@ -957,6 +1025,57 @@ export default function WriterDashboard() {
         </div>
       )}
 
+    {/* ================= 裁剪器弹窗 ================= */}
+      {cropperImgSrc && (
+        <div className="fixed inset-0 z-[100] bg-black/90 flex flex-col animate-in fade-in duration-200">
+            {/* 顶部操作栏 */}
+            <div className="flex justify-between items-center p-4 text-white z-10 bg-black/50">
+                <button onClick={() => setCropperImgSrc(null)} className="flex items-center gap-1 text-gray-300 hover:text-white">
+                    <X className="h-6 w-6" /> 取消
+                </button>
+                <h3 className="font-bold">调整封面 (3:4)</h3>
+                <button 
+                    onClick={handleSaveCrop} 
+                    disabled={uploading}
+                    className="px-4 py-1.5 bg-blue-600 rounded-full font-bold hover:bg-blue-500 disabled:opacity-50 flex items-center gap-2"
+                >
+                    {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
+                    确定
+                </button>
+            </div>
+
+            {/* 裁剪区域 */}
+            <div className="relative flex-1 bg-black w-full h-full overflow-hidden">
+                <Cropper
+                    image={cropperImgSrc}
+                    crop={crop}
+                    zoom={zoom}
+                    aspect={3 / 4} // 👈 锁定 3:4 比例 (适合小说封面)
+                    onCropChange={setCrop}
+                    onCropComplete={onCropComplete}
+                    onZoomChange={setZoom}
+                    classes={{
+                        containerClassName: 'h-full w-full',
+                    }}
+                />
+            </div>
+
+            {/* 底部滑块 */}
+            <div className="p-6 bg-black/80 flex items-center justify-center gap-4 z-10 pb-10 md:pb-6">
+                <span className="text-xs text-gray-400 font-bold">缩放</span>
+                <input
+                    type="range"
+                    value={zoom}
+                    min={1}
+                    max={3}
+                    step={0.1}
+                    aria-labelledby="Zoom"
+                    onChange={(e) => setZoom(Number(e.target.value))}
+                    className="w-64 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                />
+            </div>
+        </div>
+      )}
     </div>
   );
 }
