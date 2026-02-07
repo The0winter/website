@@ -82,7 +82,7 @@ export default function Library() {
     try {
         setBookmarkedBooks(prev => prev.filter(b => b.id !== bookId));
         setDeleteTargetId(null);
-        const res = await fetch(`https://website-production-6edf.up.railway.app/api/users/${user.id}/bookmarks/${bookId}`, {
+        const res = await fetch(`https://jiutianxiaoshuo.com/api/users/${user.id}/bookmarks/${bookId}`, {
             method: 'DELETE'
         });
         if (!res.ok) throw new Error('删除失败');

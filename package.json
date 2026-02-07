@@ -3,14 +3,14 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-    "scripts": {
-        "dev": "next dev",
-        "build": "next build",
-        "start": "next start",
-        "server": "nodemon server/index.js",
-        "lint": "next lint",
-        "typecheck": "tsc --noEmit"
-    },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "server": "nodemon server/index.js",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
     "axios": "^1.13.4",
@@ -30,7 +30,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.12.0",
-    "react-virtuoso": "^4.18.1"
+    "react-virtuoso": "^4.18.1",
+    "resend": "^6.9.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",

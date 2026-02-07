@@ -1,5 +1,21 @@
-// API client for local backend (localhost:5000)
-const API_BASE_URL = 'https://website-production-6edf.up.railway.app/api';
+// 1. 定义一个获取 URL 的函数 (这是你想要的智能逻辑)
+const getBaseUrl = () => {
+  // A. 优先读取环境变量 (在 .env 里配置的)
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  
+  // B. 如果在浏览器运行，自动读取当前域名 (最智能)
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+
+  // C. 最后保底 (防止服务器端渲染找不到 window 报错)
+  return 'https://jiutianxiaoshuo.com';
+};
+
+// 2. 导出最终地址 (注意：必须加 export 别人才能用！)
+export const API_BASE_URL = `${getBaseUrl()}/api`;
 
 export interface Profile {
   id: string;

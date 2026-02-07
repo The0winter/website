@@ -109,7 +109,7 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
     if (userId && book.id) {
       const checkBookmarkStatus = async () => {
         try {
-          const res = await fetch(`https://website-production-6edf.up.railway.app/api/users/${userId}/bookmarks`);
+          const res = await fetch(`https://jiutianxiaoshuo.com/api/users/${userId}/bookmarks`);
           if (res.ok) {
             const bookmarks = await res.json();
             const exists = bookmarks.some((b: any) => {
@@ -127,7 +127,7 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
 
     const fetchReviews = async () => {
       try {
-        const res = await fetch(`https://website-production-6edf.up.railway.app/api/books/${book.id}/reviews`);
+        const res = await fetch(`https://jiutianxiaoshuo.com/api/books/${book.id}/reviews`);
         if (res.ok) {
           const data = await res.json();
           setReviews(data);
@@ -140,7 +140,7 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
     const fetchChapters = async () => {
       try {
         setLoadingChapters(true);
-        const res = await fetch(`https://website-production-6edf.up.railway.app/api/books/${book.id}/chapters`);
+        const res = await fetch(`https://jiutianxiaoshuo.com/api/books/${book.id}/chapters`);
         if (res.ok) {
             const data = await res.json();
             setChapters(data);
@@ -230,10 +230,10 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
     setLoading(true);
     try {
       if (isBookmarked) {
-        const res = await fetch(`https://website-production-6edf.up.railway.app/api/users/${userId}/bookmarks/${book.id}`, { method: 'DELETE' });
+        const res = await fetch(`https://jiutianxiaoshuo.com/api/users/${userId}/bookmarks/${book.id}`, { method: 'DELETE' });
         if (res.ok) setIsBookmarked(false);
       } else {
-        const res = await fetch(`https://website-production-6edf.up.railway.app/api/users/${userId}/bookmarks`, {
+        const res = await fetch(`https://jiutianxiaoshuo.com/api/users/${userId}/bookmarks`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ bookId: book.id })
@@ -265,7 +265,7 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
     setSubmittingReview(true);
     
     try {
-      const res = await fetch(`https://website-production-6edf.up.railway.app/api/books/${book.id}/reviews`, {
+      const res = await fetch(`https://jiutianxiaoshuo.com/api/books/${book.id}/reviews`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

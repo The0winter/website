@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 // ⚠️ 你的 Railway 域名
-const RAILWAY_URL = 'https://website-production-6edf.up.railway.app'; 
+const RAILWAY_URL = 'https://jiutianxiaoshuo.com'; 
 const SECRET_KEY = 'wo_de_pa_chong_mi_ma_123';
 const BATCH_SIZE = 50; // 每批传50章
 

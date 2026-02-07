@@ -24,95 +24,220 @@ const categories = [
   { name: '悬疑', icon: History, slug: 'mystery' },
 ];
 
-// --- 1. 单个榜单子组件 (保持不变) ---
-const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }: any) => (
-  <div className="bg-white md:rounded-xl shadow-sm md:border border-gray-100 flex flex-col h-full overflow-hidden">
-    
-    <div className="hidden md:flex p-5 border-b border-gray-50 items-center justify-between bg-gradient-to-r from-gray-50 to-white">
-      <div className="flex items-center gap-3">
-        <Icon className={`w-6 h-6 ${rankColor}`} />
-        <h3 className="font-extrabold text-gray-800 text-xl">{title}</h3>
-      </div>
-      <span className="text-xs text-gray-400 uppercase tracking-wider font-medium bg-white px-2 py-1 rounded border border-gray-100">TOP 10</span>
-    </div>
+// --- 1. 单个榜单子组件 (最终版：PC端品字形大字版 / 移动端经典列表版) ---
+const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }: any) => {
+  // 1. 颜色主题配置
+  const themeMap: Record<string, string> = {
+    'text-yellow-500': 'from-yellow-50 via-white to-white border-yellow-100', 
+    'text-red-500': 'from-red-50 via-white to-white border-red-100',       
+    'text-purple-500': 'from-purple-50 via-white to-white border-purple-100', 
+  };
+  const bgTheme = themeMap[rankColor] || 'from-gray-50 to-white border-gray-100';
+  
+  // 2. 数据拆分 (仅用于PC端)
+  const [first, second, third, ...others] = books;
 
-    <div className="flex-1 overflow-y-auto min-h-[600px] scrollbar-thin scrollbar-thumb-gray-200">
-      {books.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-80 text-gray-400 text-sm gap-4">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
-              <ImageOff className="w-8 h-8 text-gray-300" />
-            </div>
-            <span>暂无相关书籍</span>
+  return (
+    <div className="bg-white md:rounded-xl shadow-sm md:border border-gray-100 flex flex-col h-full overflow-hidden">
+      
+      {/* === 头部 (PC端显示 / 移动端隐藏) === */}
+      <div className="hidden md:flex py-3 px-5 border-b border-gray-50 items-center justify-between bg-gradient-to-r from-gray-50 to-white">
+        <div className="flex items-center gap-2">
+          <Icon className={`w-5 h-5 ${rankColor}`} />
+          <h3 className="font-extrabold text-gray-800 text-lg">{title}</h3>
         </div>
-      ) : (
-        books.map((book: any, index: number) => (
-          <Link 
-            key={book.id} 
-            href={`/book/${book.id}`}
-            className="flex items-start gap-4 md:gap-5 p-4 md:p-5 hover:bg-blue-50/40 transition-all group relative border-b border-gray-100 last:border-b-0"
-          >
-            <div className={`
-              w-6 h-6 md:w-7 md:h-7 flex-shrink-0 flex items-center justify-center rounded-lg text-xs md:text-sm font-extrabold mt-1
-              ${index === 0 ? 'bg-red-500 text-white shadow-red-200 shadow-md transform scale-110' : ''}
-              ${index === 1 ? 'bg-orange-500 text-white shadow-orange-200 shadow-md' : ''}
-              ${index === 2 ? 'bg-yellow-500 text-white shadow-yellow-200 shadow-md' : ''}
-              ${index > 2 ? 'bg-gray-100 text-gray-400' : ''}
-            `}>
-              {index + 1}
-            </div>
+        <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold bg-white px-1.5 py-0.5 rounded border border-gray-100">TOP 10</span>
+      </div>
 
-            <div className="relative w-16 h-20 md:w-20 md:h-28 flex-shrink-0 rounded-md shadow-sm border border-gray-200 overflow-hidden group-hover:shadow-lg transition-all duration-300 group-hover:-translate-y-1">
-               {book.cover_image ? (
-                 <img src={book.cover_image} alt={book.title} className="w-full h-full object-cover" />
-               ) : (
-                 <div className="w-full h-full bg-gray-100 flex items-center justify-center">
-                    <BookOpen className="w-8 h-8 text-gray-300" />
-                 </div>
-               )}
-            </div>
+      <div className="flex-1 overflow-y-auto min-h-[600px] scrollbar-thin scrollbar-thumb-gray-200">
+        
+        {/* =======================
+            📱 移动端视图 (经典列表模式 - 恢复原样)
+           ======================= */}
+        <div className="md:hidden">
+            {books.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-60 text-gray-400 text-sm">暂无数据</div>
+            ) : (
+                books.map((book: any, index: number) => (
+                    <Link 
+                        key={book.id} 
+                        href={`/book/${book.id}`}
+                        className="flex items-center gap-4 p-4 border-b border-gray-100 last:border-0 active:bg-gray-50"
+                    >
+                        {/* A. 排名色块 (红/橙/黄/灰) */}
+                        <div className={`
+                          w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-md text-xs font-bold shadow-sm
+                          ${index === 0 ? 'bg-red-500 text-white' : ''}
+                          ${index === 1 ? 'bg-orange-500 text-white' : ''}
+                          ${index === 2 ? 'bg-yellow-500 text-white' : ''}
+                          ${index > 2 ? 'bg-gray-100 text-gray-400' : ''}
+                        `}>
+                          {index + 1}
+                        </div>
 
-            <div className="flex-1 min-w-0 flex flex-col justify-between h-20 md:h-28 py-0.5 md:py-1">
-              <div>
-                  <h4 className="text-sm md:text-[16px] font-extrabold text-gray-800 leading-snug line-clamp-1 md:line-clamp-2 group-hover:text-blue-600 transition-colors mb-1 md:mb-2">
-                    {book.title}
-                  </h4>
-                  
-                  <div className="flex items-center text-xs text-gray-500 gap-2 md:gap-3 mb-1 md:mb-3">
-                    <span className="truncate max-w-[100px] hover:text-gray-900 font-medium">
-                        {book.author || (book.author_id as any)?.username || '未知'}
-                    </span>
-                    <span className="hidden md:block w-px h-3 bg-gray-300"></span>
-                    <span className="hidden md:block bg-gray-100 px-2.5 py-1 rounded-md text-xs text-gray-600">
-                        {book.category || '综合'}
-                    </span>
-                  </div>
-              </div>
+                        {/* B. 封面 (经典小图) */}
+                        <div className="relative w-12 h-16 flex-shrink-0 rounded shadow-sm overflow-hidden border border-gray-100">
+                           {book.cover_image ? (
+                             <img src={book.cover_image} alt={book.title} className="w-full h-full object-cover" />
+                           ) : (
+                             <div className="w-full h-full bg-gray-50 flex items-center justify-center">
+                                <BookOpen className="w-4 h-4 text-gray-300" />
+                             </div>
+                           )}
+                        </div>
 
-              <div className="text-xs text-gray-400 flex items-center mt-auto">
-                  <span>{(book.views || 0).toLocaleString()} 浏览</span>
-              </div>
-            </div>
-            
-            <div className="self-center text-right pl-2">
-               {showRating ? (
-                 <div className="flex flex-col items-end">
-                    <span className="text-base md:text-lg font-black text-yellow-500 flex items-baseline gap-1">
-                        {(book.rating || 0).toFixed(1)} 
-                        <span className="text-[10px] md:text-xs font-medium text-gray-400">分</span>
-                    </span>
-                 </div>
-               ) : (
-                 <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition-colors">
-                   <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-white" />
-                 </div>
-               )}
-            </div>
-          </Link>
-        ))
-      )}
+                        {/* C. 信息 (书名+作者+分类) */}
+                        <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
+                            <h4 className="font-bold text-gray-800 text-sm line-clamp-1">{book.title}</h4>
+                            <div className="flex items-center text-xs text-gray-400 gap-2">
+                                <span className="max-w-[80px] truncate">{book.author || '未知'}</span>
+                                <span className="w-px h-2 bg-gray-200"></span>
+                                <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded text-[10px]">{book.category || '综合'}</span>
+                            </div>
+                        </div>
+
+                        {/* D. 右侧 (评分或箭头) */}
+                        <div className="flex-shrink-0">
+                            {showRating ? (
+                                <span className="text-yellow-500 font-bold text-sm">{book.rating?.toFixed(1) || '0.0'}分</span>
+                            ) : (
+                                <ChevronRight className="w-5 h-5 text-gray-300" />
+                            )}
+                        </div>
+                    </Link>
+                ))
+            )}
+        </div>
+
+        {/* =======================
+            💻 PC端视图 (保持不变：品字形 + 大字版)
+           ======================= */}
+        <div className="hidden md:block pb-4">
+            {books.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-80 text-gray-400 text-sm gap-4">
+                    <ImageOff className="w-8 h-8 text-gray-300" />
+                    <span>暂无相关书籍</span>
+                </div>
+            ) : (
+            <>
+                {/* === 👑 NO.1 冠军 === */}
+                {first && (
+                <Link 
+                    href={`/book/${first.id}`}
+                    className={`relative flex gap-5 p-5 border-b border-gray-100 bg-gradient-to-b ${bgTheme} group hover:bg-gray-50 transition-colors z-10`}
+                >
+                    <div className="absolute top-0 right-4 text-[120px] font-black opacity-[0.04] pointer-events-none select-none">1</div>
+                    
+                    <div className="relative w-28 h-38 flex-shrink-0 shadow-xl rounded-md overflow-hidden transform group-hover:-translate-y-1 transition-transform duration-300 border border-black/5">
+                        {first.cover_image ? (
+                            <img src={first.cover_image} alt={first.title} className="w-full h-full object-cover" />
+                        ) : (
+                            <div className="w-full h-full bg-gray-200 flex items-center justify-center"><BookOpen className="text-gray-400"/></div>
+                        )}
+                        <div className="absolute top-0 left-0 bg-gradient-to-r from-red-600 to-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-br-lg shadow-sm">
+                        NO.1
+                        </div>
+                    </div>
+
+                    <div className="flex-1 flex flex-col justify-start py-1 min-w-0">
+                        <h4 className="text-xl font-black text-gray-900 mb-2 truncate group-hover:text-blue-600 transition-colors">
+                            {first.title}
+                        </h4>
+                        <div className="flex items-center gap-2 mb-3">
+                            <span className="text-xs font-bold text-gray-700">{first.author}</span>
+                            <span className="text-xs text-gray-300">|</span>
+                            <span className="text-xs text-red-500 font-medium bg-red-50 px-1.5 py-0.5 rounded">{(first.views || 0).toLocaleString()} 热度</span>
+                        </div>
+                        <p className="text-sm text-gray-500 leading-relaxed line-clamp-3">
+                            {first.description || '暂无简介，但这绝对是一本不容错过的好书，情节跌宕起伏，人物刻画入木三分...'}
+                        </p>
+                    </div>
+                </Link>
+                )}
+
+                {/* === 🥈🥉 NO.2 & NO.3 === */}
+                {(second || third) && (
+                    <div className="grid grid-cols-2 gap-0 border-b border-gray-100">
+                        {[second, third].map((book, i) => {
+                            if (!book) return null;
+                            const rank = i + 2;
+                            const isSecond = rank === 2;
+                            return (
+                                <Link 
+                                    key={book.id} 
+                                    href={`/book/${book.id}`} 
+                                    className={`group relative flex flex-col p-4 transition-all hover:bg-gray-50 ${isSecond ? 'border-r border-gray-100' : ''}`}
+                                >
+                                    <div className={`absolute top-3 left-3 w-6 h-6 rounded-full border-2 border-white shadow flex items-center justify-center z-20 text-white text-[10px] font-black italic
+                                        ${isSecond ? 'bg-gray-300' : 'bg-orange-300'}
+                                    `}>
+                                        {rank}
+                                    </div>
+                                    
+                                    <div className="flex gap-3">
+                                        <div className="w-20 h-28 flex-shrink-0 rounded bg-gray-200 overflow-hidden shadow-md group-hover:shadow-lg transition-all border border-black/5">
+                                            {book.cover_image && <img src={book.cover_image} className="w-full h-full object-cover" />}
+                                        </div>
+                                        
+                                        <div className="flex-1 min-w-0 flex flex-col">
+                                            <h5 className="font-bold text-gray-800 text-base mb-1 line-clamp-1 group-hover:text-blue-600 transition-colors">
+                                                {book.title}
+                                            </h5>
+                                            <div className="flex items-center gap-2 mb-2 text-xs text-gray-400">
+                                                <span>{book.category}</span>
+                                                <span className="text-red-400">{(book.views/10000).toFixed(1)}w</span>
+                                            </div>
+                                            <p className="text-xs text-gray-400 leading-relaxed line-clamp-3">
+                                                {book.description || '暂无简介，点击查看详情...'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </Link>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {/* === 🧱 NO.4 - NO.10 === */}
+                <div className="px-2 pt-2 flex flex-col gap-1">
+                    {others.map((book: any, i: number) => {
+                        const rank = i + 4;
+                        return (
+                        <Link 
+                            key={book.id} 
+                            href={`/book/${book.id}`}
+                            className="flex items-start gap-3 p-2 rounded hover:bg-gray-50 transition-colors group"
+                        >
+                            <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center rounded text-xs font-bold text-gray-400 bg-gray-100 mt-1">
+                                {rank}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between mb-1">
+                                    <span className="text-lg font-bold text-gray-700 truncate group-hover:text-blue-600 max-w-[60%]">
+                                        {book.title}
+                                    </span>
+                                    <div className="flex items-center gap-2 text-sm text-gray-400">
+                                        <span>{book.author}</span>
+                                        <span className="w-px h-2 bg-gray-200"></span>
+                                        <span className="text-gray-400">{book.category}</span>
+                                    </div>
+                                </div>
+                                <p className="text-sm text-gray-400 truncate pr-4">
+                                    {book.description || '暂无简介'}
+                                </p>
+                            </div>
+                        </Link>
+                        );
+                    })}
+                </div>
+            </>
+            )}
+        </div>
+      </div>
     </div>
-  </div>
-);
+  );
+}
 
 // --- 2. 主逻辑组件 ---
 
@@ -242,14 +367,14 @@ function HomeContent() {
 
         <div className="max-w-[1400px] mx-auto md:px-4 md:py-8 flex flex-col gap-0 md:gap-10">
         
-          {/* === 轮播图区域 === */}
+{/* === 轮播图区域 (已修改：独立分离布局) === */}
           <section className="w-full" onMouseLeave={() => setIsPaused(false)}>
             {featuredBooks.length > 0 ? (
-              // 🔥🔥🔥 修改点：增加 flex 布局，将轮播图和右侧图标栏并排 ===
-              <div className="bg-white md:rounded-2xl shadow-sm border-b md:border border-gray-200 overflow-hidden w-full flex">
+              // 🔥 核心布局变化：flex gap-6 实现了“物理分离”
+              <div className="flex flex-col md:flex-row gap-4 md:gap-6 items-stretch">
                 
-                {/* --- 左侧：原有的轮播图 + 底部导航 (flex-1 占满剩余空间) --- */}
-                <div className="flex-1 flex flex-col min-w-0 border-r border-white/5 relative">
+                {/* --- 左侧：独立的轮播图卡片 (Flex-1 占大头) --- */}
+                <div className="flex-1 bg-white md:rounded-2xl shadow-sm border border-gray-100 overflow-hidden relative flex flex-col">
                     <div 
                       className="relative h-[220px] md:h-[380px] w-full overflow-hidden group"
                       onMouseEnter={() => setIsPaused(true)}
@@ -309,6 +434,7 @@ function HomeContent() {
                           ))}
                       </div>
 
+                      {/* 轮播指示点 */}
                       <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2 z-20">
                           {featuredBooks.map((_, index) => (
                               <button
@@ -328,6 +454,7 @@ function HomeContent() {
                       </div>
                     </div>
 
+                    {/* PC端底部列表导航 (集成在左侧卡片内) */}
                     <div className="bg-[#1a1a1a] border-t border-white/5 hidden lg:block flex-shrink-0">
                       <div className="max-w-6xl mx-auto grid grid-cols-3 divide-x divide-white/5">
                         {featuredBooks.map((book, index) => (
@@ -356,35 +483,39 @@ function HomeContent() {
                     </div>
                 </div>
 
-                {/* --- 🔥🔥🔥 右侧：新增的图标栏 (PC端显示) --- */}
-                {/* 改动说明：
-                    1. w-[80px] -> w-[110px]：加宽了，图标更舒展。
-                    2. 删除了 border-l border-white/10：去掉了生硬的白线。
-                    3. 新增 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]：用左侧阴影代替线条，过渡更自然。
-                    4. bg-[#222]：颜色微调，更有质感。
+                {/* --- 🔥🔥🔥 右侧：完全独立的白色功能栏 --- */}
+                {/* 改动点：
+                    1. bg-white: 变白了
+                    2. rounded-2xl shadow-sm: 有圆角和投影了，像一个小组件
+                    3. border border-gray-100: 增加精致感
+                    4. text-gray-600: 字体颜色变深，适配白底
                 */}
-                <div className="hidden md:flex flex-col w-[110px] bg-[#222] shrink-0 z-10 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
-                    <Link href="#ranking" className="flex-1 flex flex-col items-center justify-center gap-3 group hover:bg-white/5 transition-all text-gray-400 hover:text-white relative overflow-hidden">
-                        <div className="p-3 rounded-full bg-white/5 group-hover:bg-yellow-500/20 transition-colors">
-                           <Trophy className="w-6 h-6 text-yellow-500/80 group-hover:text-yellow-400 group-hover:scale-110 transition-transform" />
+                <div className="hidden md:flex flex-col w-[110px] bg-white rounded-2xl shadow-sm border border-gray-100 shrink-0 z-10 py-2 justify-between">
+                    <Link href="#ranking" className="flex-1 flex flex-col items-center justify-center gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
+                        <div className="p-3 rounded-full bg-yellow-50 group-hover:bg-yellow-100 transition-colors group-hover:scale-110 duration-300">
+                           <Trophy className="w-6 h-6 text-yellow-600" />
                         </div>
-                        <span className="text-xs font-bold tracking-widest opacity-80 group-hover:opacity-100">排行</span>
+                        <span className="text-xs font-bold tracking-wider">排行</span>
                     </Link>
                     
+                    <div className="w-12 h-px bg-gray-100 mx-auto"></div>
+
                     <Link href="#category" onClick={() => {
                         document.querySelector('.category-section')?.scrollIntoView({ behavior: 'smooth' });
-                    }} className="flex-1 flex flex-col items-center justify-center gap-3 group hover:bg-white/5 transition-all text-gray-400 hover:text-white relative overflow-hidden">
-                        <div className="p-3 rounded-full bg-white/5 group-hover:bg-blue-500/20 transition-colors">
-                            <LayoutGrid className="w-6 h-6 text-blue-400/80 group-hover:text-blue-300 group-hover:scale-110 transition-transform" />
+                    }} className="flex-1 flex flex-col items-center justify-center gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
+                        <div className="p-3 rounded-full bg-blue-50 group-hover:bg-blue-100 transition-colors group-hover:scale-110 duration-300">
+                            <LayoutGrid className="w-6 h-6 text-blue-600" />
                         </div>
-                        <span className="text-xs font-bold tracking-widest opacity-80 group-hover:opacity-100">分类</span>
+                        <span className="text-xs font-bold tracking-wider">分类</span>
                     </Link>
+
+                    <div className="w-12 h-px bg-gray-100 mx-auto"></div>
                     
-                    <Link href="/authors" className="flex-1 flex flex-col items-center justify-center gap-3 group hover:bg-white/5 transition-all text-gray-400 hover:text-white relative overflow-hidden">
-                         <div className="p-3 rounded-full bg-white/5 group-hover:bg-pink-500/20 transition-colors">
-                            <PenTool className="w-6 h-6 text-pink-400/80 group-hover:text-pink-300 group-hover:scale-110 transition-transform" />
+                    <Link href="/authors" className="flex-1 flex flex-col items-center justify-center gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
+                         <div className="p-3 rounded-full bg-pink-50 group-hover:bg-pink-100 transition-colors group-hover:scale-110 duration-300">
+                            <PenTool className="w-6 h-6 text-pink-600" />
                          </div>
-                        <span className="text-xs font-bold tracking-widest opacity-80 group-hover:opacity-100">作者</span>
+                        <span className="text-xs font-bold tracking-wider">作者</span>
                     </Link>
                 </div>
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { API_BASE_URL } from '@/lib/api';
 import Link from 'next/link';
 import { 
   Settings, BookOpen, List, 
@@ -12,6 +13,9 @@ import {
 import { booksApi, chaptersApi, bookmarksApi, Book, Chapter } from '@/lib/api';
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
+
+// 🔥 [新增 1] 全局章节缓存池 (放在组件外面，防止切换路由时被清空)
+const chapterCache = new Map<string, any>();
 
 // Hook: 检测是否为大屏设备 (PC端)
 function useIsDesktop() {
@@ -65,14 +69,16 @@ function ReaderContent() {
   const [fontSizeNum, setFontSizeNum] = useState(20);
   const [lineHeight, setLineHeight] = useState(1.6);
   const [paraSpacing, setParaSpacing] = useState(4); 
+  const [pageWidth, setPageWidth] = useState(1000);
 
   const [showHint, setShowHint] = useState(false); // 新手引导提示
 
   // 网页端默认参数调整：加载时如果是大屏，调整默认字号 (改小了) 和行距
   useEffect(() => {
     if (window.innerWidth >= 1024) {
-      setFontSizeNum(20); 
+      setFontSizeNum(22); 
       setLineHeight(1.8); 
+      setPageWidth(1000);
     }
   }, []);
 
@@ -185,7 +191,7 @@ function ReaderContent() {
     }
   };
 
-// --- 极速加载逻辑 (优化版：切章节不显示Loading，原地等待瞬间切换) ---
+// --- 极速加载逻辑 (优化版：带缓存 + 预加载支持) ---
   useEffect(() => {
     let isActive = true;
 
@@ -194,55 +200,60 @@ function ReaderContent() {
 
       // === 场景 A: 快速通道 (URL 里有 ID) ===
       if (targetId) {
-        // [核心修改点]
-        // 只有当当前没有任何章节内容时（比如刷新页面或第一次进），才显示全屏Loading。
-        // 如果已经有章节了（chapter 存在），说明用户正在阅读并切换到了下一章：
-        // 此时我们不开启 Loading，让页面保持“原地不动”，用户几乎无感，
-        // 等数据请求回来后，直接瞬间替换内容并滚到顶部。
-        if (!chapter) {
-            setLoading(true);
+        // 🔥 [修改点 A] 优先检查缓存
+        if (chapterCache.has(targetId)) {
+          // 1. 命中缓存！直接渲染，不需要 Loading
+          const cachedData = chapterCache.get(targetId);
+          setChapter(cachedData);
+          setLoading(false);
+          window.scrollTo(0, 0); // 瞬间回到顶部
+
+          // 虽然章节有了，但如果书本信息还没加载，还得顺手补一下（不阻塞显示）
+          if (!book) {
+             try {
+                const bookRes = await booksApi.getById(bookId);
+                if (isActive && bookRes) setBook(bookRes);
+             } catch (e) { console.error(e); }
+          }
+        } 
+        else {
+          // 2. 缓存没有，才去服务器请求 (保持你原来的逻辑)
+          if (!chapter) setLoading(true); // 只有当前没内容时才转圈
+
+          try {
+            const [chapterRes, bookRes] = await Promise.all([
+              fetch(`${API_BASE_URL}/chapters/${targetId}`),
+              !book ? booksApi.getById(bookId) : Promise.resolve(null)
+            ]);
+
+            if (isActive) {
+              if (chapterRes.ok) {
+                const chData = await chapterRes.json();
+                setChapter(chData);
+                // 🔥 [修改点 B] 请求成功后，存入缓存
+                chapterCache.set(targetId, chData); 
+                window.scrollTo(0, 0);
+              }
+              if (bookRes) setBook(bookRes);
+              setLoading(false);
+            }
+          } catch (e) {
+            console.error("快速加载失败", e);
+            setLoading(false);
+          }
         }
 
-        try {
-          // [第一步] 并行加载
-          const [chapterRes, bookRes] = await Promise.all([
-            fetch(`https://website-production-6edf.up.railway.app/api/chapters/${targetId}`),
-            !book ? booksApi.getById(bookId) : Promise.resolve(null)
-          ]);
-
-          if (isActive) {
-            // 1.1 立即显示内容
-            if (chapterRes.ok) {
-              const chData = await chapterRes.json();
-              setChapter(chData);
-              window.scrollTo(0, 0); // 数据到了，瞬间滚回顶部
-            }
-            // 1.2 更新书名
-            if (bookRes) {
-              setBook(bookRes);
-            }
-            
-            // 1.3 无论原本有没有 Loading，这里都确保关闭它
-            setLoading(false); 
-          }
-
-          // [第二步] 后台默默加载目录
-          if (allChapters.length === 0) {
+        // [第二步] 后台默默加载目录 (保持不变)
+        if (allChapters.length === 0) {
+          try {
             const chaptersRes = await chaptersApi.getByBookId(bookId);
-            if (isActive && chaptersRes) {
-              setAllChapters(chaptersRes);
-            }
-          }
-
-        } catch (e) {
-          console.error("快速加载失败", e);
-          setLoading(false);
+            if (isActive && chaptersRes) setAllChapters(chaptersRes);
+          } catch(e) {}
         }
       } 
       
-      // === 场景 B: 慢速通道 (URL 没 ID，默认进第一章) ===
+      // === 场景 B: 慢速通道 (保持不变) ===
       else {
-        // 这种情况通常是刚进书，必须显示 Loading，否则是白屏
         setLoading(true);
         try {
           const [bookRes, chaptersRes] = await Promise.all([
@@ -256,12 +267,18 @@ function ReaderContent() {
                setAllChapters(chaptersRes);
                if (chaptersRes.length > 0) {
                  const firstId = chaptersRes[0].id;
-                 const chRes = await fetch(`https://website-production-6edf.up.railway.app/api/chapters/${firstId}`);
-                 if (chRes.ok) {
-                   const chData = await chRes.json();
-                   setChapter(chData);
-                   window.scrollTo(0, 0);
+                 // 🔥 [修改点 C] 即使是第一章，也尝试读缓存
+                 if (chapterCache.has(firstId)) {
+                    setChapter(chapterCache.get(firstId));
+                 } else {
+                    const chRes = await fetch(`https://jiutianxiaoshuo.com/api/chapters/${firstId}`);
+                    if (chRes.ok) {
+                      const chData = await chRes.json();
+                      setChapter(chData);
+                      chapterCache.set(firstId, chData); // 存缓存
+                    }
                  }
+                 window.scrollTo(0, 0);
                }
              }
              setLoading(false);
@@ -276,7 +293,46 @@ function ReaderContent() {
     loadData();
 
     return () => { isActive = false; };
-  }, [bookId, chapterIdParam]); // 依赖项
+  }, [bookId, chapterIdParam]); // 依赖项不变 
+
+  // ============================================================
+  // ▼▼▼ 🔥 [新增 2] 静默预加载下一章 (Prefetching) ▼▼▼
+  // ============================================================
+  useEffect(() => {
+    // 只有当：1.当前章节已加载 2.目录已加载 时，才执行预加载
+    if (chapter && allChapters.length > 0) {
+      const currentIndex = allChapters.findIndex((ch) => ch.id === chapter.id);
+      
+      // 找到下一章
+      if (currentIndex !== -1 && currentIndex < allChapters.length - 1) {
+        const nextChapter = allChapters[currentIndex + 1];
+        
+        // 检查：如果缓存里【没有】下一章，才去下载
+        if (!chapterCache.has(nextChapter.id)) {
+          console.log(`[预加载] 开始静默下载: 第${nextChapter.chapter_number}章...`);
+          
+          fetch(`https://jiutianxiaoshuo.com/api/chapters/${nextChapter.id}`)
+            .then(res => res.json())
+            .then(data => {
+              // 下载成功，存入缓存 (注意：不要 setChapter，只存不显)
+              chapterCache.set(nextChapter.id, data);
+              console.log(`[预加载] 完成！下一章已就绪。`);
+              
+              // (可选) 简单的内存清理：如果缓存超过 20 章，删掉最早的一个，防止内存溢出
+              // ... 前面的代码
+              if (chapterCache.size > 20) {
+                  const firstKey = chapterCache.keys().next().value;
+                  // 只有当 firstKey 真的存在时才执行删除
+                  if (firstKey) {
+                      chapterCache.delete(firstKey);
+                  }
+              }
+            })
+            .catch(err => console.error("[预加载] 失败 (不影响当前阅读)", err));
+        }
+      }
+    }
+  }, [chapter, allChapters]); // 当当前章节变化时，触发下一次预加载
 
   const checkBookmark = async () => {
     try {
@@ -367,8 +423,9 @@ if (loading) return (
         className="hidden lg:flex fixed top-0 left-0 right-0 z-50 h-16 justify-center pointer-events-none transition-transform duration-300"
       >
         <div 
-          className="w-full max-w-[850px] flex items-center justify-between px-12 pointer-events-auto shadow-sm transition-colors duration-300"
+          className="w-full flex items-center justify-between px-12 pointer-events-auto shadow-sm transition-colors duration-300"
           style={{
+            maxWidth: isDesktop ? `${pageWidth}px` : '100%',
             backgroundColor: activeTheme.bg, 
             color: activeTheme.text,
             borderColor: activeTheme.line,
@@ -518,10 +575,11 @@ if (loading) return (
             w-full min-h-screen px-4 md:px-8 
             pt-4 pb-20  /* 核心修改：pt-16 改为 pt-4。让第一行文字直接顶上去，不再留出导航栏的位置 */
             transition-colors duration-300
-            lg:max-w-[850px] lg:mx-auto lg:mt-16 lg:mb-10 lg:rounded-b-sm lg:rounded-t-none lg:pt-8 lg:px-12
+             lg:mx-auto lg:mt-16 lg:mb-10 lg:rounded-b-sm lg:rounded-t-none lg:pt-8 lg:px-12
             ${isDesktop ? 'shadow-[0_4px_20px_rgba(0,0,0,0.04)]' : ''} 
           `}
           style={{ 
+            maxWidth: isDesktop ? `${pageWidth}px` : undefined,
             backgroundColor: activeTheme.bg, 
             color: activeTheme.text 
           }}
@@ -613,7 +671,7 @@ if (loading) return (
             backgroundColor: activeTheme.bg, 
             borderColor: activeTheme.line,
             left: '50%',
-            marginLeft: '440px' 
+            marginLeft: `${pageWidth / 2 + 15}px`
           }}
         >
           <Link href="/library" className="p-3 hover:bg-black/5 rounded-lg tooltip-right" title="书架">
@@ -723,8 +781,9 @@ if (loading) return (
           {isDesktop ? (
             // ============ 桌面端大设置面板 (保留不变) ============
             <div 
-                className="fixed top-[20%] right-[calc(50%-440px)] z-50 w-500px rounded-xl shadow-2xl border p-6 animate-in fade-in zoom-in-95"
+                className="fixed top-32 z-50 w-[500px] rounded-xl shadow-2xl border p-6 animate-in fade-in zoom-in-95"
                 style={{ 
+                right: `calc(50% - ${pageWidth / 2 + 15}px)`,
                 backgroundColor: isActuallyDark ? '#2a2a2a' : activeTheme.panel,
                 color: activeTheme.text,
                 borderColor: activeTheme.line 
@@ -792,6 +851,22 @@ if (loading) return (
                             />
                             <button onClick={() => setFontSizeNum(Math.min(48, fontSizeNum + 2))} className="p-2 hover:bg-white/60 rounded text-xl font-bold">A+</button>
                             <span className="w-12 text-center font-bold">{fontSizeNum}</span>
+                        </div>
+                    </div>
+
+                    {/* 🟢 新增：页面宽度设置 */}
+                    <div className="flex items-center">
+                        <span className="w-20 font-bold opacity-70 shrink-0">页面宽度</span>
+                        <div className="flex gap-3 flex-1">
+                            {[850, 1000, 1200, 1400].map(w => (
+                                <button
+                                    key={w}
+                                    onClick={() => setPageWidth(w)}
+                                    className={`flex-1 py-2 rounded-lg border transition-all text-sm font-bold ${pageWidth === w ? 'bg-blue-600 text-white border-blue-600' : 'hover:bg-black/5 border-gray-200'}`}
+                                >
+                                    {w === 850 ? '窄屏' : w === 1000 ? '标准' : w === 1200 ? '宽屏' : '超宽'}
+                                </button>
+                            ))}
                         </div>
                     </div>
 

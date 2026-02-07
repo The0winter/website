@@ -5,7 +5,7 @@ import Link from 'next/link';
 // 1. 在服务端只获取书籍详情 (速度极快)
 async function getBookData(id: string) {
   try {
-    const res = await fetch(`https://website-production-6edf.up.railway.app/api/books/${id}`, {
+    const res = await fetch(`https://jiutianxiaoshuo.com/api/books/${id}`, {
       cache: 'no-store', // 保证每次都获取最新数据
     });
     if (!res.ok) return null;

@@ -9,7 +9,7 @@ const NEW_DATA = {
     views: 0,          // 初始化阅读量为 0
 };
 
-const API_URL = 'https://website-production-6edf.up.railway.app/api/books';
+const API_URL = 'https://jiutianxiaoshuo.com/api/books';
 
 (async () => {
     console.log(`📝 正在修改书籍 ID: ${BOOK_ID}...`);

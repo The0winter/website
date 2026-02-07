@@ -2,7 +2,7 @@
 // 注意：Node.js v18 以上版本自带 fetch，无需 import
 
 const BOOK_TITLE_TO_DELETE = "玄鉴仙族";  // 👈 记得改这里！！
-const RAILWAY_URL = 'https://website-production-6edf.up.railway.app';
+const RAILWAY_URL = 'https://jiutianxiaoshuo.com';
 const SECRET_KEY = 'wo_de_pa_chong_mi_ma_123';
 
 (async () => {

@@ -1,5 +1,11 @@
-// init_rankings.js - 初始化所有榜单字段
-const API_URL = 'https://website-production-6edf.up.railway.app/api/books'; // 确认你的API地址
+require('dotenv').config({ path: '../.env' }); // 假设 .env 在上一级，根据实际情况调整
+
+// 优先读取环境变量，读不到才用保底地址
+const API_URL = process.env.API_URL 
+  ? `${process.env.API_URL}/books` 
+  : 'https://jiutianxiaoshuo.com/api/books'; 
+
+console.log('🔗 当前使用的 API 地址:', API_URL);
 
 (async () => {
     console.log('🚀 开始初始化排行榜字段...');
