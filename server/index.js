@@ -404,8 +404,12 @@ app.post('/api/auth/signin', async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     
     if (!isMatch) {
-        // ❌ 密码错误逻辑：增加错误次数
-        user.loginAttempts += 1;
+// 🔥【修改点 1】兼容老用户：如果 loginAttempts 是空的，先视为 0
+        const currentAttempts = user.loginAttempts || 0;
+        user.loginAttempts = currentAttempts + 1;
+
+        // 🕵️‍♂️【调试点】看看控制台打印了什么
+        console.log(`[Login Failed] User: ${identifier}, Attempts: ${user.loginAttempts}`);
         
         // 检查是否达到上限
         if (user.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
@@ -420,8 +424,9 @@ app.post('/api/auth/signin', async (req, res) => {
         });
     }
 
-    // ✅ 4. 登录成功逻辑：重置计数器
-    if (user.loginAttempts > 0 || user.lockUntil) {
+// ✅ 4. 登录成功逻辑
+    // 🔥【修改点 2】这里也要兼容判断
+    if ((user.loginAttempts && user.loginAttempts > 0) || user.lockUntil) {
         user.loginAttempts = 0;
         user.lockUntil = undefined;
         await user.save();
