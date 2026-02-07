@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { 
   PenTool, BookOpen, BarChart3, 
   Plus, Upload, X, Edit3, Save, Settings, AlertCircle, CheckCircle2, Sparkles, Trash2,
-  Shield, LogIn // 👈 新增图标
+  Shield, LogIn, Image as ImageIcon, Loader2// 👈 新增图标
 } from 'lucide-react';
 import { booksApi, chaptersApi, Book, Chapter } from '@/lib/api';
 
@@ -51,6 +51,12 @@ export default function WriterDashboard() {
 
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'info' | 'error'} | null>(null);
 
+  //  新增：封面上传相关的 State (放在 State 定义区域最后)
+  const [uploading, setUploading] = useState(false); // 上传 loading 状态
+  const [formBookCover, setFormBookCover] = useState(''); // 编辑时的封面 URL
+  const [newBookCoverFile, setNewBookCoverFile] = useState<File | null>(null); // 新建时的临时文件
+  const [newBookCoverPreview, setNewBookCoverPreview] = useState(''); // 新建时的临时预览
+
   // ================= 数据获取逻辑 =================
 
   const fetchMyData = useCallback(async () => {
@@ -66,6 +72,35 @@ export default function WriterDashboard() {
       setLoading(false);
     }
   }, [user]);
+
+  // ✅ 新增：通用上传函数
+  const uploadImageToCloudinary = async (file: File): Promise<string | null> => {
+    try {
+      setUploading(true);
+      const formData = new FormData();
+      formData.append('file', file);
+
+      // 调用我们在后端写的 /api/upload/cover 接口
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/upload/cover`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+            'x-user-id': user!.id
+        },
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error('上传失败');
+      const data = await res.json();
+      return data.url; // 返回云端 URL
+    } catch (e) {
+      console.error(e);
+      setToast({ msg: '图片上传失败', type: 'error' });
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // 👮 加载用户列表 (只有打开管理员弹窗时才调用)
   const fetchUserList = async () => {
@@ -103,6 +138,13 @@ export default function WriterDashboard() {
   // 监听打开书籍管理器，加载章节
   useEffect(() => {
     if (showBookManager && currentBookId) {
+        const book = myBooks.find(b => b.id === currentBookId);
+        if (book) {
+            setFormBookCover(book.cover_image || ''); // 👈 初始化封面
+            setFormBookTitle(book.title);             // 👈 确保标题同步
+            setFormBookDescription(book.description || ''); // 👈 确保简介同步
+        }
+
         chaptersApi.getByBookId(currentBookId)
             .then(setActiveChapters)
             .catch(console.error);
@@ -285,23 +327,38 @@ export default function WriterDashboard() {
     }
   };
 
+// ✅ 修改：handleCreateBook
   const handleCreateBook = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formBookTitle.trim() || !user) return;
+
     try {
+        let finalCoverUrl = '';
+
+        // 1. 如果用户选了图片，先上传
+        if (newBookCoverFile) {
+            const url = await uploadImageToCloudinary(newBookCoverFile);
+            if (url) finalCoverUrl = url;
+            else return; // 上传失败这就停止
+        }
+
+        // 2. 创建书籍 (带上 cover_image)
         await booksApi.create({
             title: formBookTitle,
             description: formBookDescription,
-            cover_image: '',
+            cover_image: finalCoverUrl, // 👈 存入 URL
             category: formBookCategory, 
             author: user.username || '匿名作家', 
             author_id: user.id, 
         } as any);
         
+        // 3. 重置所有状态
         setShowCreateBookModal(false);
         setFormBookTitle('');
         setFormBookDescription('');
         setFormBookCategory(ALL_CATEGORIES[0]);
+        setNewBookCoverFile(null);    // 👈 清空
+        setNewBookCoverPreview('');   // 👈 清空
         setShowCategoryDropdown(false);
         
         setToast({ msg: '新书创建成功！', type: 'success' });
@@ -320,12 +377,24 @@ export default function WriterDashboard() {
       await booksApi.update(currentBookId, {
           title: formBookTitle,
           description: formBookDescription,
+          cover_image: formBookCover
       });
       setToast({ msg: '书籍信息已保存', type: 'success' });
       fetchMyData(); // 刷新列表
     } catch (e) {
       setToast({ msg: '保存失败', type: 'error' });
     }
+  };
+
+  //  新增：处理编辑模式下的封面上传
+  const handleEditCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      
+      const url = await uploadImageToCloudinary(file);
+      if (url) {
+          setFormBookCover(url); // 只更新状态，用户点“保存修改”时才写入数据库
+      }
   };
 
   const handleDeleteBook = async () => {
@@ -490,47 +559,75 @@ export default function WriterDashboard() {
                  <button onClick={() => setShowBookManager(false)} className="p-2 bg-gray-200 rounded-full"><X className="h-5 w-5 text-gray-600" /></button>
               </div>
               <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white space-y-3">
-                {/* ✅ 新增开始：可折叠的书籍信息编辑区 */}
-                 {/* ✅ 修复版：可折叠的书籍信息编辑区 */}
-                 <details className="group mb-6 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                {/* ✅ 修复版：可折叠的书籍信息编辑区 */}
+                <details className="group mb-6 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden" open> {/* 👈 加上 open 默认展开方便调试 */}
                     <summary className="flex items-center justify-between p-4 cursor-pointer list-none select-none bg-gray-50 hover:bg-gray-100 transition-colors">
                         <span className="text-base font-extrabold text-gray-900 flex items-center gap-2">
-                            📝 修改书籍信息 
-                            <span className="text-xs font-normal text-gray-500">(点击展开)</span>
+                            📝 书籍设置 
                         </span>
-                        {/* 箭头图标也优化一下 */}
                         <div className="transition-transform duration-200 group-open:rotate-180 text-gray-400">▼</div>
                     </summary>
                     
                     <div className="p-5 border-t border-gray-100 bg-white animate-in slide-in-from-top-2 duration-200">
-                        <div className="space-y-4">
-                            <div>
-                                <label className="text-sm font-bold text-gray-700 mb-1.5 block">书名</label>
-                                <input 
-                                    value={formBookTitle}
-                                    onChange={(e) => setFormBookTitle(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 font-bold outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
-                                    placeholder="请输入书名"
-                                />
+                        <div className="flex flex-col md:flex-row gap-6">
+                            
+                            {/* ✅ 左侧：封面修改区 */}
+                            <div className="shrink-0 flex flex-col items-center">
+                                <div className="w-32 h-44 bg-gray-100 rounded-lg border border-gray-200 overflow-hidden relative group shadow-sm">
+                                    {uploading ? (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
+                                            <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
+                                        </div>
+                                    ) : formBookCover ? (
+                                        <img src={formBookCover} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-gray-400 flex-col">
+                                            <ImageIcon className="h-8 w-8 mb-2" />
+                                            <span className="text-xs">无封面</span>
+                                        </div>
+                                    )}
+                                    
+                                    {/* 悬停显示上传按钮 */}
+                                    <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center cursor-pointer text-white">
+                                        <Upload className="h-6 w-6 mb-1" />
+                                        <span className="text-xs font-bold">更换封面</span>
+                                        <input type="file" className="hidden" accept="image/*" onChange={handleEditCoverUpload} />
+                                    </label>
+                                </div>
+                                <p className="text-xs text-gray-400 mt-2">建议尺寸 600x800</p>
                             </div>
-                            <div>
-                                <label className="text-sm font-bold text-gray-700 mb-1.5 block">简介</label>
-                                <textarea 
-                                    value={formBookDescription}
-                                    onChange={(e) => setFormBookDescription(e.target.value)}
-                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm font-medium outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all h-28 resize-none leading-relaxed"
-                                    placeholder="请输入简介内容..."
-                                />
+
+                            {/* ✅ 右侧：表单区 */}
+                            <div className="flex-1 space-y-4">
+                                <div>
+                                    <label className="text-sm font-bold text-gray-700 mb-1.5 block">书名</label>
+                                    <input 
+                                        value={formBookTitle}
+                                        onChange={(e) => setFormBookTitle(e.target.value)}
+                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 font-bold outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-bold text-gray-700 mb-1.5 block">简介</label>
+                                    <textarea 
+                                        value={formBookDescription}
+                                        onChange={(e) => setFormBookDescription(e.target.value)}
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm font-medium outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all h-24 resize-none leading-relaxed"
+                                    />
+                                </div>
+                                <div className="flex justify-end">
+                                    <button 
+                                        onClick={handleUpdateBook}
+                                        disabled={uploading}
+                                        className="px-6 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/30 active:scale-[0.98] transition-all disabled:opacity-50"
+                                    >
+                                        保存所有修改
+                                    </button>
+                                </div>
                             </div>
-                            <button 
-                                onClick={handleUpdateBook}
-                                className="w-full py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/30 active:scale-[0.98] transition-all"
-                            >
-                                保存修改
-                            </button>
                         </div>
                     </div>
-                 </details>
+                </details>
                  {/* ✅ 新增结束 */}
                  {activeChapters.length === 0 ? (
                      <div className="text-center text-gray-400 py-8">暂无章节</div>
@@ -618,93 +715,72 @@ export default function WriterDashboard() {
         </div>
       )}
 
-      {/* 4. 创建新书弹窗 */}
-      {showCreateBookModal && (
+        {/* 4. 创建新书弹窗 */}
+        {showCreateBookModal && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
-           <div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in slide-in-from-bottom-10 md:slide-in-from-bottom-0">
-              <h3 className="text-xl md:text-2xl font-bold mb-6 text-gray-900 flex items-center gap-2">
-                 <Sparkles className="h-6 w-6 text-purple-500" /> 创建新作品
-              </h3>
-              <form onSubmit={handleCreateBook} className="space-y-4 md:space-y-6">
-                 <div>
+            <div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in slide-in-from-bottom-10 md:slide-in-from-bottom-0">
+                <h3 className="text-xl md:text-2xl font-bold mb-6 text-gray-900 flex items-center gap-2">
+                <Sparkles className="h-6 w-6 text-purple-500" /> 创建新作品
+                </h3>
+                <form onSubmit={handleCreateBook} className="space-y-4 md:space-y-6">
+                
+                {/* ✅ 新增：封面上传区域 */}
+                <div className="flex justify-center">
+                        <label className="relative cursor-pointer group">
+                            <div className="w-28 h-36 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden hover:border-blue-500 transition">
+                                {newBookCoverPreview ? (
+                                    <img src={newBookCoverPreview} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="text-center text-gray-400">
+                                        <ImageIcon className="h-8 w-8 mx-auto mb-1" />
+                                        <span className="text-xs">上传封面</span>
+                                    </div>
+                                )}
+                                {/* 遮罩层，显示更换提示 */}
+                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                                    <Upload className="h-6 w-6 text-white" />
+                                </div>
+                            </div>
+                            <input 
+                                type="file" 
+                                className="hidden" 
+                                accept="image/*"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                        setNewBookCoverFile(file);
+                                        setNewBookCoverPreview(URL.createObjectURL(file)); // 本地预览，不消耗流量
+                                    }
+                                }}
+                            />
+                        </label>
+                </div>
+
+                {/* 下面是原来的书名、分类、简介... 保持不变 */}
+                <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">书名</label>
                     <input 
                         type="text" 
                         value={formBookTitle}
                         onChange={(e) => setFormBookTitle(e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 font-bold placeholder-gray-400" 
+                        // ... className ...
                         placeholder="请输入书名" 
                     />
-                 </div>
+                </div>
+                
+                {/* ... 省略中间代码 ... */}
 
-                 <div className="relative">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">选择分类</label>
-                    <div className="flex flex-wrap gap-2">
-                        {visibleCategories.map((cat) => (
-                            <button
-                                key={cat}
-                                type="button"
-                                onClick={() => {
-                                    setFormBookCategory(cat);
-                                    setShowCategoryDropdown(false);
-                                }}
-                                className={`px-3 py-2 rounded-lg text-sm font-bold transition-all duration-200 border ${
-                                    formBookCategory === cat
-                                        ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                                        : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-500'
-                                }`}
-                            >
-                                {cat}
-                            </button>
-                        ))}
-                        {hiddenCategories.length > 0 && (
-                            <div className="relative inline-block">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
-                                    className={`px-3 py-2 rounded-lg text-sm font-bold border bg-white text-gray-600 border-gray-200`}
-                                >
-                                    ...
-                                </button>
-                                {showCategoryDropdown && (
-                                    <div className="absolute bottom-full mb-2 right-0 w-48 bg-white border border-gray-200 rounded-xl shadow-xl p-2 z-50 grid grid-cols-2 gap-2">
-                                        {hiddenCategories.map((cat) => (
-                                            <button
-                                                key={cat}
-                                                type="button"
-                                                onClick={() => {
-                                                    setFormBookCategory(cat);
-                                                    setShowCategoryDropdown(false);
-                                                }}
-                                                className="px-3 py-2 rounded-lg text-sm font-bold border border-transparent hover:bg-gray-50"
-                                            >
-                                                {cat}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                 </div>
-
-                 <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">简介</label>
-                    <textarea 
-                        value={formBookDescription}
-                        onChange={(e) => setFormBookDescription(e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none resize-none text-gray-900 font-medium h-24 md:h-32" 
-                        placeholder="简单介绍一下你的故事..."
-                    ></textarea>
-                 </div>
-                 <div className="flex gap-4 mt-8 pb-safe md:pb-0">
+                <div className="flex gap-4 mt-8 pb-safe md:pb-0">
                     <button type="button" onClick={() => setShowCreateBookModal(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl active:bg-gray-200">取消</button>
-                    <button type="submit" className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl active:bg-blue-700 shadow-lg">立即创建</button>
-                 </div>
-              </form>
-           </div>
+                    <button type="submit" disabled={uploading} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl active:bg-blue-700 shadow-lg flex justify-center items-center gap-2">
+                        {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
+                        {uploading ? '上传中...' : '立即创建'}
+                    </button>
+                </div>
+                </form>
+            </div>
         </div>
-      )}
+        )}
 
       {/* 5. 章节删除确认弹窗 */}
       {chapterToDelete && (

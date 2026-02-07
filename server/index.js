@@ -13,6 +13,7 @@ import User from './models/User.js';
 import Book from './models/Book.js';
 import Chapter from './models/Chapter.js';
 import Bookmark from './models/Bookmark.js'; // ✅ 补全模型引入，防止报错
+import upload from './utils/upload.js';
 import { createReview, getReviews } from './controllers/reviewController.js';
 
 const app = express();
@@ -363,6 +364,18 @@ app.get('/api/users/:userId/profile', async (req, res) => {
 // --- Reviews ---
 app.get('/api/books/:id/reviews', getReviews);
 app.post('/api/books/:id/reviews', authMiddleware, createReview);
+app.post('/api/upload/cover', authMiddleware, upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: '没有上传文件' });
+    }
+    // Cloudinary 会返回一个 path (即 secure_url)
+    res.json({ url: req.file.path });
+  } catch (error) {
+    console.error('Upload Error:', error);
+    res.status(500).json({ error: '上传失败: ' + error.message });
+  }
+});
 
 // --- Books ---
 app.get('/api/books', async (req, res) => {
