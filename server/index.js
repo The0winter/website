@@ -624,17 +624,39 @@ app.delete('/api/users/:userId/bookmarks/:bookId', async (req, res) => {
 });
 
 // ================= 6. 定时任务 =================
+// ================= 6. 定时任务 (已修复：增加防崩溃保护) =================
+
+// 1. 日榜重置 (每天 00:00)
 cron.schedule('0 0 * * *', async () => {
-    console.log('⏰ 执行日榜重置...');
-    await Book.updateMany({}, { daily_views: 0 });
+    console.log('⏰ [Cron] 开始执行日榜重置...');
+    try {
+        await Book.updateMany({}, { daily_views: 0 });
+        console.log('✅ [Cron] 日榜重置成功');
+    } catch (error) {
+        console.error('❌ [Cron] 日榜重置失败 (服务器未崩溃):', error.message);
+    }
 });
+
+// 2. 周榜重置 (每周四 23:00)
 cron.schedule('0 23 * * 4', async () => {
-    console.log('⏰ 执行周榜重置 (周四晚)...');
-    await Book.updateMany({}, { weekly_views: 0 });
+    console.log('⏰ [Cron] 开始执行周榜重置 (周四晚)...');
+    try {
+        await Book.updateMany({}, { weekly_views: 0 });
+        console.log('✅ [Cron] 周榜重置成功');
+    } catch (error) {
+        console.error('❌ [Cron] 周榜重置失败 (服务器未崩溃):', error.message);
+    }
 });
+
+// 3. 月榜重置 (每月 1号 00:00)
 cron.schedule('0 0 1 * *', async () => {
-    console.log('⏰ 执行月榜重置...');
-    await Book.updateMany({}, { monthly_views: 0 });
+    console.log('⏰ [Cron] 开始执行月榜重置...');
+    try {
+        await Book.updateMany({}, { monthly_views: 0 });
+        console.log('✅ [Cron] 月榜重置成功');
+    } catch (error) {
+        console.error('❌ [Cron] 月榜重置失败 (服务器未崩溃):', error.message);
+    }
 });
 
 const PORT = process.env.PORT || 5000;
