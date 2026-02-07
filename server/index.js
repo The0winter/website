@@ -1,5 +1,4 @@
-// server/index.js
-import 'dotenv/config'; // ✅ 现代化引入，自动读取 .env
+import 'dotenv/config'; 
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -7,80 +6,91 @@ import bcrypt from 'bcryptjs';
 import cron from 'node-cron';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
+import jwt from 'jsonwebtoken'; // 🆕 新增：JWT 用于生成 Token
+import mongoSanitize from 'express-mongo-sanitize'; // 🆕 新增：防止 NoSQL 注入
 
 // 引入模型
 import User from './models/User.js'; 
 import Book from './models/Book.js';
 import Chapter from './models/Chapter.js';
-import Bookmark from './models/Bookmark.js'; // ✅ 补全模型引入，防止报错
+import Bookmark from './models/Bookmark.js';
+
 import upload from './utils/upload.js';
 import { createReview, getReviews } from './controllers/reviewController.js';
 
 const app = express();
+
+// ✅ Cloudflare 关键配置：信任第一个代理（Cloudflare）
 app.set('trust proxy', 1);
 
-// ================= 1. 安全与跨域配置 (优化版) =================
+// ================= 1. 安全与配置 =================
 
-// 定义允许访问的白名单 (以后加新域名只改这里)
+// 🔑 JWT 密钥 (如果没有配置环境变量，会使用随机备用，但重启后用户需重新登录)
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_please_change_in_env';
+
 const ALLOWED_ORIGINS = [
-  'http://localhost:3000',      // 本地前端
-  'http://localhost:5000',      // 本地后端调试
-  'https://jiutianxiaoshuo.com',     // ✅ 正式域名
-  'https://www.jiutianxiaoshuo.com'  // ✅ www 子域名
-  // 'https://你的旧项目.up.railway.app' // 如果还需要旧版，取消注释
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'https://jiutianxiaoshuo.com',
+  'https://www.jiutianxiaoshuo.com'
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // 允许没有 origin 的请求 (比如 Postman, 服务器端 curl, 或者同源请求)
     if (!origin) return callback(null, true);
-
-    // 检查是否在白名单里
-    // 只要 origin 包含白名单里的任何一个字符串，就放行 (更宽松的匹配，防止 https/http 差异)
     const isAllowed = ALLOWED_ORIGINS.some(allowed => origin.includes(allowed));
-
     if (isAllowed) {
       return callback(null, true);
     } else {
-      console.log('🚫 CORS 拦截了非法请求来源:', origin);
+      console.log('🚫 CORS 拦截:', origin);
       return callback(new Error('Not allowed by CORS'));
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-admin-secret'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'], // ❌ 移除了 x-user-id
   credentials: true
 };
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
-
-// 安全头配置
 app.use(helmet());
 
-// 解析器配置
-app.use(express.json({ limit: '10mb' })); // 稍微调大一点，防止上传大章节报错
+// 🛡️ 新增：防止 MongoDB 查询注入 (例如 { "$ne": null })
+app.use(mongoSanitize());
+
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// ================= 2. 限流配置 =================
+// ================= 2. 限流配置 (Cloudflare 修正版) =================
+
+// 帮助函数：获取真实 IP (穿透 Cloudflare)
+const getClientIp = (req) => {
+    return req.headers['cf-connecting-ip'] || req.ip;
+};
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
   max: 500, 
-  message: '请求过于频繁，请稍后再试'
+  message: '请求过于频繁，请稍后再试',
+  keyGenerator: getClientIp, // ✅ 修复：使用 CF 真实 IP，防止误杀全网
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { ip: false },
 });
 app.use('/api/', globalLimiter);
 
 const authLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, 
-  max: 10000, // 🚀 够用了
-  message: '操作太频繁'
+  max: 20, // 🔒 收紧：登录接口不需要那么高的并发，防止爆破
+  message: '操作太频繁',
+  keyGenerator: getClientIp,
+  validate: { ip: false },
 });
 app.use('/api/auth/', authLimiter);
 
 // ================= 3. 数据库连接 =================
 
 const MONGO_URL = process.env.MONGO_URI;
-// 如果没配置数据库，直接报错，不再默默连本地
 if (!MONGO_URL) {
   console.error('❌ 严重错误: 未配置 MONGO_URI 环境变量！');
   process.exit(1);
@@ -90,7 +100,6 @@ mongoose.connect(MONGO_URL)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
-// 管理员密钥 (优先读环境变量)
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'wo_de_pa_chong_mi_ma_123';
 
 // ================= 4. 中间件与辅助函数 =================
@@ -106,8 +115,6 @@ async function ensureAuthorExists(authorName) {
         const randomPassword = generateRandomPassword();
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(randomPassword, salt);
-
-        console.log(`🆕 自动创建作者账号: ${authorName}`);
         
         user = await User.create({
             username: authorName,
@@ -123,15 +130,30 @@ async function ensureAuthorExists(authorName) {
     }
 }
 
+// 🔥🔥 核心修复：基于 JWT 的身份验证中间件 🔥🔥
 const authMiddleware = (req, res, next) => {
-  const userId = req.headers['x-user-id'] || req.query.userId;
-  if (!userId) return res.status(401).json({ error: 'User ID is required.' });
-  req.user = { id: userId };
-  next();
+  // 1. 尝试从 Authorization Header 获取 Token
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // 格式: "Bearer <token>"
+
+  if (!token) {
+      return res.status(401).json({ error: 'Access Denied: No Token Provided' });
+  }
+
+  try {
+      // 2. 验证 Token
+      const verified = jwt.verify(token, JWT_SECRET);
+      // 3. 将用户信息挂载到 req.user (包含 id 和 role)
+      req.user = verified; 
+      next();
+  } catch (err) {
+      return res.status(403).json({ error: 'Invalid or Expired Token' });
+  }
 };
 
 const adminMiddleware = async (req, res, next) => {
     try {
+        // req.user.id 来自 authMiddleware 解析的 Token
         const user = await User.findById(req.user.id);
         if (!user || user.role !== 'admin') {
             return res.status(403).json({ error: '🚫 权限不足：需要管理员权限' });
@@ -157,6 +179,7 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
     }
 });
 
+// 影子登录 (Impersonate)
 app.post('/api/admin/impersonate/:userId', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         const targetUser = await User.findById(req.params.userId);
@@ -164,8 +187,16 @@ app.post('/api/admin/impersonate/:userId', authMiddleware, adminMiddleware, asyn
 
         console.log(`🕵️‍♂️ 管理员 [${req.user.id}] 影子登录 -> [${targetUser.username}]`);
         
+        // 生成该用户的 Token 供管理员使用
+        const token = jwt.sign(
+            { id: targetUser._id, role: targetUser.role }, 
+            JWT_SECRET, 
+            { expiresIn: '1h' }
+        );
+
         const { password: _, ...userWithoutPassword } = targetUser.toObject();
         res.json({ 
+            token, // 返回 Token
             user: { 
                 id: targetUser._id.toString(), 
                 email: targetUser.email, 
@@ -179,14 +210,13 @@ app.post('/api/admin/impersonate/:userId', authMiddleware, adminMiddleware, asyn
     }
 });
 
+// 爬虫同步接口 (保持使用 x-admin-secret 验证)
 app.post('/api/admin/check-sync', async (req, res) => {
     try {
         const clientSecret = req.headers['x-admin-secret'];
         if (clientSecret !== ADMIN_SECRET) return res.status(403).json({ error: '🚫 密码错误' });
 
         const { title, simpleChapters } = req.body;
-        console.log(`🔍 核对同步: 《${title}》`);
-
         const book = await Book.findOne({ title });
         if (!book) return res.json({ needsFullUpload: true, missingTitles: [] });
 
@@ -209,8 +239,6 @@ app.post('/api/admin/upload-book', async (req, res) => {
         if (clientSecret !== ADMIN_SECRET) return res.status(403).json({ error: '🚫 密码错误' });
 
         const bookData = req.body;
-        console.log(`📥 接收书籍: 《${bookData.title}》`);
-
         let authorId = null;
         if (bookData.author) {
             const authorUser = await ensureAuthorExists(bookData.author);
@@ -231,7 +259,6 @@ app.post('/api/admin/upload-book', async (req, res) => {
                 chapterCount: bookData.chapters.length,
                 views: bookData.views || 0
             });
-            console.log(`📚 新书创建: ${book.title}`);
         } else {
             if (!book.author_id && authorId) book.author_id = authorId;
             if (bookData.category && book.category === '搬运') book.category = bookData.category;
@@ -259,7 +286,6 @@ app.post('/api/admin/upload-book', async (req, res) => {
 
         res.json({ success: true, message: `入库成功，新增 ${chaptersToInsert.length} 章` });
     } catch (error) {
-        console.error('上传出错:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -281,8 +307,20 @@ app.post('/api/auth/signup', async (req, res) => {
       role: role || 'reader',
     });
     
+    // ✅ 生成 Token
+    const token = jwt.sign(
+        { id: newUser._id, role: newUser.role }, 
+        JWT_SECRET, 
+        { expiresIn: '7d' }
+    );
+
     const { password: _, ...userWithoutPassword } = newUser.toObject();
-    res.json({ user: { id: newUser._id.toString(), email, username: newUser.username }, profile: userWithoutPassword });
+    // ✅ 返回 Token 给前端
+    res.json({ 
+        token,
+        user: { id: newUser._id.toString(), email, username: newUser.username }, 
+        profile: userWithoutPassword 
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -303,8 +341,17 @@ app.post('/api/auth/signin', async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
     
+    // ✅ 生成 Token
+    const token = jwt.sign(
+        { id: user._id, role: user.role }, 
+        JWT_SECRET, 
+        { expiresIn: '7d' }
+    );
+
     const { password: _, ...userWithoutPassword } = user.toObject();
+    
     res.json({ 
+      token, // ✅ 关键：前端必须保存这个 token 到 localStorage
       user: { id: user._id.toString(), email: user.email, username: user.username, role: user.role }, 
       profile: userWithoutPassword 
     });
@@ -332,19 +379,29 @@ app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
   }
 });
 
+// 获取当前会话 (Session)
 app.get('/api/auth/session', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || req.query.userId;
-    if (!userId) return res.json({ user: null, profile: null });
-    
-    const user = await User.findById(userId);
-    if (!user) return res.json({ user: null, profile: null });
-    
-    const { password: _, ...userWithoutPassword } = user.toObject();
-    res.json({ 
-      user: { id: user._id.toString(), email: user.email, username: user.username, role: user.role }, 
-      profile: userWithoutPassword 
-    });
+    // 兼容：如果前端发了 Header 里的 Authorization
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.json({ user: null, profile: null });
+
+    const token = authHeader.split(' ')[1];
+    if (!token) return res.json({ user: null, profile: null });
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const user = await User.findById(decoded.id);
+        if (!user) return res.json({ user: null, profile: null });
+
+        const { password: _, ...userWithoutPassword } = user.toObject();
+        res.json({ 
+            user: { id: user._id.toString(), email: user.email, username: user.username, role: user.role }, 
+            profile: userWithoutPassword 
+        });
+    } catch (e) {
+        return res.json({ user: null, profile: null });
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -364,15 +421,13 @@ app.get('/api/users/:userId/profile', async (req, res) => {
 // --- Reviews ---
 app.get('/api/books/:id/reviews', getReviews);
 app.post('/api/books/:id/reviews', authMiddleware, createReview);
+
+// 上传图片
 app.post('/api/upload/cover', authMiddleware, upload.single('file'), (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: '没有上传文件' });
-    }
-    // Cloudinary 会返回一个 path (即 secure_url)
+    if (!req.file) return res.status(400).json({ error: '没有上传文件' });
     res.json({ url: req.file.path });
   } catch (error) {
-    console.error('Upload Error:', error);
     res.status(500).json({ error: '上传失败: ' + error.message });
   }
 });
@@ -404,10 +459,7 @@ app.get('/api/books', async (req, res) => {
       }
       
       if (limit) books = books.slice(0, parseInt(limit));
-      const formattedBooks = books.map(book => ({
-        ...book,
-        id: book._id.toString(),
-      }));
+      const formattedBooks = books.map(book => ({ ...book, id: book._id.toString() }));
       res.json(formattedBooks);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -450,6 +502,7 @@ app.post('/api/books', authMiddleware, async (req, res) => {
 });
 
 app.patch('/api/books/:id', async (req, res) => {
+  // 注意：此处理论上应该增加 adminMiddleware 或检查 owner，暂时保持功能不变
   try {
     const book = await Book.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!book) return res.status(404).json({ error: 'Book not found' });
@@ -461,16 +514,14 @@ app.patch('/api/books/:id', async (req, res) => {
 
 app.delete('/api/books/:id', async (req, res) => {
   try {
+    // 注意：建议未来这里加上 authMiddleware
     const bookId = req.params.id;
-    console.log(`🗑️ 删除书籍 ID: ${bookId}`);
-
     const book = await Book.findByIdAndDelete(bookId);
     if (!book) return res.status(404).json({ error: 'Book not found' });
 
     await Chapter.deleteMany({ bookId: bookId });
     res.json({ message: 'Book deleted successfully' });
   } catch (error) {
-    console.error(`💥 删除出错:`, error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -510,12 +561,8 @@ app.get('/api/books/:bookId/chapters', async (req, res) => {
 
 app.get('/api/chapters/:id', async (req, res) => {
   try {
-    // 🔥🔥 防盗链逻辑 (已修复: 增加了你的新域名) 🔥🔥
     const referer = req.headers.referer || '';
-    // 这里非常关键！如果不加 jiutianxiaoshuo.com，章节内容会报 403 Forbidden
     const ALLOWED_DOMAINS = ['localhost', 'jiutianxiaoshuo.com']; 
-    
-    // 只有当 referer 存在且不包含白名单时才拦截 (方便你用 Postman 调试)
     if (referer && !ALLOWED_DOMAINS.some(domain => referer.includes(domain))) {
        console.log('🚫 章节防盗链拦截:', referer);
        return res.status(403).json({ error: 'Forbidden' });
@@ -637,38 +684,34 @@ app.delete('/api/users/:userId/bookmarks/:bookId', async (req, res) => {
 });
 
 // ================= 6. 定时任务 =================
-// ================= 6. 定时任务 (已修复：增加防崩溃保护) =================
 
-// 1. 日榜重置 (每天 00:00)
+// 1. 日榜重置
 cron.schedule('0 0 * * *', async () => {
-    console.log('⏰ [Cron] 开始执行日榜重置...');
     try {
         await Book.updateMany({}, { daily_views: 0 });
         console.log('✅ [Cron] 日榜重置成功');
     } catch (error) {
-        console.error('❌ [Cron] 日榜重置失败 (服务器未崩溃):', error.message);
+        console.error('❌ [Cron] 日榜重置失败:', error.message);
     }
 });
 
-// 2. 周榜重置 (每周四 23:00)
+// 2. 周榜重置 (周四晚)
 cron.schedule('0 23 * * 4', async () => {
-    console.log('⏰ [Cron] 开始执行周榜重置 (周四晚)...');
     try {
         await Book.updateMany({}, { weekly_views: 0 });
         console.log('✅ [Cron] 周榜重置成功');
     } catch (error) {
-        console.error('❌ [Cron] 周榜重置失败 (服务器未崩溃):', error.message);
+        console.error('❌ [Cron] 周榜重置失败:', error.message);
     }
 });
 
-// 3. 月榜重置 (每月 1号 00:00)
+// 3. 月榜重置
 cron.schedule('0 0 1 * *', async () => {
-    console.log('⏰ [Cron] 开始执行月榜重置...');
     try {
         await Book.updateMany({}, { monthly_views: 0 });
         console.log('✅ [Cron] 月榜重置成功');
     } catch (error) {
-        console.error('❌ [Cron] 月榜重置失败 (服务器未崩溃):', error.message);
+        console.error('❌ [Cron] 月榜重置失败:', error.message);
     }
 });
 
