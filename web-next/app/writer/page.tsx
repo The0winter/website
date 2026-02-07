@@ -490,7 +490,7 @@ export default function WriterDashboard() {
                 
                 <button 
                     onClick={() => setShowCreateBookModal(true)}
-                    className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg hover:bg-blue-700 transition shadow-md shadow-blue-500/20 active:scale-95"
+                    className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg hover:bg-blue-700 transition shadow-md shadow-blue-500/20 active:scale-95 cursor-pointer"
                 >
                     <Plus className="h-4 w-4" /> <span className="hidden md:inline">创建新书</span><span className="md:hidden">新建</span>
                 </button>
@@ -526,14 +526,14 @@ export default function WriterDashboard() {
                                 <div className="flex flex-wrap gap-2 md:gap-3 mt-3">
                                     <button 
                                         onClick={() => { setCurrentBookId(book.id); openChapterEditor('new'); }}
-                                        className="flex-1 md:flex-none flex items-center justify-center gap-1 px-3 py-1.5 md:px-4 md:py-2 bg-blue-50 text-blue-600 text-xs md:text-sm font-medium rounded-lg active:bg-blue-100 transition border border-blue-100"
+                                        className="flex-1 md:flex-none flex items-center justify-center gap-1 px-3 py-1.5 md:px-4 md:py-2 bg-blue-50 text-blue-600 text-xs md:text-sm font-medium rounded-lg active:bg-blue-100 transition border border-blue-100 cursor-pointer"
                                     >
                                         <Upload className="h-3 w-3 md:h-4 md:w-4" /> 快速发布
                                     </button>
                                     <button 
                                         onClick={() => { setCurrentBookId(book.id); setFormBookTitle(book.title);
                                         setFormBookDescription(book.description || '');setShowBookManager(true); }}
-                                        className="flex-1 md:flex-none flex items-center justify-center gap-1 px-3 py-1.5 md:px-4 md:py-2 bg-gray-100 text-gray-700 text-xs md:text-sm font-medium rounded-lg active:bg-gray-200 transition border border-gray-200"
+                                        className="flex-1 md:flex-none flex items-center justify-center gap-1 px-3 py-1.5 md:px-4 md:py-2 bg-gray-100 text-gray-700 text-xs md:text-sm font-medium rounded-lg active:bg-gray-200 transition border border-gray-200 cursor-pointer"
                                     >
                                         <Settings className="h-3 w-3 md:h-4 md:w-4" /> 管理
                                     </button>
@@ -654,10 +654,15 @@ export default function WriterDashboard() {
                      ) : (
                         activeChapters.map((chapter) => (
                             <div key={chapter.id} className="group flex items-center justify-between p-4 bg-white hover:bg-blue-50 rounded-xl border border-gray-100 hover:border-blue-200 transition-all shadow-sm hover:shadow-md cursor-default">
+                               {/* 找到 activeChapters.map 里面的这个 div */}
                                 <div className="flex-1 mr-4 min-w-0">
                                     <div className="flex items-center gap-2">
-                                        <span className="shrink-0 text-xs font-mono text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">#{chapter.chapter_number}</span>
-                                        <p className="font-bold text-gray-900 text-sm md:text-base truncate group-hover:text-blue-700 transition-colors">{chapter.title}</p>
+                                        {/* ❌ 之前这里有个 span 显示 #x，现在彻底删掉了 */}
+                                        
+                                        {/* 只保留标题 */}
+                                        <p className="font-bold text-gray-900 text-sm md:text-base truncate group-hover:text-blue-700 transition-colors">
+                                            {chapter.title}
+                                        </p>
                                     </div>
                                     <p className="text-xs text-gray-400 mt-1 pl-1">字数: {chapter.word_count || 0}</p>
                                 </div>
