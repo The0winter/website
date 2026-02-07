@@ -380,19 +380,22 @@ app.post('/api/auth/signin', async (req, res) => {
       $or: [{ email: identifier }, { username: identifier }]
     });
 
-    if (!user) return res.status(401).json({ error: '账号或密码错误' }); // 模糊报错，防止枚举账号
+    if (!user) return res.status(401).json({ error: '账号或密码错误' });
 
-    // 2. 🛑 检查账号是否被锁定
+    // 🔥【修复1】防止 Schema 未更新导致 isLocked 报错
+    // 如果 User 模型里没加 virtual，这里 isLocked 是 undefined，我们当作 false 处理
     if (user.isLocked) {
-        // 计算还需要等多久
-        const secondsLeft = Math.ceil((user.lockUntil - Date.now()) / 1000);
-        // 如果时间到了，自动解锁（把 lockUntil 和 loginAttempts 重置）
+        // 🔥【修复2】防止 lockUntil 是 undefined 导致数学计算出 NaN
+        const lockTime = user.lockUntil || 0;
+        const secondsLeft = Math.ceil((lockTime - Date.now()) / 1000);
+        
         if (secondsLeft <= 0) {
+            // 时间到了，解锁
             user.loginAttempts = 0;
             user.lockUntil = undefined;
             await user.save();
         } else {
-            // 如果还在锁定期，直接拒绝
+            // 还在锁定中
             const minutes = Math.ceil(secondsLeft / 60);
             return res.status(403).json({ 
                 error: `账号已锁定，请 ${minutes} 分钟后再试` 
@@ -400,55 +403,60 @@ app.post('/api/auth/signin', async (req, res) => {
         }
     }
 
-    // 3. 验证密码
+    // 2. 验证密码
     const isMatch = await bcrypt.compare(password, user.password);
     
     if (!isMatch) {
-// 🔥【修改点 1】兼容老用户：如果 loginAttempts 是空的，先视为 0
+        // 🔥【修复3】核心修复：老用户 loginAttempts 是 undefined
+        // undefined + 1 = NaN (导致崩溃或数据库保存失败)
+        // 强制转为 0 再计算
         const currentAttempts = user.loginAttempts || 0;
         user.loginAttempts = currentAttempts + 1;
-
-        // 🕵️‍♂️【调试点】看看控制台打印了什么
-        console.log(`[Login Failed] User: ${identifier}, Attempts: ${user.loginAttempts}`);
         
-        // 检查是否达到上限
-        if (user.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
-            user.lockUntil = Date.now() + LOCK_TIME; // 设定锁定截止时间
+        // 检查是否达到上限 (5次)
+        if (user.loginAttempts >= 5) {
+            user.lockUntil = Date.now() + (60 * 60 * 1000); // 锁定 1 小时
             await user.save();
             return res.status(403).json({ error: '密码错误次数过多，账号已锁定 1 小时' });
         }
 
         await user.save();
         return res.status(401).json({ 
-            error: `密码错误，还剩 ${MAX_LOGIN_ATTEMPTS - user.loginAttempts} 次机会` 
+            error: `密码错误，还剩 ${5 - user.loginAttempts} 次机会` 
         });
     }
 
-// ✅ 4. 登录成功逻辑
-    // 🔥【修改点 2】这里也要兼容判断
+    // 3. 登录成功：重置错误次数
+    // 只有当存在错误记录时才重置，避免每次登录都写数据库
     if ((user.loginAttempts && user.loginAttempts > 0) || user.lockUntil) {
         user.loginAttempts = 0;
         user.lockUntil = undefined;
         await user.save();
     }
     
-    // ... 下面是原有的生成 Token 代码，保持不变 ...
+    // 生成 Token
     const token = jwt.sign(
         { id: user._id, role: user.role }, 
         JWT_SECRET, 
         { expiresIn: '7d' }
     );
 
-    const { password: _, loginAttempts, lockUntil, ...userWithoutPassword } = user.toObject();
-    
+    // 安全返回用户信息
+    const userObj = user.toObject();
+    // 移除敏感字段
+    delete userObj.password;
+    delete userObj.loginAttempts;
+    delete userObj.lockUntil;
+
     res.json({ 
       token, 
       user: { id: user._id.toString(), email: user.email, username: user.username, role: user.role }, 
-      profile: userWithoutPassword 
+      profile: userObj 
     });
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Login Error:', error); // 打印错误日志到控制台
+    res.status(500).json({ error: '服务器登录异常，请联系管理员' });
   }
 });
 

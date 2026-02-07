@@ -9,7 +9,7 @@ const UserSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: { type: String, enum: ['reader', 'writer', 'admin'], default: 'reader' },
   avatar: String, 
-  loginAttempts: { type: Number, required: true, default: 0 },
+  loginAttempts: { type: Number, default: 0 },
   lockUntil: { type: Number }, // 存时间戳
   created_at: { type: Date, default: Date.now },
 }, { 
