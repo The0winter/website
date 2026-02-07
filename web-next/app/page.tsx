@@ -511,7 +511,7 @@ function HomeContent() {
 
                     <div className="w-12 h-px bg-gray-100 mx-auto"></div>
                     
-                    <Link href="/authors" className="flex-1 flex flex-col items-center justify-center gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
+                    <Link href="/authorsList" className="flex-1 flex flex-col items-center justify-center gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
                          <div className="p-3 rounded-full bg-pink-50 group-hover:bg-pink-100 transition-colors group-hover:scale-110 duration-300">
                             <PenTool className="w-6 h-6 text-pink-600" />
                          </div>
