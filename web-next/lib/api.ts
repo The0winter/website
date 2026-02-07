@@ -1,20 +1,20 @@
-// 1. 定义一个获取 URL 的函数 (这是你想要的智能逻辑)
+// 智能地址逻辑：浏览器走外网，服务器走内网
 const getBaseUrl = () => {
-  // A. 优先读取环境变量 (在 .env 里配置的)
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
-  }
-  
-  // B. 如果在浏览器运行，自动读取当前域名 (最智能)
+  // 1. 【浏览器端】 Client Side
+  // 只要有 window 对象，说明是在用户的浏览器里运行
   if (typeof window !== 'undefined') {
+    // 自动读取当前网址 (比如 https://jiutianxiaoshuo.com)
     return window.location.origin;
   }
 
-  // C. 最后保底 (防止服务器端渲染找不到 window 报错)
-  return 'https://jiutianxiaoshuo.com';
+  // 2. 【服务器端】 Server Side (SSR)
+  // 这是解决 500 报错的关键！
+  // 在服务器内部，直接走 127.0.0.1:5000 内部高速通道
+  // 完全绕过 SSL 证书验证，也绕过 Nginx，速度最快且 100% 稳定
+  return 'http://127.0.0.1:5000';
 };
 
-// 2. 导出最终地址 (注意：必须加 export 别人才能用！)
+// 导出最终地址 (一定要加 export！)
 export const API_BASE_URL = `${getBaseUrl()}/api`;
 
 export interface Profile {
