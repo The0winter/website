@@ -549,9 +549,10 @@ export default function WriterDashboard() {
       {/* ===================== 弹窗区域 (保持不变) ===================== */}
       {/* 1. 书籍管理器 */}
 {/* 5. 书籍管理器 (大修：强制两列 + 宽屏 + 强交互) */}
+      {/* 5. 书籍管理器 (终极修正：章节双列 + 默认收起 + 鼠标手势) */}
       {showBookManager && activeBook && (
         <div className="fixed inset-0 z-40 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
-           {/* ⚠️ 注意这里：max-w-5xl 是关键，让弹窗变得非常宽，足以容纳两列 */}
+           {/* 弹窗宽度 max-w-5xl 保证够宽 */}
            <div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] md:max-h-[85vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 md:slide-in-from-bottom-0">
               
               {/* 顶部标题栏 */}
@@ -560,28 +561,29 @@ export default function WriterDashboard() {
                     <h3 className="text-lg md:text-xl font-bold text-gray-900 truncate max-w-[200px]">{activeBook.title}</h3>
                     <p className="text-xs text-gray-500">目录与设置</p>
                  </div>
-                 <button onClick={() => setShowBookManager(false)} className="p-2 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors"><X className="h-5 w-5 text-gray-600" /></button>
+                 <button onClick={() => setShowBookManager(false)} className="p-2 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors cursor-pointer"><X className="h-5 w-5 text-gray-600" /></button>
               </div>
 
               {/* 中间滚动区 */}
               <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-white space-y-6">
                 
-                 {/* ✅ 修复版：书籍设置 (强制左右分栏 Grid 布局) */}
-                 <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden" open>
+                 {/* 🔴 问题2修复：删掉了 open 属性，默认收起！ */}
+                 <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                    {/* 🔴 问题1修复：强制加上 cursor-pointer，鼠标放上去必变小手 */}
                     <summary className="flex items-center justify-between p-4 cursor-pointer list-none select-none bg-gray-50 hover:bg-blue-50 transition-colors group-open:bg-blue-50/50">
                         <span className="text-base font-extrabold text-gray-900 flex items-center gap-2">
                             <Settings className="h-5 w-5 text-blue-600" /> 书籍信息设置 
+                            <span className="text-xs font-normal text-gray-500 group-open:hidden">(点击展开)</span>
                         </span>
                         <div className="transition-transform duration-200 group-open:rotate-180 text-gray-400">▼</div>
                     </summary>
                     
                     <div className="p-6 border-t border-gray-100 bg-white animate-in slide-in-from-top-2 duration-200">
-                        {/* ⚠️ 核心布局：Grid 网格，左边固定 200px，右边自动填满 */}
                         <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-8">
                             
-                            {/* 左侧：封面修改区 */}
+                            {/* 左侧：封面区 */}
                             <div className="flex flex-col items-center gap-3">
-                                <div className="w-40 h-56 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 overflow-hidden relative group shadow-sm hover:border-blue-500 transition-all">
+                                <div className="w-40 h-56 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 overflow-hidden relative group shadow-sm hover:border-blue-500 transition-all cursor-pointer">
                                     {uploading ? (
                                         <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
                                             <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
@@ -595,14 +597,13 @@ export default function WriterDashboard() {
                                         </div>
                                     )}
                                     
-                                    {/* 悬停时的遮罩层 */}
                                     <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center cursor-pointer text-white">
                                         <Upload className="h-8 w-8 mb-2 animate-bounce" />
                                         <span className="text-sm font-bold">点击更换</span>
                                         <input type="file" className="hidden" accept="image/*" onChange={handleEditCoverUpload} />
                                     </label>
                                 </div>
-                                <p className="text-xs text-gray-400">支持 JPG, PNG (推荐 600x800)</p>
+                                <p className="text-xs text-gray-400">支持 JPG, PNG</p>
                             </div>
 
                             {/* 右侧：表单区 */}
@@ -628,7 +629,7 @@ export default function WriterDashboard() {
                                     <button 
                                         onClick={handleUpdateBook}
                                         disabled={uploading}
-                                        className="px-8 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2"
+                                        className="px-8 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer"
                                     >
                                         <Save className="h-4 w-4" />
                                         保存所有修改
@@ -644,27 +645,27 @@ export default function WriterDashboard() {
                     <h4 className="font-bold text-gray-900 text-lg">章节列表 ({activeChapters.length})</h4>
                  </div>
 
-                 {/* 章节列表内容 */}
-                 <div className="space-y-3">
+                 {/* 🔴 问题3修复：这里变成了 grid-cols-2！两列布局！ */}
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                      {activeChapters.length === 0 ? (
-                         <div className="text-center text-gray-400 py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                         <div className="col-span-full text-center text-gray-400 py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
                              暂无章节，快去创作吧
                          </div>
                      ) : (
                         activeChapters.map((chapter) => (
-                            <div key={chapter.id} className="group flex items-center justify-between p-4 bg-white hover:bg-blue-50 rounded-xl border border-gray-100 hover:border-blue-200 transition-all shadow-sm hover:shadow-md">
-                                <div className="flex-1 mr-4">
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-sm font-mono text-gray-400 bg-gray-100 px-2 py-0.5 rounded">#{chapter.chapter_number}</span>
-                                        <p className="font-bold text-gray-900 text-base line-clamp-1 group-hover:text-blue-700 transition-colors">{chapter.title}</p>
+                            <div key={chapter.id} className="group flex items-center justify-between p-4 bg-white hover:bg-blue-50 rounded-xl border border-gray-100 hover:border-blue-200 transition-all shadow-sm hover:shadow-md cursor-default">
+                                <div className="flex-1 mr-4 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <span className="shrink-0 text-xs font-mono text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">#{chapter.chapter_number}</span>
+                                        <p className="font-bold text-gray-900 text-sm md:text-base truncate group-hover:text-blue-700 transition-colors">{chapter.title}</p>
                                     </div>
-                                    <p className="text-xs text-gray-400 mt-1 pl-1">字数: {chapter.word_count || 0} · {new Date().toLocaleDateString()}</p>
+                                    <p className="text-xs text-gray-400 mt-1 pl-1">字数: {chapter.word_count || 0}</p>
                                 </div>
-                                <div className="flex gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => openChapterEditor('edit', chapter)} className="p-2 bg-white border border-gray-200 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all hover:scale-105 shadow-sm">
+                                <div className="flex gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                    <button onClick={() => openChapterEditor('edit', chapter)} className="p-2 bg-white border border-gray-200 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all hover:scale-105 shadow-sm cursor-pointer">
                                         <Edit3 className="h-4 w-4" />
                                     </button>
-                                    <button onClick={() => handleDeleteChapter(chapter.id)} className="p-2 bg-white border border-gray-200 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all hover:scale-105 shadow-sm">
+                                    <button onClick={() => handleDeleteChapter(chapter.id)} className="p-2 bg-white border border-gray-200 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all hover:scale-105 shadow-sm cursor-pointer">
                                         <Trash2 className="h-4 w-4" />
                                     </button>
                                 </div>
@@ -679,13 +680,13 @@ export default function WriterDashboard() {
                  <span className="text-xs text-red-600 font-bold flex items-center gap-1">
                      <AlertCircle className="h-4 w-4" /> 危险区域
                  </span>
-                 <button onClick={handleDeleteBook} className="flex items-center gap-1 md:gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 text-xs md:text-sm font-medium rounded-lg hover:bg-red-600 hover:text-white hover:shadow-red-500/20 active:scale-95 transition-all">
+                 <button onClick={handleDeleteBook} className="flex items-center gap-1 md:gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 text-xs md:text-sm font-medium rounded-lg hover:bg-red-600 hover:text-white hover:shadow-red-500/20 active:scale-95 transition-all cursor-pointer">
                      <Trash2 className="h-3 w-3 md:h-4 md:w-4" /> 删除本书
                  </button>
               </div>
            </div>
         </div>
-      )}    
+      )} 
 
       {/* 2. 章节编辑器 */}
       {showChapterEditor && (
