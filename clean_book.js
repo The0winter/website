@@ -2,15 +2,18 @@
 // 注意：Node.js v18 以上版本自带 fetch，无需 import
 
 const BOOK_TITLE_TO_DELETE = "玄鉴仙族";  // 👈 记得改这里！！
-const RAILWAY_URL = 'https://jiutianxiaoshuo.com';
-const SECRET_KEY = 'wo_de_pa_chong_mi_ma_123';
-
+const VPS_URL = 'https://jiutianxiaoshuo.com';
+const SECRET_KEY = process.env.SECRET_KEY;
+if (!SECRET_KEY) {
+    console.error('❌ 错误：请在 .env 文件中设置 SECRET_KEY');
+    process.exit(1);
+}
 (async () => {
     console.log(`🗑️ 正在寻找并删除: 《${BOOK_TITLE_TO_DELETE}》...`);
 
     try {
         // 1. 先通过书名找到 ID
-        const searchRes = await fetch(`${RAILWAY_URL}/api/books?limit=1000`);
+        const searchRes = await fetch(`${VPS_URL}/api/books?limit=1000`);
         const books = await searchRes.json();
         const targetBook = books.find(b => b.title === BOOK_TITLE_TO_DELETE);
 
@@ -20,7 +23,7 @@ const SECRET_KEY = 'wo_de_pa_chong_mi_ma_123';
         }
 
         // 2. 发送删除指令
-        const delRes = await fetch(`${RAILWAY_URL}/api/books/${targetBook.id}`, {
+        const delRes = await fetch(`${VPS_URL}/api/books/${targetBook.id}`, {
             method: 'DELETE',
             headers: { 'x-admin-secret': SECRET_KEY }
         });

@@ -2,10 +2,17 @@
 // 旗舰版：支持“差异化极速同步”的上传脚本
 import fs from 'fs';
 import path from 'path';
+import 'dotenv/config';
 
 // ⚠️ 你的 Railway 域名
-const RAILWAY_URL = 'https://jiutianxiaoshuo.com'; 
-const SECRET_KEY = 'wo_de_pa_chong_mi_ma_123';
+const VPS_URL = 'https://jiutianxiaoshuo.com'; 
+const SECRET_KEY = process.env.SECRET_KEY;
+if (!SECRET_KEY) {
+    console.log('当前目录:', process.cwd());
+    console.log('读到的环境变量:', process.env.SECRET_KEY);
+    console.error('❌ 错误：请在 .env 文件中设置 SECRET_KEY');
+    process.exit(1);
+}
 const BATCH_SIZE = 50; // 每批传50章
 
 async function uploadFiles() {
@@ -18,7 +25,7 @@ async function uploadFiles() {
 
     const files = fs.readdirSync(downloadDir).filter(f => f.endsWith('.json'));
     console.log(`📦 扫描到 ${files.length} 本书，准备开始极速同步...`);
-    console.log(`🔗 目标地址: ${RAILWAY_URL}\n`);
+    console.log(`🔗 目标地址: ${VPS_URL}\n`);
 
     for (const file of files) {
         try {
@@ -37,7 +44,7 @@ async function uploadFiles() {
 
             // --- 第二步：发送清单给后端核对 ---
             console.log(`   📡 正在与云端核对章节清单...`);
-            const checkResponse = await fetch(`${RAILWAY_URL}/api/admin/check-sync`, {
+            const checkResponse = await fetch(`${VPS_URL}/api/admin/check-sync`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-admin-secret': SECRET_KEY },
                 body: JSON.stringify({ 
@@ -85,7 +92,7 @@ async function uploadFiles() {
                     chapters: chunk
                 };
 
-                const response = await fetch(`${RAILWAY_URL}/api/admin/upload-book`, {
+                const response = await fetch(`${VPS_URL}/api/admin/upload-book`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'x-admin-secret': SECRET_KEY },
                     body: JSON.stringify(payload)

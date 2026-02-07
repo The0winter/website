@@ -14,6 +14,7 @@ import User from './models/User.js';
 import Book from './models/Book.js';
 import Chapter from './models/Chapter.js';
 import Bookmark from './models/Bookmark.js';
+import AdminLog from './models/AdminLog.js';
 
 import upload from './utils/upload.js';
 import { createReview, getReviews } from './controllers/reviewController.js';
@@ -26,14 +27,14 @@ app.set('trust proxy', 1);
 // ================= 1. 安全与配置 =================
 
 // 🔑 JWT 密钥 (如果没有配置环境变量，会使用随机备用，但重启后用户需重新登录)
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_please_change_in_env';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    throw new Error("❌ 致命错误：未配置 JWT_SECRET 环境变量！");
+}
 
-const ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'http://localhost:5000',
-  'https://jiutianxiaoshuo.com',
-  'https://www.jiutianxiaoshuo.com'
-];
+const ALLOWED_ORIGINS = process.env.NODE_ENV === 'production' 
+  ? ['https://jiutianxiaoshuo.com', 'https://www.jiutianxiaoshuo.com']
+  : ['http://localhost:3000', 'http://localhost:5000'];
 
 const corsOptions = {
   origin: function (origin, callback) {
@@ -58,8 +59,25 @@ app.use(helmet());
 // 🛡️ 新增：防止 MongoDB 查询注入 (例如 { "$ne": null })
 app.use(mongoSanitize());
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+// 1. 全局只给 100kb (足够登录和普通操作)
+app.use(express.json({ limit: '100kb' })); 
+
+// 2. 只有上传书籍/图片的接口单独放开限制
+// 例如在上传封面的路由里：
+app.post('/api/upload/cover', 
+  express.json({ limit: '10mb' }), // ✅ 1. 局部允许大请求体
+  authMiddleware,                  // ✅ 2. 验证登录
+  upload.single('file'),           // ✅ 3. 处理文件流
+  (req, res) => {                  // ✅ 4. 这里的花括号里是具体的业务逻辑
+    try {
+      if (!req.file) return res.status(400).json({ error: '没有上传文件' });
+      // 返回文件路径给前端
+      res.json({ url: req.file.path });
+    } catch (error) {
+      res.status(500).json({ error: '上传失败: ' + error.message });
+    }
+  }
+);
 
 // ================= 2. 限流配置 (Cloudflare 修正版) =================
 
@@ -100,7 +118,12 @@ mongoose.connect(MONGO_URL)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'wo_de_pa_chong_mi_ma_123';
+const ADMIN_SECRET = process.env.ADMIN_SECRET;
+if (!ADMIN_SECRET) {
+    throw new Error("❌ 致命错误：未配置 ADMIN_SECRET 环境变量！");
+}
+
+const isProduction = process.env.NODE_ENV === 'production';
 
 // ================= 4. 中间件与辅助函数 =================
 
@@ -185,6 +208,16 @@ app.post('/api/admin/impersonate/:userId', authMiddleware, adminMiddleware, asyn
         const targetUser = await User.findById(req.params.userId);
         if (!targetUser) return res.status(404).json({ error: '找不到该用户' });
 
+        await AdminLog.create({
+            admin_id: req.user.id,           // 操作者：当前管理员的 ID
+            target_user_id: targetUser._id,  // 受害者/目标：被登录的用户 ID
+            action: 'IMPERSONATE_LOGIN',     // 动作名称
+            ip_address: req.ip || req.headers['cf-connecting-ip'], // 记录管理员的 IP
+            details: `管理员 [${req.user.role}] 登录了用户 [${targetUser.username}]`
+        });
+
+        console.log(`🕵️‍♂️ [审计] 管理员 ${req.user.id} 影子登录 -> ${targetUser.username}`);
+
         console.log(`🕵️‍♂️ 管理员 [${req.user.id}] 影子登录 -> [${targetUser.username}]`);
         
         // 生成该用户的 Token 供管理员使用
@@ -229,7 +262,9 @@ app.post('/api/admin/check-sync', async (req, res) => {
 
         res.json({ needsFullUpload: false, missingTitles });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
     }
 });
 
@@ -286,7 +321,9 @@ app.post('/api/admin/upload-book', async (req, res) => {
 
         res.json({ success: true, message: `入库成功，新增 ${chaptersToInsert.length} 章` });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
     }
 });
 
@@ -322,39 +359,89 @@ app.post('/api/auth/signup', async (req, res) => {
         profile: userWithoutPassword 
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
+
+// 常量定义：最大尝试次数 和 锁定时间
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCK_TIME = 60 * 60 * 1000; // 1 小时 (毫秒)
 
 app.post('/api/auth/signin', async (req, res) => {
   try {
     const { email, username, password } = req.body;
     const identifier = email || username;
-    if (!identifier || !password) return res.status(400).json({ error: 'Provide account/password' });
+    if (!identifier || !password) return res.status(400).json({ error: '请输入账号和密码' });
     
+    // 1. 查找用户
     const user = await User.findOne({ 
       $or: [{ email: identifier }, { username: identifier }]
     });
 
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-    
+    if (!user) return res.status(401).json({ error: '账号或密码错误' }); // 模糊报错，防止枚举账号
+
+    // 2. 🛑 检查账号是否被锁定
+    if (user.isLocked) {
+        // 计算还需要等多久
+        const secondsLeft = Math.ceil((user.lockUntil - Date.now()) / 1000);
+        // 如果时间到了，自动解锁（把 lockUntil 和 loginAttempts 重置）
+        if (secondsLeft <= 0) {
+            user.loginAttempts = 0;
+            user.lockUntil = undefined;
+            await user.save();
+        } else {
+            // 如果还在锁定期，直接拒绝
+            const minutes = Math.ceil(secondsLeft / 60);
+            return res.status(403).json({ 
+                error: `账号已锁定，请 ${minutes} 分钟后再试` 
+            });
+        }
+    }
+
+    // 3. 验证密码
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
     
-    // ✅ 生成 Token
+    if (!isMatch) {
+        // ❌ 密码错误逻辑：增加错误次数
+        user.loginAttempts += 1;
+        
+        // 检查是否达到上限
+        if (user.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
+            user.lockUntil = Date.now() + LOCK_TIME; // 设定锁定截止时间
+            await user.save();
+            return res.status(403).json({ error: '密码错误次数过多，账号已锁定 1 小时' });
+        }
+
+        await user.save();
+        return res.status(401).json({ 
+            error: `密码错误，还剩 ${MAX_LOGIN_ATTEMPTS - user.loginAttempts} 次机会` 
+        });
+    }
+
+    // ✅ 4. 登录成功逻辑：重置计数器
+    if (user.loginAttempts > 0 || user.lockUntil) {
+        user.loginAttempts = 0;
+        user.lockUntil = undefined;
+        await user.save();
+    }
+    
+    // ... 下面是原有的生成 Token 代码，保持不变 ...
     const token = jwt.sign(
         { id: user._id, role: user.role }, 
         JWT_SECRET, 
         { expiresIn: '7d' }
     );
 
-    const { password: _, ...userWithoutPassword } = user.toObject();
+    const { password: _, loginAttempts, lockUntil, ...userWithoutPassword } = user.toObject();
     
     res.json({ 
-      token, // ✅ 关键：前端必须保存这个 token 到 localStorage
+      token, 
       user: { id: user._id.toString(), email: user.email, username: user.username, role: user.role }, 
       profile: userWithoutPassword 
     });
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -375,7 +462,9 @@ app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
 
     res.json({ success: true, message: '密码修改成功' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
 
@@ -403,7 +492,9 @@ app.get('/api/auth/session', async (req, res) => {
         return res.json({ user: null, profile: null });
     }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
 
@@ -414,7 +505,9 @@ app.get('/api/users/:userId/profile', async (req, res) => {
     const { password, ...userWithoutPassword } = user.toObject();
     res.json(userWithoutPassword);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
 
@@ -462,7 +555,9 @@ app.get('/api/books', async (req, res) => {
       const formattedBooks = books.map(book => ({ ...book, id: book._id.toString() }));
       res.json(formattedBooks);
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
     }
 });
 
@@ -472,7 +567,9 @@ app.get('/api/books/:id', async (req, res) => {
       if (!book) return res.status(404).json({ error: 'Book not found' });
       res.json({ ...book.toObject(), id: book._id.toString() });
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
     }
 });
 
@@ -497,7 +594,9 @@ app.post('/api/books', authMiddleware, async (req, res) => {
     const populatedBook = await Book.findById(newBook._id).populate('author_id', 'username email id');
     res.status(201).json({ ...populatedBook.toObject(), id: populatedBook._id.toString() });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
 
@@ -508,7 +607,9 @@ app.patch('/api/books/:id', async (req, res) => {
     if (!book) return res.status(404).json({ error: 'Book not found' });
     res.json(book);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
 
@@ -522,7 +623,9 @@ app.delete('/api/books/:id', async (req, res) => {
     await Chapter.deleteMany({ bookId: bookId });
     res.json({ message: 'Book deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
 
@@ -555,7 +658,9 @@ app.get('/api/books/:bookId/chapters', async (req, res) => {
     }));
     res.json(formattedChapters);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
 
@@ -573,7 +678,9 @@ app.get('/api/chapters/:id', async (req, res) => {
     
     res.json({ ...chapter, id: chapter._id.toString(), bookId: chapter.bookId.toString() });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
 
@@ -597,7 +704,9 @@ app.post('/api/chapters', async (req, res) => {
       await newChapter.save();
       res.status(201).json({ ...newChapter.toObject(), id: newChapter._id.toString() });
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
     }
 });
 
@@ -612,7 +721,9 @@ app.patch('/api/chapters/:id', async (req, res) => {
 
     res.json({ ...updatedChapter.toObject(), id: updatedChapter._id.toString() });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
 
@@ -622,7 +733,9 @@ app.delete('/api/chapters/:id', async (req, res) => {
     if (!result) return res.status(404).json({ error: 'Chapter not found' });
     res.json({ message: 'Chapter deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
 
@@ -632,7 +745,9 @@ app.get('/api/users/:userId/bookmarks', async (req, res) => {
     const bookmarks = await Bookmark.find({ user_id: req.params.userId }).populate('bookId');
     res.json(bookmarks);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
 
@@ -644,7 +759,9 @@ app.get('/api/users/:userId/bookmarks/:bookId/check', async (req, res) => {
     const count = await Bookmark.countDocuments({ user_id: req.params.userId, bookId });
     res.json({ isBookmarked: count > 0 });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
 
@@ -664,7 +781,9 @@ app.post('/api/users/:userId/bookmarks', async (req, res) => {
     await bookmark.save();
     res.json(bookmark);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
 
@@ -679,7 +798,9 @@ app.delete('/api/users/:userId/bookmarks/:bookId', async (req, res) => {
 
     res.json({ success: true, message: 'Removed from bookshelf' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+    error: isProduction ? '服务器内部错误，请稍后重试' : error.message 
+});
   }
 });
 

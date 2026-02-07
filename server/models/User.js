@@ -9,6 +9,8 @@ const UserSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: { type: String, enum: ['reader', 'writer', 'admin'], default: 'reader' },
   avatar: String, 
+  loginAttempts: { type: Number, required: true, default: 0 },
+  lockUntil: { type: Number }, // 存时间戳
   created_at: { type: Date, default: Date.now },
 }, { 
   timestamps: true,
@@ -21,6 +23,11 @@ const UserSchema = new mongoose.Schema({
       delete ret.password; // 🔒 安全：绝对不能把密码返回给前端
     }
   }
+});
+
+UserSchema.virtual('isLocked').get(function() {
+    // 如果有锁定时间，且当前时间还在锁定时间之前 -> 锁定中
+    return !!(this.lockUntil && this.lockUntil > Date.now());
 });
 
 // 🔥🔥🔥 关键修改 2：显式定义 id 虚拟字段 🔥🔥🔥
