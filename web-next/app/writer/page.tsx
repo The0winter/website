@@ -548,111 +548,144 @@ export default function WriterDashboard() {
 
       {/* ===================== 弹窗区域 (保持不变) ===================== */}
       {/* 1. 书籍管理器 */}
+{/* 5. 书籍管理器 (大修：强制两列 + 宽屏 + 强交互) */}
       {showBookManager && activeBook && (
         <div className="fixed inset-0 z-40 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
-           <div className="bg-white rounded-t-2xl md:rounded-xl shadow-2xl w-full max-w-4xl h-[85vh] md:max-h-[85vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 md:slide-in-from-bottom-0">
-              <div className="p-4 md:p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+           {/* ⚠️ 注意这里：max-w-5xl 是关键，让弹窗变得非常宽，足以容纳两列 */}
+           <div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] md:max-h-[85vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 md:slide-in-from-bottom-0">
+              
+              {/* 顶部标题栏 */}
+              <div className="p-4 md:p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center shrink-0">
                  <div>
                     <h3 className="text-lg md:text-xl font-bold text-gray-900 truncate max-w-[200px]">{activeBook.title}</h3>
-                    <p className="text-xs text-gray-500">目录管理</p>
+                    <p className="text-xs text-gray-500">目录与设置</p>
                  </div>
-                 <button onClick={() => setShowBookManager(false)} className="p-2 bg-gray-200 rounded-full"><X className="h-5 w-5 text-gray-600" /></button>
+                 <button onClick={() => setShowBookManager(false)} className="p-2 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors"><X className="h-5 w-5 text-gray-600" /></button>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white space-y-3">
-                {/* ✅ 修复版：可折叠的书籍信息编辑区 */}
-                    <details className="group mb-6 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                        <summary className="flex items-center justify-between p-4 cursor-pointer list-none select-none bg-gray-50 hover:bg-gray-100 transition-colors">
-                            <span className="text-base font-extrabold text-gray-900 flex items-center gap-2">
-                                📝 书籍设置 
-                            </span>
-                            <div className="transition-transform duration-200 group-open:rotate-180 text-gray-400">▼</div>
-                        </summary>
-                        
-                        <div className="p-5 border-t border-gray-100 bg-white animate-in slide-in-from-top-2 duration-200">
-                            <div className="flex flex-col md:flex-row gap-6">
-                                
-                                {/* ✅ 左侧：封面修改区 (就是这里缺了！) */}
-                                <div className="shrink-0 flex flex-col items-center">
-                                    <div className="w-32 h-44 bg-gray-100 rounded-lg border border-gray-200 overflow-hidden relative group shadow-sm">
-                                        {uploading ? (
-                                            <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
-                                                <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
-                                            </div>
-                                        ) : formBookCover ? (
-                                            <img src={formBookCover} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-gray-400 flex-col">
-                                                <ImageIcon className="h-8 w-8 mb-2" />
-                                                <span className="text-xs">无封面</span>
-                                            </div>
-                                        )}
-                                        
-                                        {/* 悬停显示上传按钮 */}
-                                        <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center cursor-pointer text-white">
-                                            <Upload className="h-6 w-6 mb-1" />
-                                            <span className="text-xs font-bold">更换封面</span>
-                                            <input type="file" className="hidden" accept="image/*" onChange={handleEditCoverUpload} />
-                                        </label>
-                                    </div>
-                                    <p className="text-xs text-gray-400 mt-2">建议尺寸 600x800</p>
-                                </div>
 
-                                {/* ✅ 右侧：表单区 */}
-                                <div className="flex-1 space-y-4">
-                                    <div>
-                                        <label className="text-sm font-bold text-gray-700 mb-1.5 block">书名</label>
-                                        <input 
-                                            value={formBookTitle}
-                                            onChange={(e) => setFormBookTitle(e.target.value)}
-                                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 font-bold outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-sm font-bold text-gray-700 mb-1.5 block">简介</label>
-                                        <textarea 
-                                            value={formBookDescription}
-                                            onChange={(e) => setFormBookDescription(e.target.value)}
-                                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm font-medium outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all h-24 resize-none leading-relaxed"
-                                        />
-                                    </div>
-                                    <div className="flex justify-end">
-                                        <button 
-                                            onClick={handleUpdateBook}
-                                            disabled={uploading}
-                                            className="px-6 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/30 active:scale-[0.98] transition-all disabled:opacity-50"
-                                        >
-                                            保存所有修改
-                                        </button>
-                                    </div>
+              {/* 中间滚动区 */}
+              <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-white space-y-6">
+                
+                 {/* ✅ 修复版：书籍设置 (强制左右分栏 Grid 布局) */}
+                 <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden" open>
+                    <summary className="flex items-center justify-between p-4 cursor-pointer list-none select-none bg-gray-50 hover:bg-blue-50 transition-colors group-open:bg-blue-50/50">
+                        <span className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                            <Settings className="h-5 w-5 text-blue-600" /> 书籍信息设置 
+                        </span>
+                        <div className="transition-transform duration-200 group-open:rotate-180 text-gray-400">▼</div>
+                    </summary>
+                    
+                    <div className="p-6 border-t border-gray-100 bg-white animate-in slide-in-from-top-2 duration-200">
+                        {/* ⚠️ 核心布局：Grid 网格，左边固定 200px，右边自动填满 */}
+                        <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-8">
+                            
+                            {/* 左侧：封面修改区 */}
+                            <div className="flex flex-col items-center gap-3">
+                                <div className="w-40 h-56 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 overflow-hidden relative group shadow-sm hover:border-blue-500 transition-all">
+                                    {uploading ? (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
+                                            <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
+                                        </div>
+                                    ) : formBookCover ? (
+                                        <img src={formBookCover} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                    ) : (
+                                        <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                                            <ImageIcon className="h-10 w-10 mb-2 opacity-50" />
+                                            <span className="text-xs font-medium">暂无封面</span>
+                                        </div>
+                                    )}
+                                    
+                                    {/* 悬停时的遮罩层 */}
+                                    <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center cursor-pointer text-white">
+                                        <Upload className="h-8 w-8 mb-2 animate-bounce" />
+                                        <span className="text-sm font-bold">点击更换</span>
+                                        <input type="file" className="hidden" accept="image/*" onChange={handleEditCoverUpload} />
+                                    </label>
+                                </div>
+                                <p className="text-xs text-gray-400">支持 JPG, PNG (推荐 600x800)</p>
+                            </div>
+
+                            {/* 右侧：表单区 */}
+                            <div className="space-y-5">
+                                <div>
+                                    <label className="text-sm font-bold text-gray-700 mb-1.5 block">书名</label>
+                                    <input 
+                                        value={formBookTitle}
+                                        onChange={(e) => setFormBookTitle(e.target.value)}
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 font-bold text-lg outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all hover:bg-white hover:border-gray-300"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-sm font-bold text-gray-700 mb-1.5 block">简介</label>
+                                    <textarea 
+                                        value={formBookDescription}
+                                        onChange={(e) => setFormBookDescription(e.target.value)}
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm font-medium outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all hover:bg-white hover:border-gray-300 h-32 resize-none leading-relaxed"
+                                        placeholder="请输入简介..."
+                                    />
+                                </div>
+                                <div className="flex justify-end pt-2">
+                                    <button 
+                                        onClick={handleUpdateBook}
+                                        disabled={uploading}
+                                        className="px-8 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        <Save className="h-4 w-4" />
+                                        保存所有修改
+                                    </button>
                                 </div>
                             </div>
                         </div>
-                    </details>
-                 {/* ✅ 新增结束 */}
-                 {activeChapters.length === 0 ? (
-                     <div className="text-center text-gray-400 py-8">暂无章节</div>
-                 ) : (
-                    activeChapters.map((chapter) => (
-                        <div key={chapter.id} className="flex items-center justify-between p-3 md:p-4 bg-gray-50 rounded-xl border border-gray-100 active:border-blue-200 transition">
-                            <div className="flex-1 mr-2">
-                                <p className="font-bold text-gray-900 text-sm md:text-base line-clamp-1">{chapter.title}</p>
-                                <p className="text-xs text-gray-400 mt-0.5">字数: {chapter.word_count || 0}</p>
+                    </div>
+                 </details>
+
+                 {/* 章节列表标题 */}
+                 <div className="flex items-center justify-between px-1">
+                    <h4 className="font-bold text-gray-900 text-lg">章节列表 ({activeChapters.length})</h4>
+                 </div>
+
+                 {/* 章节列表内容 */}
+                 <div className="space-y-3">
+                     {activeChapters.length === 0 ? (
+                         <div className="text-center text-gray-400 py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                             暂无章节，快去创作吧
+                         </div>
+                     ) : (
+                        activeChapters.map((chapter) => (
+                            <div key={chapter.id} className="group flex items-center justify-between p-4 bg-white hover:bg-blue-50 rounded-xl border border-gray-100 hover:border-blue-200 transition-all shadow-sm hover:shadow-md">
+                                <div className="flex-1 mr-4">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-sm font-mono text-gray-400 bg-gray-100 px-2 py-0.5 rounded">#{chapter.chapter_number}</span>
+                                        <p className="font-bold text-gray-900 text-base line-clamp-1 group-hover:text-blue-700 transition-colors">{chapter.title}</p>
+                                    </div>
+                                    <p className="text-xs text-gray-400 mt-1 pl-1">字数: {chapter.word_count || 0} · {new Date().toLocaleDateString()}</p>
+                                </div>
+                                <div className="flex gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => openChapterEditor('edit', chapter)} className="p-2 bg-white border border-gray-200 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all hover:scale-105 shadow-sm">
+                                        <Edit3 className="h-4 w-4" />
+                                    </button>
+                                    <button onClick={() => handleDeleteChapter(chapter.id)} className="p-2 bg-white border border-gray-200 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all hover:scale-105 shadow-sm">
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                </div>
                             </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => openChapterEditor('edit', chapter)} className="p-2 bg-white border border-gray-200 text-blue-600 rounded-lg"><Edit3 className="h-4 w-4" /></button>
-                                <button onClick={() => handleDeleteChapter(chapter.id)} className="p-2 bg-white border border-gray-200 text-red-600 rounded-lg"><Trash2 className="h-4 w-4" /></button>
-                            </div>
-                        </div>
-                    ))
-                 )}
+                        ))
+                     )}
+                 </div>
               </div>
-              <div className="p-4 bg-red-50 border-t border-red-100 flex justify-between items-center pb-8 md:pb-4">
-                 <span className="text-xs text-red-600 font-bold">⚠️ 危险区域</span>
-                 <button onClick={handleDeleteBook} className="flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-white border border-red-200 text-red-600 text-xs md:text-sm font-medium rounded-lg active:bg-red-50 transition"><Trash2 className="h-3 w-3 md:h-4 md:w-4" /> 删除本书</button>
+
+              {/* 底部危险区 */}
+              <div className="p-4 bg-red-50 border-t border-red-100 flex justify-between items-center pb-8 md:pb-4 shrink-0">
+                 <span className="text-xs text-red-600 font-bold flex items-center gap-1">
+                     <AlertCircle className="h-4 w-4" /> 危险区域
+                 </span>
+                 <button onClick={handleDeleteBook} className="flex items-center gap-1 md:gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 text-xs md:text-sm font-medium rounded-lg hover:bg-red-600 hover:text-white hover:shadow-red-500/20 active:scale-95 transition-all">
+                     <Trash2 className="h-3 w-3 md:h-4 md:w-4" /> 删除本书
+                 </button>
               </div>
            </div>
         </div>
-      )}
+      )}    
 
       {/* 2. 章节编辑器 */}
       {showChapterEditor && (
@@ -772,22 +805,22 @@ export default function WriterDashboard() {
                     <label className="block text-sm font-bold text-gray-700 mb-2">选择分类</label>
                     <div className="flex flex-wrap gap-2">
                         {visibleCategories.map((cat) => (
-                            <button
-                                key={cat}
-                                type="button"
-                                onClick={() => {
-                                    setFormBookCategory(cat);
-                                    setShowCategoryDropdown(false);
-                                }}
-                                className={`px-3 py-2 rounded-lg text-sm font-bold transition-all duration-200 border ${
-                                    formBookCategory === cat
-                                        ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                                        : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-500'
-                                }`}
-                            >
-                                {cat}
-                            </button>
-                        ))}
+                                        <button
+                                            key={cat}
+                                            type="button"
+                                            onClick={() => {
+                                                setFormBookCategory(cat);
+                                                setShowCategoryDropdown(false);
+                                            }}
+                                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 border transform active:scale-95 ${
+                                                formBookCategory === cat
+                                                    ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-500/30 scale-105' // 选中状态：深蓝 + 阴影 + 放大
+                                                    : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 hover:-translate-y-0.5' // 悬停状态：浅蓝背景 + 上浮
+                                            }`}
+                                        >
+                                            {cat}
+                                        </button>
+                                    ))}
                         {/* 更多分类按钮 */}
                         {hiddenCategories.length > 0 && (
                             <div className="relative inline-block">
