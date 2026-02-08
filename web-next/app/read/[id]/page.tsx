@@ -19,6 +19,25 @@ import AdBanner from '@/components/AdBanner';
 // 🔥 [新增 1] 全局章节缓存池 (放在组件外面，防止切换路由时被清空)
 const chapterCache = new Map<string, any>();
 
+
+  // 🔥 [新增] 广告配置 
+  const topAdConfig = {
+    key: '548bdf520cc853ae859d72284e7eaa96', 
+    format: 'iframe',
+    height: 90,
+    width: 728,
+    params: {}
+  };
+
+  const bottomAdConfig = {
+    key:  'c499a0debce3cc11988efbef57ec87d0',
+    format: 'iframe',
+    height: 250,
+    width: 300,
+    params: {}
+  };
+
+
 // Hook: 检测是否为大屏设备 (PC端)
 function useIsDesktop() {
   const [isDesktop, setIsDesktop] = useState(false);
@@ -74,24 +93,6 @@ function ReaderContent() {
   const [pageWidth, setPageWidth] = useState(1000);
 
   const [showHint, setShowHint] = useState(false); // 新手引导提示
-
-  // 🔥 [新增] 广告配置 (请把 key 换成你 Adsterra 后台申请到的真实 key)
-// 如果是本地开发，广告可能不会显示，这是正常的
-  const topAdConfig = {
-    key: '548bdf520cc853ae859d72284e7eaa96', 
-    format: 'iframe',
-    height: 90,
-    width: 728,
-    params: {}
-  };
-
-  const bottomAdConfig = {
-    key:  'c499a0debce3cc11988efbef57ec87d0',
-    format: 'iframe',
-    height: 250,
-    width: 300,
-    params: {}
-  };
 
   // 网页端默认参数调整：加载时如果是大屏，调整默认字号 (改小了) 和行距
   useEffect(() => {
