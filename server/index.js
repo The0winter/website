@@ -14,8 +14,9 @@ import User from './models/User.js';
 import Book from './models/Book.js';
 import Chapter from './models/Chapter.js';
 import Bookmark from './models/Bookmark.js';
-// ⚠️ 暂时注释掉 AdminLog，防止因为文件不存在导致服务器启动失败
-// import AdminLog from './models/AdminLog.js'; 
+
+import VerificationCode from './models/VerificationCode.js';
+import sendVerificationEmail from './utils/sendEmail.js';
 
 import upload from './utils/upload.js';
 import { createReview, getReviews } from './controllers/reviewController.js';
@@ -302,14 +303,21 @@ app.post('/api/admin/upload-book', async (req, res) => {
 // --- Auth API ---
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { email, password, username, role } = req.body;
+    // ✅ 1. 多接收一个 code 参数
+    const { email, password, username, role, code } = req.body;
+
+    // ✅ 2. 校验验证码 (这是新增的核心逻辑)
+    const validCode = await VerificationCode.findOne({ email, code });
+    if (!validCode) {
+      return res.status(400).json({ error: '验证码错误或已过期' });
+    }
+
     const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(400).json({ error: 'Email already exists' });
+    if (existingUser) return res.status(400).json({ error: '该邮箱已被注册' });
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     
-    // 🚨 显式初始化 loginAttempts
     const newUser = await User.create({
       email,
       password: hashedPassword,
@@ -318,9 +326,12 @@ app.post('/api/auth/signup', async (req, res) => {
       loginAttempts: 0 
     });
     
+    // ✅ 3. 注册成功后，删除验证码
+    await VerificationCode.deleteOne({ _id: validCode._id });
+
     const token = jwt.sign(
         { id: newUser._id, role: newUser.role }, 
-        JWT_SECRET, 
+        JWT_SECRET, // 注意：确保这里能访问到 JWT_SECRET 变量
         { expiresIn: '7d' }
     );
 
@@ -467,6 +478,30 @@ app.get('/api/auth/session', async (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ 新增：发送验证码接口
+app.post('/api/auth/send-code', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: "请填写邮箱" });
+
+  // 生成6位随机数
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+  try {
+    // 删除旧验证码，防止重复
+    await VerificationCode.deleteMany({ email });
+    
+    // 保存新验证码
+    await new VerificationCode({ email, code }).save();
+
+    // 发送邮件
+    await sendVerificationEmail(email, code);
+    res.json({ message: "验证码已发送" });
+  } catch (error) {
+    console.error("邮件发送错误:", error);
+    res.status(500).json({ message: "邮件发送失败" });
   }
 });
 
