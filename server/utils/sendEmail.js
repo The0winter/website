@@ -1,8 +1,8 @@
-const nodemailer = require('nodemailer');
+import nodemailer from 'nodemailer';
 
 // 配置发送器
 const transporter = nodemailer.createTransport({
-  service: 'QQ', // 如果是 Gmail 就填 'Gmail'
+  service: 'QQ', // 或者 'Gmail'
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
@@ -18,4 +18,4 @@ const sendVerificationEmail = async (email, code) => {
   });
 };
 
-module.exports = sendVerificationEmail;
+export default sendVerificationEmail;
