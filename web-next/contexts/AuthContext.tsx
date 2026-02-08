@@ -8,8 +8,8 @@ interface AuthContextType {
   loading: boolean;
   
   // 注册相关的不用动（除非你注册后也想直接拿到token）
-  signUp: (email: string, password: string, username: string, role: 'reader' | 'writer') => Promise<{ error: Error | null }>;
-  register: (username: string, email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, username: string, role: 'reader' | 'writer', code: string) => Promise<{ error: Error | null }>;
+  register: (username: string, email: string, password: string, code: string) => Promise<{ error: Error | null }>;
   
   // 👇👇👇 重点修改这一行 👇👇👇
   signIn: (email: string, password: string) => Promise<{ 
@@ -66,27 +66,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     initAuth();
   }, []);
 
-  const signUp = async (email: string, password: string, username: string, role: 'reader' | 'writer') => {
+const signUp = async (email: string, password: string, username: string, role: 'reader' | 'writer', code: string) => {
     try {
-      const { user: newUser, profile: newProfile } = await authApi.signUp(email, password, username, role);
+      // 调用 api 时把 code 传进去
+      const { user: newUser, profile: newProfile } = await authApi.signUp(email, password, username, role, code);
       setUser(newUser);
       setProfile(newProfile);
-      // 这里的 saveUserToStorage 记得确保文件头部定义了或者导入了
       localStorage.setItem('novelhub_user', newUser.id); 
       return { error: null };
     } catch (error) {
       return { error: error as Error };
     }
-  };
+};
 
-  const register = async (username: string, email: string, password: string) => {
-    // 复用上面的 signUp，默认角色是 reader
-    return signUp(email, password, username, 'reader');
-  };
-
-  // 👆👆👆 补完结束 👆👆👆
-
-  // const signIn = async ... (这里是你原本的第69行)
+// ✅ 修改 register：接收 code
+const register = async (username: string, email: string, password: string, code: string) => {
+    // 传给 signUp
+    return signUp(email, password, username, 'reader', code);
+};
 
 const signIn = async (email: string, password: string) => {
     try {

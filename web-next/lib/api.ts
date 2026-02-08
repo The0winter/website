@@ -255,10 +255,10 @@ export interface AuthResponse {
 
 export const authApi = {
   // Sign up
-  signUp: async (email: string, password: string, username: string, role: 'reader' | 'writer'): Promise<AuthResponse> => {
+  signUp: async (email: string, password: string, username: string, role: string, code: string): Promise<AuthResponse> => {
     return apiCall<AuthResponse>('/auth/signup', {
       method: 'POST',
-      body: JSON.stringify({ email, password, username, role }),
+      body: JSON.stringify({ email, password, username, role, code }),
     });
   },
 
