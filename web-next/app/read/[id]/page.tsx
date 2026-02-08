@@ -14,6 +14,8 @@ import { booksApi, chaptersApi, bookmarksApi, Book, Chapter } from '@/lib/api';
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
 
+import AdBanner from '@/components/AdBanner';
+
 // 🔥 [新增 1] 全局章节缓存池 (放在组件外面，防止切换路由时被清空)
 const chapterCache = new Map<string, any>();
 
@@ -72,6 +74,24 @@ function ReaderContent() {
   const [pageWidth, setPageWidth] = useState(1000);
 
   const [showHint, setShowHint] = useState(false); // 新手引导提示
+
+  // 🔥 [新增] 广告配置 (请把 key 换成你 Adsterra 后台申请到的真实 key)
+// 如果是本地开发，广告可能不会显示，这是正常的
+  const topAdConfig = {
+    key: '548bdf520cc853ae859d72284e7eaa96', 
+    format: 'iframe',
+    height: 90,
+    width: 728,
+    params: {}
+  };
+
+  const bottomAdConfig = {
+    key:  'c499a0debce3cc11988efbef57ec87d0',
+    format: 'iframe',
+    height: 250,
+    width: 300,
+    params: {}
+  };
 
   // 网页端默认参数调整：加载时如果是大屏，调整默认字号 (改小了) 和行距
   useEffect(() => {
@@ -592,6 +612,14 @@ if (loading) return (
             </h1>
           </div>
 
+          {/* 🔥 [新增] 顶部广告位 */}
+          <div className="my-6 flex justify-center">
+             {/* 给它一个容器，防止广告加载时页面剧烈抖动 */}
+             <div className="min-h-[90px] w-full flex justify-center items-center bg-black/5 rounded-lg overflow-hidden">
+                <AdBanner atOptions={topAdConfig} />
+             </div>
+          </div>
+
           {/* 正文 */}
           <div 
             className="text-justify break-words"
@@ -642,6 +670,13 @@ if (loading) return (
                 </p>
               );
             })}
+          </div>
+
+          {/* 🔥 [新增] 底部广告位 (黄金位置) */}
+          <div className="mt-12 mb-8 flex justify-center">
+             <div className="min-h-[250px] w-full flex justify-center items-center bg-black/5 rounded-lg overflow-hidden max-w-[340px] mx-auto">
+                <AdBanner atOptions={bottomAdConfig} />
+             </div>
           </div>
 
           {/* 底部翻页按钮 */}

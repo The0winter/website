@@ -339,7 +339,7 @@ app.post('/api/auth/signup', async (req, res) => {
 app.post('/api/auth/signin', async (req, res) => {
   try {
     const { email, username, password } = req.body;
-    const identifier = email || username;
+    const identifier = (email || username || '').trim();
     if (!identifier || !password) return res.status(400).json({ error: '请输入账号和密码' });
     
     const user = await User.findOne({ 
