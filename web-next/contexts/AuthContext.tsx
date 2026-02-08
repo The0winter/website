@@ -122,11 +122,19 @@ const signIn = async (email: string, password: string) => {
     }
 };
 
-  // ✅ 已修改：函数名改为 logout，为了匹配 Navbar 调用
-  const logout = async () => {
+const logout = async () => {
+    // 1. 清空状态
     setUser(null);
     setProfile(null);
-    removeUserFromStorage();
+    
+    // 2. 🧹 大扫除：必须把所有 LocalStorage 的 Key 都删掉！
+    removeUserFromStorage(); // 这是你原本的逻辑，只删除了 ID
+    
+    // 👇👇👇 新增下面这两行 👇👇👇
+    localStorage.removeItem('token'); // 👈 删掉令牌！
+    localStorage.removeItem('user');  // 👈 删掉缓存的用户信息！
+    
+    // 如果你还有其他缓存（比如 reading_settings 之类的），也可以在这里删
   };
   
 
