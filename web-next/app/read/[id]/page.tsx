@@ -673,10 +673,31 @@ if (loading) return (
             })}
           </div>
 
-          {/* 🔥 [新增] 底部广告位 (黄金位置) */}
-          <div className="mt-12 mb-8 flex justify-center">
-             <div className="min-h-[250px] w-full flex justify-center items-center bg-black/5 rounded-lg overflow-hidden max-w-[340px] mx-auto">
-                <AdBanner atOptions={bottomAdConfig} />
+          {/* 🔥 [修改后] 底部双广告位布局 */}
+          <div className="mt-12 mb-8 px-4">
+             {/* Flex布局策略：
+                1. flex-col: 手机上垂直排列 (虽然我们在下面隐藏了第二个，但防万一)
+                2. md:flex-row: 电脑(中屏以上)水平排列
+                3. gap-6: 广告之间的间距
+                4. justify-center: 整体居中
+             */}
+             <div className="flex flex-col md:flex-row justify-center items-center gap-6">
+                
+                {/* 广告位 1 (左) - 手机电脑都显示 */}
+                <div className="min-h-[250px] min-w-[300px] flex justify-center items-center bg-black/5 rounded-lg overflow-hidden">
+                   <AdBanner atOptions={bottomAdConfig} />
+                </div>
+
+                {/* 广告位 2 (右) - 🔥 关键点：hidden md:flex 
+                    意思是：手机上隐藏 (hidden)，电脑上显示 (flex) 
+                */}
+                <div className="hidden md:flex min-h-[250px] min-w-[300px] justify-center items-center bg-black/5 rounded-lg overflow-hidden">
+                   {/* 建议这里用一个新的 config (比如 bottomAdConfigRight)
+                      如果没有申请新的，暂时先复用 bottomAdConfig 也可以
+                   */}
+                   <AdBanner atOptions={bottomAdConfig} /> 
+                </div>
+
              </div>
           </div>
 
