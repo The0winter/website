@@ -60,21 +60,31 @@ export interface Bookmark {
   created_at?: string;
 }
 
-// Helper function for API calls
+
 async function apiCall<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T> {
-  // Extract user ID from localStorage (set during login)
+  // 1. 获取 UserID (你原有的逻辑)
   const userId = localStorage.getItem('novelhub_user');
+  
+  // 👇👇👇 2. 新增：获取 Token 👇👇👇
+  const token = localStorage.getItem('token');
+
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     headers: {
       'Content-Type': 'application/json',
+      // 原有的 user-id 头
       ...(userId ? { 'x-user-id': userId } : {}),
+      
+      // 👇👇👇 3. 新增：必须把 Token 带上，否则后端不认人！ 👇👇👇
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      
       ...options?.headers,
     },
     ...options,
   });
+
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(error.error || `HTTP error! status: ${response.status}`);
