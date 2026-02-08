@@ -91,13 +91,16 @@ app.use('/api/auth/', authLimiter);
 // ================= 3. 数据库连接 =================
 
 const MONGO_URL = process.env.MONGO_URI;
-// 🚨 修复：如果没连上，打印错误但不要直接 process.exit(1) 杀掉进程
 if (!MONGO_URL) {
-  console.error('❌ 警告: 未配置 MONGO_URI，数据库无法连接！');
+  console.error('❌ [严重警告] 未读到 MONGO_URI，请检查 .env 文件！');
 } else {
   mongoose.connect(MONGO_URL)
-    .then(() => console.log('✅ MongoDB Connected'))
-    .catch(err => console.error('❌ MongoDB Connection Error:', err));
+    .then(() => {
+        // 👇👇👇 改这里：打印出当前连的是哪个库 👇👇👇
+        console.log(`✅ MongoDB 连接成功！当前数据库: [ ${mongoose.connection.name} ]`);
+        console.log('💡 如果上面显示的不是 "data"，请去 .env 文件修改连接字符串！');
+    })
+    .catch(err => console.error('❌ MongoDB 连接失败:', err));
 }
 
 // ================= 4. 中间件 =================
@@ -346,16 +349,19 @@ app.post('/api/auth/signin', async (req, res) => {
     if (!user) return res.status(401).json({ error: '账号或密码错误' });
 
     // 修复1：防止 isLocked 报错 (兼容 Schema 未更新的情况)
-    if (user.isLocked) {
-        const lockTime = user.lockUntil || 0;
+    if (user.lockUntil && user.lockUntil > Date.now()) {
+        const lockTime = user.lockUntil;
+        // 计算剩余秒数
         const secondsLeft = Math.ceil((lockTime - Date.now()) / 1000);
-        if (secondsLeft <= 0) {
+        
+        if (secondsLeft > 0) {
+            const minutes = Math.ceil(secondsLeft / 60);
+            return res.status(403).json({ error: `账号已锁定，请 ${minutes} 分钟后再试` });
+        } else {
+            // 如果锁定时间已过，重置状态（这一步其实你下面的代码也写了，这里可以为了保险加上）
             user.loginAttempts = 0;
             user.lockUntil = undefined;
             await user.save();
-        } else {
-            const minutes = Math.ceil(secondsLeft / 60);
-            return res.status(403).json({ error: `账号已锁定，请 ${minutes} 分钟后再试` });
         }
     }
 
