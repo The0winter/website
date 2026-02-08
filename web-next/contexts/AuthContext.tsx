@@ -66,6 +66,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     initAuth();
   }, []);
 
+  // ... 上面是 useEffect 的结尾 (第67行) ...
+  // initAuth();
+  // }, []);
+
+  // 👇👇👇 请把这段代码补在第 68 行的位置 👇👇👇
+
+  const signUp = async (email: string, password: string, username: string, role: 'reader' | 'writer') => {
+    try {
+      const { user: newUser, profile: newProfile } = await authApi.signUp(email, password, username, role);
+      setUser(newUser);
+      setProfile(newProfile);
+      // 这里的 saveUserToStorage 记得确保文件头部定义了或者导入了
+      localStorage.setItem('novelhub_user', newUser.id); 
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
+  };
+
+  const register = async (username: string, email: string, password: string) => {
+    // 复用上面的 signUp，默认角色是 reader
+    return signUp(email, password, username, 'reader');
+  };
+
+  // 👆👆👆 补完结束 👆👆👆
+
+  // const signIn = async ... (这里是你原本的第69行)
+
 const signIn = async (email: string, password: string) => {
     try {
       // 👇 修改点 1：这里不仅要解构 user 和 profile，还要把 token 解构出来
@@ -106,6 +134,7 @@ const signIn = async (email: string, password: string) => {
     setProfile(null);
     removeUserFromStorage();
   };
+  
 
   return (
     // ✅ 已修改：Value 中传入 logout
