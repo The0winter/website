@@ -29,6 +29,14 @@ const chapterCache = new Map<string, any>();
     params: {}
   };
 
+  const mobileTopAdConfig = {
+  key: 'b1d0573321880440cdb2f56b7fa2db9a', // <--- 填入新申请的 Key
+  format: 'iframe',
+  height: 50,         // 高度改成 50
+  width: 320,         // 宽度改成 320
+  params: {}
+};
+
   const bottomAdConfig = {
     key:  'c499a0debce3cc11988efbef57ec87d0',
     format: 'iframe',
@@ -605,20 +613,34 @@ if (loading) return (
             color: activeTheme.text 
           }}
         >
-        {/* 标题区 (修改：间距更紧凑) */}
-          <div className="mb-5 px-2"> {/* mb-10 改为 mb-5，拉近标题和正文的距离 */}
+          {/* 标题区 */}
+          <div className="mb-5 px-2"> 
             <h1 className="text-3xl md:text-4xl font-bold tracking-wide leading-tight" style={{ color: activeTheme.text }}>
               {chapter.title.startsWith('第') ?
                 chapter.title : `第${chapter.chapter_number}章 ${chapter.title}`}
             </h1>
           </div>
 
-          {/* 🔥 [新增] 顶部广告位 */}
-          <div className="my-6 flex justify-center">
-             {/* 给它一个容器，防止广告加载时页面剧烈抖动 */}
-             <div className="min-h-[90px] w-full flex justify-center items-center bg-black/5 rounded-lg overflow-hidden">
+          {/* ========================================================= */}
+          {/* 1. 💻 PC 端广告 (728x90) - 放在标题之下 */}
+          {/* 关键修改：加上 hidden lg:flex，防止手机加载它 */}
+          {/* ========================================================= */}
+          <div className="hidden lg:flex my-6 justify-center">
+              <div className="min-h-[90px] w-[728px] flex justify-center items-center bg-black/5 rounded-lg overflow-hidden">
+                {/* 确保这里用的是 728 的 Key */}
                 <AdBanner atOptions={topAdConfig} />
-             </div>
+              </div>
+          </div>
+
+          {/* ========================================================= */}
+          {/* 2. 📱 手机端广告 (320x50) - 放在标题之下 */}
+          {/* 关键修改：保持 lg:hidden，防止电脑加载它 */}
+          {/* ========================================================= */}
+          <div className="lg:hidden mb-6 flex justify-center">
+              <div className="min-h-[50px] w-[320px] flex justify-center items-center bg-black/5 rounded overflow-hidden">
+                {/* 确保这里用的是 320 的 Key */}
+                <AdBanner atOptions={mobileTopAdConfig} />
+              </div>
           </div>
 
           {/* 正文 */}
@@ -673,28 +695,19 @@ if (loading) return (
             })}
           </div>
 
-          {/* 🔥 [修改后] 底部双广告位布局 */}
+{/* 🔥 底部双广告位布局 */}
           <div className="mt-12 mb-8 px-4">
-             {/* Flex布局策略：
-                1. flex-col: 手机上垂直排列 (虽然我们在下面隐藏了第二个，但防万一)
-                2. md:flex-row: 电脑(中屏以上)水平排列
-                3. gap-6: 广告之间的间距
-                4. justify-center: 整体居中
-             */}
              <div className="flex flex-col md:flex-row justify-center items-center gap-6">
                 
-                {/* 广告位 1 (左) - 手机电脑都显示 */}
+                {/* 左边的广告 */}
                 <div className="min-h-[250px] min-w-[300px] flex justify-center items-center bg-black/5 rounded-lg overflow-hidden">
+                   {/* 使用同一个配置 */}
                    <AdBanner atOptions={bottomAdConfig} />
                 </div>
 
-                {/* 广告位 2 (右) - 🔥 关键点：hidden md:flex 
-                    意思是：手机上隐藏 (hidden)，电脑上显示 (flex) 
-                */}
+                {/* 右边的广告 (仅电脑显示) */}
                 <div className="hidden md:flex min-h-[250px] min-w-[300px] justify-center items-center bg-black/5 rounded-lg overflow-hidden">
-                   {/* 建议这里用一个新的 config (比如 bottomAdConfigRight)
-                      如果没有申请新的，暂时先复用 bottomAdConfig 也可以
-                   */}
+                   {/* 🔥 直接复用同一个配置！效果完全一样 */}
                    <AdBanner atOptions={bottomAdConfig} /> 
                 </div>
 
