@@ -483,7 +483,16 @@ if (loading) return (
               </div>
               <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex items-center justify-center shrink-0">
                  {(user as any)?.avatar ? (
-                    <img src={(user as any).avatar} alt="avatar" className="w-full h-full object-cover" />
+                    <img 
+                      src={(user as any).avatar} 
+                      alt="avatar" 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // 如果图片加载失败 (404)，自动把 src 变成一个透明图或默认图，防止报错很难看
+                        e.currentTarget.src = 'https://ui-avatars.com/api/?name=User&background=random'; 
+                        // 或者直接隐藏它：e.currentTarget.style.display = 'none';
+                      }}
+                    />
                 ) : (
                     <User className="w-6 h-6 opacity-50" />
                 )}

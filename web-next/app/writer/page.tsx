@@ -120,8 +120,8 @@ export default function WriterDashboard() {
     try {
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users`, {
             headers: { 
-                'Authorization': `Bearer ${localStorage.getItem('token') || ''}`, // 如果你有token的话
-                'x-user-id': user.id 
+                // 👇 这一行才是关键！
+                'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
             }
         });
         if (res.ok) {
