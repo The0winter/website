@@ -359,24 +359,35 @@ app.post('/api/auth/signin', async (req, res) => {
         }
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+ const isMatch = await bcrypt.compare(password, user.password);
     
     if (!isMatch) {
-        // 修复2：强制转换 undefined 为 0
+        // --- 调试代码开始 ---
+        console.log(`❌ [调试] 密码错误。当前数据库记录次数: ${user.loginAttempts}`);
+        // ------------------
+
         const currentAttempts = user.loginAttempts || 0;
         user.loginAttempts = currentAttempts + 1;
+        
+        // --- 调试代码 ---
+        console.log(`📉 [调试] 准备更新为: ${user.loginAttempts}`);
+        // ----------------
         
         if (user.loginAttempts >= 5) {
             user.lockUntil = Date.now() + (60 * 60 * 1000); 
             await user.save();
+            console.log('🔒 [调试] 已触发锁定！'); // 看看这行会不会打印
             return res.status(403).json({ error: '密码错误次数过多，账号已锁定 1 小时' });
         }
 
         await user.save();
+        console.log('💾 [调试] 已保存错误次数'); 
+        
         return res.status(401).json({ 
             error: `密码错误，还剩 ${5 - user.loginAttempts} 次机会` 
         });
     }
+    // ... 后面的代码 ...
 
     // 修复3：登录成功也做兼容检查
     if ((user.loginAttempts && user.loginAttempts > 0) || user.lockUntil) {
