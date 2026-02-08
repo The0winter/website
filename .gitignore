@@ -33,7 +33,6 @@ ehthumbs.db
 Desktop.ini
 
 # Crawler outputs (prevent uploading scraped data)
-*.png
 *.jpg
 
 # --- 爬虫专用配置 (新增) ---
