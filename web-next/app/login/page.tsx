@@ -21,21 +21,39 @@ export default function Login() {
   const { signIn } = useAuth();
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
       const result = await signIn(email, password); 
+      
+      // 如果有错误信息
       if (result && result.error) {
          setError(result.error.message || '登录失败');
          setLoading(false);
       } else {
+         // ✅✅✅ 核心修复：手动保存 Token 到浏览器！✅✅✅
+         // 注意：这里假设 signIn 返回了后端给的 { token, user } 对象
+         if (result && result.token) {
+             localStorage.setItem('token', result.token);
+             console.log('✅ 登录成功，Token 已保存:', result.token);
+             
+             // 顺便把用户信息也存一下，防止页面刷新后不知道你是谁
+             if (result.user) {
+                localStorage.setItem('user', JSON.stringify(result.user));
+             }
+         } else {
+             console.warn('⚠️ 警告：登录看似成功但没有收到 Token，可能是 AuthContext 问题');
+         }
+         
+         // 保存完再去跳转
          router.push('/');
       }
     } catch (err: any) {
-      setError(err.message || '登录失败');
+      console.error(err);
+      setError(err.message || '登录异常');
       setLoading(false);
     }
   };

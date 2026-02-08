@@ -6,10 +6,19 @@ interface AuthContextType {
   user: AuthUser | null;
   profile: Profile | null;
   loading: boolean;
+  
+  // 注册相关的不用动（除非你注册后也想直接拿到token）
   signUp: (email: string, password: string, username: string, role: 'reader' | 'writer') => Promise<{ error: Error | null }>;
   register: (username: string, email: string, password: string) => Promise<{ error: Error | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  logout: () => Promise<void>; // ✅ 已修改：重命名 logout -> logout
+  
+  // 👇👇👇 重点修改这一行 👇👇👇
+  signIn: (email: string, password: string) => Promise<{ 
+      error: Error | null; 
+      token?: string;      // ✅ 新增：告诉TS这里可能有token
+      user?: AuthUser;     // ✅ 新增：告诉TS这里可能有user数据
+  }>;
+  
+  logout: () => Promise<void>; 
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
