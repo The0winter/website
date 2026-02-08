@@ -1,6 +1,7 @@
 import 'dotenv/config'; 
 import express from 'express';
 import mongoose from 'mongoose';
+import { submitToIndexNow } from './utils/indexNow.js'
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import cron from 'node-cron';
@@ -290,9 +291,23 @@ app.post('/api/admin/upload-book', async (req, res) => {
             }
         }
 
-        if (chaptersToInsert.length > 0) {
-            await Chapter.insertMany(chaptersToInsert);
-        }
+            if (chaptersToInsert.length > 0) {
+                // 👇 修改开始：接收返回值
+                const insertedDocs = await Chapter.insertMany(chaptersToInsert);
+                
+                // 🔥 新增：后台静默推送（不影响主流程）
+                try {
+                    const newUrls = insertedDocs.map(doc => 
+                        `https://jiutianxiaoshuo.com/book/${book._id}/${doc._id}`
+                    );
+                    submitToIndexNow(newUrls).catch(err => console.error('IndexNow推送异常:', err));
+                } catch (e) {
+                    console.error('生成URL失败:', e);
+                }
+            }
+
+res.json({ success: true, message: `入库成功，新增 ${chaptersToInsert.length} 章` });
+// ... 原本的代码 ...
 
         res.json({ success: true, message: `入库成功，新增 ${chaptersToInsert.length} 章` });
     } catch (error) {
@@ -694,6 +709,9 @@ app.post('/api/chapters', async (req, res) => {
       });
 
       await newChapter.save();
+      const chapterUrl = `https://jiutianxiaoshuo.com/book/${bookId}/${newChapter._id}`;
+      submitToIndexNow([chapterUrl]).catch(e => console.error('IndexNow Error:', e));
+
       res.status(201).json({ ...newChapter.toObject(), id: newChapter._id.toString() });
     } catch (error) {
       res.status(500).json({ error: error.message });

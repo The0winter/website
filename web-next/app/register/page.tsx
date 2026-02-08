@@ -88,7 +88,7 @@ export default function Register() {
        <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-lg shadow-md">
          {/* 标题部分省略，保持原样即可 */}
          <div className="text-center">
-            <h2 className="text-3xl font-bold">注册账户</h2>
+            <h2 className="text-3xl font-bold text-gray-900">注册账户</h2>
          </div>
          
          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -114,6 +114,7 @@ export default function Register() {
                   id="email"
                   type="email"
                   required
+                  autoComplete="off"
                   className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                   placeholder="邮箱地址"
                   value={email}
@@ -152,6 +153,7 @@ export default function Register() {
                   id="password"
                   type="password"
                   required
+                  autoComplete="off"
                   className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                   placeholder="密码"
                   value={password}
@@ -166,6 +168,7 @@ export default function Register() {
                   id="confirm-password"
                   type="password"
                   required
+                  autoComplete="new-password"
                   className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                   placeholder="确认密码"
                   value={confirmPassword}
