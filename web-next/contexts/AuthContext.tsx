@@ -66,55 +66,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     initAuth();
   }, []);
 
-  const signUp = async (email: string, password: string, username: string, role: 'reader' | 'writer') => {
-    try {
-      const { user: newUser, profile: newProfile } = await authApi.signUp(email, password, username, role);
-      setUser(newUser);
-      setProfile(newProfile);
-      saveUserToStorage(newUser.id);
-      return { error: null };
-    } catch (error) {
-      return { error: error as Error };
-    }
-  };
-
-  const register = async (username: string, email: string, password: string) => {
-    // 这里我们自动补上 'reader' 作为默认角色，因为你的注册页面没有选角色的地方
-    // 注意这里调用 signUp 时，参数顺序调整为了正确的顺序 (email, password, username, role)
-    return signUp(email, password, username, 'reader');
-  };
-
 const signIn = async (email: string, password: string) => {
     try {
-      // 1. 【原有逻辑】先执行登录，拿到基础信息
-      const { user: sessionUser, profile: sessionProfile } = await authApi.signIn(email, password);
+      // 👇 修改点 1：这里不仅要解构 user 和 profile，还要把 token 解构出来
+      // 假设你的 authApi.signIn 返回的是后端整个 json：{ token, user, profile }
+      const { user: sessionUser, profile: sessionProfile, token } = await authApi.signIn(email, password);
 
-      // 2. 【新增补丁】为了解决“名字不显示”的 Bug，我们立刻用 ID 去拉取一次完整信息
-      // 只要这一步成功，我们就用新的完整数据；如果失败，也不会报错，继续用上面的 sessionUser
+      // ... (中间获取完整用户信息的逻辑保持不变) ...
+      
       try {
         const { user: fullUser, profile: fullProfile } = await authApi.getSession(sessionUser.id);
-        
-        // 如果成功拿到了带 username 的完整用户
         if (fullUser && fullUser.username) {
-           setUser(fullUser); // ✅ 存入完整数据 (带名字)
+           setUser(fullUser);
            setProfile(fullProfile);
            saveUserToStorage(fullUser.id);
-           return { error: null }; // 🎉 完美结束
+           // 👇 修改点 2：这里成功返回时，必须带上 token
+           return { error: null, token: token, user: fullUser }; 
         }
       } catch (e) {
         console.warn('获取完整信息失败，将使用基础登录信息');
       }
 
-      // 3. 【保底逻辑】如果上面的补丁没跑通，依然执行你原来的逻辑，保证登录功能绝不会坏
-      setUser(sessionUser); // ⚠️ 虽然这里 username 可能是空的，但至少能登录进去
+      // 3. 【保底逻辑】
+      setUser(sessionUser);
       setProfile(sessionProfile);
       saveUserToStorage(sessionUser.id);
-      return { error: null };
+      
+      // 👇 修改点 3：这里也必须带上 token
+      return { error: null, token: token, user: sessionUser }; 
 
     } catch (error) {
       return { error: error as Error };
     }
-  };
+};
 
   // ✅ 已修改：函数名改为 logout，为了匹配 Navbar 调用
   const logout = async () => {

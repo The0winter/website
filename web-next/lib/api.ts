@@ -240,6 +240,7 @@ export interface AuthUser {
 export interface AuthResponse {
   user: AuthUser;
   profile: Profile;
+  token: string;  // 👈 加上这一行！告诉 TS 后端会返回 token
 }
 
 export const authApi = {

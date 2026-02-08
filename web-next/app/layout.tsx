@@ -8,7 +8,7 @@ import Navbar from "@/components/Navbar";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "我的小说网站",
+  title: "九天小说",
   description: "基于 MERN Stack 的小说阅读平台",
 };
 
