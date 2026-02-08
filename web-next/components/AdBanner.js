@@ -9,7 +9,7 @@ const AdBanner = ({ atOptions }) => {
       const conf = document.createElement('script');
       const script = document.createElement('script');
       script.type = 'text/javascript';
-      script.src = `//www.highcpmcreativecontent.com/${atOptions.key}/invoke.js`;
+      script.src = `https://www.highperformanceformat.com/c499a0debce3cc11988efbef57ec87d0${atOptions.key}/invoke.js`;
       
       conf.innerHTML = `atOptions = ${JSON.stringify(atOptions)}`;
 
