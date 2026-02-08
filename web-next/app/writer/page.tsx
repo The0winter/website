@@ -249,7 +249,8 @@ export default function WriterDashboard() {
             headers: { 
                 'Content-Type': 'application/json',
                 // 🛠️ 修复 1：加个 ! 告诉 TS "我确信 user 存在"
-                'x-user-id': user!.id 
+                'x-user-id': user!.id ,
+                'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
             }
         });
 

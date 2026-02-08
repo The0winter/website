@@ -66,12 +66,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     initAuth();
   }, []);
 
-  // ... 上面是 useEffect 的结尾 (第67行) ...
-  // initAuth();
-  // }, []);
-
-  // 👇👇👇 请把这段代码补在第 68 行的位置 👇👇👇
-
   const signUp = async (email: string, password: string, username: string, role: 'reader' | 'writer') => {
     try {
       const { user: newUser, profile: newProfile } = await authApi.signUp(email, password, username, role);
