@@ -262,9 +262,9 @@ export default function WriterDashboard() {
         const data = await res.json();
         const newId = data.user.id; 
 
-        // 🛠️ 修复 2 (最关键)：必须使用 'novelhub_user' 这个 Key！
+        localStorage.setItem('token', data.token);
+
         // 你的 api.txt 和 AuthContext 里都只认这个名字。
-        // 如果名字不对，刷新页面后 api 就会读不到 ID，导致掉线。
         localStorage.setItem('novelhub_user', newId);
         
         // 顺便更新一下 user 对象，防止闪烁
