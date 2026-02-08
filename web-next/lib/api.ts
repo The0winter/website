@@ -20,7 +20,7 @@ export const API_BASE_URL = `${getBaseUrl()}/api`;
 export interface Profile {
   id: string;
   username: string;
-  role: 'reader' | 'writer';
+  role: 'reader' | 'writer'| 'admin';
   created_at: string;
 }
 
@@ -241,7 +241,7 @@ export interface AuthUser {
   id: string;
   email: string;
   username: string; // 👈 补上这一行！告诉 TS 用户确实有名字
-  role: 'reader' | 'writer';
+  role: 'reader' | 'writer'| 'admin';
   token?: string;
   avatar?: string;
   // 如果还有其他字段比如 avatar 等，也可以加在这里

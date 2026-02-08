@@ -94,7 +94,7 @@ export default function Navbar() {
 
             {user ? (
               <div className="flex items-center space-x-4">
-                {user.role === 'writer' && (
+                {(user.role === 'writer' || user.role === 'admin') && (
                   <Link 
                     href="/writer"
                     className={`flex items-center space-x-1 ${textSecondary} ${hoverText} transition-colors`}
