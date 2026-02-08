@@ -5,7 +5,7 @@ import path from 'path';
 import { MongoClient } from 'mongodb'; 
 
 // ⚠️ 请确保这里是你的真实连接地址
-const MONGO_URI = 'mongodb://1505993663_db_user:nQUNYNryJ0h9En0v@ac-ajkro1e-shard-00-00.xsa60lo.mongodb.net:27017,ac-ajkro1e-shard-00-01.xsa60lo.mongodb.net:27017,ac-ajkro1e-shard-00-02.xsa60lo.mongodb.net:27017/?replicaSet=atlas-13w2me-shard-0&ssl=true&authSource=admin'; 
+const MONGO_URI = process.env.MONGO_URI_LOCAL; 
 // ⚠️ 数据库名 (看截图你的数据库好像叫 "test" 下的 "chapters" 集合，但也可能是 "data" 库)
 // 请务必确认你的 Cluster0 下面那个库的名字，截图看左边是 "Cluster0 -> data -> chapters"
 // 所以这里很可能应该是 'data'

@@ -4,8 +4,10 @@ import { useState } from 'react';
 
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-// 1. 引入图标
-import { Search, User, LogOut, BookOpen, PenTool, Library, X, ArrowRight } from 'lucide-react';
+// 1. 引入 Next.js 的图片组件
+import Image from 'next/image';
+// 2. 去掉了 BookOpen，其他图标保持不变
+import { Search, User, LogOut, PenTool, Library, X, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext'; 
 
@@ -15,7 +17,7 @@ export default function Navbar() {
   const pathname = usePathname();
   const [searchQuery, setSearchQuery] = useState('');
   
-  // 2. 新增移动端搜索框开关状态
+  // 移动端搜索框开关状态
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
   const { theme } = useReadingSettings(); 
@@ -31,8 +33,7 @@ export default function Navbar() {
       router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
       // 搜索提交后关闭移动端搜索框
       setIsMobileSearchOpen(false);
-
-      // 2. [新增] 修复：清空搜索框内容，确保下次打开是空的
+      // 清空搜索框内容
       setSearchQuery('');
     }
   };
@@ -52,19 +53,27 @@ export default function Navbar() {
     <nav className={`${navBg} border-b ${navBorder} sticky top-0 z-50 transition-colors duration-300`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* ==================== 1. 电脑端布局 (hidden md:flex) 保持不变 ==================== */}
+        {/* ==================== 1. 电脑端布局 (hidden md:flex) ==================== */}
         <div className="hidden md:flex justify-between h-16">
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/" className="flex items-center">
-              <BookOpen className="h-8 w-8 text-blue-600" />
+              {/* 🔥 修改点：电脑端 Logo */}
+              <Image 
+                src="/logo.png"       // 对应 public/logo.png
+                alt="Logo" 
+                width={32}            // 对应 h-8 (32px)
+                height={32} 
+                className="w-8 h-8 object-contain" // object-contain 防止图片变形
+                priority              // 优先加载 Logo，防止闪烁
+              />
               <span className={`ml-2 text-xl font-bold ${textPrimary}`}>
                 九天小说
               </span>
             </Link>
           </div>
 
-          {/* 搜索框 */}
+          {/* 搜索框 (保持原有逻辑完全不动) */}
           <div className="flex-1 flex items-center justify-center px-8">
             <form onSubmit={handleSearch} className="w-full max-w-lg relative">
               <input
@@ -83,7 +92,7 @@ export default function Navbar() {
             </form>
           </div>
 
-          {/* 右侧按钮 */}
+          {/* 右侧按钮 (保持原有逻辑完全不动) */}
           <div className="flex items-center space-x-4">
             <Link 
               href="/library" 
@@ -128,26 +137,32 @@ export default function Navbar() {
         </div>
 
         {/* ==================== 2. 手机端布局 (md:hidden) ==================== */}
-        {/* 改动：将布局改为 flex-col 以容纳下方的搜索框 */}
         <div className="md:hidden flex flex-col">
             <div className="flex justify-between items-center h-14">
                 {/* 左侧：精简 Logo */}
                 <Link href="/" className="flex items-center gap-2">
-                   <BookOpen className="w-5 h-5 text-blue-600" />
+                   {/* 🔥 修改点：手机端 Logo */}
+                   <Image 
+                     src="/logo.png" 
+                     alt="Logo" 
+                     width={24}  // 手机端稍微小一点
+                     height={24} 
+                     className="w-6 h-6 object-contain" 
+                   />
                    <span className={`font-black text-lg tracking-tighter ${textPrimary}`}>九天</span>
                 </Link>
 
-                {/* 右侧：图标组 */}
+                {/* 右侧：图标组 (保持原有逻辑完全不动) */}
                 <div className={`flex items-center gap-5 ${textSecondary}`}>
-                   {/* 搜索图标 (改动：点击展开/收起搜索框) */}
+                   {/* 搜索图标 */}
                    <button 
                      onClick={() => setIsMobileSearchOpen(!isMobileSearchOpen)}
                      className="focus:outline-none"
                    >
                      {isMobileSearchOpen ? (
-                       <X className="w-5 h-5" /> // 展开时显示关闭图标
+                       <X className="w-5 h-5" />
                      ) : (
-                       <Search className="w-5 h-5" /> // 收起时显示搜索图标
+                       <Search className="w-5 h-5" />
                      )}
                    </button>
                    
@@ -163,7 +178,7 @@ export default function Navbar() {
                 </div>
             </div>
 
-          {/* 🔥 新增：移动端折叠搜索框 (精装修版) */}
+          {/* 移动端搜索框 (保持原有逻辑完全不动) */}
             {isMobileSearchOpen && (
               <div className="pb-3 px-1 animate-in slide-in-from-top-2 fade-in duration-200">
                 <form onSubmit={handleSearch} className="relative flex items-center">
@@ -181,10 +196,8 @@ export default function Navbar() {
                     `}
                   />
                   
-                  {/* 左侧搜索镜图标 */}
                   <Search className={`absolute left-3.5 w-4 h-4 pointer-events-none ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
                   
-                  {/* 右侧提交按钮 (有内容时变蓝，无内容时隐藏或变灰) */}
                   <button 
                     type="submit" 
                     disabled={!searchQuery.trim()}

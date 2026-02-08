@@ -9,7 +9,7 @@ import { scrapeAndSaveBook } from './server/utils/scraperService.js';
 // ⚠️ 关键：这里要填你【线上】数据库的连接地址
 // 格式通常是: mongodb+srv://<username>:<password>@cluster0.xxx.mongodb.net/yourdbname
 //const MONGO_URL = process.env.MONGO_URI;
-const MONGO_URL = 'mongodb://1505993663_db_user:nQUNYNryJ0h9En0v@ac-ajkro1e-shard-00-00.xsa60lo.mongodb.net:27017,ac-ajkro1e-shard-00-01.xsa60lo.mongodb.net:27017,ac-ajkro1e-shard-00-02.xsa60lo.mongodb.net:27017/?replicaSet=atlas-13w2me-shard-0&ssl=true&authSource=admin';
+const MONGO_URL = process.env.MONGO_URI_LOCAL;
 
 if (!MONGO_URL) {
     console.error("❌ 致命错误：未找到 MONGO_URI 环境变量！");

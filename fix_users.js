@@ -3,7 +3,7 @@ import 'dotenv/config'; // 确保能读取 .env 里的数据库地址
 import mongoose from 'mongoose';
 
 
-const MONGO_URL = 'mongodb://1505993663_db_user:nQUNYNryJ0h9En0v@ac-ajkro1e-shard-00-00.xsa60lo.mongodb.net:27017,ac-ajkro1e-shard-00-01.xsa60lo.mongodb.net:27017,ac-ajkro1e-shard-00-02.xsa60lo.mongodb.net:27017/data?replicaSet=atlas-13w2me-shard-0&ssl=true&authSource=admin';
+const MONGO_URL = MONGO_URI_LOCAL;
 const migrate = async () => {
   try {
     console.log('🚀 [第1步] 正在连接数据库...');
