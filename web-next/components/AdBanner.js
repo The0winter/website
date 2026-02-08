@@ -42,7 +42,7 @@ const AdBanner = ({ atOptions }) => {
     iframe.height = height;
     iframe.style.border = 'none';
     iframe.style.overflow = 'hidden';
-    iframe.sandbox = 'allow-scripts allow-same-origin allow-forms';
+    iframe.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox';
     
     // 3. 把这个 iframe 放到我们的容器里
     const container = containerRef.current;

@@ -655,30 +655,57 @@ export default function WriterDashboard() {
                     <div className="p-6 border-t border-gray-100 bg-white animate-in slide-in-from-top-2 duration-200">
                         <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-8">
                             
-                            {/* 左侧：封面区 */}
-                            <div className="flex flex-col items-center gap-3">
-                                <div className="w-40 h-56 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 overflow-hidden relative group shadow-sm hover:border-blue-500 transition-all cursor-pointer">
-                                    {uploading ? (
-                                        <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
-                                            <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
-                                        </div>
-                                    ) : formBookCover ? (
+                        {/* 左侧：封面修改区 (已添加删除功能) */}
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="w-40 h-56 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 overflow-hidden relative group shadow-sm hover:border-blue-500 transition-all cursor-pointer">
+                                
+                                {/* 1. 加载中状态 */}
+                                {uploading ? (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
+                                        <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
+                                    </div>
+                                ) : formBookCover ? (
+                                    // 2. 有封面时显示图片
+                                    <>
                                         <img src={formBookCover} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                                    ) : (
-                                        <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                                            <ImageIcon className="h-10 w-10 mb-2 opacity-50" />
-                                            <span className="text-xs font-medium">暂无封面</span>
-                                        </div>
-                                    )}
-                                    
-                                    <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center cursor-pointer text-white">
+                                        
+                                        {/* ✅ 新增：删除封面按钮 (右上角红色垃圾桶) */}
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // 防止触发上传
+                                                e.preventDefault();
+                                                if (confirm('确定要移除这张封面吗？(记得点右下角保存)')) {
+                                                    setFormBookCover(''); // 清空状态
+                                                }
+                                            }}
+                                            className="absolute top-2 right-2 z-20 p-2 bg-red-600/90 text-white rounded-full hover:bg-red-700 shadow-sm opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
+                                            title="移除封面"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </>
+                                ) : (
+                                    // 3. 无封面时显示占位符
+                                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                                        <ImageIcon className="h-10 w-10 mb-2 opacity-50" />
+                                        <span className="text-xs font-medium">暂无封面</span>
+                                    </div>
+                                )}
+                                
+                                {/* 4. 覆盖层：点击上传/裁剪 (z-10 保证在图片之上，但在删除按钮之下) */}
+                                <label className="absolute inset-0 z-10 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center justify-center cursor-pointer text-white">
+                                    {/* 如果有删除按钮，稍微往下挪一点，避开右上角 */}
+                                    <div className="flex flex-col items-center transform translate-y-2">
                                         <Upload className="h-8 w-8 mb-2 animate-bounce" />
                                         <span className="text-sm font-bold">点击更换</span>
-                                        <input type="file" className="hidden" accept="image/*" onChange={(e) => onSelectFile(e, 'edit')} />
-                                    </label>
-                                </div>
-                                <p className="text-xs text-gray-400">支持 JPG, PNG</p>
+                                    </div>
+                                    {/* ⚠️ 记得检查这里是不是 onSelectFile ！ */}
+                                    <input type="file" className="hidden" accept="image/*" onChange={(e) => onSelectFile(e, 'edit')} />
+                                </label>
                             </div>
+                            <p className="text-xs text-gray-400">支持 JPG, PNG (推荐 3:4)</p>
+                        </div>
 
                             {/* 右侧：表单区 */}
                             <div className="space-y-5">
