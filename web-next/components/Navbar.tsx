@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-// 1. 引入 X 图标
+// 1. 引入图标
 import { Search, User, LogOut, BookOpen, PenTool, Library, X, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext'; 
