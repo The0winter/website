@@ -822,34 +822,49 @@ app.get('/api/books/:bookId/chapters', async (req, res) => {
   }
 });
 
+// ✅ 修复后的章节获取接口：自动增加书籍浏览量 + 用户阅读量
 app.get('/api/chapters/:id', async (req, res) => {
   try {
+    // 1. 防盗链检查 (保持你原有的逻辑)
     const referer = req.headers.referer || '';
     const ALLOWED_DOMAINS = ['localhost', 'jiutianxiaoshuo.com']; 
     if (referer && !ALLOWED_DOMAINS.some(domain => referer.includes(domain))) {
        // console.log('🚫 章节防盗链拦截:', referer);
-       // 暂时放宽防盗链，避免前端调试问题
     }
 
-    // 埋点统计用户浏览量 (静默处理，不影响主逻辑)
-    const authHeader = req.headers['authorization'];
-    if (authHeader) {
-        try {
-            const token = authHeader.split(' ')[1];
-            if (token) {
-                const decoded = jwt.verify(token, JWT_SECRET);
-                // 异步更新，不await，加快响应速度
-                User.findByIdAndUpdate(decoded.id, { 
-                    $inc: { 'stats.today_views': 1 } 
-                }).exec();
-            }
-        } catch (e) { /* 忽略无效token */ }
-    }
-
+    // 2. 先查章节，确保章节存在
     const chapter = await Chapter.findById(req.params.id).lean();
     if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+
+    // ================= 📊 数据统计区域 (核心修复) =================
+    
+    // 🔥 A. 增加【书籍】浏览量 (同步增加，确保数据准确)
+    // 既然读了这一章，这本书的点击量就该 +1
+    // 使用非阻塞写法 (不加 await)，加快响应速度，后台慢慢存
+    Book.findByIdAndUpdate(chapter.bookId, { 
+        $inc: { views: 1, daily_views: 1, weekly_views: 1, monthly_views: 1 } 
+    }).exec().catch(err => console.error('书籍浏览量更新失败:', err));
+
+    // 🔥 B. 增加【用户】阅读量 (如果已登录)
+    const authHeader = req.headers['authorization'];
+    if (authHeader) {
+        const token = authHeader.split(' ')[1];
+        if (token) {
+            try {
+                const decoded = jwt.verify(token, JWT_SECRET);
+                // 给这个用户今日阅读量 +1
+                User.findByIdAndUpdate(decoded.id, { 
+                    $inc: { 'stats.today_views': 1 } 
+                }).exec().catch(err => console.error('用户统计更新失败:', err));
+            } catch (e) {
+                // Token 过期或无效，忽略，不影响看书
+            }
+        }
+    }
+    // ==========================================================
     
     res.json({ ...chapter, id: chapter._id.toString(), bookId: chapter.bookId.toString() });
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

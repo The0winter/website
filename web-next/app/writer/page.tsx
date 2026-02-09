@@ -387,7 +387,7 @@ export default function WriterDashboard() {
                                         >
                                             <Upload className="h-3 w-3 md:h-4 md:w-4" /> <span>快速发布</span>
                                         </button>
-                                        <button onClick={() => { setCurrentBookId(book.id); setFormBookTitle(book.title); setFormBookDescription(book.description || ''); setFormBookCover(book.cover_image || ''); setShowBookManager(true); }} className="w-32 flex items-center justify-center gap-1 px-3 py-2 bg-white text-blue-600 text-sm font-bold rounded-lg border border-blue-100 shadow-sm hover:bg-blue-50 hover:border-blue-300 hover:shadow-md active:scale-95 transition-all cursor-pointer"
+                                        <button onClick={() => { setCurrentBookId(book.id); setFormBookTitle(book.title); setFormBookDescription(book.description || ''); setFormBookCover(book.cover_image || ''); setShowBookManager(true); }} className="w-32 flex items-center justify-center gap-1 px-3 py-2 bg-white text-gray-700 text-sm font-bold rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 hover:border-gray-300 hover:shadow-md active:scale-95 transition-all cursor-pointer"
                                         >
                                             <Settings className="h-3 w-3 md:h-4 md:w-4" /> <span>管理</span>
                                         </button>
