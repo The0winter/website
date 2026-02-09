@@ -1,6 +1,6 @@
 'use client'; 
 
-import { useState, useEffect } from 'react'; // ✅ 引入 useEffect
+import { useState, useEffect } from 'react'; 
 import { useRouter } from 'next/navigation'; 
 import { useAuth } from '@/contexts/AuthContext'; 
 
@@ -10,18 +10,17 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   
-  // ✅ 新增状态
   const [code, setCode] = useState('');
   const [countdown, setCountdown] = useState(0);
   
   const [error, setError] = useState('');
+  // ✅ 新增：成功提示状态
+  const [success, setSuccess] = useState(''); 
   const [loading, setLoading] = useState(false);
   
-  // 1. 取出 register 和 signIn
   const { register, signIn } = useAuth();
   const router = useRouter(); 
 
-  // ✅ 新增：倒计时逻辑
   useEffect(() => {
     if (countdown > 0) {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
@@ -29,7 +28,6 @@ export default function Register() {
     }
   }, [countdown]);
 
-  // ✅ 新增：发送验证码函数
   const handleSendCode = async () => {
     if (!email || !email.includes('@')) {
       setError('请输入有效的邮箱地址');
@@ -38,7 +36,8 @@ export default function Register() {
     
     try {
       setError('');
-      // 注意：确保这个 URL 是你后端的地址
+      setSuccess(''); // 发送前清空之前的提示
+      
       const res = await fetch('/api/auth/send-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -48,8 +47,14 @@ export default function Register() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || '发送失败');
       
-      setCountdown(60); // 开始60秒倒计时
-      alert('验证码已发送，请查收邮件！');
+      setCountdown(60); 
+      
+      // ✅ 修改：不再弹 alert，而是设置页面内的成功状态
+      setSuccess('验证码已发送至您的邮箱，请查收！');
+      
+      // 3秒后自动关闭提示，体验更好
+      setTimeout(() => setSuccess(''), 3000);
+
     } catch (err: any) {
       setError(err.message);
     }
@@ -61,7 +66,7 @@ export default function Register() {
     if (password !== confirmPassword) {
       return setError('两次输入的密码不一致');
     }
-    if (!code) { // ✅ 检查验证码
+    if (!code) { 
       return setError('请输入验证码');
     }
 
@@ -69,10 +74,7 @@ export default function Register() {
       setError('');
       setLoading(true);
 
-      // ✅ 2. 传入 code 给 register
       await register(username, email, password, code);
-      
-      // 注册成功后自动登录
       await signIn(email, password);
 
       router.push('/'); 
@@ -86,12 +88,31 @@ export default function Register() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
        <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-lg shadow-md">
-         {/* 标题部分省略，保持原样即可 */}
          <div className="text-center">
             <h2 className="text-3xl font-bold text-gray-900">注册账户</h2>
          </div>
          
          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+            
+            {/* ✅ 新增：成功提示框 (仅在 success 有值时显示) */}
+            {success && (
+              <div className="rounded-md bg-green-50 p-4 border border-green-200 animate-fade-in-down">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    {/* 一个绿色的小勾图标 */}
+                    <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-green-800">
+                      {success}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-4">
               {/* 用户名 */}
               <div>
@@ -122,7 +143,7 @@ export default function Register() {
                 />
               </div>
 
-              {/* ✅ 新增：验证码输入框 + 按钮 */}
+              {/* 验证码输入框 + 按钮 */}
               <div className="flex gap-2">
                 <div className="relative flex-grow">
                   <label htmlFor="code" className="sr-only">验证码</label>
@@ -140,7 +161,7 @@ export default function Register() {
                   type="button"
                   onClick={handleSendCode}
                   disabled={countdown > 0}
-                  className="whitespace-nowrap px-4 py-2 border border-transparent text-sm font-medium rounded-md text-blue-600 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="whitespace-nowrap px-4 py-2 border border-transparent text-sm font-medium rounded-md text-blue-600 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {countdown > 0 ? `${countdown}s 后重发` : '获取验证码'}
                 </button>
