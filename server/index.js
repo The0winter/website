@@ -323,13 +323,27 @@ app.post('/api/auth/signup', async (req, res) => {
     // ✅ 1. 多接收一个 code 参数
     const { email, password, username, role, code } = req.body;
 
-    // ✅ 2. 校验验证码 (这是新增的核心逻辑)
+// ✅ 2. 校验验证码 (修改后)
     const validCode = await VerificationCode.findOne({ email, code });
+    
+    // 情况A: 根本找不到 (可能没发过，或者过了1小时被数据库自动删了)
     if (!validCode) {
-      return res.status(400).json({ error: '验证码错误或已过期' });
+      return res.status(400).json({ error: '验证码错误或不存在' });
     }
 
+    // 情况B: 找到了，但我们要检查是不是“超时”了 (核心逻辑)
+    // 计算现在的时间 - 发送的时间
+    const timeDiff = Date.now() - new Date(validCode.lastSentAt).getTime();
+    const isExpired = timeDiff > 5 * 60 * 1000; // 5分钟 = 300000毫秒
+
+    if (isExpired) {
+       return res.status(400).json({ error: '验证码已过期(超过5分钟)，请重新获取' });
+    }
+
+    // --- 验证通过，继续下面的注册逻辑 ---
+
     const existingUser = await User.findOne({ email });
+    // ... (后面的代码不用动)
     if (existingUser) return res.status(400).json({ error: '该邮箱已被注册' });
 
     const salt = await bcrypt.genSalt(10);
@@ -498,24 +512,63 @@ app.get('/api/auth/session', async (req, res) => {
   }
 });
 
-// ✅ 新增：发送验证码接口
+// ✅ 发送验证码接口 (完整版：防重复 + 防轰炸 + 限流)
 app.post('/api/auth/send-code', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ message: "请填写邮箱" });
 
-  // 生成6位随机数
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-
   try {
-    // 删除旧验证码，防止重复
-    await VerificationCode.deleteMany({ email });
+    // 🔥 第一步：检查邮箱是否已被注册
+    // 如果用户已经是会员了，就别让他发验证码了，直接让他去登录
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "该邮箱已被注册，请直接登录" });
+    }
+
+    // --- 下面是之前的防轰炸/限流逻辑 ---
     
-    // 保存新验证码
-    await new VerificationCode({ email, code }).save();
+    // 生成6位随机数
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // 查一下验证码表里的记录
+    let record = await VerificationCode.findOne({ email });
+
+    if (record) {
+      // 存在记录，检查是否超频
+      const now = Date.now();
+      const lastSentTime = new Date(record.lastSentAt).getTime();
+      const diffSeconds = (now - lastSentTime) / 1000;
+
+      // 限制A：60秒冷却
+      if (diffSeconds < 60) {
+        return res.status(429).json({ message: `发送太频繁，请 ${Math.ceil(60 - diffSeconds)} 秒后再试` });
+      }
+
+      // 限制B：1小时内最多5次
+      if (record.sendCount >= 5) {
+        return res.status(429).json({ message: "操作太频繁，请 1 小时后再试" });
+      }
+
+      // 允许发送：更新数据
+      record.code = code;
+      record.sendCount += 1;
+      record.lastSentAt = now;
+      await record.save();
+
+    } else {
+      // 没有记录，创建新记录
+      await new VerificationCode({
+        email,
+        code,
+        sendCount: 1,
+        lastSentAt: Date.now()
+      }).save();
+    }
 
     // 发送邮件
     await sendVerificationEmail(email, code);
     res.json({ message: "验证码已发送" });
+
   } catch (error) {
     console.error("邮件发送错误:", error);
     res.status(500).json({ message: "邮件发送失败" });
