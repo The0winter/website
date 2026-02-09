@@ -234,7 +234,7 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
             // 2. 选择需要的字段 (包括 stats)
             .select('username email role created_at isBanned stats weekly_score')
             // 3. 排序：按 weekly_score (活跃分) 倒序，分数一样按注册时间
-            .sort({ weekly_score: -1, created_at: -1 })
+            .sort({ weekly_score: -1, created_at: -1 }) // 直接按分数排，现在分数是秒级更新的
             // 4. 限制 15 条
             .limit(15);
             
@@ -857,21 +857,12 @@ app.get('/api/chapters/:id', async (req, res) => {
             try {
                 const decoded = jwt.verify(token, JWT_SECRET);
                 
-                // 2. 打印日志：看有没有识别出用户 ID
-                console.log(`👤 [调试] 识别到登录用户 ID: ${decoded.id}`);
-
-                // 3. 关键：尝试更新并打印结果
                 User.findByIdAndUpdate(decoded.id, { 
-                    $inc: { 'stats.today_views': 1 } 
-                }, { new: true }) // new: true 会返回更新后的数据
-                .then(updatedUser => {
-                    if (updatedUser) {
-                        console.log(`✅ [调试] 更新成功！当前 today_views = ${updatedUser.stats?.today_views}`);
-                    } else {
-                        console.log(`⚠️ [调试] 未找到该用户，更新失败`);
-                    }
-                })
-                .catch(err => console.error('❌ [调试] 数据库报错:', err));
+                $inc: { 
+                    'stats.today_views': 1,  // 今日阅读数 +1 (用于统计)
+                    'weekly_score': 1        // 🌟 核心：总分也立刻 +1 (用于排名)
+                } 
+            }).exec().catch(err => console.error('用户统计更新失败:', err));
                 
             } catch (e) {
                 console.log('⚠️ [调试] Token 无效或过期');
@@ -907,12 +898,12 @@ app.post('/api/chapters', authMiddleware, checkUploadQuota, async (req, res) => 
 
       await newChapter.save();
 
-      // 注意：之前的 daily_upload_words 是记录字数，这个是记录“次数”
       if (req.user.role !== 'admin') {
           await User.findByIdAndUpdate(req.user.id, {
               $inc: { 
                   daily_upload_words: req.incomingWordCount || 0,
-                  'stats.today_uploads': 1 // 次数 +1
+                  'stats.today_uploads': 1, // 今日上传数 +1
+                  'weekly_score': 5         // 🌟 核心：总分立刻 +5 (让你一眼看到上传狂魔)
               },
               last_upload_date: new Date()
           });
