@@ -347,7 +347,6 @@ export default function ProfilePage() {
             <p className="text-center text-gray-300 text-xs mt-4">Version 1.0.0</p>
         </div>
 
-      </div>
 
       {/* ================= 修改密码 Modal (响应式优化) ================= */}
       {showPasswordModal && (
