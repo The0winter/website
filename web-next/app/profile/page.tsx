@@ -15,7 +15,6 @@ import {
 import { authApi } from '@/lib/api';
 
 export default function ProfilePage() {
-  const { user, profile, loading, logout } = useAuth();
   const router = useRouter();
 
   // ================= State 定义 =================
@@ -27,8 +26,12 @@ export default function ProfilePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const { user, profile, loading, logout, setUser } = useAuth();
   // 📸 处理头像上传
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // 如果正在上传，直接忽略新的变动
+    if (avatarUploading) return; 
+    
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
@@ -39,31 +42,31 @@ export default function ProfilePage() {
     }
 
     try {
-        setAvatarUploading(true);
-        
-        // 1. 上传到 Cloudinary
-        const url = await uploadImageToCloudinary(file);
-        if (!url) throw new Error('上传失败');
+    setAvatarUploading(true);
+    // 1. 上传图片拿到 URL
+    const url = await uploadImageToCloudinary(file);
+    
+    // 2. 更新后端
+    const updatedUserFromBackend = await authApi.updateUser(user.id, { avatar: url });
+    if (updatedUserFromBackend.error) {
+    throw new Error(updatedUserFromBackend.error);
+}
+    // 3. ✅ 优雅地更新前端状态 (替代 reload)
+    // 假设 res 是后端返回的最新的 user 对象
+    // 如果 res 包含 token 和 user，根据实际情况取值
+    const newUser = { ...user, avatar: url }; 
+    
+    // 更新 Context 状态，React 会自动重新渲染头像，无需刷新
+    if (setUser) {
+        setUser(newUser);
+    }
+    
+    // 更新 LocalStorage (防止用户按 F5 后头像又变回去)
+    localStorage.setItem('user', JSON.stringify(newUser));
 
-        // 2. 调用后端更新数据库
-        const updatedUser = await authApi.updateUser(user.id, { avatar: url });
-        
-        if (updatedUser.error) {
-            throw new Error(updatedUser.error);
-        }
+    setToast({ msg: '头像更新成功！', type: 'success' });
 
-        // 3. 更新本地存储和状态，让页面立刻刷新
-        // 注意：这里最简单的办法是更新 localStorage 然后重载页面，或者调用 AuthContext 的 update 方法
-        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-        const newUser = { ...storedUser, avatar: url };
-        localStorage.setItem('user', JSON.stringify(newUser));
-        
-        setToast({ msg: '头像更新成功！', type: 'success' });
-        
-        // 强制刷新页面以更新所有地方的头像 (简单粗暴但有效)
-        setTimeout(() => window.location.reload(), 1000);
-
-    } catch (err: any) {
+} catch (err: any) {
         setToast({ msg: err.message || '头像上传失败', type: 'error' });
     } finally {
         setAvatarUploading(false);
@@ -410,7 +413,7 @@ export default function ProfilePage() {
                         )}
                     </div>
 
-                    <div className="pt-2 flex gap-3 pb-safe"> 
+                    <div className="pt-2 flex gap-3 pb-6 md:pb-0">
                         {/* pb-safe 是为了适配 iPhone 底部黑条，如果是原生 App 开发常需要，Web 一般留点 padding 就行 */}
                         <button 
                             type="button" 

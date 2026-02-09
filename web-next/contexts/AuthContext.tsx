@@ -7,6 +7,7 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   
+  setUser: (user: AuthUser | null) => void;
   // 注册相关的不用动（除非你注册后也想直接拿到token）
   signUp: (email: string, password: string, username: string, role: 'reader' | 'writer', code: string) => Promise<{ error: Error | null }>;
   register: (username: string, email: string, password: string, code: string) => Promise<{ error: Error | null }>;
@@ -137,7 +138,7 @@ const logout = async () => {
 
   return (
     // ✅ 已修改：Value 中传入 logout
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, logout, register}}>
+    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, logout, register, setUser}}>
       {children}
     </AuthContext.Provider>
   );
