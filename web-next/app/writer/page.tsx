@@ -383,11 +383,11 @@ export default function WriterDashboard() {
                                         <p className="text-xs md:text-sm text-gray-500 mt-1 line-clamp-2">{book.description || '暂无简介'}</p>
                                     </div>
                                     <div className="flex gap-2 md:gap-3 mt-3">
-                                        <button onClick={() => { setCurrentBookId(book.id); openChapterEditor('new'); }} className="flex-1 flex items-center justify-center gap-1 px-3 py-1 bg-blue-50 text-blue-600 text-xs font-medium rounded-lg active:bg-blue-100 transition border border-blue-100 hover:bg-blue-100 cursor-pointer"
+                                        <button onClick={() => { setCurrentBookId(book.id); openChapterEditor('new'); }} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-blue-600 text-sm font-bold rounded-xl border border-blue-100 shadow-sm hover:bg-blue-50 hover:border-blue-300 hover:shadow-md active:scale-95 transition-all cursor-pointer"
                                         >
                                             <Upload className="h-3 w-3 md:h-4 md:w-4" /> <span>快速发布</span>
                                         </button>
-                                        <button onClick={() => { setCurrentBookId(book.id); setFormBookTitle(book.title); setFormBookDescription(book.description || ''); setFormBookCover(book.cover_image || ''); setShowBookManager(true); }} className="flex-1 flex items-center justify-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg active:bg-gray-200 transition border border-gray-200 hover:bg-gray-200 cursor-pointer"
+                                        <button onClick={() => { setCurrentBookId(book.id); setFormBookTitle(book.title); setFormBookDescription(book.description || ''); setFormBookCover(book.cover_image || ''); setShowBookManager(true); }} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-gray-700 text-sm font-bold rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 hover:border-gray-300 hover:shadow-md active:scale-95 transition-all cursor-pointer"
                                         >
                                             <Settings className="h-3 w-3 md:h-4 md:w-4" /> <span>管理</span>
                                         </button>

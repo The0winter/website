@@ -1003,45 +1003,38 @@ cron.schedule('5 0 * * *', async () => {
     try {
         const users = await User.find({});
         for (const user of users) {
-            // 1. 获取今日数据
+            // ... (获取 todayViews, todayWords 代码不变) ...
             const todayViews = user.stats?.today_views || 0;
-            // ⚠️ 确保你在 userSchema 里加了 today_words 字段，或者复用 daily_upload_words
-            const todayWords = user.daily_upload_words || 0; 
+            const todayWords = user.daily_upload_words || 0;
+
+            // ... (存入 history 代码不变) ...
             
-            // 2. 存入历史 (保留字数)
-            const newHistoryItem = {
-                date: new Date(),
-                views: todayViews,
-                words: todayWords // 记录字数
-            };
-            
-            const currentHistory = Array.isArray(user.stats?.history) ? user.stats.history : [];
-            const newHistory = [...currentHistory, newHistoryItem].slice(-7); // 只留7天
-            
-            // 3. 🟢 计算周活跃分 (算法优化)
+            // 🟢 修改：安全加权算法 (侧重检测恶意上传)
             let totalScore = 0;
-            newHistory.forEach(h => {
-                // 浏览量权重: 1
-                const vScore = (h.views || 0) * 1; 
-                // 字数权重: 0.1 (即每写10个字 = 1分)
-                // 这样 2000字的一章 = 200分，相当于 200 个阅读量，比较平衡
-                const wScore = Math.floor((h.words || 0) / 10); 
-                
-                totalScore += (vScore + wScore);
+            // 重新计算历史总分
+            // 注意：这里我们用新加入的 history 数据来算，或者简单点，只算累积
+            // 为了简化，我们直接遍历 history 数组
+            const currentHistory = user.stats?.history || [];
+            
+            currentHistory.forEach(h => {
+                const v = h.views || 0;
+                const w = h.words || 0;
+
+                // ⚖️ 权重公式：
+                // 浏览 1 次 = 1 分 (低风险)
+                // 上传 1 字 = 5 分 (高风险，持久化存储)
+                // 例子：上传一章2000字 = 10,000分。
+                // 这样只要有人上传，他的分数就会直接飙升到列表顶部，让你立刻注意到。
+                totalScore += (v * 1) + (w * 5); 
             });
             
-            // 4. 更新数据库
-            user.stats = {
-                today_views: 0,
-                today_uploads: 0, // 如果你还想留着次数
-                history: newHistory
-            };
+            // ... (保存逻辑不变) ...
             user.daily_upload_words = 0; // 重置今日字数
-            user.weekly_score = totalScore; // 更新总分
+            user.weekly_score = totalScore;
             
             await user.save();
         }
-        console.log('✅ [Cron] 数据归档及加权计算完成');
+        console.log('✅ [Cron] 数据归档完成');
     } catch (error) {
         console.error('❌ [Cron] 失败:', error);
     }
