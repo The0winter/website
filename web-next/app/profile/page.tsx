@@ -239,28 +239,32 @@ return (
                 </div>
             </div>
 
-            {/* ================= 功能入口 (保持原样) ================= */}
-            <div className="px-6 pb-2 grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                <Link href="/library" className="group flex items-center p-4 bg-gray-50 rounded-2xl hover:bg-gray-100 transition border border-transparent hover:border-gray-200">
-                    <div className="h-10 w-10 bg-white text-blue-600 rounded-lg flex items-center justify-center mr-4 shadow-sm group-hover:scale-110 transition-transform">
-                        <BookOpen className="h-5 w-5" />
+            {/* ================= 功能入口 ================= */}
+            {/* 修改：grid-cols-2 强制两列，gap-3 减小间距 */}
+            <div className="px-6 pb-2 grid grid-cols-2 gap-3 mt-4">
+                
+                <Link href="/library" className="group flex items-center p-3 sm:p-4 bg-slate-50/50 hover:bg-slate-100 border border-slate-100 rounded-2xl transition">
+                    {/* 修改：手机端图标变小 (h-8 w-8)，右边距变小 (mr-2) */}
+                    <div className="h-8 w-8 sm:h-10 sm:w-10 bg-white text-blue-600 rounded-xl flex items-center justify-center shadow-sm border border-slate-100 mr-2 sm:mr-4 group-hover:scale-110 transition-transform shrink-0">
+                        <BookOpen className="h-4 w-4 sm:h-5 sm:w-5" />
                     </div>
-                    <div className="flex-1">
-                        <h3 className="font-bold text-gray-900 text-sm">我的书架</h3>
-                        <p className="text-xs text-gray-500 mt-0.5">继续阅读你的收藏</p>
+                    <div className="flex-1 min-w-0"> {/* min-w-0 防止文字撑开布局 */}
+                        <h3 className="font-bold text-slate-900 text-sm truncate">我的书架</h3>
+                        <p className="text-xs text-slate-500 truncate">阅读历史</p>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-blue-500 transition-colors" />
+                    {/* 修改：手机端隐藏箭头，节省空间 */}
+                    <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-400 hidden sm:block shrink-0" />
                 </Link>
 
-                <Link href="/writer" className="group flex items-center p-4 bg-gray-50 rounded-2xl hover:bg-amber-50 transition border border-transparent hover:border-amber-100">
-                    <div className="h-10 w-10 bg-white text-amber-600 rounded-lg flex items-center justify-center mr-4 shadow-sm group-hover:scale-110 transition-transform">
-                        <PenTool className="h-5 w-5" />
+                <Link href="/writer" className="group flex items-center p-3 sm:p-4 bg-slate-50/50 hover:bg-amber-50/50 border border-slate-100 hover:border-amber-100 rounded-2xl transition">
+                    <div className="h-8 w-8 sm:h-10 sm:w-10 bg-white text-amber-600 rounded-xl flex items-center justify-center shadow-sm border border-slate-100 mr-2 sm:mr-4 group-hover:scale-110 transition-transform shrink-0">
+                        <PenTool className="h-4 w-4 sm:h-5 sm:w-5" />
                     </div>
-                    <div className="flex-1">
-                        <h3 className="font-bold text-gray-900 text-sm">作家专区</h3>
-                        <p className="text-xs text-gray-500 mt-0.5">发布与管理作品</p>
+                    <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-slate-900 text-sm truncate">作家专区</h3>
+                        <p className="text-xs text-slate-500 truncate">创作中心</p>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-amber-500 transition-colors" />
+                    <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-amber-400 hidden sm:block shrink-0" />
                 </Link>
             </div>
 
