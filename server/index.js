@@ -24,6 +24,9 @@ import { createReview, getReviews } from './controllers/reviewController.js';
 
 const app = express();
 
+let userViewBuffer = {}; // 存用户阅读量: { "userId1": 5, "userId2": 1 }
+let bookViewBuffer = {}; // 存书籍阅读量: { "bookId1": 100, "bookId2": 3 }
+
 app.set('trust proxy', 1);
 
 // ================= 1. 安全与配置 (紧急修复版) =================
@@ -836,40 +839,33 @@ app.get('/api/chapters/:id', async (req, res) => {
     const chapter = await Chapter.findById(req.params.id).lean();
     if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
 
-// 在 server/index.js 中找到这一段
-
-    // ================= 📊 数据统计区域 (调试版) =================
+// ================= 🔥 [修改] 改为内存记账 🔥 =================
     
-    // 1. 打印日志：看书确实被请求了吗？
-    console.log(`📖 [调试] 有人正在读书: BookID=${chapter.bookId}`);
+    // A. 记录书籍浏览量 (只是在内存对象里 +1)
+    const bookIdStr = chapter.bookId.toString();
+    if (!bookViewBuffer[bookIdStr]) {
+        bookViewBuffer[bookIdStr] = 0;
+    }
+    bookViewBuffer[bookIdStr]++; 
 
-    // 🔥 A. 增加【书籍】浏览量
-    Book.findByIdAndUpdate(chapter.bookId, { 
-        $inc: { views: 1, daily_views: 1, weekly_views: 1, monthly_views: 1 } 
-    }).exec().catch(err => console.error('❌ 书籍统计失败:', err));
-
-    // 🔥 B. 增加【用户】阅读量
+    // B. 记录用户浏览量
     const authHeader = req.headers['authorization'];
-    
     if (authHeader) {
         const token = authHeader.split(' ')[1];
         if (token) {
             try {
+                // 解码拿到 UserID
                 const decoded = jwt.verify(token, JWT_SECRET);
+                const userId = decoded.id;
+
+                // 内存记账
+                if (!userViewBuffer[userId]) {
+                    userViewBuffer[userId] = 0;
+                }
+                userViewBuffer[userId]++;
                 
-                User.findByIdAndUpdate(decoded.id, { 
-                $inc: { 
-                    'stats.today_views': 1,  // 今日阅读数 +1 (用于统计)
-                    'weekly_score': 1        // 🌟 核心：总分也立刻 +1 (用于排名)
-                } 
-            }).exec().catch(err => console.error('用户统计更新失败:', err));
-                
-            } catch (e) {
-                console.log('⚠️ [调试] Token 无效或过期');
-            }
+            } catch (e) { /* Token 无效忽略 */ }
         }
-    } else {
-        console.log('👻 [调试] 用户未登录 (无 Auth Header)');
     }
     // ==========================================================
     
@@ -1079,6 +1075,71 @@ cron.schedule('0 0 1 * *', async () => {
         console.error('❌ [Cron] 月榜重置失败:', error.message);
     }
 });
+
+// ================= 🔥 [新增] 5分钟自动刷盘定时器 🔥 =================
+
+// 设置为 5 分钟 (300000 毫秒) 执行一次
+setInterval(async () => {
+    // 1. 检查是否有数据需要处理
+    const userIds = Object.keys(userViewBuffer);
+    const bookIds = Object.keys(bookViewBuffer);
+
+    if (userIds.length === 0 && bookIds.length === 0) return; // 没人看书，啥也不做
+
+    console.log(`💾 [Buffer] 开始批量写入数据库... 用户更新:${userIds.length}人, 书籍更新:${bookIds.length}本`);
+
+    // --- 🔒 锁定数据：把当前 buffer 复制出来，并立即清空全局 buffer ---
+    // 这样做是为了防止在写入数据库的这几秒内，新进来的点击被弄丢或者重复计算
+    const currentUsers = { ...userViewBuffer };
+    const currentBooks = { ...bookViewBuffer };
+    
+    userViewBuffer = {}; // 立即清空，准备接收下一波
+    bookViewBuffer = {}; // 立即清空
+
+    try {
+        // --- 2. 批量更新书籍 (Book) ---
+        if (Object.keys(currentBooks).length > 0) {
+            const bookOps = Object.keys(currentBooks).map(bookId => ({
+                updateOne: {
+                    filter: { _id: bookId },
+                    update: { 
+                        $inc: { 
+                            views: currentBooks[bookId],
+                            daily_views: currentBooks[bookId],
+                            weekly_views: currentBooks[bookId],
+                            monthly_views: currentBooks[bookId]
+                        } 
+                    }
+                }
+            }));
+            await Book.bulkWrite(bookOps);
+        }
+
+        // --- 3. 批量更新用户 (User) ---
+        if (Object.keys(currentUsers).length > 0) {
+            const userOps = Object.keys(currentUsers).map(userId => ({
+                updateOne: {
+                    filter: { _id: userId },
+                    update: { 
+                        $inc: { 
+                            'stats.today_views': currentUsers[userId],
+                            'weekly_score': currentUsers[userId] // 同时也更新活跃分
+                        } 
+                    }
+                }
+            }));
+            await User.bulkWrite(userOps);
+        }
+
+        console.log('✅ [Buffer] 批量写入完成！');
+
+    } catch (err) {
+        console.error('❌ [Buffer] 写入失败，数据可能丢失:', err);
+        // 如果你需要非常严格的数据安全，这里可以把 currentUsers 加回 userViewBuffer
+        // 但对于浏览量统计，偶尔丢一次通常可以接受，为了代码简单暂不处理回滚
+    }
+
+}, 5 * 60 * 1000); // 5分钟
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
