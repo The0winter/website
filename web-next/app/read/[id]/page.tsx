@@ -489,7 +489,7 @@ if (loading) return (
               </div>
             </div>
 
-            <Link href={user ? `/user/${user.id}` : '/login'} className="flex items-center gap-3 hover:bg-black/5 py-1 px-3 rounded-full transition-colors">
+            <Link href={user ? '/profile' : '/login'} className="flex items-center gap-3 hover:bg-black/5 py-1 px-3 rounded-full transition-colors">
               <div className="text-right hidden xl:block">
                 <div className="text-sm font-bold">{user ? (user.username || '书友') : '点击登录'}</div>
                 {user && <div className="text-xs opacity-60">个人中心</div>}
@@ -546,7 +546,7 @@ if (loading) return (
         </div>
 
         {/* 右侧：用户头像 */}
-        <Link href={user ? `/user/${user.id}` : '/login'} className="rounded-full overflow-hidden border border-black/10 relative z-10">
+        <Link href={user ? '/profile' : '/login'} className="rounded-full overflow-hidden border border-black/10 relative z-10">
             {(user as any)?.avatar ? (
                 <img src={(user as any).avatar} alt="avatar" className="w-8 h-8 object-cover" />
             ) : (

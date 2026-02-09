@@ -470,6 +470,30 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 });
 
+// ✅ 新增：更新用户信息（比如头像）
+app.patch('/api/users/:id', authMiddleware, async (req, res) => {
+  try {
+    // 只能修改自己的，或者管理员可以修改别人的
+    if (req.user.id !== req.params.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: '无权修改此用户' });
+    }
+
+    const { avatar } = req.body; // 我们目前只允许改头像
+    
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.id, 
+      { avatar }, // 只更新 avatar 字段
+      { new: true } // 返回更新后的数据
+    ).select('-password'); // 不要把密码返回去
+
+    if (!updatedUser) return res.status(404).json({ error: '用户不存在' });
+
+    res.json(updatedUser);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 🚨 登录接口：包含数据修复逻辑
 app.post('/api/auth/signin', async (req, res) => {
   try {

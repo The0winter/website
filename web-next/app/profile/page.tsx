@@ -4,6 +4,10 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+// 引入 Upload 图标
+import { Upload, Loader2 } from 'lucide-react';
+// 引入你之前用过的上传函数 (假设在 utils 或 lib 下，如果没有请把之前上传封面的那个函数拷过来)
+import uploadImageToCloudinary from '@/lib/upload';
 import { 
   User, Mail, Calendar, LogOut, 
   BookOpen, PenTool, Shield, Lock, X, CheckCircle2, AlertCircle, ChevronRight 
@@ -22,6 +26,49 @@ export default function ProfilePage() {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  // 📸 处理头像上传
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    // 限制大小 (比如 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+        setToast({ msg: '图片太大，请上传 2MB 以内的图片', type: 'error' });
+        return;
+    }
+
+    try {
+        setAvatarUploading(true);
+        
+        // 1. 上传到 Cloudinary
+        const url = await uploadImageToCloudinary(file);
+        if (!url) throw new Error('上传失败');
+
+        // 2. 调用后端更新数据库
+        const updatedUser = await authApi.updateUser(user.id, { avatar: url });
+        
+        if (updatedUser.error) {
+            throw new Error(updatedUser.error);
+        }
+
+        // 3. 更新本地存储和状态，让页面立刻刷新
+        // 注意：这里最简单的办法是更新 localStorage 然后重载页面，或者调用 AuthContext 的 update 方法
+        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+        const newUser = { ...storedUser, avatar: url };
+        localStorage.setItem('user', JSON.stringify(newUser));
+        
+        setToast({ msg: '头像更新成功！', type: 'success' });
+        
+        // 强制刷新页面以更新所有地方的头像 (简单粗暴但有效)
+        setTimeout(() => window.location.reload(), 1000);
+
+    } catch (err: any) {
+        setToast({ msg: err.message || '头像上传失败', type: 'error' });
+    } finally {
+        setAvatarUploading(false);
+    }
+  };
 
   // ================= Effect =================
   useEffect(() => {
@@ -134,7 +181,43 @@ export default function ProfilePage() {
                     
                     {/* 头像 - 尺寸和上边距都改小 */}
                     {/* -mt-10 (原-12), h-20 w-20 (原h-24 w-24) */}
-                    <div className="relative -mt-10 md:-mt-14 mb-3 md:mb-6">
+                    <div className="relative -mt-10 md:-mt-14 mb-3 md:mb-6 group/avatar">
+                    <div className="h-20 w-20 md:h-32 md:w-32 rounded-full border-[4px] border-white bg-white shadow-md flex items-center justify-center text-2xl md:text-4xl font-bold text-indigo-600 select-none overflow-hidden relative">
+                        
+                        {/* A. 如果正在上传，显示转圈 */}
+                        {avatarUploading ? (
+                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
+                                <Loader2 className="h-8 w-8 text-white animate-spin" />
+                            </div>
+                        ) : null}
+
+                        {/* B. 如果有头像，显示图片；否则显示首字母 */}
+                        {user.avatar ? (
+                            <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                        ) : (
+                            (user.username || 'User').substring(0, 1).toUpperCase()
+                        )}
+
+                        {/* C. 悬停遮罩层 + 上传 Input */}
+                        <label className="absolute inset-0 bg-black/40 opacity-0 group-hover/avatar:opacity-100 transition-opacity flex flex-col items-center justify-center cursor-pointer text-white z-10">
+                            <Upload className="h-6 w-6 md:h-8 md:w-8 mb-1" />
+                            <span className="text-[10px] md:text-xs font-bold">更换头像</span>
+                            {/* 隐藏的文件输入框 */}
+                            <input 
+                                type="file" 
+                                className="hidden" 
+                                accept="image/*" 
+                                onChange={handleAvatarUpload}
+                                disabled={avatarUploading}
+                            />
+                        </label>
+                    </div>
+                    
+                    {/* 移动端提示 (因为手机没有悬停状态，加一个小相机图标提示用户可以点) */}
+                    <div className="absolute bottom-0 right-0 md:hidden bg-white rounded-full p-1.5 shadow-sm border border-gray-100 pointer-events-none">
+                        <Upload className="h-3 w-3 text-gray-500" />
+                    </div>
+                </div>
                         <div className="h-20 w-20 md:h-32 md:w-32 rounded-full border-[4px] border-white bg-white shadow-md flex items-center justify-center text-2xl md:text-4xl font-bold text-indigo-600 select-none overflow-hidden">
                             {(user.username || 'User').substring(0, 1).toUpperCase()}
                         </div>

@@ -275,14 +275,13 @@ export const authApi = {
     return apiCall<{ user: AuthUser | null; profile: Profile | null }>(`/auth/session?userId=${userId}`);
   },
 
-  // 🔥 新增：修改密码
+  // 修改密码
   changePassword: async (userId: string, oldPass: string, newPass: string): Promise<{ success: boolean; error?: string }> => {
-    // 复用你已有的 apiCall 逻辑
     const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-user-id': userId // 确保带上 ID
+        'x-user-id': userId
       },
       body: JSON.stringify({ oldPassword: oldPass, newPassword: newPass }),
     });
@@ -294,5 +293,23 @@ export const authApi = {
     }
     
     return { success: true };
+  }, // 👈 注意这里！changePassword 结束了，必须加逗号
+
+  // ✅ 修正后的 updateUser：放在 changePassword 外面，并且变量名改对了
+  updateUser: async (userId: string, data: { avatar?: string }) => {
+    const token = localStorage.getItem('token');
+    
+    // 注意：这里用的是 API_BASE_URL，不是 API_URL
+    const res = await fetch(`${API_BASE_URL}/users/${userId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    });
+    
+    return res.json();
   },
+
 };

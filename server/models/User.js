@@ -19,8 +19,9 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: 'reader',
   },
+
+  avatar: { type: String, default: '' },
   
-  // 👇👇👇【关键修复】必须补上这两个字段，否则代码读不到！👇👇👇
   loginAttempts: { 
     type: Number, 
     required: true, 
