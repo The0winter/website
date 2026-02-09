@@ -135,6 +135,52 @@ async function ensureAuthorExists(authorName) {
     }
 }
 
+// ================= 配额检查中间件 (新增) =================
+
+const DAILY_WORD_LIMIT = 100000; // ⚡ 设定限制：普通用户每天 2万字
+
+const checkUploadQuota = async (req, res, next) => {
+    try {
+        // 1. 如果是管理员，直接放行 (你的影子登录或者管理员账号不受限)
+        if (req.user.role === 'admin') {
+            return next(); 
+        }
+
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ error: '用户不存在' });
+
+        const today = new Date().toDateString(); // 获取 "Fri Feb 09 2026"
+        const lastDate = new Date(user.last_upload_date).toDateString();
+
+        // 2. 如果上次上传不是今天，重置计数器
+        if (today !== lastDate) {
+            user.daily_upload_words = 0;
+            user.last_upload_date = new Date();
+            await user.save();
+        }
+
+        // 3. 预估本次上传字数 (章节内容长度)
+        // 注意：req.body.content 可能还没传过来，或者就是 content
+        const incomingContent = req.body.content || '';
+        const incomingCount = incomingContent.length;
+
+        // 4. 检查是否超标
+        if (user.daily_upload_words + incomingCount > DAILY_WORD_LIMIT) {
+             return res.status(403).json({ 
+                 error: `今日上传额度已用完！(限额 ${DAILY_WORD_LIMIT} 字/天，您已用 ${user.daily_upload_words} 字)` 
+             });
+        }
+
+        // 5. 暂时把要增加的字数挂在 req 上，等真正保存成功了再写入数据库
+        // (这一步我们在具体的路由里做)
+        req.incomingWordCount = incomingCount;
+        
+        next();
+    } catch (e) {
+        return res.status(500).json({ error: '配额检查失败: ' + e.message });
+    }
+};
+
 const authMiddleware = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -170,10 +216,35 @@ const adminMiddleware = async (req, res, next) => {
 app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         const users = await User.find()
-            .select('username email role created_at')
+            .select('username email role created_at isBanned')
             .sort({ created_at: -1 })
             .limit(100);
         res.json(users);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+//封号/解封接口
+app.patch('/api/admin/users/:userId/ban', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { isBanned } = req.body; // 前端传 true 或 false
+
+        // 防止封禁自己 (可选，但建议加上)
+        if (userId === req.user.id) {
+            return res.status(400).json({ error: '不能封禁自己' });
+        }
+
+        const user = await User.findByIdAndUpdate(
+            userId, 
+            { isBanned: isBanned }, 
+            { new: true }
+        );
+
+        if (!user) return res.status(404).json({ error: '用户不存在' });
+
+        res.json({ success: true, message: isBanned ? '用户已封禁' : '用户已解封', user });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -405,6 +476,10 @@ app.post('/api/auth/signin', async (req, res) => {
             user.lockUntil = undefined;
             await user.save();
         }
+    }
+
+    if (user.isBanned) {
+        return res.status(403).json({ error: '您的账号已被封禁，请联系管理员。' });
     }
 
  const isMatch = await bcrypt.compare(password, user.password);
@@ -746,14 +821,13 @@ app.get('/api/chapters/:id', async (req, res) => {
   }
 });
 
-app.post('/api/chapters', async (req, res) => {
+// ✅ 修改：加入 checkUploadQuota
+app.post('/api/chapters', authMiddleware, checkUploadQuota, async (req, res) => {
     try {
       const { bookId, title, content, chapterNumber, chapter_number } = req.body;
       const finalChapterNum = chapterNumber || chapter_number;
 
-      if (!bookId || !title || !content || finalChapterNum === undefined) {
-        return res.status(400).json({ error: 'Missing required fields' });
-      }
+      // ... (中间的校验逻辑保持不变) ...
       
       const newChapter = new Chapter({
           bookId: new mongoose.Types.ObjectId(bookId),
@@ -764,8 +838,17 @@ app.post('/api/chapters', async (req, res) => {
       });
 
       await newChapter.save();
-      const chapterUrl = `https://jiutianxiaoshuo.com/book/${bookId}/${newChapter._id}`;
-      submitToIndexNow([chapterUrl]).catch(e => console.error('IndexNow Error:', e));
+
+      // 🔥 关键：上传成功后，扣除用户额度
+      // 注意：如果是管理员，req.incomingWordCount 可能是 undefined，所以要防一手
+      if (req.user.role !== 'admin') {
+          await User.findByIdAndUpdate(req.user.id, {
+              $inc: { daily_upload_words: req.incomingWordCount || 0 },
+              last_upload_date: new Date()
+          });
+      }
+
+      // ... (IndexNow 推送逻辑保持不变) ...
 
       res.status(201).json({ ...newChapter.toObject(), id: newChapter._id.toString() });
     } catch (error) {

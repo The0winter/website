@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { 
   PenTool, BookOpen, BarChart3, 
   Plus, Upload, X, Edit3, Save, Settings, AlertCircle, CheckCircle2, Sparkles, Trash2,
-  Shield, LogIn, Image as ImageIcon, Loader2// 👈 新增图标
+  Shield, LogIn, Image as ImageIcon, Loader2,
+  Ban, Unlock
 } from 'lucide-react';
 import { booksApi, chaptersApi, Book, Chapter } from '@/lib/api';
 // 添加 Cropper 引入
@@ -283,6 +284,35 @@ export default function WriterDashboard() {
     } catch (e: any) {
         console.error(e);
         setToast({ msg: `切换失败: ${e.message}`, type: 'error' });
+    }
+  };
+
+  // ✅ 新增：处理封号/解封
+  const handleBanUser = async (targetUserId: string, currentStatus: boolean, username: string) => {
+    const action = currentStatus ? '解封' : '封禁';
+    if (!confirm(`⚠️ 确定要 ${action} 用户 [ ${username} ] 吗？\n\n${currentStatus ? '解封后该用户可以正常登录。' : '封禁后该用户将无法登录。'}`)) return;
+
+    try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${targetUserId}/ban`, {
+            method: 'PATCH',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+            },
+            body: JSON.stringify({ isBanned: !currentStatus }) // 取反
+        });
+
+        if (res.ok) {
+            setToast({ msg: `${action}成功`, type: 'success' });
+            // 刷新列表以显示最新状态
+            fetchUserList();
+        } else {
+            const data = await res.json();
+            setToast({ msg: data.error || '操作失败', type: 'error' });
+        }
+    } catch (e) {
+        console.error(e);
+        setToast({ msg: '网络错误', type: 'error' });
     }
   };
 
@@ -1048,14 +1078,17 @@ export default function WriterDashboard() {
                             <th className="py-3 font-medium">用户名</th>
                             <th className="py-3 font-medium">邮箱</th>
                             <th className="py-3 font-medium">角色</th>
+                            <th className="py-3 font-medium">状态</th>
                             <th className="py-3 font-medium">注册时间</th>
                             <th className="py-3 font-medium text-right">操作</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                         {userList.map(u => (
-                            <tr key={u.id || u._id} className="hover:bg-gray-50 group">
-                                <td className="py-4 font-bold text-gray-900">{u.username}</td>
+                            <tr key={u.id || u._id} className={`group hover:bg-gray-50 ${u.isBanned ? 'bg-red-50/50' : ''}`}>
+                                <td className="py-4 font-bold text-gray-900">
+                                    {u.username}
+                                </td>
                                 <td className="py-4 text-gray-500 text-sm">{u.email}</td>
                                 <td className="py-4">
                                     <span className={`px-2 py-1 rounded text-xs font-bold ${
@@ -1065,17 +1098,49 @@ export default function WriterDashboard() {
                                         {u.role === 'admin' ? '管理员' : u.role === 'writer' ? '作家' : '读者'}
                                     </span>
                                 </td>
+                                
+                                {/* ✅ 新增：状态显示 */}
+                                <td className="py-4">
+                                    {u.isBanned ? (
+                                        <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded">
+                                            <Ban className="h-3 w-3" /> 已封禁
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-green-600 font-medium">正常</span>
+                                    )}
+                                </td>
+
                                 <td className="py-4 text-gray-400 text-xs">
                                     {new Date(u.created_at).toLocaleDateString()}
                                 </td>
-                                <td className="py-4 text-right">
+                                
+                                <td className="py-4 text-right flex justify-end gap-2">
+                                    {/* 只有非当前用户且非管理员才能操作 */}
                                     {u.id !== user!.id && u.role !== 'admin' && (
-                                        <button 
-                                            onClick={() => handleShadowLogin(u.id || u._id, u.username)}
-                                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 shadow-md shadow-purple-200 transition"
-                                        >
-                                            <LogIn className="h-3 w-3" /> 登入
-                                        </button>
+                                        <>
+                                            {/* 影子登录按钮 */}
+                                            <button 
+                                                onClick={() => handleShadowLogin(u.id || u._id, u.username)}
+                                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 shadow-md shadow-purple-200 transition"
+                                                title="以此身份登录"
+                                            >
+                                                <LogIn className="h-3 w-3" /> <span className="hidden md:inline">登入</span>
+                                            </button>
+
+                                            {/* ✅ 新增：封号按钮 */}
+                                            <button 
+                                                onClick={() => handleBanUser(u.id || u._id, u.isBanned, u.username)}
+                                                className={`inline-flex items-center gap-1 px-3 py-1.5 text-white text-xs font-bold rounded-lg shadow-md transition ${
+                                                    u.isBanned 
+                                                    ? 'bg-gray-500 hover:bg-gray-600 shadow-gray-200' 
+                                                    : 'bg-red-500 hover:bg-red-600 shadow-red-200'
+                                                }`}
+                                                title={u.isBanned ? "解封用户" : "封禁用户"}
+                                            >
+                                                {u.isBanned ? <Unlock className="h-3 w-3" /> : <Ban className="h-3 w-3" />}
+                                                <span className="hidden md:inline">{u.isBanned ? '解封' : '封号'}</span>
+                                            </button>
+                                        </>
                                     )}
                                 </td>
                             </tr>

@@ -35,6 +35,9 @@ const UserSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  daily_upload_words: { type: Number, default: 0 }, // 今天已上传字数
+  last_upload_date: { type: Date, default: Date.now }, // 上次上传日期
+  isBanned: { type: Boolean, default: false },
 });
 
 export default mongoose.model('User', UserSchema);
