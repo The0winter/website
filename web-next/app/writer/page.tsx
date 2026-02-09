@@ -445,9 +445,17 @@ export default function WriterDashboard() {
                                     <tr><td colSpan={4} className="p-8 text-center text-gray-400">未找到用户</td></tr>
                                 ) : userList.map(u => {
                                     // 准备图表数据
-                                    const history = u.stats?.history || [];
-                                    const viewData = history.map((h: any) => h.views || 0);
-                                    const uploadData = history.map((h: any) => h.uploads || 0);
+                                    const stats = u.stats || {};
+                                    const history = stats.history || [];
+                                    
+                                    // 🛡️ 2. 获取今日实时数据
+                                    const todayViews = stats.today_views || 0;
+                                    const todayUploads = stats.today_uploads || 0;
+
+                                    // 🛡️ 3. 拼接数据：历史数据 + 今日数据 (让管理员能看到当天的实时变化)
+                                    // 注意：MiniChart 只需要数字数组
+                                    const viewData = [...history.map((h: any) => h.views || 0), todayViews];
+                                    const uploadData = [...history.map((h: any) => h.uploads || 0), todayUploads];
                                     
                                     return (
                                         <tr key={u.id || u._id} className={`group hover:bg-gray-50 transition ${u.isBanned ? 'bg-red-50/30' : ''}`}>
@@ -481,11 +489,16 @@ export default function WriterDashboard() {
                                             <td className="px-6 py-4">
                                                 <div className="flex gap-6">
                                                     <div className="flex flex-col gap-1">
-                                                        <span className="text-[10px] text-gray-400 uppercase font-bold">浏览量</span>
+                                                        {/* 这里修改了 title，增加了具体的数字显示 */}
+                                                        <span className="text-[10px] text-gray-400 uppercase font-bold">
+                                                            浏览量 ({todayViews}) 
+                                                        </span>
                                                         <MiniChart data={viewData} color="#3b82f6" />
                                                     </div>
                                                     <div className="flex flex-col gap-1">
-                                                        <span className="text-[10px] text-gray-400 uppercase font-bold">上传量</span>
+                                                        <span className="text-[10px] text-gray-400 uppercase font-bold">
+                                                            上传量 ({todayUploads})
+                                                        </span>
                                                         <MiniChart data={uploadData} color="#10b981" />
                                                     </div>
                                                 </div>

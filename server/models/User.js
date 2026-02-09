@@ -44,16 +44,21 @@ const UserSchema = new mongoose.Schema({
     today_views: { type: Number, default: 0 },   // 今日阅读章节数
     today_uploads: { type: Number, default: 0 }, // 今日上传次数
     // 历史记录 (存最近7天，用于画曲线)
-    history: [{
-        date: { type: Date },
-        views: { type: Number },
-        uploads: { type: Number }
-    }]
+    history: [
+      {
+        date: { type: Date, default: Date.now },
+        views: { type: Number, default: 0 },
+        uploads: { type: Number, default: 0 }
+      }
+    ]
   },
   // ✅ 新增：周活跃度综合评分 (用于排序：浏览量+上传量)
   weekly_score: { type: Number, default: 0 },
 
   created_at: { type: Date, default: Date.now }
 });
+
+UserSchema.index({ weekly_score: -1 }); 
+UserSchema.index({ created_at: -1 });
 
 export default mongoose.model('User', UserSchema);
