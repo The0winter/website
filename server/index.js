@@ -69,7 +69,9 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // ================= 2. 限流配置 =================
 
 const getClientIp = (req) => {
-    return req.headers['cf-connecting-ip'] || req.ip;
+    const ip = req.headers['cf-connecting-ip'] || req.ip || '127.0.0.1';
+    // 强制转换为字符串，防止某些库对 IPv6 对象格式处理异常
+    return String(ip);
 };
 
 const globalLimiter = rateLimit({
