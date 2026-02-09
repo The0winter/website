@@ -225,6 +225,12 @@ function ReaderContent() {
     let isActive = true;
 
     const loadData = async () => {
+
+      const token = localStorage.getItem('token');
+      const authHeaders = {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      };
       let targetId = chapterIdParam;
 
       // === 场景 A: 快速通道 (URL 里有 ID) ===
@@ -251,7 +257,7 @@ function ReaderContent() {
 
           try {
             const [chapterRes, bookRes] = await Promise.all([
-              fetch(`${API_BASE_URL}/chapters/${targetId}`),
+              fetch(`${API_BASE_URL}/chapters/${targetId}`, { headers: authHeaders }),
               !book ? booksApi.getById(bookId) : Promise.resolve(null)
             ]);
 
@@ -300,7 +306,7 @@ function ReaderContent() {
                  if (chapterCache.has(firstId)) {
                     setChapter(chapterCache.get(firstId));
                  } else {
-                    const chRes = await fetch(`https://jiutianxiaoshuo.com/api/chapters/${firstId}`);
+                    const chRes = await fetch(`https://jiutianxiaoshuo.com/api/chapters/${firstId}`, { headers: authHeaders });
                     if (chRes.ok) {
                       const chData = await chRes.json();
                       setChapter(chData);
@@ -339,8 +345,15 @@ function ReaderContent() {
         // 检查：如果缓存里【没有】下一章，才去下载
         if (!chapterCache.has(nextChapter.id)) {
           console.log(`[预加载] 开始静默下载: 第${nextChapter.chapter_number}章...`);
+
+          const token = localStorage.getItem('token');
           
-          fetch(`https://jiutianxiaoshuo.com/api/chapters/${nextChapter.id}`)
+          fetch(`https://jiutianxiaoshuo.com/api/chapters/${nextChapter.id}`, {
+              headers: {
+                  'Content-Type': 'application/json',
+                  ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              }
+          })
             .then(res => res.json())
             .then(data => {
               // 下载成功，存入缓存 (注意：不要 setChapter，只存不显)
