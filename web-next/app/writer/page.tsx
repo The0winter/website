@@ -239,7 +239,16 @@ export default function WriterDashboard() {
       else if (chapter) {
           setCurrentChapterId(chapter.id); setFormChapterTitle(chapter.title); setFormChapterContent('加载中...'); setShowChapterEditor(true);
           try {
-              const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/chapters/${chapter.id}`);
+              // ✅ 正确写法：带上 Token
+            const token = localStorage.getItem('token'); // 获取登录凭证
+
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/chapters/${chapter.id}`, {
+            headers: {
+                'Content-Type': 'application/json',
+                // 如果有 token，就带上；没有就是空字符串（游客）
+                'Authorization': token ? `Bearer ${token}` : ''
+            }
+            });
               if(!res.ok) throw new Error('err');
               const data = await res.json(); setFormChapterContent(data.content || '');
           } catch(e) { setFormChapterContent('加载失败'); }
