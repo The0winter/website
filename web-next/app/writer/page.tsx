@@ -815,7 +815,39 @@ export default function WriterDashboard() {
       {showChapterEditor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-white md:bg-black/60 md:backdrop-blur-sm p-0 md:p-4 animate-in zoom-in-95 duration-200">
            <div className="bg-white w-full h-full md:rounded-2xl md:shadow-2xl md:max-w-5xl md:h-[90vh] flex flex-col overflow-hidden">
-              {/* ... 顶部栏保持不变 ... */}
+              {/* 🟢 修复：补回丢失的顶部操作栏 (关闭、标题、发布按钮) */}
+              <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-200 flex justify-between items-center bg-white shrink-0">
+                 <div className="flex items-center gap-2 md:gap-3">
+                    {/* 关闭按钮 */}
+                    <button 
+                        onClick={() => setShowChapterEditor(false)} 
+                        className="p-1 -ml-2 text-gray-500 active:bg-gray-100 hover:bg-gray-100 rounded-full transition-colors cursor-pointer"
+                        title="关闭"
+                    >
+                        <X className="h-6 w-6" />
+                    </button>
+                    <h3 className="text-base md:text-lg font-bold text-gray-900">
+                        {currentChapterId ? '编辑章节' : '新建章节'}
+                    </h3>
+                 </div>
+                 
+                 {/* 右侧按钮组 */}
+                 <div className="flex items-center gap-2 md:gap-3">
+                    <button 
+                        onClick={handleSaveDraft} 
+                        className="flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-5 md:py-2 bg-gray-100 text-gray-700 text-sm md:text-base font-bold rounded-full active:bg-gray-200 hover:bg-gray-200 transition cursor-pointer"
+                    >
+                        <Save className="h-4 w-4" /> <span className="hidden md:inline">存草稿</span>
+                    </button>
+                    <button 
+                        onClick={handlePublishTrigger} 
+                        className="flex items-center gap-1 md:gap-2 px-4 py-1.5 md:px-6 md:py-2 bg-blue-600 text-white text-sm md:text-base font-bold rounded-full active:bg-blue-700 hover:bg-blue-700 transition shadow-lg shadow-blue-500/30 cursor-pointer"
+                    >
+                        <Upload className="h-4 w-4" /> 发布
+                    </button>
+                 </div>
+              </div>
+              {/* 🟢 修复结束 */}
               
               <div className="flex-1 overflow-y-auto bg-gray-50 md:bg-gray-50/50 p-0 md:p-8">
                  <div className="max-w-3xl mx-auto h-full flex flex-col md:space-y-6 bg-white md:bg-transparent">
