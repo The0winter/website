@@ -996,43 +996,54 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 // 添加一个新的 Cron 任务 (每天凌晨 00:05 执行)
+// 在 server/index.js 的 Cron 任务部分
+
 cron.schedule('5 0 * * *', async () => {
     console.log('🔄 [Cron] 开始归档用户活跃数据...');
     try {
         const users = await User.find({});
         for (const user of users) {
-            const todayStats = user.stats || { today_views: 0, today_uploads: 0, history: [] };
+            // 1. 获取今日数据
+            const todayViews = user.stats?.today_views || 0;
+            // ⚠️ 确保你在 userSchema 里加了 today_words 字段，或者复用 daily_upload_words
+            const todayWords = user.daily_upload_words || 0; 
             
-            // 1. 构建新的历史节点
+            // 2. 存入历史 (保留字数)
             const newHistoryItem = {
                 date: new Date(),
-                views: todayStats.today_views || 0,
-                uploads: todayStats.today_uploads || 0
+                views: todayViews,
+                words: todayWords // 记录字数
             };
             
-            // 2. 插入历史并只保留最近 7 天
-            const currentHistory = Array.isArray(todayStats.history) ? todayStats.history : [];
-            const newHistory = [...currentHistory, newHistoryItem].slice(-7); 
+            const currentHistory = Array.isArray(user.stats?.history) ? user.stats.history : [];
+            const newHistory = [...currentHistory, newHistoryItem].slice(-7); // 只留7天
             
-            // 3. 计算周活跃分 (加权：上传权重高一点，比如 浏览*1 + 上传*1，你说了先五五开那就直接相加)
+            // 3. 🟢 计算周活跃分 (算法优化)
             let totalScore = 0;
             newHistory.forEach(h => {
-                totalScore += (h.views || 0) + (h.uploads || 0);
+                // 浏览量权重: 1
+                const vScore = (h.views || 0) * 1; 
+                // 字数权重: 0.1 (即每写10个字 = 1分)
+                // 这样 2000字的一章 = 200分，相当于 200 个阅读量，比较平衡
+                const wScore = Math.floor((h.words || 0) / 10); 
+                
+                totalScore += (vScore + wScore);
             });
-            // 加上今天的(虽然今天要重置，但为了排序实时性，通常算历史分即可，或者保留各种策略)
             
+            // 4. 更新数据库
             user.stats = {
-                today_views: 0,   // 重置今日
-                today_uploads: 0, // 重置今日
+                today_views: 0,
+                today_uploads: 0, // 如果你还想留着次数
                 history: newHistory
             };
-            user.weekly_score = totalScore;
+            user.daily_upload_words = 0; // 重置今日字数
+            user.weekly_score = totalScore; // 更新总分
             
             await user.save();
         }
-        console.log('✅ [Cron] 用户活跃数据归档完成');
+        console.log('✅ [Cron] 数据归档及加权计算完成');
     } catch (error) {
-        console.error('❌ [Cron] 数据归档失败:', error);
+        console.error('❌ [Cron] 失败:', error);
     }
 });
 

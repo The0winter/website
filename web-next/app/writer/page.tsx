@@ -330,7 +330,7 @@ export default function WriterDashboard() {
           {/* 切换到控制台 (仅管理员) */}
           {(user as any).role === 'admin' && (
             <button 
-                onClick={() => { setCurrentView('admin'); fetchUserList(); }}
+                onClick={() => setCurrentView('admin')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition mt-2 ${currentView === 'admin' ? 'bg-purple-50 text-purple-600' : 'text-gray-600 hover:bg-purple-50 hover:text-purple-600'}`}
             >
                 <LayoutDashboard className="h-5 w-5" /> 超级控制台
@@ -383,10 +383,12 @@ export default function WriterDashboard() {
                                         <p className="text-xs md:text-sm text-gray-500 mt-1 line-clamp-2">{book.description || '暂无简介'}</p>
                                     </div>
                                     <div className="flex gap-2 md:gap-3 mt-3">
-                                        <button onClick={() => { setCurrentBookId(book.id); openChapterEditor('new'); }} className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 md:px-4 md:py-2 bg-blue-50 text-blue-600 text-xs md:text-sm font-medium rounded-lg active:bg-blue-100 transition border border-blue-100 hover:bg-blue-100 cursor-pointer">
+                                        <button onClick={() => { setCurrentBookId(book.id); openChapterEditor('new'); }} className="flex-1 flex items-center justify-center gap-1 px-3 py-1 bg-blue-50 text-blue-600 text-xs font-medium rounded-lg active:bg-blue-100 transition border border-blue-100 hover:bg-blue-100 cursor-pointer"
+                                        >
                                             <Upload className="h-3 w-3 md:h-4 md:w-4" /> <span>快速发布</span>
                                         </button>
-                                        <button onClick={() => { setCurrentBookId(book.id); setFormBookTitle(book.title); setFormBookDescription(book.description || ''); setFormBookCover(book.cover_image || ''); setShowBookManager(true); }} className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 md:px-4 md:py-2 bg-gray-100 text-gray-700 text-xs md:text-sm font-medium rounded-lg active:bg-gray-200 transition border border-gray-200 hover:bg-gray-200 cursor-pointer">
+                                        <button onClick={() => { setCurrentBookId(book.id); setFormBookTitle(book.title); setFormBookDescription(book.description || ''); setFormBookCover(book.cover_image || ''); setShowBookManager(true); }} className="flex-1 flex items-center justify-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg active:bg-gray-200 transition border border-gray-200 hover:bg-gray-200 cursor-pointer"
+                                        >
                                             <Settings className="h-3 w-3 md:h-4 md:w-4" /> <span>管理</span>
                                         </button>
                                     </div>
@@ -419,7 +421,7 @@ export default function WriterDashboard() {
                             placeholder="搜索用户名或邮箱..." 
                             value={adminSearch}
                             onChange={(e) => setAdminSearch(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition shadow-sm"
+                            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition shadow-sm text-gray-900 placeholder-gray-500 bg-gray-50/50"
                         />
                     </div>
                 </div>
