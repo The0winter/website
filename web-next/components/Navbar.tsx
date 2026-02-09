@@ -68,7 +68,7 @@ export default function Navbar() {
                 priority              // 优先加载 Logo，防止闪烁
               />
               <span className={`ml-2 text-xl font-bold ${textPrimary}`}>
-                九天小说
+                九天小说站
               </span>
             </Link>
           </div>

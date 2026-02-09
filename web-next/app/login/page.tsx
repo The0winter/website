@@ -57,10 +57,9 @@ export default function Login() {
         <div className="text-center">
           <Link href="/" className="inline-flex items-center justify-center space-x-2">
             <BookOpen className="h-10 w-10 text-blue-600" />
-            <span className="text-2xl font-bold text-gray-900">九天小说</span>
+            <span className="text-2xl font-bold text-gray-900">九天小说站</span>
           </Link>
           <h2 className="mt-6 text-2xl font-bold text-gray-900">欢迎回来</h2>
-          <p className="mt-2 text-sm text-gray-600">请登录您的账户以继续阅读</p>
         </div>
 
         {/* ✅ 修改点 2：美化后的切换 Tabs */}

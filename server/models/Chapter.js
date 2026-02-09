@@ -8,8 +8,8 @@ const chapterSchema = new mongoose.Schema({
     required: true 
   },
   
-  title: { type: String, required: true },
-  content: { type: String, required: true },
+  title: { type: String, required: true, maxLength: 100 },
+  content: { type: String, required: true, maxLength: 60000 },
   chapter_number: { type: Number, required: true },
   word_count: { type: Number, default: 0 },
   published_at: { type: Date, default: Date.now },
