@@ -39,7 +39,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     // 核心修改：模仿 69书吧 的标题策略
     // 格式：书名 + 核心词 + 重复书名 + 长尾词 + 站名
-    title: `${book.title} 无弹窗_${book.title}最新章节全文阅读_九天小说`,
+    title: `${book.title} 无弹窗_${book.title}最新章节全文阅读_笔趣阁_九天小说`,
     
     // 描述：包含作者、分类、状态等丰富信息
     description: `${book.title}是作者${book.author}创作的一部${book.category}小说。九天小说提供${book.title}最新章节全文免费阅读，无弹窗，更新快。`,

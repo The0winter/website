@@ -4,51 +4,42 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-// 👇 引入 Eye (睁眼) 和 EyeOff (闭眼) 图标
+// 引入图标
 import { BookOpen, Mail, User, Eye, EyeOff } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  
-  // 👇 新增状态：控制密码是否显示
   const [showPassword, setShowPassword] = useState(false);
   
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isEmailLogin, setIsEmailLogin] = useState(true);
+  
+  // ✅ 修改点 1：默认改为 false，即默认显示 "用户名" 登录
+  const [isEmailLogin, setIsEmailLogin] = useState(false);
   
   const { signIn } = useAuth();
   const router = useRouter();
 
-const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      const result = await signIn(email, password); 
+      const result = await signIn(email, password);
       
-      // 如果有错误信息
       if (result && result.error) {
          setError(result.error.message || '登录失败');
          setLoading(false);
       } else {
-         // ✅✅✅ 核心修复：手动保存 Token 到浏览器！✅✅✅
-         // 注意：这里假设 signIn 返回了后端给的 { token, user } 对象
+         // 登录成功逻辑保持不变
          if (result && result.token) {
              localStorage.setItem('token', result.token);
-             console.log('✅ 登录成功，Token 已保存:', result.token);
-             
-             // 顺便把用户信息也存一下，防止页面刷新后不知道你是谁
              if (result.user) {
                 localStorage.setItem('user', JSON.stringify(result.user));
              }
-         } else {
-             console.warn('⚠️ 警告：登录看似成功但没有收到 Token，可能是 AuthContext 问题');
          }
-         
-         // 保存完再去跳转
          router.push('/');
       }
     } catch (err: any) {
@@ -60,27 +51,60 @@ const handleSubmit = async (e: React.FormEvent) => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full space-y-8">
+      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg"> {/* 加大圆角和阴影 */}
         
+        {/* 顶部 Logo 区 */}
         <div className="text-center">
           <Link href="/" className="inline-flex items-center justify-center space-x-2">
             <BookOpen className="h-10 w-10 text-blue-600" />
             <span className="text-2xl font-bold text-gray-900">九天小说</span>
           </Link>
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">欢迎回来</h2>
-          <p className="mt-2 text-gray-600">登录你的账户</p>
+          <h2 className="mt-6 text-2xl font-bold text-gray-900">欢迎回来</h2>
+          <p className="mt-2 text-sm text-gray-600">请登录您的账户以继续阅读</p>
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        {/* ✅ 修改点 2：美化后的切换 Tabs */}
+        <div className="flex border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => setIsEmailLogin(false)}
+            className={`flex-1 pb-4 text-sm font-medium text-center transition-colors relative ${
+              !isEmailLogin 
+                ? 'text-blue-600 border-b-2 border-blue-600' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <div className="flex items-center justify-center space-x-2">
+              <User className="w-4 h-4" />
+              <span>用户名登录</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsEmailLogin(true)}
+            className={`flex-1 pb-4 text-sm font-medium text-center transition-colors relative ${
+              isEmailLogin 
+                ? 'text-blue-600 border-b-2 border-blue-600' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <div className="flex items-center justify-center space-x-2">
+              <Mail className="w-4 h-4" />
+              <span>邮箱登录</span>
+            </div>
+          </button>
+        </div>
+
+        <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
               {error}
             </div>
           )}
 
-          <div className="space-y-5"> {/* 稍微加大一点间距 space-y-4 -> space-y-5 */}
+          <div className="space-y-4">
             
-            {/* 账号/邮箱输入框 */}
+            {/* 账号/邮箱 输入框 (根据 Tab 状态自动变) */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                 {isEmailLogin ? '邮箱地址' : '用户名'}
@@ -100,42 +124,34 @@ const handleSubmit = async (e: React.FormEvent) => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  // 👇 修改点：text-gray-900 (深色) font-medium (加粗)
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 font-medium placeholder-gray-400"
+                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900 placeholder-gray-400 transition-all"
                   placeholder={isEmailLogin ? '请输入邮箱' : '请输入用户名'}
                 />
               </div>
-              <div className="mt-1 text-right">
-                <button
-                  type="button"
-                  onClick={() => setIsEmailLogin(!isEmailLogin)}
-                  className="text-sm text-blue-600 hover:text-blue-500 font-medium"
-                >
-                  {isEmailLogin ? '使用用户名登录' : '使用邮箱登录'}
-                </button>
-              </div>
             </div>
 
-            {/* 密码输入框 (带显隐切换) */}
+            {/* 密码输入框 */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                密码
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                  密码
+                </label>
+                {/* 如果你有忘记密码页面，可以在这里加 Link */}
+                <Link href="#" className="text-sm font-medium text-blue-600 hover:text-blue-500">
+                  忘记密码?
+                </Link>
+              </div>
               <div className="relative">
                 <input
                   id="password"
                   name="password"
-                  // 👇 关键：根据状态切换 text 或 password
-                  type={showPassword ? 'text' : 'password'} 
+                  type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  // 👇 修改点：text-gray-900 font-medium, 并且加了 pr-10 给右边图标留位置
-                  className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 font-medium placeholder-gray-400"
+                  className="block w-full pl-3 pr-10 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900 placeholder-gray-400 transition-all"
                   placeholder="请输入密码"
                 />
-                
-                {/* 👇 右侧的小眼睛按钮 */}
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
@@ -149,20 +165,21 @@ const handleSubmit = async (e: React.FormEvent) => {
                 </button>
               </div>
             </div>
+
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed transition-all"
           >
-            {loading ? '登录中...' : '登录'}
+            {loading ? '登录中...' : '立即登录'}
           </button>
 
           <div className="text-center text-sm">
             <span className="text-gray-600">还没有账号？ </span>
-            <Link href="/register" className="font-medium text-blue-600 hover:text-blue-500">
-              去注册
+            <Link href="/register" className="font-bold text-blue-600 hover:text-blue-500 hover:underline">
+              现在注册！
             </Link>
           </div>
         </form>
