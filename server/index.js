@@ -888,7 +888,6 @@ app.post('/api/chapters', authMiddleware, checkUploadQuota, async (req, res) => 
 
       await newChapter.save();
 
-      // 记录上传次数 (stats.today_uploads)
       // 注意：之前的 daily_upload_words 是记录字数，这个是记录“次数”
       if (req.user.role !== 'admin') {
           await User.findByIdAndUpdate(req.user.id, {
@@ -899,17 +898,6 @@ app.post('/api/chapters', authMiddleware, checkUploadQuota, async (req, res) => 
               last_upload_date: new Date()
           });
       }
-
-      // 🔥 关键：上传成功后，扣除用户额度
-      // 注意：如果是管理员，req.incomingWordCount 可能是 undefined，所以要防一手
-      if (req.user.role !== 'admin') {
-          await User.findByIdAndUpdate(req.user.id, {
-              $inc: { daily_upload_words: req.incomingWordCount || 0 },
-              last_upload_date: new Date()
-          });
-      }
-
-      // ... (IndexNow 推送逻辑保持不变) ...
 
       res.status(201).json({ ...newChapter.toObject(), id: newChapter._id.toString() });
     } catch (error) {
