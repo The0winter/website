@@ -39,7 +39,7 @@ export default function Register() {
     try {
       setError('');
       // 注意：确保这个 URL 是你后端的地址
-      const res = await fetch('http://localhost:5000/api/auth/send-code', {
+      const res = await fetch('/api/auth/send-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),

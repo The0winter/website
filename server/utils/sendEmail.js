@@ -2,7 +2,7 @@ import nodemailer from 'nodemailer';
 
 // 配置发送器
 const transporter = nodemailer.createTransport({
-  service: 'QQ', // 或者 'Gmail'
+  service: 'Gmail', // 或者 'Gmail'
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
