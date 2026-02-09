@@ -836,30 +836,49 @@ app.get('/api/chapters/:id', async (req, res) => {
     const chapter = await Chapter.findById(req.params.id).lean();
     if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
 
-    // ================= 📊 数据统计区域 (核心修复) =================
+// 在 server/index.js 中找到这一段
+
+    // ================= 📊 数据统计区域 (调试版) =================
     
-    // 🔥 A. 增加【书籍】浏览量 (同步增加，确保数据准确)
-    // 既然读了这一章，这本书的点击量就该 +1
-    // 使用非阻塞写法 (不加 await)，加快响应速度，后台慢慢存
+    // 1. 打印日志：看书确实被请求了吗？
+    console.log(`📖 [调试] 有人正在读书: BookID=${chapter.bookId}`);
+
+    // 🔥 A. 增加【书籍】浏览量
     Book.findByIdAndUpdate(chapter.bookId, { 
         $inc: { views: 1, daily_views: 1, weekly_views: 1, monthly_views: 1 } 
-    }).exec().catch(err => console.error('书籍浏览量更新失败:', err));
+    }).exec().catch(err => console.error('❌ 书籍统计失败:', err));
 
-    // 🔥 B. 增加【用户】阅读量 (如果已登录)
+    // 🔥 B. 增加【用户】阅读量
     const authHeader = req.headers['authorization'];
+    
     if (authHeader) {
         const token = authHeader.split(' ')[1];
         if (token) {
             try {
                 const decoded = jwt.verify(token, JWT_SECRET);
-                // 给这个用户今日阅读量 +1
+                
+                // 2. 打印日志：看有没有识别出用户 ID
+                console.log(`👤 [调试] 识别到登录用户 ID: ${decoded.id}`);
+
+                // 3. 关键：尝试更新并打印结果
                 User.findByIdAndUpdate(decoded.id, { 
                     $inc: { 'stats.today_views': 1 } 
-                }).exec().catch(err => console.error('用户统计更新失败:', err));
+                }, { new: true }) // new: true 会返回更新后的数据
+                .then(updatedUser => {
+                    if (updatedUser) {
+                        console.log(`✅ [调试] 更新成功！当前 today_views = ${updatedUser.stats?.today_views}`);
+                    } else {
+                        console.log(`⚠️ [调试] 未找到该用户，更新失败`);
+                    }
+                })
+                .catch(err => console.error('❌ [调试] 数据库报错:', err));
+                
             } catch (e) {
-                // Token 过期或无效，忽略，不影响看书
+                console.log('⚠️ [调试] Token 无效或过期');
             }
         }
+    } else {
+        console.log('👻 [调试] 用户未登录 (无 Auth Header)');
     }
     // ==========================================================
     
