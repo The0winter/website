@@ -6,82 +6,99 @@ import { useRouter } from 'next/navigation';
 import { 
   PenTool, BookOpen, BarChart3, 
   Plus, Upload, X, Edit3, Save, Settings, AlertCircle, CheckCircle2, Sparkles, Trash2,
-  Shield, LogIn, Image as ImageIcon, Loader2,
-  Ban, Unlock
+  Shield, LogIn, Image as ImageIcon, Loader2, Ban, Unlock, Search, LayoutDashboard
 } from 'lucide-react';
 import { booksApi, chaptersApi, Book, Chapter } from '@/lib/api';
-// 添加 Cropper 引入
 import Cropper from 'react-easy-crop';
 import { getCroppedImg } from '@/lib/canvasUtils'; 
 
+// ================= 迷你曲线图组件 (纯SVG实现，零依赖) =================
+const MiniChart = ({ data, color = "#3b82f6" }: { data: number[], color?: string }) => {
+    if (!data || data.length < 2) return <div className="text-[10px] text-gray-300">数据不足</div>;
+    
+    const max = Math.max(...data, 1);
+    const height = 24; // 高度 24px
+    const width = 60;  // 宽度 60px
+    const step = width / (data.length - 1);
+    
+    // 生成 SVG 路径
+    const points = data.map((val, i) => {
+        const x = i * step;
+        const y = height - (val / max) * height;
+        return `${x},${y}`;
+    }).join(' ');
+
+    return (
+        <svg width={width} height={height} className="overflow-visible">
+            {/* 折线 */}
+            <polyline fill="none" stroke={color} strokeWidth="1.5" points={points} strokeLinecap="round" strokeLinejoin="round" />
+            {/* 最后一个点的圆点 */}
+            <circle cx={width} cy={height - (data[data.length-1] / max) * height} r="2" fill={color} />
+        </svg>
+    );
+};
 
 export default function WriterDashboard() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const LIMITS = {
-  TITLE: 100,        // 书名/章节名限制 100 字
-  DESC: 500,         // 简介限制 500 字
-  CONTENT: 50000     // 章节正文限制 5万字 (足够多了，防恶意攻击)
-};
+
+  const LIMITS = { TITLE: 100, DESC: 500, CONTENT: 50000 };
   
   // ================= State 定义区域 =================
   
-  // 1. 基础数据
+// 核心：视图控制 'works' | 'admin'
+  const [currentView, setCurrentView] = useState<'works' | 'admin'>('works');
+
+  // 作品相关
   const [myBooks, setMyBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeChapters, setActiveChapters] = useState<Chapter[]>([]);
 
-  // 2. 弹窗控制
+  // 弹窗控制
   const [showCreateBookModal, setShowCreateBookModal] = useState(false);
   const [showChapterEditor, setShowChapterEditor] = useState(false);
   const [showBookManager, setShowBookManager] = useState(false);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [chapterToDelete, setChapterToDelete] = useState<string | null>(null);
   
-  // 👮 管理员专用 State
-  const [showAdminModal, setShowAdminModal] = useState(false);
+  // 👮 管理员页面专用 State
   const [userList, setUserList] = useState<any[]>([]); 
+  const [adminSearch, setAdminSearch] = useState(''); // 搜索词
+  const [adminLoading, setAdminLoading] = useState(false);
 
-  // 3. 选中项与表单
+  // 表单与选中项
   const [currentBookId, setCurrentBookId] = useState<string>('');
   const [currentChapterId, setCurrentChapterId] = useState<string | null>(null);
-
   const [formBookTitle, setFormBookTitle] = useState('');
   const [formBookDescription, setFormBookDescription] = useState('');
-  
-  // 分类逻辑
-  const ALL_CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻', '奇幻', '体育', '军事', '悬疑'];
-  const visibleCategories = ALL_CATEGORIES.slice(0, 4);
-  const hiddenCategories = ALL_CATEGORIES.slice(4);
-  const [formBookCategory, setFormBookCategory] = useState(ALL_CATEGORIES[0]);
+  const [formBookCategory, setFormBookCategory] = useState('玄幻');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-
   const [formChapterTitle, setFormChapterTitle] = useState('');
   const [formChapterContent, setFormChapterContent] = useState('');
-
+  
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'info' | 'error'} | null>(null);
 
-  //  新增：封面上传相关的 State (放在 State 定义区域最后)
-  const [uploading, setUploading] = useState(false); // 上传 loading 状态
-  const [formBookCover, setFormBookCover] = useState(''); // 编辑时的封面 URL
-  const [newBookCoverFile, setNewBookCoverFile] = useState<File | null>(null); // 新建时的临时文件
-  const [newBookCoverPreview, setNewBookCoverPreview] = useState(''); // 新建时的临时预览
-
-  // === ✂️ 裁剪相关 State ===
+  // 封面上传
+  const [uploading, setUploading] = useState(false);
+  const [formBookCover, setFormBookCover] = useState('');
+  const [newBookCoverFile, setNewBookCoverFile] = useState<File | null>(null);
+  const [newBookCoverPreview, setNewBookCoverPreview] = useState('');
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
-  
-  const [cropperImgSrc, setCropperImgSrc] = useState<string | null>(null); // 裁剪弹窗显示的图
-  const [isCroppingFor, setIsCroppingFor] = useState<'new' | 'edit' | null>(null); // 记录当前是给“新书”还是“修改”裁剪
+  const [cropperImgSrc, setCropperImgSrc] = useState<string | null>(null);
+  const [isCroppingFor, setIsCroppingFor] = useState<'new' | 'edit' | null>(null);
 
-  // ================= 数据获取逻辑 =================
+  const ALL_CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻', '奇幻', '体育', '军事', '悬疑'];
+  const visibleCategories = ALL_CATEGORIES.slice(0, 4);
+  const hiddenCategories = ALL_CATEGORIES.slice(4);
+
+  // ================= 逻辑函数 =================
 
   const fetchMyData = useCallback(async () => {
     if (!user) return;
     try {
       setLoading(true);
-      // 获取当前登录用户（可能是管理员影子登录后的身份）的书籍
       const books = await booksApi.getMyBooks(user.id);
       setMyBooks(books); 
     } catch (error) {
@@ -91,28 +108,52 @@ export default function WriterDashboard() {
     }
   }, [user]);
 
-  // ✅ 新增：通用上传函数
+  // 👮 加载用户列表 (支持搜索)
+  const fetchUserList = useCallback(async (search = '') => {
+    if (!user) return;
+    setAdminLoading(true);
+    try {
+        // ✅ 升级：带上 search 参数
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users?search=${encodeURIComponent(search)}`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            setUserList(data);
+        } else {
+            setToast({ msg: '获取用户列表失败', type: 'error' });
+        }
+    } catch (e) {
+        setToast({ msg: '网络错误', type: 'error' });
+    } finally {
+        setAdminLoading(false);
+    }
+  }, [user]);
+
+  // 监听搜索词变化 (防抖)
+  useEffect(() => {
+      if (currentView === 'admin') {
+          const timer = setTimeout(() => {
+              fetchUserList(adminSearch);
+          }, 500); // 500ms 防抖
+          return () => clearTimeout(timer);
+      }
+  }, [adminSearch, currentView, fetchUserList]);
+
   const uploadImageToCloudinary = async (file: File): Promise<string | null> => {
     try {
       setUploading(true);
       const formData = new FormData();
       formData.append('file', file);
-
-      // 调用我们在后端写的 /api/upload/cover 接口
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/upload/cover`, {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-            'x-user-id': user!.id
-        },
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}`, 'x-user-id': user!.id },
         body: formData,
       });
-
       if (!res.ok) throw new Error('上传失败');
       const data = await res.json();
-      return data.url; // 返回云端 URL
+      return data.url;
     } catch (e) {
-      console.error(e);
       setToast({ msg: '图片上传失败', type: 'error' });
       return null;
     } finally {
@@ -120,440 +161,156 @@ export default function WriterDashboard() {
     }
   };
 
-  // 👮 加载用户列表 (只有打开管理员弹窗时才调用)
-  const fetchUserList = async () => {
-    if (!user) return;
-    try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users`, {
-            headers: { 
-                // 👇 这一行才是关键！
-                'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-            }
-        });
-        if (res.ok) {
-            const data = await res.json();
-            setUserList(data);
-        } else {
-            setToast({ msg: '获取用户列表失败 (权限不足?)', type: 'error' });
-        }
-    } catch (e) {
-        console.error(e);
-        setToast({ msg: '网络错误', type: 'error' });
-    }
-  };
-
-  // 1. 用户选择了文件，准备裁剪
+  // ... 裁剪、登录等逻辑保持不变 (此处为了简洁省略，实际使用时请保留) ...
   const onSelectFile = (e: React.ChangeEvent<HTMLInputElement>, type: 'new' | 'edit') => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       const reader = new FileReader();
       reader.addEventListener('load', () => {
         setCropperImgSrc(reader.result?.toString() || '');
-        setIsCroppingFor(type); // 👈 记住是给谁裁的
-        setZoom(1); // 重置缩放
-        setCrop({ x: 0, y: 0 }); // 重置位置
+        setIsCroppingFor(type);
+        setZoom(1); setCrop({ x: 0, y: 0 });
       });
       reader.readAsDataURL(file);
     }
   };
 
-  // 2. 裁剪区域变化回调
-  const onCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => {
-    setCroppedAreaPixels(croppedAreaPixels);
-  }, []);
+  const onCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => setCroppedAreaPixels(croppedAreaPixels), []);
 
-  // 3. 确定裁剪并上传
   const handleSaveCrop = async () => {
     if (!cropperImgSrc || !croppedAreaPixels) return;
-    
     try {
       setUploading(true);
-      // 生成裁剪后的 Blob 文件
       const croppedBlob = await getCroppedImg(cropperImgSrc, croppedAreaPixels);
-      
       if (!croppedBlob) throw new Error('Canvas create failed');
-
-      // 把 Blob 转成 File 对象以便上传
       const file = new File([croppedBlob], "cover.jpg", { type: "image/jpeg" });
-      
-      // 上传到 Cloudinary
       const url = await uploadImageToCloudinary(file);
-      
       if (url) {
-        if (isCroppingFor === 'new') {
-            setNewBookCoverPreview(url); // 只是预览，不存文件对象了，直接存 Cloudinary URL
-            // 注意：这里需要微调 handleCreateBook 逻辑，下面会说
-        } else if (isCroppingFor === 'edit') {
-            setFormBookCover(url);
-        }
-        setToast({ msg: '裁剪并上传成功', type: 'success' });
+        if (isCroppingFor === 'new') setNewBookCoverPreview(url);
+        else if (isCroppingFor === 'edit') setFormBookCover(url);
+        setToast({ msg: '裁剪成功', type: 'success' });
       }
-
-      // 关闭裁剪窗
-      setCropperImgSrc(null);
-      setIsCroppingFor(null);
-
-    } catch (e) {
-      console.error(e);
-      setToast({ msg: '裁剪失败', type: 'error' });
-    } finally {
-      setUploading(false);
-    }
+      setCropperImgSrc(null); setIsCroppingFor(null);
+    } catch (e) { setToast({ msg: '裁剪失败', type: 'error' }); } finally { setUploading(false); }
   };
 
-  // ================= Effect 监听 =================
-
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) {
-        router.push('/login');
-    } else {
-        fetchMyData();
-    }
-  }, [user, authLoading, router, fetchMyData]);
-
-  // 监听打开书籍管理器，加载章节
-  useEffect(() => {
-    if (showBookManager && currentBookId) {
-        const book = myBooks.find(b => b.id === currentBookId);
-        if (book) {
-            setFormBookCover(book.cover_image || ''); // 👈 初始化封面
-            setFormBookTitle(book.title);             // 👈 确保标题同步
-            setFormBookDescription(book.description || ''); // 👈 确保简介同步
-        }
-
-        chaptersApi.getByBookId(currentBookId)
-            .then(setActiveChapters)
-            .catch(console.error);
-    }
-  }, [showBookManager, currentBookId]);
-
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
-
-  // ================= 核心业务逻辑 =================
-
-// 🚀 核心：影子登录逻辑 (修复版)
+  // 影子登录
   const handleShadowLogin = async (targetUserId: string, targetName: string) => {
-    // 1. 安全检查：如果 user 为空或者是 null，直接拦截
-    // 这里的判断能让 TS 知道后续 user 一定存在
-    if (!user || (user as any).role !== 'admin') {
-        alert('你不是管理员，无法操作');
-        return;
-    }
-    
-    if (!confirm(`⚠️ 确认切换身份\n\n即将以 [ ${targetName} ] 的视角登录。`)) return;
-
+    if (!user || (user as any).role !== 'admin') return alert('权限不足');
+    if (!confirm(`⚠️ 确认切换身份为 [ ${targetName} ] ?`)) return;
     try {
-        // 2. 发送请求
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/impersonate/${targetUserId}`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                // 🛠️ 修复 1：加个 ! 告诉 TS "我确信 user 存在"
-                'x-user-id': user!.id ,
-                'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-            }
+            headers: { 'Content-Type': 'application/json', 'x-user-id': user!.id , 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
         });
-
-        if (!res.ok) {
-            const errText = await res.text(); 
-            throw new Error(errText || '请求失败');
-        }
-        
+        if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
-        const newId = data.user.id; 
-
         localStorage.setItem('token', data.token);
-
-        // 你的 api.txt 和 AuthContext 里都只认这个名字。
-        localStorage.setItem('novelhub_user', newId);
-        
-        // 顺便更新一下 user 对象，防止闪烁
+        localStorage.setItem('novelhub_user', data.user.id);
         localStorage.setItem('user', JSON.stringify(data.user));
-
-        alert(`✅ 切换成功！\n\n当前身份：${data.user.username}\n即将刷新页面...`);
-        
-        // 3. 刷新页面，让 AuthContext 重新通过 novelhub_user 读取新身份
         window.location.reload();
-
-    } catch (e: any) {
-        console.error(e);
-        setToast({ msg: `切换失败: ${e.message}`, type: 'error' });
-    }
-  };
-
-  // ✅ 新增：处理封号/解封
-  const handleBanUser = async (targetUserId: string, currentStatus: boolean, username: string) => {
-    const action = currentStatus ? '解封' : '封禁';
-    if (!confirm(`⚠️ 确定要 ${action} 用户 [ ${username} ] 吗？\n\n${currentStatus ? '解封后该用户可以正常登录。' : '封禁后该用户将无法登录。'}`)) return;
-
-    try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${targetUserId}/ban`, {
-            method: 'PATCH',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-            },
-            body: JSON.stringify({ isBanned: !currentStatus }) // 取反
-        });
-
-        if (res.ok) {
-            setToast({ msg: `${action}成功`, type: 'success' });
-            // 刷新列表以显示最新状态
-            fetchUserList();
-        } else {
-            const data = await res.json();
-            setToast({ msg: data.error || '操作失败', type: 'error' });
-        }
-    } catch (e) {
-        console.error(e);
-        setToast({ msg: '网络错误', type: 'error' });
-    }
+    } catch (e: any) { setToast({ msg: `切换失败: ${e.message}`, type: 'error' }); }
   };
 
   const activeBook = myBooks.find(b => b.id === currentBookId);
 
-// 替换掉原来的 openChapterEditor 函数
-  const openChapterEditor = async (type: 'new' | 'edit', chapter?: Chapter) => {
-    // 1. 如果是新建章节
-    if (type === 'new') {
-        setCurrentChapterId(null);
-        setFormChapterTitle('');
-        setFormChapterContent('');
-        setShowChapterEditor(true);
-    } 
-    // 2. 如果是编辑已有章节
-    else if (chapter) {
-        setCurrentChapterId(chapter.id);
-        setFormChapterTitle(chapter.title);
-        
-        // --- 核心修改开始 ---
-        // 先显示加载中，防止用户看到空白不知所措
-        setFormChapterContent('正在从云端加载章节内容...'); 
-        setShowChapterEditor(true); // 先打开窗口
-
-        try {
-            // 单独请求这一章的详情（后端这个接口会返回 content）
-            // 注意：这里直接用 fetch 最稳妥，确保能连上你的后端
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/chapters/${chapter.id}`, {
-                headers: {
-                    // 如果你的后端开启了简单的防盗链检查，这里可能需要带上
-                    // 不过通常浏览器 fetch 会自动处理 referer
-                }
-            });
-            
-            if (!res.ok) throw new Error('加载失败');
-            
-            const data = await res.json();
-            
-            // 拿到真正的 content 后填进去
-            // 为了防止用户手快已经关了窗口，这里可以加个判断，或者直接设置
-            setFormChapterContent(data.content || ''); 
-            
-        } catch (e) {
-            console.error(e);
-            setFormChapterContent('❌ 内容加载失败，请检查网络后重试。');
-            setToast({ msg: '章节内容获取失败', type: 'error' });
-        }
-        // --- 核心修改结束 ---
-    }
-  };
-
- const saveChapterCore = async (status: 'ongoing' | 'completed') => {
-    // 1. 基础非空检查
-    if (!formChapterTitle.trim()) {
-        setToast({ msg: '标题不能为空', type: 'error' });
-        return false;
-    }
-
-    // 🛡️ 2. 安全检查：防止超长文本
-    if (formChapterTitle.length > LIMITS.TITLE) {
-        setToast({ msg: `标题太长了 (限 ${LIMITS.TITLE} 字)`, type: 'error' });
-        return false;
-    }
-    if (formChapterContent.length > LIMITS.CONTENT) {
-        setToast({ msg: `正文超长，请分章发布 (限 ${LIMITS.CONTENT} 字)`, type: 'error' });
-        return false;
-    }
-
+  // 封号逻辑
+  const handleBanUser = async (targetUserId: string, currentStatus: boolean, username: string) => {
+    const action = currentStatus ? '解封' : '封禁';
+    if (!confirm(`⚠️ 确定要 ${action} 用户 [ ${username} ] 吗？`)) return;
     try {
-        const chapterData = {
-            title: formChapterTitle,
-            content: formChapterContent,
-            bookId: currentBookId,
-            chapter_number: 1, // 后端需自动处理递增
-        };
-
-        if (currentChapterId) {
-            await chaptersApi.update(currentChapterId, chapterData);
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${targetUserId}/ban`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` },
+            body: JSON.stringify({ isBanned: !currentStatus })
+        });
+        if (res.ok) {
+            setToast({ msg: `${action}成功`, type: 'success' });
+            fetchUserList(adminSearch); // 刷新
         } else {
-            await chaptersApi.create(chapterData);
+            setToast({ msg: '操作失败', type: 'error' });
         }
-        
-        fetchMyData(); 
-        if (currentBookId) {
-            const updatedChapters = await chaptersApi.getByBookId(currentBookId);
-            setActiveChapters(updatedChapters);
-        }
-        return true;
-    } catch (err) {
-        console.error(err);
-        setToast({ msg: '保存失败', type: 'error' });
-        return false;
-    }
+    } catch (e) { setToast({ msg: '网络错误', type: 'error' }); }
   };
 
-  const handleSaveDraft = async () => {
-    if (await saveChapterCore('ongoing')) {
-        setToast({ msg: '保存成功！', type: 'success' });
-    }
-  };
-
-  const handlePublishTrigger = () => {
-    if (!formChapterTitle.trim()) return alert('标题不能为空');
-    setShowPublishConfirm(true);
-  };
-
-  const handleConfirmPublish = async () => {
-    if (await saveChapterCore('completed')) {
-        setShowPublishConfirm(false);
-        setShowChapterEditor(false);
-        setToast({ msg: '发布成功！', type: 'success' });
-    }
-  };
-
-  const handleDeleteChapter = (chapterId: string) => {
-    setChapterToDelete(chapterId); 
-  };
-
-  const executeDeleteChapter = async () => {
-    if (!chapterToDelete) return;
-    try {
-        await chaptersApi.delete(chapterToDelete);
-        setToast({ msg: '删除成功', type: 'success' });
-        setActiveChapters(prev => prev.filter(c => c.id !== chapterToDelete));
-        fetchMyData(); 
-    } catch (e) {
-        setToast({ msg: '删除失败，请重试', type: 'error' });
-    } finally {
-        setChapterToDelete(null);
-    }
-  };
-
-  const handleCreateBook = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formBookTitle.trim() || !user) return;
-
-    try {
-        let finalCoverUrl = '';
-
-    // 1. 优先检查：是否已经有裁剪好的云端链接 (裁剪器直接返回的 URL)
-    if (newBookCoverPreview.startsWith('http')) {
-        finalCoverUrl = newBookCoverPreview;
-    } 
-    // 2. 备选方案：如果没有链接，但有本地文件 (防止万一你绕过了裁剪器)
-    else if (newBookCoverFile) {
-        const url = await uploadImageToCloudinary(newBookCoverFile);
-        if (url) finalCoverUrl = url;
-        else return; // 上传失败这就停止
-    }
-
-        // 2. 创建书籍 (带上 cover_image)
-        await booksApi.create({
-            title: formBookTitle,
-            description: formBookDescription,
-            cover_image: finalCoverUrl, // 👈 存入 URL
-            category: formBookCategory, 
-            author: user.username || '匿名作家', 
-            author_id: user.id, 
-        } as any);
-        
-        // 3. 重置所有状态
-        setShowCreateBookModal(false);
-        setFormBookTitle('');
-        setFormBookDescription('');
-        setFormBookCategory(ALL_CATEGORIES[0]);
-        setNewBookCoverFile(null);    // 👈 清空
-        setNewBookCoverPreview('');   // 👈 清空
-        setShowCategoryDropdown(false);
-        
-        setToast({ msg: '新书创建成功！', type: 'success' });
-        fetchMyData();
-    } catch (e) {
-        console.error(e);
-        setToast({ msg: '创建失败', type: 'error' });
-    }
-  };
-
-  // ✅ 新增：更新书籍信息函数
-  const handleUpdateBook = async () => {
-    if (!currentBookId || !formBookTitle.trim()) return;
-    try {
-      // 如果你的 api.ts 里没有 update 方法，请确认添加，或者暂时用 fetch 代替
-      await booksApi.update(currentBookId, {
-          title: formBookTitle,
-          description: formBookDescription,
-          cover_image: formBookCover
-      });
-      setToast({ msg: '书籍信息已保存', type: 'success' });
-      fetchMyData(); // 刷新列表
-    } catch (e) {
-      setToast({ msg: '保存失败', type: 'error' });
-    }
-  };
-
-  //  新增：处理编辑模式下的封面上传
-  const handleEditCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      
-      const url = await uploadImageToCloudinary(file);
-      if (url) {
-          setFormBookCover(url); // 只更新状态，用户点“保存修改”时才写入数据库
+  // 书籍章节逻辑 (省略重复代码，逻辑与之前一致) ...
+  const openChapterEditor = async (type: 'new' | 'edit', chapter?: Chapter) => {
+      if (type === 'new') { setCurrentChapterId(null); setFormChapterTitle(''); setFormChapterContent(''); setShowChapterEditor(true); }
+      else if (chapter) {
+          setCurrentChapterId(chapter.id); setFormChapterTitle(chapter.title); setFormChapterContent('加载中...'); setShowChapterEditor(true);
+          try {
+              const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/chapters/${chapter.id}`);
+              if(!res.ok) throw new Error('err');
+              const data = await res.json(); setFormChapterContent(data.content || '');
+          } catch(e) { setFormChapterContent('加载失败'); }
       }
   };
-
-  const handleDeleteBook = async () => {
-    const confirmName = prompt('输入书名确认删除：');
-    const book = myBooks.find(b => b.id === currentBookId);
-    if (book && confirmName === book.title) {
-        try {
-            await booksApi.delete(currentBookId);
-            setShowBookManager(false);
-            setToast({ msg: '书籍已删除', type: 'success' });
-            fetchMyData();
-        } catch (e) {
-            alert('删除失败');
-        }
-    }
+  const saveChapterCore = async (status: 'ongoing' | 'completed') => {
+      if (!formChapterTitle.trim()) { setToast({msg:'标题为空', type:'error'}); return false;}
+      if (formChapterTitle.length > LIMITS.TITLE) { setToast({msg:'标题过长', type:'error'}); return false;}
+      if (formChapterContent.length > LIMITS.CONTENT) { setToast({msg:'正文过长', type:'error'}); return false;}
+      try {
+          const data = { title: formChapterTitle, content: formChapterContent, bookId: currentBookId, chapter_number: 1 };
+          if (currentChapterId) await chaptersApi.update(currentChapterId, data);
+          else await chaptersApi.create(data);
+          fetchMyData(); 
+          if(currentBookId) chaptersApi.getByBookId(currentBookId).then(setActiveChapters);
+          return true;
+      } catch(e) { setToast({msg:'保存失败', type:'error'}); return false; }
   };
+  const handleSaveDraft = async () => { if(await saveChapterCore('ongoing')) setToast({msg:'保存成功', type:'success'}); };
+  const handlePublishTrigger = () => { if(!formChapterTitle.trim()) return; setShowPublishConfirm(true); };
+  const handleConfirmPublish = async () => { if(await saveChapterCore('completed')) { setShowPublishConfirm(false); setShowChapterEditor(false); setToast({msg:'发布成功', type:'success'}); }};
+  const handleDeleteChapter = (cid: string) => setChapterToDelete(cid);
+  const executeDeleteChapter = async () => { if(!chapterToDelete) return; await chaptersApi.delete(chapterToDelete); setActiveChapters(prev => prev.filter(c => c.id !== chapterToDelete)); setChapterToDelete(null); setToast({msg:'删除成功', type:'success'}); };
+  const handleCreateBook = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if(!formBookTitle.trim() || !user) return;
+      try {
+          let url = '';
+          if(newBookCoverPreview.startsWith('http')) url = newBookCoverPreview;
+          else if(newBookCoverFile) { const u = await uploadImageToCloudinary(newBookCoverFile); if(u) url = u; else return; }
+          await booksApi.create({ title: formBookTitle, description: formBookDescription, cover_image: url, category: formBookCategory, author: user.username, author_id: user.id } as any);
+          setShowCreateBookModal(false); setFormBookTitle(''); setFormBookDescription(''); setFormBookCategory(ALL_CATEGORIES[0]); setNewBookCoverFile(null); setNewBookCoverPreview('');
+          setToast({msg:'创建成功', type:'success'}); fetchMyData();
+      } catch(e) { setToast({msg:'创建失败', type:'error'}); }
+  };
+  const handleUpdateBook = async () => { if(!currentBookId) return; await booksApi.update(currentBookId, { title: formBookTitle, description: formBookDescription, cover_image: formBookCover }); setToast({msg:'保存成功', type:'success'}); fetchMyData(); };
+  const handleDeleteBook = async () => { const n = prompt('输入书名确认删除:'); const b = myBooks.find(k=>k.id===currentBookId); if(b && n===b.title) { await booksApi.delete(currentBookId); setShowBookManager(false); fetchMyData(); setToast({msg:'删除成功', type:'success'}); }};
 
-  if (authLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  if (!user) return null;
+
+  // Effect
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) router.push('/login');
+    else fetchMyData();
+  }, [user, authLoading, router, fetchMyData]);
+
+  useEffect(() => {
+    if (showBookManager && currentBookId) {
+        const book = myBooks.find(b => b.id === currentBookId);
+        if (book) { setFormBookCover(book.cover_image || ''); setFormBookTitle(book.title); setFormBookDescription(book.description || ''); }
+        chaptersApi.getByBookId(currentBookId).then(setActiveChapters).catch(console.error);
+    }
+  }, [showBookManager, currentBookId, myBooks]);
+
+  useEffect(() => { if(toast) { const t = setTimeout(()=>setToast(null),3000); return ()=>clearTimeout(t); } }, [toast]);
+
+  if (authLoading || !user) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600"/></div>;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
-      
-      {/* Toast 提示 */}
+      {/* Toast */}
       {toast && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[100] animate-in fade-in slide-in-from-top-4 w-[90%] md:w-auto text-center">
-          <div className={`px-4 py-3 md:px-6 md:py-3 rounded-full shadow-lg text-white font-medium flex items-center justify-center gap-2 ${
-            toast.type === 'success' ? 'bg-green-600' : toast.type === 'error' ? 'bg-red-600' : 'bg-blue-600'
-          }`}>
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[110] animate-in fade-in slide-in-from-top-4">
+          <div className={`px-6 py-3 rounded-full shadow-lg text-white font-medium flex items-center gap-2 ${toast.type === 'success' ? 'bg-green-600' : toast.type === 'error' ? 'bg-red-600' : 'bg-blue-600'}`}>
             {toast.type === 'success' ? <CheckCircle2 className="h-5 w-5"/> : <AlertCircle className="h-5 w-5"/>}
-            <span className="text-sm md:text-base">{toast.msg}</span>
+            <span>{toast.msg}</span>
           </div>
         </div>
       )}
 
-      {/* ❌ 已删除：移动端专属顶部栏 (<header className="md:hidden...">) */}
-
-      {/* 侧边栏 (保持 Desktop 不变) */}
+      {/* ================= 侧边栏 (导航核心) ================= */}
       <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col fixed h-full z-10">
         <div className="p-6 border-b border-gray-100">
           <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -562,109 +319,211 @@ export default function WriterDashboard() {
           </h2>
         </div>
         <nav className="flex-1 p-4 space-y-2">
-          <button className="w-full flex items-center gap-3 px-4 py-3 text-blue-600 bg-blue-50 rounded-lg font-medium">
+          {/* 切换到作品管理 */}
+          <button 
+            onClick={() => setCurrentView('works')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${currentView === 'works' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'}`}
+          >
             <BookOpen className="h-5 w-5" /> 作品管理
           </button>
           
+          {/* 切换到控制台 (仅管理员) */}
           {(user as any).role === 'admin' && (
             <button 
-                onClick={() => { setShowAdminModal(true); fetchUserList(); }}
-                className="w-full flex items-center gap-3 px-4 py-3 text-purple-600 hover:bg-purple-50 rounded-lg font-medium transition mt-2"
+                onClick={() => { setCurrentView('admin'); fetchUserList(); }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition mt-2 ${currentView === 'admin' ? 'bg-purple-50 text-purple-600' : 'text-gray-600 hover:bg-purple-50 hover:text-purple-600'}`}
             >
-                <Shield className="h-5 w-5" /> 用户管理 (Admin)
+                <LayoutDashboard className="h-5 w-5" /> 超级控制台
             </button>
           )}
         </nav>
         <div className="p-4 border-t border-gray-100">
            <div className="flex items-center gap-3 px-4 py-2">
-              <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold ${
-                  (user as any).role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
-              }`}>
+              <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold ${(user as any).role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
                 {((user as any).username || 'U')[0].toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{(user as any).username || '未命名用户'}</p>
+                <p className="text-sm font-medium text-gray-900 truncate">{(user as any).username}</p>
                 <p className="text-xs text-gray-500">{(user as any).role === 'admin' ? '超级管理员' : '作家'}</p>
               </div>
            </div>
         </div>
       </aside>
 
-      {/* 主内容区 (调整 mobile padding，去掉 header 后顶部不需要留那么多空隙了) */}
+      {/* ================= 主内容区域 ================= */}
       <main className="flex-1 md:ml-64 p-4 md:p-8 pb-20 md:pb-8">
         
-        {/* 为了方便移动端管理员操作，如果你删了顶部栏，我在“我的作品”标题旁加个小的盾牌入口（仅Admin可见） */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[80vh] md:min-h-0">
-            <div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 md:bg-white">
-                <div className="flex items-center gap-2">
+        {/* 1. 作品管理视图 */}
+        {currentView === 'works' && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[80vh] md:min-h-0 animate-in fade-in">
+                <div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 md:bg-white">
                     <h3 className="font-bold text-lg text-gray-900">我的作品</h3>
-                    {/* 🛡️ 补位：移动端管理员入口 (原本在顶部栏，现在挪到这里，不占空间) */}
-                    {(user as any).role === 'admin' && (
-                        <button 
-                            onClick={() => { setShowAdminModal(true); fetchUserList(); }}
-                            className="md:hidden p-1.5 bg-purple-50 text-purple-600 rounded-lg"
-                        >
-                            <Shield className="h-4 w-4" />
-                        </button>
+                    <button onClick={() => setShowCreateBookModal(true)} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg hover:bg-blue-700 transition shadow-md shadow-blue-500/20 active:scale-95 cursor-pointer">
+                        <Plus className="h-4 w-4" /> <span className="hidden md:inline">创建新书</span><span className="md:hidden">新建</span>
+                    </button>
+                </div>
+
+                <div className="divide-y divide-gray-100">
+                    {loading ? ( <div className="p-12 text-center text-gray-400">加载中...</div> ) : myBooks.length === 0 ? (
+                        <div className="p-12 text-center text-gray-500 flex flex-col items-center gap-4">
+                            <BookOpen className="h-12 w-12 text-gray-200" /> <p>暂无作品</p>
+                        </div>
+                    ) : (
+                        myBooks.map((book) => (
+                            <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
+                                <div className="w-20 h-28 md:w-24 md:h-32 bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
+                                    {book.cover_image ? <img src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
+                                </div>
+                                <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
+                                    <div>
+                                        <div className="flex justify-between items-start">
+                                            <h4 className="text-base md:text-xl font-bold text-gray-900 mb-1 line-clamp-1">{book.title}</h4>
+                                            <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full md:hidden">{book.category || '未分类'}</span>
+                                        </div>
+                                        <p className="text-xs md:text-sm text-gray-500 mt-1 line-clamp-2">{book.description || '暂无简介'}</p>
+                                    </div>
+                                    <div className="flex gap-2 md:gap-3 mt-3">
+                                        <button onClick={() => { setCurrentBookId(book.id); openChapterEditor('new'); }} className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 md:px-4 md:py-2 bg-blue-50 text-blue-600 text-xs md:text-sm font-medium rounded-lg active:bg-blue-100 transition border border-blue-100 hover:bg-blue-100 cursor-pointer">
+                                            <Upload className="h-3 w-3 md:h-4 md:w-4" /> <span>快速发布</span>
+                                        </button>
+                                        <button onClick={() => { setCurrentBookId(book.id); setFormBookTitle(book.title); setFormBookDescription(book.description || ''); setFormBookCover(book.cover_image || ''); setShowBookManager(true); }} className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 md:px-4 md:py-2 bg-gray-100 text-gray-700 text-xs md:text-sm font-medium rounded-lg active:bg-gray-200 transition border border-gray-200 hover:bg-gray-200 cursor-pointer">
+                                            <Settings className="h-3 w-3 md:h-4 md:w-4" /> <span>管理</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))
                     )}
                 </div>
-                
-                <button 
-                    onClick={() => setShowCreateBookModal(true)}
-                    className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg hover:bg-blue-700 transition shadow-md shadow-blue-500/20 active:scale-95 cursor-pointer"
-                >
-                    <Plus className="h-4 w-4" /> <span className="hidden md:inline">创建新书</span><span className="md:hidden">新建</span>
-                </button>
             </div>
+        )}
 
-            <div className="divide-y divide-gray-100">
-                {loading ? (
-                    <div className="p-12 text-center text-gray-400">正在从云端获取作品...</div>
-                ) : myBooks.length === 0 ? (
-                    <div className="p-12 text-center text-gray-500 flex flex-col items-center gap-4">
-                        <BookOpen className="h-12 w-12 text-gray-200" />
-                        <p>暂无作品，快去创建第一本书吧！</p>
+        {/* 2. ✅ 超级管理员控制台视图 (新页面) */}
+        {currentView === 'admin' && (user as any).role === 'admin' && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                {/* 顶部：标题与搜索 */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                            <Shield className="h-7 w-7 text-purple-600" /> 控制台
+                        </h2>
+                        <p className="text-sm text-gray-500 mt-1">
+                            管理用户状态，查看活跃数据 (Top 15 活跃用户)
+                        </p>
                     </div>
-                ) : (
-                    myBooks.map((book) => (
-                        <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
-                            {/* 封面图 */}
-                            <div className="w-20 h-28 md:w-24 md:h-32 bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden">
-                                {book.cover_image ? <img src={book.cover_image} className="w-full h-full object-cover"/> : <BookOpen className="h-8 w-8 opacity-50" />}
-                            </div>
-                            
-                            <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
-                                <div>
-                                    <div className="flex justify-between items-start">
-                                        <h4 className="text-base md:text-xl font-bold text-gray-900 mb-1 line-clamp-1">{book.title}</h4>
-                                        <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full md:hidden">
-                                            {book.category || '未分类'}
-                                        </span>
-                                    </div>
-                                    <p className="text-xs md:text-sm text-gray-500 mt-1 line-clamp-2 md:line-clamp-2">{book.description || '暂无简介'}</p>
-                                </div>
-                                
-                                <div className="flex flex-wrap gap-2 md:gap-3 mt-3">
-                                    <button 
-                                        onClick={() => { setCurrentBookId(book.id); openChapterEditor('new'); }}
-                                        className="flex-1 md:flex-none flex items-center justify-center gap-1 px-3 py-1.5 md:px-4 md:py-2 bg-blue-50 text-blue-600 text-xs md:text-sm font-medium rounded-lg active:bg-blue-100 transition border border-blue-100 cursor-pointer"
-                                    >
-                                        <Upload className="h-3 w-3 md:h-4 md:w-4" /> 快速发布
-                                    </button>
-                                    <button 
-                                        onClick={() => { setCurrentBookId(book.id); setFormBookTitle(book.title);
-                                        setFormBookDescription(book.description || '');setShowBookManager(true); }}
-                                        className="flex-1 md:flex-none flex items-center justify-center gap-1 px-3 py-1.5 md:px-4 md:py-2 bg-gray-100 text-gray-700 text-xs md:text-sm font-medium rounded-lg active:bg-gray-200 transition border border-gray-200 cursor-pointer"
-                                    >
-                                        <Settings className="h-3 w-3 md:h-4 md:w-4" /> 管理
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    ))
-                )}
+                    {/* 搜索框 */}
+                    <div className="relative w-full md:w-80">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <input 
+                            type="text" 
+                            placeholder="搜索用户名或邮箱..." 
+                            value={adminSearch}
+                            onChange={(e) => setAdminSearch(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition shadow-sm"
+                        />
+                    </div>
+                </div>
+
+                {/* 用户列表卡片 */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse min-w-[800px]">
+                            <thead>
+                                <tr className="bg-gray-50/50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider">
+                                    <th className="px-6 py-4 font-semibold">用户</th>
+                                    <th className="px-6 py-4 font-semibold">角色/状态</th>
+                                    <th className="px-6 py-4 font-semibold">本周活跃趋势 (浏览/上传)</th>
+                                    <th className="px-6 py-4 font-semibold text-right">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {adminLoading ? (
+                                    <tr><td colSpan={4} className="p-8 text-center text-gray-400">加载中...</td></tr>
+                                ) : userList.length === 0 ? (
+                                    <tr><td colSpan={4} className="p-8 text-center text-gray-400">未找到用户</td></tr>
+                                ) : userList.map(u => {
+                                    // 准备图表数据
+                                    const history = u.stats?.history || [];
+                                    const viewData = history.map((h: any) => h.views || 0);
+                                    const uploadData = history.map((h: any) => h.uploads || 0);
+                                    
+                                    return (
+                                        <tr key={u.id || u._id} className={`group hover:bg-gray-50 transition ${u.isBanned ? 'bg-red-50/30' : ''}`}>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-white shadow-sm ${u.role === 'admin' ? 'bg-gradient-to-br from-purple-500 to-indigo-600' : 'bg-gradient-to-br from-blue-400 to-blue-600'}`}>
+                                                        {u.username[0].toUpperCase()}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-gray-900">{u.username}</p>
+                                                        <p className="text-xs text-gray-500">{u.email}</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col gap-1 items-start">
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${u.role==='admin'?'bg-purple-50 text-purple-600 border-purple-100':'bg-blue-50 text-blue-600 border-blue-100'}`}>
+                                                        {u.role.toUpperCase()}
+                                                    </span>
+                                                    {u.isBanned ? (
+                                                        <span className="flex items-center gap-1 text-xs font-bold text-red-600">
+                                                            <Ban className="h-3 w-3" /> 已封禁
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs text-green-600 flex items-center gap-1">
+                                                            <CheckCircle2 className="h-3 w-3" /> 正常
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex gap-6">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-[10px] text-gray-400 uppercase font-bold">浏览量</span>
+                                                        <MiniChart data={viewData} color="#3b82f6" />
+                                                    </div>
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-[10px] text-gray-400 uppercase font-bold">上传量</span>
+                                                        <MiniChart data={uploadData} color="#10b981" />
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex justify-end gap-2 opacity-60 group-hover:opacity-100 transition">
+                                                    {u.id !== user!.id && u.role !== 'admin' && (
+                                                        <>
+                                                            <button 
+                                                                onClick={() => handleShadowLogin(u.id || u._id, u.username)}
+                                                                className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg border border-transparent hover:border-purple-100 transition"
+                                                                title="影子登录"
+                                                            >
+                                                                <LogIn className="h-4 w-4" />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleBanUser(u.id || u._id, u.isBanned, u.username)}
+                                                                className={`p-2 rounded-lg border border-transparent transition ${u.isBanned ? 'text-green-600 hover:bg-green-50 hover:border-green-100' : 'text-red-600 hover:bg-red-50 hover:border-red-100'}`}
+                                                                title={u.isBanned ? "解封" : "封号"}
+                                                            >
+                                                                {u.isBanned ? <Unlock className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                    {/* 底部提示 */}
+                    <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 text-xs text-gray-500 flex justify-between">
+                         <span>显示基于活跃度排序的前 15 名用户</span>
+                         <span>数据每日凌晨更新</span>
+                    </div>
+                </div>
             </div>
-        </div>
+        )}
       </main>
 
       {/* ===================== 弹窗区域 (保持不变) ===================== */}
@@ -1060,97 +919,7 @@ export default function WriterDashboard() {
         </div>
       )}
 
-      {/* 6. 管理员：用户列表弹窗 */}
-      {showAdminModal && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
-              <div className="p-4 md:p-6 border-b border-gray-100 bg-purple-50 flex justify-between items-center">
-                 <h3 className="text-lg md:text-xl font-bold text-purple-900 flex items-center gap-2">
-                    <Shield className="h-5 w-5 md:h-6 md:w-6" /> <span className="hidden md:inline">超级管理员控制台</span><span className="md:hidden">Admin</span>
-                 </h3>
-                 <button onClick={() => setShowAdminModal(false)}><X className="h-6 w-6 text-gray-500" /></button>
-              </div>
-              
-              <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white overflow-x-auto">
-                 <table className="w-full text-left border-collapse min-w-[600px] md:min-w-0">
-                    <thead>
-                        <tr className="text-sm text-gray-500 border-b border-gray-100">
-                            <th className="py-3 font-medium">用户名</th>
-                            <th className="py-3 font-medium">邮箱</th>
-                            <th className="py-3 font-medium">角色</th>
-                            <th className="py-3 font-medium">状态</th>
-                            <th className="py-3 font-medium">注册时间</th>
-                            <th className="py-3 font-medium text-right">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                        {userList.map(u => (
-                            <tr key={u.id || u._id} className={`group hover:bg-gray-50 ${u.isBanned ? 'bg-red-50/50' : ''}`}>
-                                <td className="py-4 font-bold text-gray-900">
-                                    {u.username}
-                                </td>
-                                <td className="py-4 text-gray-500 text-sm">{u.email}</td>
-                                <td className="py-4">
-                                    <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                        u.role === 'admin' ? 'bg-purple-100 text-purple-700' :
-                                        u.role === 'writer' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-                                    }`}>
-                                        {u.role === 'admin' ? '管理员' : u.role === 'writer' ? '作家' : '读者'}
-                                    </span>
-                                </td>
-                                
-                                {/* ✅ 新增：状态显示 */}
-                                <td className="py-4">
-                                    {u.isBanned ? (
-                                        <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded">
-                                            <Ban className="h-3 w-3" /> 已封禁
-                                        </span>
-                                    ) : (
-                                        <span className="text-xs text-green-600 font-medium">正常</span>
-                                    )}
-                                </td>
 
-                                <td className="py-4 text-gray-400 text-xs">
-                                    {new Date(u.created_at).toLocaleDateString()}
-                                </td>
-                                
-                                <td className="py-4 text-right flex justify-end gap-2">
-                                    {/* 只有非当前用户且非管理员才能操作 */}
-                                    {u.id !== user!.id && u.role !== 'admin' && (
-                                        <>
-                                            {/* 影子登录按钮 */}
-                                            <button 
-                                                onClick={() => handleShadowLogin(u.id || u._id, u.username)}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 shadow-md shadow-purple-200 transition"
-                                                title="以此身份登录"
-                                            >
-                                                <LogIn className="h-3 w-3" /> <span className="hidden md:inline">登入</span>
-                                            </button>
-
-                                            {/* ✅ 新增：封号按钮 */}
-                                            <button 
-                                                onClick={() => handleBanUser(u.id || u._id, u.isBanned, u.username)}
-                                                className={`inline-flex items-center gap-1 px-3 py-1.5 text-white text-xs font-bold rounded-lg shadow-md transition ${
-                                                    u.isBanned 
-                                                    ? 'bg-gray-500 hover:bg-gray-600 shadow-gray-200' 
-                                                    : 'bg-red-500 hover:bg-red-600 shadow-red-200'
-                                                }`}
-                                                title={u.isBanned ? "解封用户" : "封禁用户"}
-                                            >
-                                                {u.isBanned ? <Unlock className="h-3 w-3" /> : <Ban className="h-3 w-3" />}
-                                                <span className="hidden md:inline">{u.isBanned ? '解封' : '封号'}</span>
-                                            </button>
-                                        </>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                 </table>
-              </div>
-           </div>
-        </div>
-      )}
 
     {/* ================= 裁剪器弹窗 ================= */}
       {cropperImgSrc && (

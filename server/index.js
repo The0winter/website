@@ -213,12 +213,31 @@ const adminMiddleware = async (req, res, next) => {
 // ================= 5. API 路由 =================
 
 // --- Admin API ---
+// 替换原来的 /api/admin/users 接口
 app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
     try {
-        const users = await User.find()
-            .select('username email role created_at isBanned')
-            .sort({ created_at: -1 })
-            .limit(100);
+        const { search } = req.query;
+        let query = {};
+        
+        // 1. 检索功能
+        if (search) {
+            const regex = new RegExp(search, 'i'); // 模糊匹配，不区分大小写
+            query = { 
+                $or: [ 
+                    { username: regex }, 
+                    { email: regex } 
+                ] 
+            };
+        }
+
+        const users = await User.find(query)
+            // 2. 选择需要的字段 (包括 stats)
+            .select('username email role created_at isBanned stats weekly_score')
+            // 3. 排序：按 weekly_score (活跃分) 倒序，分数一样按注册时间
+            .sort({ weekly_score: -1, created_at: -1 })
+            // 4. 限制 15 条
+            .limit(15);
+            
         res.json(users);
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -812,6 +831,21 @@ app.get('/api/chapters/:id', async (req, res) => {
        // 暂时放宽防盗链，避免前端调试问题
     }
 
+    // 埋点统计用户浏览量 (静默处理，不影响主逻辑)
+    const authHeader = req.headers['authorization'];
+    if (authHeader) {
+        try {
+            const token = authHeader.split(' ')[1];
+            if (token) {
+                const decoded = jwt.verify(token, JWT_SECRET);
+                // 异步更新，不await，加快响应速度
+                User.findByIdAndUpdate(decoded.id, { 
+                    $inc: { 'stats.today_views': 1 } 
+                }).exec();
+            }
+        } catch (e) { /* 忽略无效token */ }
+    }
+
     const chapter = await Chapter.findById(req.params.id).lean();
     if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
     
@@ -838,6 +872,18 @@ app.post('/api/chapters', authMiddleware, checkUploadQuota, async (req, res) => 
       });
 
       await newChapter.save();
+
+      // 记录上传次数 (stats.today_uploads)
+      // 注意：之前的 daily_upload_words 是记录字数，这个是记录“次数”
+      if (req.user.role !== 'admin') {
+          await User.findByIdAndUpdate(req.user.id, {
+              $inc: { 
+                  daily_upload_words: req.incomingWordCount || 0,
+                  'stats.today_uploads': 1 // 次数 +1
+              },
+              last_upload_date: new Date()
+          });
+      }
 
       // 🔥 关键：上传成功后，扣除用户额度
       // 注意：如果是管理员，req.incomingWordCount 可能是 undefined，所以要防一手
@@ -946,6 +992,47 @@ cron.schedule('0 0 * * *', async () => {
         console.log('✅ [Cron] 日榜重置成功');
     } catch (error) {
         console.error('❌ [Cron] 日榜重置失败:', error.message);
+    }
+});
+
+// 添加一个新的 Cron 任务 (每天凌晨 00:05 执行)
+cron.schedule('5 0 * * *', async () => {
+    console.log('🔄 [Cron] 开始归档用户活跃数据...');
+    try {
+        const users = await User.find({});
+        for (const user of users) {
+            const todayStats = user.stats || { today_views: 0, today_uploads: 0, history: [] };
+            
+            // 1. 构建新的历史节点
+            const newHistoryItem = {
+                date: new Date(),
+                views: todayStats.today_views || 0,
+                uploads: todayStats.today_uploads || 0
+            };
+            
+            // 2. 插入历史并只保留最近 7 天
+            const currentHistory = Array.isArray(todayStats.history) ? todayStats.history : [];
+            const newHistory = [...currentHistory, newHistoryItem].slice(-7); 
+            
+            // 3. 计算周活跃分 (加权：上传权重高一点，比如 浏览*1 + 上传*1，你说了先五五开那就直接相加)
+            let totalScore = 0;
+            newHistory.forEach(h => {
+                totalScore += (h.views || 0) + (h.uploads || 0);
+            });
+            // 加上今天的(虽然今天要重置，但为了排序实时性，通常算历史分即可，或者保留各种策略)
+            
+            user.stats = {
+                today_views: 0,   // 重置今日
+                today_uploads: 0, // 重置今日
+                history: newHistory
+            };
+            user.weekly_score = totalScore;
+            
+            await user.save();
+        }
+        console.log('✅ [Cron] 用户活跃数据归档完成');
+    } catch (error) {
+        console.error('❌ [Cron] 数据归档失败:', error);
     }
 });
 
