@@ -5,15 +5,17 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
-  User, Mail, LogOut, BookOpen, PenTool, Shield, Lock, 
-  X, CheckCircle2, AlertCircle, ChevronRight, Upload, Loader2, Camera 
+  Mail, LogOut, BookOpen, PenTool, Lock, 
+  X, CheckCircle2, AlertCircle, ChevronRight, Loader2, Camera 
 } from 'lucide-react';
 import uploadImageToCloudinary from '@/lib/upload';
 import { authApi } from '@/lib/api';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, profile, loading, logout, setUser } = useAuth();
+  
+  // 🔽 修复1：去掉 setUser (防止报错)，只取原本就有的 logout
+  const { user, profile, loading, logout } = useAuth();
 
   // ================= State 定义 =================
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -46,17 +48,20 @@ export default function ProfilePage() {
         // 2. 更新后端
         const updatedUserFromBackend = await authApi.updateUser(user.id, { avatar: url });
         
+        // 🔽 修复2：修正变量名，把 res.error 改成 updatedUserFromBackend.error
         if (updatedUserFromBackend.error) {
             throw new Error(updatedUserFromBackend.error);
         }
 
-        // 3. 更新前端状态
-        const newUser = { ...user, avatar: url };
-        if (setUser) {
-            setUser(newUser);
-        }
+        // 3. 更新本地存储
+        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+        const newUser = { ...storedUser, avatar: url };
         localStorage.setItem('user', JSON.stringify(newUser));
+
         setToast({ msg: '头像更新成功！', type: 'success' });
+        
+        // 🔽 修复3：因为没有 setUser，我们用回你原来的刷新页面方法，这样最安全
+        setTimeout(() => window.location.reload(), 1000);
 
     } catch (err: any) {
         setToast({ msg: err.message || '头像上传失败', type: 'error' });
@@ -141,7 +146,7 @@ export default function ProfilePage() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-safe font-sans">
+    <div className="min-h-screen bg-gray-100 py-8 px-4 md:py-12 font-sans flex justify-center items-start">
       
       {/* 全局 Toast */}
       {toast && (
@@ -155,158 +160,145 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* 主内容区域 */}
-      <div className="py-6 px-4 md:py-12 md:px-6 lg:px-8 max-w-4xl mx-auto space-y-6">
+      {/* 🔽 修复4：这就是你要求的“白色书页 + 阴影”长条布局 */}
+      <div className="w-full max-w-3xl bg-white shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] min-h-[85vh] relative overflow-hidden flex flex-col">
         
-        {/* ================= 顶部：个人信息卡片 ================= */}
-        <div className="bg-white shadow-sm rounded-2xl overflow-hidden border border-gray-100 relative">
-            {/* 背景图 */}
-            <div className="h-24 md:h-32 bg-gradient-to-r from-blue-600 to-indigo-700"></div>
-            
-            <div className="px-4 pb-4 md:px-8 md:pb-8 relative">
-                <div className="flex flex-col md:flex-row items-center md:items-end -mt-12 md:-mt-16 gap-4 md:gap-6">
-                    
-                    {/* 头像区域 */}
-                    <div className="relative group/avatar shrink-0">
-                        <div className="h-24 w-24 md:h-32 md:w-32 rounded-full border-4 border-white bg-white shadow-lg flex items-center justify-center text-3xl font-bold text-indigo-600 overflow-hidden relative z-10">
-                            
-                            {/* Loading 遮罩 */}
-                            {avatarUploading && (
-                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
-                                    <Loader2 className="h-8 w-8 text-white animate-spin" />
-                                </div>
-                            )}
+        {/* 页眉区域 */}
+        <div className="h-48 bg-gradient-to-r from-blue-600 to-indigo-700 relative">
+             <div className="absolute inset-0 bg-white/5 opacity-50" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
+        </div>
 
-                            {/* 头像图片 */}
-                            {user.avatar ? (
-                                <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
-                            ) : (
-                                (user.username || 'User').substring(0, 1).toUpperCase()
-                            )}
-                            
-                            {/* 上传 Input (覆盖整个头像) */}
-                            <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center bg-black/0 hover:bg-black/30 transition-colors z-20">
-                                <input 
-                                    type="file" 
-                                    className="hidden" 
-                                    accept="image/*" 
-                                    onChange={handleAvatarUpload}
-                                    disabled={avatarUploading}
-                                />
-                                {/* PC端悬停显示相机 */}
-                                <Camera className="h-8 w-8 text-white opacity-0 group-hover/avatar:opacity-100 transition-opacity drop-shadow-md" />
-                            </label>
-                        </div>
-
-                        {/* 移动端右下角小相机图标 (提示可点击) */}
-                        <div className="absolute bottom-0 right-0 md:hidden z-30 bg-white rounded-full p-1.5 shadow-md border border-gray-100 pointer-events-none">
-                            <Camera className="h-3.5 w-3.5 text-gray-600" />
-                        </div>
+        {/* 个人信息 */}
+        <div className="px-8 pb-8 -mt-20 relative z-10 border-b border-gray-100">
+             <div className="flex flex-col items-start">
+                
+                {/* 头像 */}
+                <div className="relative group/avatar">
+                    <div className="h-36 w-36 rounded-full border-[6px] border-white bg-white shadow-lg flex items-center justify-center overflow-hidden relative">
+                         {avatarUploading && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-20">
+                                <Loader2 className="h-10 w-10 text-white animate-spin" />
+                            </div>
+                        )}
+                        {/* 🔽 修复5：加问号 user?.avatar 解决 TS 报错 */}
+                        {user?.avatar ? (
+                            <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover group-hover/avatar:scale-105 transition-transform duration-500" />
+                        ) : (
+                            <span className="text-4xl font-bold text-indigo-600">{(user?.username || 'U').substring(0, 1).toUpperCase()}</span>
+                        )}
+                        
+                        <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center bg-black/0 hover:bg-black/20 transition-colors z-20">
+                            <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={avatarUploading} />
+                            <Camera className="h-10 w-10 text-white opacity-0 group-hover/avatar:opacity-100 transition-opacity drop-shadow-md" />
+                        </label>
                     </div>
+                </div>
 
-                    {/* 用户信息 */}
-                    <div className="flex-1 text-center md:text-left md:mb-2 space-y-1">
-                        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex flex-col md:flex-row items-center gap-2">
-                            {user.username}
-                            <span className={`px-2.5 py-0.5 text-xs rounded-full font-medium border flex items-center gap-1 mt-1 md:mt-0 ${
+                {/* 名字与邮箱 */}
+                <div className="mt-4 space-y-1 w-full flex justify-between items-end">
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+                            {/* 🔽 修复6：加问号 user?.username */}
+                            {user?.username}
+                            <span className={`px-2.5 py-0.5 text-xs rounded-full font-medium border flex items-center gap-1 ${
                                 profile?.role === 'writer' 
                                     ? 'bg-amber-50 text-amber-700 border-amber-200' 
                                     : 'bg-blue-50 text-blue-700 border-blue-200'
                             }`}>
-                                {profile?.role === 'writer' ? <PenTool className="h-3 w-3" /> : <BookOpen className="h-3 w-3" />}
                                 {profile?.role === 'writer' ? '签约作家' : '普通读者'}
                             </span>
                         </h1>
-                        <p className="text-gray-500 text-sm flex items-center justify-center md:justify-start gap-1.5">
-                            <Mail className="h-3.5 w-3.5" /> {user.email}
+                        <p className="text-gray-500 font-medium flex items-center gap-2 mt-1">
+                            {/* 🔽 修复7：加问号 user?.email */}
+                            <Mail className="h-4 w-4" /> {user?.email}
                         </p>
                     </div>
 
-                    {/* PC端退出按钮 */}
-                    <div className="hidden md:block md:mb-4">
-                        <button 
-                            onClick={handleLogout}
-                            className="flex items-center gap-2 px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition text-sm font-medium"
-                        >
-                            <LogOut className="h-4 w-4" /> 退出登录
-                        </button>
-                    </div>
+                    <button onClick={handleLogout} className="hidden md:flex text-gray-400 hover:text-red-600 transition-colors items-center gap-1 text-sm font-medium">
+                        <LogOut className="h-4 w-4" /> 退出
+                    </button>
                 </div>
-            </div>
+             </div>
         </div>
 
-        {/* ================= 功能入口 ================= */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Link href="/library" className="group flex items-center p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition active:scale-[0.99]">
-                <div className="h-12 w-12 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center mr-4 group-hover:scale-110 transition-transform">
+        {/* 核心功能流 */}
+        <div className="flex-1 py-6">
+            
+            <div className="px-8 mb-2 text-xs font-bold text-gray-400 uppercase tracking-wider">创作与阅读</div>
+            
+            <Link href="/library" className="group flex items-center px-8 py-5 hover:bg-gray-50 transition-colors border-l-4 border-transparent hover:border-blue-500">
+                <div className="h-12 w-12 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center mr-5 group-hover:scale-110 transition-transform shadow-sm">
                     <BookOpen className="h-6 w-6" />
                 </div>
                 <div className="flex-1">
-                    <h3 className="font-bold text-gray-900">我的书架</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">继续阅读你的收藏</p>
+                    <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors">我的书架</h3>
+                    <p className="text-sm text-gray-500 mt-0.5">查看收藏历史与阅读进度</p>
                 </div>
-                <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-blue-500 transition-colors" />
+                <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
             </Link>
 
-            <Link href="/writer" className="group flex items-center p-4 bg-gradient-to-br from-white to-amber-50/50 rounded-xl border border-amber-100 shadow-sm hover:shadow-md transition active:scale-[0.99]">
-                <div className="h-12 w-12 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center mr-4 group-hover:scale-110 transition-transform">
+            <Link href="/writer" className="group flex items-center px-8 py-5 hover:bg-gray-50 transition-colors border-l-4 border-transparent hover:border-amber-500">
+                <div className="h-12 w-12 bg-amber-50 text-amber-600 rounded-lg flex items-center justify-center mr-5 group-hover:scale-110 transition-transform shadow-sm">
                     <PenTool className="h-6 w-6" />
                 </div>
                 <div className="flex-1">
-                    <h3 className="font-bold text-gray-900">作家专区</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">发布与管理作品</p>
+                    <h3 className="text-lg font-bold text-gray-900 group-hover:text-amber-600 transition-colors">作家专区</h3>
+                    <p className="text-sm text-gray-500 mt-0.5">发布作品，管理你的小说创作</p>
                 </div>
-                <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-amber-500 transition-colors" />
+                <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-amber-500 group-hover:translate-x-1 transition-all" />
             </Link>
-        </div>
 
-        {/* ================= 账户安全 ================= */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-             <div className="px-5 py-4 border-b border-gray-50 flex items-center gap-2">
-                <Shield className="h-5 w-5 text-green-600" />
-                <h3 className="font-bold text-gray-900">账户安全</h3>
-             </div>
-            
-            <div className="divide-y divide-gray-50">
-                <div 
-                    onClick={() => setShowPasswordModal(true)}
-                    className="flex justify-between items-center px-5 py-4 hover:bg-gray-50 transition cursor-pointer active:bg-gray-100"
-                >
-                    <div>
-                        <div className="font-medium text-gray-700 text-sm">登录密码</div>
-                        <div className="text-xs text-gray-400 mt-0.5">建议定期修改密码以保护账户安全</div>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-gray-300" />
-                </div>
+            <div className="my-6 border-t border-gray-100 mx-8"></div>
 
-                <div className="flex justify-between items-center px-5 py-4">
-                    <div>
-                        <div className="font-medium text-gray-700 text-sm">绑定邮箱</div>
-                        <div className="text-xs text-gray-400 mt-0.5">{user.email}</div>
-                    </div>
-                    <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1">
-                        <CheckCircle2 className="h-3 w-3" /> 已验证
-                    </span>
-                </div>
-            </div>
-        </div>
+            <div className="px-8 mb-2 text-xs font-bold text-gray-400 uppercase tracking-wider">账户安全</div>
 
-        {/* 移动端底部退出按钮 */}
-        <div className="md:hidden pb-8 pt-2">
-            <button 
-                onClick={handleLogout}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-gray-500 bg-white border border-gray-200 shadow-sm rounded-xl font-medium active:bg-gray-50 transition-colors"
+            <div 
+                onClick={() => setShowPasswordModal(true)}
+                className="group flex items-center px-8 py-4 hover:bg-gray-50 transition-colors cursor-pointer border-l-4 border-transparent hover:border-gray-300"
             >
-                <LogOut className="h-5 w-5" /> 退出登录
-            </button>
-            <p className="text-center text-gray-300 text-xs mt-4">v1.0.0</p>
+                <div className="h-10 w-10 bg-gray-50 text-gray-600 rounded-lg flex items-center justify-center mr-5">
+                    <Lock className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                    <div className="font-bold text-gray-900">登录密码</div>
+                    <div className="text-xs text-gray-400 mt-0.5">定期修改密码以保护安全</div>
+                </div>
+                <div className="px-3 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded hover:bg-gray-200 transition">修改</div>
+            </div>
+
+            <div className="flex items-center px-8 py-4 hover:bg-gray-50 transition-colors border-l-4 border-transparent">
+                <div className="h-10 w-10 bg-gray-50 text-gray-600 rounded-lg flex items-center justify-center mr-5">
+                    <Mail className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                    <div className="font-bold text-gray-900">绑定邮箱</div>
+                    <div className="text-xs text-gray-400 mt-0.5">{user?.email}</div>
+                </div>
+                <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" /> 已验证
+                </span>
+            </div>
+
         </div>
 
+        <div className="bg-gray-50/50 h-16 flex items-center justify-center border-t border-gray-100 mt-auto">
+             <span className="text-xs text-gray-300 font-mono">ID: {user?.id}</span>
+        </div>
       </div>
 
-      {/* ================= 修改密码 Modal ================= */}
+        {/* 移动端悬浮退出按钮 */}
+        <div className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+            <button 
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-6 py-3 text-white bg-gray-900 shadow-xl rounded-full font-bold active:scale-95 transition-all"
+            >
+                <LogOut className="h-4 w-4" /> 退出登录
+            </button>
+        </div>
+
+      {/* ================= 修改密码 Modal (这里完全没变) ================= */}
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
             <div className="bg-white w-full md:w-full md:max-w-md rounded-t-2xl md:rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 md:zoom-in-95 duration-200">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
                     <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
