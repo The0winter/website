@@ -140,8 +140,8 @@ export default function ProfilePage() {
 
   if (!user) return null;
 
-  return (
-    <div className="min-h-screen bg-gray-50 pb-safe font-sans">
+return (
+    <div className="min-h-screen bg-gray-50 font-sans">
       
       {/* 全局 Toast (保持不变) */}
       {toast && (
@@ -155,23 +155,24 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* 主内容区域：修改宽度 max-w-4xl -> max-w-2xl */}
-      <div className="py-6 px-4 md:py-12 md:px-6 lg:px-8 max-w-2xl mx-auto">
+      {/* 主内容区域：
+          1. 移除了 py-6 px-4 等所有内边距，确保内容贴边。
+          2. 保留 max-w-2xl mx-auto 确保在大屏上居中。
+      */}
+      <div className="max-w-2xl mx-auto">
         
-        {/* 新增：外层大容器，实现“上下贯通”的效果 */}
-        <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
+        {/* 核心大框：
+            1. 新增 min-h-screen：强制高度至少占满整个屏幕，实现“上下贯通”。
+            2. 移除 rounded-3xl：既已贯通，去掉圆角更自然（也符合“顶到边界”的视觉）。
+            3. 保留 shadow-xl 和 bg-white。
+        */}
+        <div className="bg-white min-h-screen shadow-xl overflow-hidden border-x border-gray-100">
 
             {/* ================= 顶部：个人信息区域 ================= */}
-            {/* 移除了原本的 rounded/shadow/border，让它融入大容器 */}
             <div className="relative group/card">
                 
-                {/* 修改背景：
-                    1. 颜色更柔和 (blue-100 to white)
-                    2. 颜色往上挪 (bg-gradient-to-b) 
-                */}
+                {/* 这里的代码完全保持原样，没有任何功能改动 */}
                 <div className="relative h-32 md:h-48 bg-gradient-to-b from-blue-100 to-white overflow-hidden">
-                    
-                    {/* 装饰光晕：调低了透明度和颜色饱和度，不再刺眼 */}
                     <div className="absolute top-0 right-0 -mt-8 -mr-8 h-48 w-48 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
                     <div className="absolute bottom-0 left-0 -mb-8 -ml-8 h-48 w-48 bg-indigo-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse delay-1000"></div>
                 </div>
@@ -179,7 +180,7 @@ export default function ProfilePage() {
                 <div className="px-4 pb-4 md:px-8 md:pb-8 relative">
                     <div className="flex flex-col md:flex-row items-center md:items-end -mt-16 md:-mt-16 gap-4 md:gap-6 relative z-10">
                         
-                        {/* 头像区域 (逻辑保持不变) */}
+                        {/* 头像 */}
                         <div className="relative group/avatar shrink-0">
                             <div className="h-24 w-24 md:h-32 md:w-32 rounded-full border-[5px] border-white bg-white shadow-md flex items-center justify-center text-3xl font-bold text-indigo-600 overflow-hidden relative z-10">
                                 {avatarUploading && (
@@ -208,7 +209,7 @@ export default function ProfilePage() {
                             </div>
                         </div>
 
-                        {/* 用户信息 */}
+                        {/* 用户名等 */}
                         <div className="flex-1 text-center md:text-left md:mb-4 space-y-1">
                             <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex flex-col md:flex-row items-center gap-2 font-display tracking-tight">
                                 {user.username}
@@ -226,7 +227,6 @@ export default function ProfilePage() {
                             </p>
                         </div>
 
-                        {/* PC端退出按钮 */}
                         <div className="hidden md:block md:mb-6">
                             <button 
                                 onClick={handleLogout}
@@ -239,8 +239,7 @@ export default function ProfilePage() {
                 </div>
             </div>
 
-            {/* ================= 功能入口 ================= */}
-            {/* 修改：移除独立的白色卡片背景，改为浅灰色块嵌入大容器 */}
+            {/* ================= 功能入口 (保持原样) ================= */}
             <div className="px-6 pb-2 grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <Link href="/library" className="group flex items-center p-4 bg-gray-50 rounded-2xl hover:bg-gray-100 transition border border-transparent hover:border-gray-200">
                     <div className="h-10 w-10 bg-white text-blue-600 rounded-lg flex items-center justify-center mr-4 shadow-sm group-hover:scale-110 transition-transform">
@@ -265,8 +264,7 @@ export default function ProfilePage() {
                 </Link>
             </div>
 
-            {/* ================= 账户安全 ================= */}
-            {/* 修改：移除外层卡片样式，仅保留内容 */}
+            {/* ================= 账户安全 (保持原样) ================= */}
             <div className="mt-2">
                 <div className="px-8 py-4 flex items-center gap-2 mt-4">
                     <Shield className="h-4 w-4 text-green-600" />
@@ -297,7 +295,7 @@ export default function ProfilePage() {
                 </div>
             </div>
 
-            {/* 移动端底部退出按钮 (现在放在了大容器内部底部) */}
+            {/* 移动端退出按钮 */}
             <div className="md:hidden px-6 pb-6 pt-4">
                 <button 
                     onClick={handleLogout}
@@ -306,10 +304,11 @@ export default function ProfilePage() {
                     <LogOut className="h-4 w-4" /> 退出登录
                 </button>
             </div>
+            
+            {/* 版本号移到里面，避免被截断 */}
+            <p className="text-center text-gray-300 text-xs py-6">v1.0.0</p>
 
         </div> {/* End of 大容器 */}
-        
-        <p className="text-center text-gray-300 text-xs mt-6">v1.0.0</p>
 
       </div>
 
