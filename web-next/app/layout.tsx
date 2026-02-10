@@ -5,6 +5,8 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ReadingSettingsProvider } from "@/contexts/ReadingSettingsContext"; 
 import Navbar from "@/components/Navbar";
 
+import { GoogleAnalytics } from '@next/third-parties/google';
+
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -33,6 +35,7 @@ export default function RootLayout({
 
           </ReadingSettingsProvider>
         </AuthProvider>
+        <GoogleAnalytics gaId="G-DWMPP2NRQ1" />
       </body>
     </html>
   );
