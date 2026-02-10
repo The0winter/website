@@ -69,6 +69,11 @@ console.log('📂 启动【书籍批量更新模式 - 隐身增强版】...');
                 continue;
             }
 
+            // 模拟更加真实的浏览器环境
+            await page.setExtraHTTPHeaders({ 
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                'Referer': 'https://www.69shuba.com/' // 伪装来源
+            });
             // 1. 去书的首页 (增加容错)
             try {
                 await page.goto(bookData.sourceUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -94,16 +99,43 @@ console.log('📂 启动【书籍批量更新模式 - 隐身增强版】...');
             });
             if (isExpanded) await sleep(3000); // 展开目录需要时间
 
-            const webChapters = await page.evaluate(() => {
-                const links = Array.from(document.querySelectorAll('li a, dd a'));
-                const list = links.filter(a => a.innerText.includes('章') || /^\d+/.test(a.innerText))
-                    .map(a => ({ title: a.innerText.trim(), link: a.href }));
-                // 去重
-                const unique = [];
-                const seen = new Set();
-                for (const c of list) { if(!seen.has(c.link)) { seen.add(c.link); unique.push(c); } }
-                return unique;
-            });
+            // 🔥🔥🔥【新增】重试机制：如果没抓到，刷新再试，最多试3次 🔥🔥🔥
+            let webChapters = [];
+            let retryCount = 0;
+            const MAX_RETRIES = 3;
+
+            while (retryCount < MAX_RETRIES) {
+                // 1. 尝试获取目录
+                webChapters = await page.evaluate(() => {
+                    const links = Array.from(document.querySelectorAll('li a, dd a'));
+                    const list = links.filter(a => a.innerText.includes('章') || /^\d+/.test(a.innerText))
+                        .map(a => ({ title: a.innerText.trim(), link: a.href }));
+                    
+                    // 内部去重
+                    const unique = [];
+                    const seen = new Set();
+                    for (const c of list) { if(!seen.has(c.link)) { seen.add(c.link); unique.push(c); } }
+                    return unique;
+                });
+
+                if (webChapters.length > 0) {
+                    // 成功抓到了，跳出循环
+                    break;
+                }
+
+                // 没抓到，说明可能是假页面或者加载失败
+                retryCount++;
+                console.log(`⚠️  未检测到章节，第 ${retryCount}/${MAX_RETRIES} 次重试...`);
+                
+                // 刷新页面
+                try {
+                    await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
+                    // 刷新后稍微等一下，甚至可以模拟滚动一下
+                    await sleep(3000); 
+                } catch(e) {
+                    console.log('   刷新超时...');
+                }
+            }
             // 【统一强力排序修复】(从 run_offline.js 复制过来的)
             webChapters.sort((a, b) => {
                 const getNum = (str) => {
@@ -124,7 +156,18 @@ console.log('📂 启动【书籍批量更新模式 - 隐身增强版】...');
                 };
                 return getNum(a.title) - getNum(b.title);
             });
-
+        // 🔥🔥🔥【关键修改】防覆盖/防清空机制 🔥🔥🔥
+        // 逻辑：如果这次从网上抓到的章节数是 0 (说明被反爬了，或者网站结构变了)，
+        // 绝对不能拿这个 0 章去更新本地的几百章，否则书就“空”了。
+        if (webChapters.length === 0) {
+            console.error(`\n❌ 严重警告：《${bookData.title}》 抓取到的章节数为 0！`);
+            console.error('🛡️  触发熔断：跳过本书更新，保护本地数据不被清空。');
+            console.error('   (可能是网站反爬虫，建议稍后再试)');
+            
+            // 只是跳过这一本书，不退出整个程序，继续检查下一本
+            continue; 
+        }
+        // 🔥🔥🔥【结束】🔥🔥🔥
             // 3. 对比逻辑 (保持不变)
             const newChapters = [];
             const mergedChapters = [];
@@ -165,6 +208,11 @@ console.log('📂 启动【书籍批量更新模式 - 隐身增强版】...');
             // 4. 抓取新章节 (增加随机延迟)
             for (let i = 0; i < newChapters.length; i++) {
                 const chap = newChapters[i];
+                // 模拟更加真实的浏览器环境
+            await page.setExtraHTTPHeaders({ 
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                'Referer': 'https://www.69shuba.com/' // 伪装来源
+            });
                 try {
                     await page.goto(chap.link, { waitUntil: 'domcontentloaded', timeout: 45000 });
                     try { await page.waitForSelector('.txtnav', { timeout: 5000 }); } catch(e) {}
@@ -192,7 +240,7 @@ console.log('📂 启动【书籍批量更新模式 - 隐身增强版】...');
             console.log(`🎉 《${bookData.title}》 更新完毕！`);
             
             // 每本书之间也休息一下
-            await sleep(2000);
+            await sleep(8000);
         }
 
         console.log('\n✅ 所有书籍检查完成！');

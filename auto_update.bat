@@ -14,10 +14,10 @@ node run_update.js
 echo.
 echo.
 echo ========================================================
-echo [2/2] 正在同步到云端 (upload_to_railway.js)...
-echo 目标：读取本地 JSON -> 上传 Railway -> 存入 MongoDB
+echo [2/2] 正在同步到云端 (upload_to_vps.js)...
+echo 目标：读取本地 JSON -> 上传 VPS -> 存入 MongoDB
 echo ========================================================
-node upload_to_railway.js
+node upload_to_vps.js
 
 echo.
 echo ========================================================

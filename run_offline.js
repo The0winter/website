@@ -124,20 +124,13 @@ console.log('📂 启动【新书爬取模式 - 直连版】...');
             if(!seen.has(c.link)) { seen.add(c.link); uniqueChapters.push(c); }
         }
 
-        // 🔥🔥🔥【增强版】排序修复 🔥🔥🔥
-        uniqueChapters.sort((a, b) => {
-            const getNum = (str) => {
-                const cleanStr = str.replace(/\s+/g, '');
-                const matchChapter = cleanStr.match(/第(\d+)章/);
-                if (matchChapter) return parseInt(matchChapter[1]);
-                const matchStartNum = cleanStr.match(/^(\d+)/);
-                if (matchStartNum) return parseInt(matchStartNum[1]);
-                const matchAnyNum = cleanStr.match(/(\d+)/);
-                return matchAnyNum ? parseInt(matchAnyNum[1]) : 999999; 
-            };
-            return getNum(a.title) - getNum(b.title);
-        });
-
+            if (uniqueChapters.length === 0) {
+            console.error('\n❌ 严重警告：从网站获取到的章节数为 0！');
+            console.error('🛡️  触发熔断：为了防止覆盖本地文件，程序强制退出。');
+            
+            await browser.close();
+            process.exit(1); // 👈 这一脚刹车踩死，后面所有保存操作都不会发生
+        }
         const finalData = {
             title: basicInfo.title,
             author: basicInfo.author,

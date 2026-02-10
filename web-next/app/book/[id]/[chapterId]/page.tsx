@@ -1,7 +1,7 @@
 'use client'; 
 
 import { useEffect, useState, Suspense } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { API_BASE_URL } from '@/lib/api';
 import Link from 'next/link';
 import { 
@@ -60,12 +60,12 @@ function useIsDesktop() {
 
 function ReaderContent() {
   const params = useParams();
-  const searchParams = useSearchParams();
+  //const searchParams = useSearchParams();
   const router = useRouter();
   const isDesktop = useIsDesktop(); 
   
   const bookId = params.id as string;
-  const chapterIdParam = searchParams.get('chapterId');
+  const chapterIdParam = params.chapterId as string;
   const { user } = useAuth();
   const [book, setBook] = useState<Book | null>(null);
   const [chapter, setChapter] = useState<Chapter | null>(null);
@@ -396,10 +396,8 @@ function ReaderContent() {
     } catch (error) {}
   };
    const goToChapter = (targetChapterId: string) => {
-    // 核心修改：加上 { scroll: false }
-    // 这样路由跳转时页面会保持不动，直到数据加载完成后，我们的 useEffect 才会把它滚到顶部
-    router.push(`/read/${bookId}?chapterId=${targetChapterId}`, { scroll: false });
-    };
+   // 改成路径式跳转 /book/书ID/章节ID
+    router.push(`/book/${bookId}/${targetChapterId}`, { scroll: false });};
   const currentChapterIndex = allChapters.findIndex((ch) => ch.id === chapter?.id);
   const prevChapter = currentChapterIndex > 0 ? allChapters[currentChapterIndex - 1] : null;
   const nextChapter = currentChapterIndex < allChapters.length - 1 ? allChapters[currentChapterIndex + 1] : null;
