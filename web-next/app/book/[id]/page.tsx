@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import BookDetailClient from '@/components/BookDetailClient';
 
 // 定义 API 地址
-const API_BASE_URL = 'https://jiutianxiaoshuo.com/api';
+const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
 // ✅ 修正：详情页只有 id，没有 chapterId
 type Props = {
