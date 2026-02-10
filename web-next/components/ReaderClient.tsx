@@ -79,6 +79,7 @@ function ReaderContent() {
   const [loading, setLoading] = useState(() => {
      return !bookCache.has(bookId) || !chapterCache.has(chapterIdParam);
   });
+  const [isNavigating, setIsNavigating] = useState(false);
   
   const [showCatalog, setShowCatalog] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -411,9 +412,48 @@ if (targetId) {
       }
     } catch (error) {}
   };
-   const goToChapter = (targetChapterId: string) => {
-   // 改成路径式跳转 /book/书ID/章节ID
-    router.push(`/book/${bookId}/${targetChapterId}`, { scroll: false });};
+// 核心跳转逻辑：预取模式
+  const goToChapter = async (targetChapterId: string) => {
+    // 防止重复点击
+    if (isNavigating) return;
+
+    // A. 缓存里已经有了？直接飞过去！(秒开)
+    if (chapterCache.has(targetChapterId)) {
+       router.push(`/book/${bookId}/${targetChapterId}`, { scroll: false });
+       return;
+    }
+
+    // B. 缓存里没有？先停在原地，去后台下载
+    setIsNavigating(true); // 这里可以让按钮显示“加载中...”
+    
+    try {
+      const token = localStorage.getItem('token');
+      // 手动发起 fetch
+      const res = await fetch(`https://jiutianxiaoshuo.com/api/chapters/${targetChapterId}`, {
+         headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+         }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        // 🔥 关键：手动写入缓存！
+        // 这样等路由跳转过去时，新页面初始化就能直接读到数据，实现“无缝衔接”
+        chapterCache.set(targetChapterId, data);
+        
+        // 数据准备好了，起飞！
+        router.push(`/book/${bookId}/${targetChapterId}`, { scroll: false });
+      } else {
+        alert('加载失败，请重试');
+        setIsNavigating(false); // 失败了要恢复按钮状态
+      }
+    } catch (e) {
+      console.error(e);
+      alert('网络请求出错');
+      setIsNavigating(false);
+    }
+  };
   const currentChapterIndex = allChapters.findIndex((ch) => ch.id === chapter?.id);
   const prevChapter = currentChapterIndex > 0 ? allChapters[currentChapterIndex - 1] : null;
   const nextChapter = currentChapterIndex < allChapters.length - 1 ? allChapters[currentChapterIndex + 1] : null;
@@ -750,22 +790,31 @@ if (loading) return (
              </div>
           </div>
 
-          {/* 底部翻页按钮 */}
+{/* 底部翻页按钮 */}
           <div className="mt-16 flex items-center justify-between gap-4">
             <button 
-              disabled={!prevChapter}
+              disabled={!prevChapter || isNavigating} // 👈 加上 isNavigating
               onClick={(e) => { e.stopPropagation(); prevChapter && goToChapter(prevChapter.id); }}
               className="flex-1 py-3 rounded-xl border text-lg font-bold shadow-sm active:scale-95 transition-all disabled:opacity-30 disabled:active:scale-100 hover:bg-black/5"
               style={{ borderColor: activeTheme.line }}
             >
               上一章
             </button>
+            
             <button 
-              disabled={!nextChapter}
+              disabled={!nextChapter || isNavigating} // 👈 加上 isNavigating
               onClick={(e) => { e.stopPropagation(); nextChapter && goToChapter(nextChapter.id); }}
-              className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-md shadow-blue-200 active:scale-95 transition-all disabled:opacity-50 disabled:bg-gray-400 disabled:shadow-none disabled:active:scale-100"
+              className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-md shadow-blue-200 active:scale-95 transition-all disabled:opacity-50 disabled:bg-gray-400 disabled:shadow-none disabled:active:scale-100 flex items-center justify-center gap-2"
             >
-              {nextChapter ? '下一章' : '已是最新'}
+              {/* 👇 动态显示文字 */}
+              {isNavigating ? (
+                 <>
+                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                   加载中...
+                 </>
+              ) : (
+                 nextChapter ? '下一章' : '已是最新'
+              )}
             </button>
           </div>
         </article>
@@ -1115,9 +1164,18 @@ if (loading) return (
 }
 
 export default function ReaderPage() {
+  // 1. 获取当前 URL 参数
+  const params = useParams();
+  
+  // 2. 生成一个唯一的 Key
+  // 只要 chapterId 变了，Key 就变了，React 就会强制销毁并重建组件
+  const componentKey = params?.chapterId ? String(params.chapterId) : 'default';
+
   return (
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center">加载中...</div>}>
-      <ReaderContent />
+      {/* 🔥 核心修改：加上 key 属性 */}
+      {/* 这样每次切章节，组件都会“重生”，直接从缓存读取新数据，彻底根除闪烁！ */}
+      <ReaderContent key={componentKey} />
     </Suspense>
   );
 }
