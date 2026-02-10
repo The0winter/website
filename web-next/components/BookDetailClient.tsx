@@ -315,6 +315,14 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
   };
   const displayRating = book.rating ? (book.rating * 2).toFixed(1) : '0.0';
 
+  // 🔥 新增：计算第一章的 ID，用于“开始阅读”按钮
+  const firstChapterId = useMemo(() => {
+    if (chapters.length === 0) return null;
+    // 确保按章节号从小到大排序，取第一个
+    const sorted = [...chapters].sort((a, b) => a.chapter_number - b.chapter_number);
+    return sorted[0].id;
+  }, [chapters]);
+
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
       <div className="h-[10px] md:h-[20px]"></div> 
@@ -377,7 +385,11 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
                  {/* 电脑端的大按钮组 (手机端隐藏) */}
                  <div className="hidden md:flex flex-wrap gap-4 mt-auto">
                     {chapters.length > 0 ? (
-                        <Link href={`/read/${book.id}`} className="bg-blue-600 text-white px-8 py-3 rounded-md hover:bg-blue-700 font-semibold transition-colors shadow-sm">开始阅读</Link>
+                        <Link 
+                        href={firstChapterId ? `/book/${book.id}/${firstChapterId}` : '#'} 
+                        className="bg-blue-600 text-white px-8 py-3 rounded-md hover:bg-blue-700 font-semibold transition-colors shadow-sm">
+                        开始阅读
+                      </Link>
                     ) : (
                         <button disabled className="bg-gray-400 text-white px-8 py-3 rounded-md cursor-not-allowed font-semibold">暂无章节</button>
                     )}
@@ -418,12 +430,12 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
 
             {/* 🔥 手机端按钮组 (移到封面下方) */}
             <div className="flex md:hidden gap-3 mt-4">
-                 <Link 
-                    href={chapters.length > 0 ? `/read/${book.id}` : '#'} 
-                    className={`flex-1 py-2.5 rounded text-center text-sm font-bold text-white shadow-sm ${chapters.length > 0 ? 'bg-blue-600' : 'bg-gray-400'}`}
-                 >
-                    开始阅读
-                 </Link>
+            <Link 
+                href={firstChapterId ? `/book/${book.id}/${firstChapterId}` : '#'} 
+                className={`flex-1 py-2.5 rounded text-center text-sm font-bold text-white shadow-sm ${firstChapterId ? 'bg-blue-600' : 'bg-gray-400'}`}
+            >
+                开始阅读
+            </Link>
                  <button 
                     onClick={handleToggleBookmark}
                     className={`flex-1 py-2.5 rounded text-center text-sm font-bold border ${isBookmarked ? 'border-gray-300 bg-gray-100 text-gray-600' : 'border-blue-600 text-blue-600 bg-white'}`}
@@ -492,7 +504,7 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
                     {previewChapters.map((chapter, index) => (
                         <Link
                             key={chapter.id}
-                            href={`/read/${book.id}?chapterId=${chapter.id}`}
+                            href={`/book/${book.id}/${chapter.id}`}
                             // 🔥 核心逻辑：index >= 8 时，手机端隐藏 (hidden)，电脑端显示 (md:flex)
                             className={`group items-center p-2 bg-gray-50 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200 transition-all text-xs md:text-sm 
                                 ${index >= 8 ? 'hidden md:flex' : 'flex'}`}
@@ -664,7 +676,7 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
                                     {rowChapters.map((chapter) => (
                                         <Link
                                             key={chapter.id}
-                                            href={`/read/${book.id}?chapterId=${chapter.id}`}
+                                            href={`/book/${book.id}/${chapter.id}`}
                                             className="group flex items-center p-3 bg-gray-50 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200 transition-all text-sm"
                                         >
                                             <span className="text-gray-700 truncate group-hover:text-blue-600 w-full font-medium">
