@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import AdBanner from '@/components/AdBanner';
 
 let bgCleanupTimer: NodeJS.Timeout | null = null;
+let globalIsDesktop = typeof window !== 'undefined' ? window.innerWidth >= 1024 : false;
 
 // 🔥 [新增 1] 全局章节缓存池
 const chapterCache = new Map<string, any>();
@@ -60,9 +61,15 @@ const settingsCache = {
 
 // Hook: 检测是否为大屏设备 (PC端)
 function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = useState(false);
+  // 🔥 [修改 2] 初始值直接读全局变量，不要用 false
+  const [isDesktop, setIsDesktop] = useState(globalIsDesktop);
+  
   useEffect(() => {
-    const check = () => setIsDesktop(window.innerWidth >= 1024);
+    const check = () => {
+      const isDesk = window.innerWidth >= 1024;
+      setIsDesktop(isDesk);
+      globalIsDesktop = isDesk; // 🔥 更新全局变量
+    };
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
@@ -538,7 +545,9 @@ if (targetId) {
 if (loading) return (
     <div 
       className="min-h-screen flex items-center justify-center transition-colors duration-300" 
-      style={{ backgroundColor: activeTheme.bg }} // <--- 关键：Loading 背景色必须和阅读背景一致
+      style={{ 
+        backgroundColor: isDesktop ? activeTheme.desk : activeTheme.bg 
+      }} 
     >
       <div className="flex flex-col items-center gap-3">
          <BookOpen className="h-10 w-10 animate-pulse opacity-50" style={{ color: activeTheme.text }} />
@@ -722,8 +731,7 @@ if (loading) return (
         <article 
           className={`
             w-full min-h-screen px-4 md:px-8 
-            pt-4 pb-20  /* 核心修改：pt-16 改为 pt-4。让第一行文字直接顶上去，不再留出导航栏的位置 */
-            transition-colors duration-300
+            pt-4 pb-20  
              lg:mx-auto lg:mt-16 lg:mb-10 lg:rounded-b-sm lg:rounded-t-none lg:pt-8 lg:px-12
             ${isDesktop ? 'shadow-[0_4px_20px_rgba(0,0,0,0.04)]' : ''} 
           `}
