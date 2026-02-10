@@ -521,7 +521,7 @@ if (loading) return (
         <div 
           className="w-full flex items-center justify-between px-12 pointer-events-auto shadow-sm transition-colors duration-300"
           style={{
-            maxWidth: isDesktop ? `${pageWidth}px` : '100%',
+            maxWidth: `${pageWidth}px`,
             backgroundColor: activeTheme.bg, 
             color: activeTheme.text,
             borderColor: activeTheme.line,
@@ -684,7 +684,7 @@ if (loading) return (
             ${isDesktop ? 'shadow-[0_4px_20px_rgba(0,0,0,0.04)]' : ''} 
           `}
           style={{ 
-            maxWidth: isDesktop ? `${pageWidth}px` : undefined,
+            maxWidth: `${pageWidth}px`,
             backgroundColor: activeTheme.bg, 
             color: activeTheme.text 
           }}
