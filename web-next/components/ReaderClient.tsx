@@ -26,7 +26,7 @@ const bookCache = new Map<string, any>();
 const settingsCache = {
   themeColor: 'cream' as 'gray' | 'cream' | 'green' | 'blue',
   fontFamily: 'sans' as 'sans' | 'serif' | 'kai',
-  fontSizeNum: 22, // 电脑端默认大一点
+  fontSizeNum: 20, // 电脑端默认大一点
   lineHeight: 1.8,
   paraSpacing: 4,
   pageWidth: 1000
@@ -1054,14 +1054,14 @@ if (loading) return (
                     <div className="flex items-center">
                         <span className="w-20 font-bold opacity-70 shrink-0">字体大小</span>
                         <div className="flex items-center gap-4 flex-1 bg-black/5 rounded-lg p-2 px-4">
-                            <button onClick={() => setFontSizeNum(Math.max(12, fontSizeNum - 2))} className="p-2 hover:bg-white/60 rounded text-sm font-bold">A-</button>
+                            <button onClick={() => setFontSizeNum(Math.max(12, fontSizeNum - 1))} className="p-2 hover:bg-white/60 rounded text-sm font-bold">A-</button>
                             <input 
-                                type="range" min="14" max="36" step="2" 
+                                type="range" min="14" max="36" step="1" 
                                 value={fontSizeNum} 
                                 onChange={(e) => setFontSizeNum(Number(e.target.value))}
                                 className="flex-1 h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-blue-600"
                             />
-                            <button onClick={() => setFontSizeNum(Math.min(48, fontSizeNum + 2))} className="p-2 hover:bg-white/60 rounded text-xl font-bold">A+</button>
+                            <button onClick={() => setFontSizeNum(Math.min(48, fontSizeNum + 1))} className="p-2 hover:bg-white/60 rounded text-xl font-bold">A+</button>
                             <span className="w-12 text-center font-bold">{fontSizeNum}</span>
                         </div>
                     </div>
@@ -1130,9 +1130,9 @@ if (loading) return (
           >
             {/* 紧凑排版：字号调整 (放在最上面方便操作) */}
             <div className="flex items-center gap-3 mb-4 bg-black/5 rounded-lg p-2">
-                <button onClick={() => setFontSizeNum(Math.max(12, fontSizeNum - 2))} className="px-3 font-serif hover:bg-black/10 rounded">A-</button>
+                <button onClick={() => setFontSizeNum(Math.max(12, fontSizeNum - 1))} className="px-3 font-serif hover:bg-black/10 rounded">A-</button>
                 <div className="flex-1 text-center text-sm font-bold opacity-80">{fontSizeNum}</div>
-                <button onClick={() => setFontSizeNum(Math.min(48, fontSizeNum + 2))} className="px-3 font-serif text-lg hover:bg-black/10 rounded">A+</button>
+                <button onClick={() => setFontSizeNum(Math.min(48, fontSizeNum + 1))} className="px-3 font-serif text-lg hover:bg-black/10 rounded">A+</button>
             </div>
 
             <div className="space-y-4">
