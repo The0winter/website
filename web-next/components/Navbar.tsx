@@ -23,7 +23,10 @@ export default function Navbar() {
   const { theme } = useReadingSettings(); 
   const isDark = theme === 'dark';
 
-  if (pathname?.startsWith('/read/')) {
+const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
+
+  // 只要是旧版阅读页(/read/) 或者 新版阅读页，都隐藏
+  if (pathname?.startsWith('/read/') || isNewReadingPage) {
     return null;
   }
 
