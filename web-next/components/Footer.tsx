@@ -22,7 +22,7 @@ export default function Footer() {
               九天小说站
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed max-w-xs">
-              海量热门小说免费阅读，每日更新，致力打造最舒适的阅读体验。
+              致力打造最舒适的阅读体验。
               <br />
               基于 MERN Stack 技术栈构建。
             </p>
@@ -67,17 +67,25 @@ export default function Footer() {
             </div>
           </div>
         </div>
-
+        {/* Footer 底部区域修改 */}
         <div className="mt-8 pt-8 border-t border-gray-100 dark:border-[#333] flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-xs text-gray-400 text-center md:text-left">
-            &copy; {new Date().getFullYear()} 九天小说. All rights reserved.
-          </p>
+          <div className="text-center md:text-left">
+            <p className="text-xs text-gray-400">
+              &copy; {new Date().getFullYear()} 九天小说. 
+              {/* 删掉 All rights reserved，改成下面这句： */}
+              <span className="ml-1 opacity-80">Design by Jiutian.</span>
+            </p>
+            {/* 新增：免责声明 (字体极小，既免责又不抢眼) */}
+            <p className="text-[10px] text-gray-500 mt-1 max-w-md scale-90 origin-left">
+              本站所有小说为转载作品，所有章节均由网友上传，转载至本站只是为了宣传本书让更多读者欣赏。
+            </p>
+          </div>
           
           <div className="flex items-center gap-6 text-gray-400">
+             {/* 既然有 Cloudflare 邮件路由，这里可以直接写 support 或 help */}
             <a href="mailto:support@jiutianxiaoshuo.com" className="hover:text-blue-600 transition-colors flex items-center gap-2 text-xs">
               <Mail className="w-4 h-4" /> 联系站长
             </a>
-            
           </div>
         </div>
       </div>

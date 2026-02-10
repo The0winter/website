@@ -16,8 +16,10 @@ import { useAuth } from '@/contexts/AuthContext';
 
 import AdBanner from '@/components/AdBanner';
 
-// 🔥 [新增 1] 全局章节缓存池 (放在组件外面，防止切换路由时被清空)
+// 🔥 [新增 1] 全局章节缓存池
 const chapterCache = new Map<string, any>();
+// 🔥 [新增] 全局书籍缓存池 (防止切换章节时书名/封面闪烁)
+const bookCache = new Map<string, any>();
 
 
   // 🔥 [新增] 广告配置 
@@ -67,11 +69,16 @@ function ReaderContent() {
   const bookId = params.id as string;
   const chapterIdParam = params.chapterId as string;
   const { user } = useAuth();
-  const [book, setBook] = useState<Book | null>(null);
-  const [chapter, setChapter] = useState<Chapter | null>(null);
   const [allChapters, setAllChapters] = useState<Chapter[]>([]);
   const [isBookmarked, setIsBookmarked] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [book, setBook] = useState<Book | null>(() => bookCache.get(bookId) || null);
+  const [chapter, setChapter] = useState<Chapter | null>(() => chapterCache.get(chapterIdParam) || null);
+  
+  // 只有当缓存里【既没有书也没有章节】时，才显示 loading
+  // 如果有缓存，loading 初始值就是 false，直接渲染正文
+  const [loading, setLoading] = useState(() => {
+     return !bookCache.has(bookId) || !chapterCache.has(chapterIdParam);
+  });
   
   const [showCatalog, setShowCatalog] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -233,47 +240,56 @@ function ReaderContent() {
       };
       let targetId = chapterIdParam;
 
-      // === 场景 A: 快速通道 (URL 里有 ID) ===
-      if (targetId) {
-        // 🔥 [修改点 A] 优先检查缓存
-        if (chapterCache.has(targetId)) {
-          // 1. 命中缓存！直接渲染，不需要 Loading
-          const cachedData = chapterCache.get(targetId);
-          setChapter(cachedData);
-          setLoading(false);
-          window.scrollTo(0, 0); // 瞬间回到顶部
-
-          // 虽然章节有了，但如果书本信息还没加载，还得顺手补一下（不阻塞显示）
-          if (!book) {
-             try {
-                const bookRes = await booksApi.getById(bookId);
-                if (isActive && bookRes) setBook(bookRes);
-             } catch (e) { console.error(e); }
-          }
+if (targetId) {
+        // 1. 优先检查缓存
+        if (chapterCache.has(targetId) && bookCache.has(bookId)) {
+           // ⚡️ 如果书和章节都有缓存，什么都不用做！
+           // 因为我们在 useState 初始化时已经拿到了
+           setLoading(false);
+           // 但为了保险（防止初始化后数据变了），还是默默更新一下 state
+           setChapter(chapterCache.get(targetId));
+           setBook(bookCache.get(bookId));
+           window.scrollTo(0, 0);
         } 
         else {
-          // 2. 缓存没有，才去服务器请求 (保持你原来的逻辑)
-          if (!chapter) setLoading(true); // 只有当前没内容时才转圈
+          // 2. 缓存缺失，需要请求
+          // 只有在真的没数据时，才转圈圈。如果只是缺其中一个，尽量保持界面显示
+          if (!chapter || !book) setLoading(true);
 
           try {
             const [chapterRes, bookRes] = await Promise.all([
-              fetch(`${API_BASE_URL}/chapters/${targetId}`, { headers: authHeaders }),
-              !book ? booksApi.getById(bookId) : Promise.resolve(null)
+              // 如果缓存有章节，就不请求了 (Promise.resolve)
+              !chapterCache.has(targetId) 
+                  ? fetch(`${API_BASE_URL}/chapters/${targetId}`, { headers: authHeaders })
+                  : Promise.resolve(null),
+              // 如果缓存有书，就不请求了
+              !bookCache.has(bookId) 
+                  ? booksApi.getById(bookId) 
+                  : Promise.resolve(null)
             ]);
 
             if (isActive) {
-              if (chapterRes.ok) {
+              // 处理章节数据
+              if (chapterRes && chapterRes.ok) {
                 const chData = await chapterRes.json();
                 setChapter(chData);
-                // 🔥 [修改点 B] 请求成功后，存入缓存
-                chapterCache.set(targetId, chData); 
+                chapterCache.set(targetId, chData); // ✅ 存入缓存
                 window.scrollTo(0, 0);
+              } else if (chapterCache.has(targetId)) {
+                // 如果这次没请求(用了缓存)，确保滚动到顶部
+                 window.scrollTo(0, 0);
               }
-              if (bookRes) setBook(bookRes);
+
+              // 处理书籍数据
+              if (bookRes) {
+                 setBook(bookRes);
+                 bookCache.set(bookId, bookRes); // ✅ 存入缓存
+              }
+
               setLoading(false);
             }
           } catch (e) {
-            console.error("快速加载失败", e);
+            console.error("加载失败", e);
             setLoading(false);
           }
         }
