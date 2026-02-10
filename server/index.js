@@ -393,8 +393,8 @@ app.post('/api/admin/upload-book', async (req, res) => {
                 // 🔥 新增：后台静默推送（不影响主流程）
                 try {
                     const newUrls = insertedDocs.map(doc => 
-                        `https://jiutianxiaoshuo.com/book/${book._id}/${doc._id}`
-                    );
+                      `https://jiutianxiaoshuo.com/book/${book._id}/${doc._id}`
+                  );
                     submitToIndexNow(newUrls).catch(err => console.error('IndexNow推送异常:', err));
                 } catch (e) {
                     console.error('生成URL失败:', e);
@@ -904,7 +904,12 @@ app.post('/api/chapters', authMiddleware, checkUploadQuota, async (req, res) => 
               last_upload_date: new Date()
           });
       }
-
+            try {
+          const chapterUrl = `https://jiutianxiaoshuo.com/book/${bookId}/${newChapter._id}`;
+          submitToIndexNow([chapterUrl]).catch(err => console.error('IndexNow推送异常:', err));
+      } catch (e) {
+          console.error('IndexNow 生成URL失败:', e);
+      }
       res.status(201).json({ ...newChapter.toObject(), id: newChapter._id.toString() });
     } catch (error) {
       res.status(500).json({ error: error.message });
