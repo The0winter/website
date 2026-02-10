@@ -754,14 +754,18 @@ if (loading) return (
           </div>
         </article>
 
-        {/* 4. 网页端悬浮工具栏 (保留不变) */}
+ <div 
+        className="hidden xl:block absolute top-0 h-full pointer-events-none" // pointer-events-none 防止隐形长条遮挡点击
+        style={{ 
+          left: '50%',
+          marginLeft: `${pageWidth / 2 + 15}px`
+        }}
+      >
         <aside 
-          className="fixed top-1/3 hidden xl:flex flex-col gap-3 p-2 rounded-xl shadow-lg border transition-all duration-300" 
+          className="sticky top-1/3 flex flex-col gap-3 p-2 rounded-xl shadow-lg border transition-all duration-300 pointer-events-auto" // pointer-events-auto 恢复按钮点击
           style={{ 
             backgroundColor: activeTheme.bg, 
             borderColor: activeTheme.line,
-            left: '50%',
-            marginLeft: `${pageWidth / 2 + 15}px`
           }}
         >
           <Link href="/library" className="p-3 hover:bg-black/5 rounded-lg tooltip-right" title="书架">
@@ -784,6 +788,7 @@ if (loading) return (
             <Settings style={{ color: activeTheme.text }} className="w-5 h-5" />
           </button>
         </aside>
+      </div>
       </div>
 
       {/* 5. 目录弹窗 (完美兼容版) */}

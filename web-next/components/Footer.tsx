@@ -1,16 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { Mail, Github, ExternalLink } from 'lucide-react';
+// 去掉了 Github 图标的引用
+import { Mail, ExternalLink } from 'lucide-react';
 
 export default function Footer() {
-  // 这里填入你以后交换到的友情链接
-  // 暂时先放几个高质量的导航站或大站撑门面
-  const friendLinks = [
-    { name: '起点中文网', url: 'https://www.qidian.com' },
-    { name: '纵横小说', url: 'https://www.zongheng.com' },
-    { name: '笔趣阁 (示例)', url: '#' }, 
-    // 等你找到朋友了，就在这里加： { name: '朋友的小说站', url: 'https://...' }
+  // 🔥 修改 1: 链接列表已清空
+  const friendLinks: { name: string; url: string }[] = [
+    // 以后要加链接时，像这样写：
+    // { name: '某某小说网', url: 'https://example.com' },
   ];
 
   return (
@@ -49,17 +47,20 @@ export default function Footer() {
               友情链接 <ExternalLink className="w-3 h-3 opacity-50"/>
             </h3>
             <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-gray-500 dark:text-gray-400">
+              
+              {/* 如果没有链接，这里就是空的 */}
               {friendLinks.map((link, index) => (
                 <a 
                   key={index} 
                   href={link.url} 
                   target="_blank" 
-                  rel="noopener noreferrer" // ⚠️ 自己的朋友不用加 nofollow，否则对方会生气
+                  rel="noopener noreferrer"
                   className="hover:text-blue-600 hover:underline transition-colors"
                 >
                   {link.name}
                 </a>
               ))}
+
               <span className="text-xs text-gray-400 self-center">
                 (申请友链请联系底部邮箱)
               </span>
@@ -71,13 +72,12 @@ export default function Footer() {
           <p className="text-xs text-gray-400 text-center md:text-left">
             &copy; {new Date().getFullYear()} 九天小说. All rights reserved.
           </p>
+          
           <div className="flex items-center gap-6 text-gray-400">
-            <a href="mailto:admin@jiutianxiaoshuo.com" className="hover:text-blue-600 transition-colors flex items-center gap-2 text-xs">
+            <a href="mailto:support@jiutianxiaoshuo.com" className="hover:text-blue-600 transition-colors flex items-center gap-2 text-xs">
               <Mail className="w-4 h-4" /> 联系站长
             </a>
-            <a href="https://github.com" target="_blank" className="hover:text-blue-600 transition-colors flex items-center gap-2 text-xs">
-              <Github className="w-4 h-4" /> 源码
-            </a>
+            
           </div>
         </div>
       </div>
