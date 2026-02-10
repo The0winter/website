@@ -16,10 +16,20 @@ import { useAuth } from '@/contexts/AuthContext';
 
 import AdBanner from '@/components/AdBanner';
 
+let bgCleanupTimer: NodeJS.Timeout | null = null;
+
 // 🔥 [新增 1] 全局章节缓存池
 const chapterCache = new Map<string, any>();
 // 🔥 [新增] 全局书籍缓存池 (防止切换章节时书名/封面闪烁)
 const bookCache = new Map<string, any>();
+const settingsCache = {
+  themeColor: 'cream' as 'gray' | 'cream' | 'green' | 'blue',
+  fontFamily: 'sans' as 'sans' | 'serif' | 'kai',
+  fontSizeNum: 22, // 电脑端默认大一点
+  lineHeight: 1.8,
+  paraSpacing: 4,
+  pageWidth: 1000
+};
 
 
   // 🔥 [新增] 广告配置 
@@ -101,12 +111,21 @@ function ReaderContent() {
     }
   }, [isDesktop, chapterIdParam]); // 依赖项：设备变了 或 章节变了 都触发
 
-  const [themeColor, setThemeColor] = useState<'gray' | 'cream' | 'green' | 'blue'>('cream');
-  const [fontFamily, setFontFamily] = useState<'sans' | 'serif' | 'kai'>('sans');
-  const [fontSizeNum, setFontSizeNum] = useState(20);
-  const [lineHeight, setLineHeight] = useState(1.6);
-  const [paraSpacing, setParaSpacing] = useState(4); 
-  const [pageWidth, setPageWidth] = useState(1000);
+  const [themeColor, setThemeColor] = useState(settingsCache.themeColor);
+  const [fontFamily, setFontFamily] = useState(settingsCache.fontFamily);
+  const [fontSizeNum, setFontSizeNum] = useState(settingsCache.fontSizeNum);
+  const [lineHeight, setLineHeight] = useState(settingsCache.lineHeight);
+  const [paraSpacing, setParaSpacing] = useState(settingsCache.paraSpacing); 
+  const [pageWidth, setPageWidth] = useState(settingsCache.pageWidth);
+
+  // 🔥 新增：当这些设置改变时，自动同步回全局缓存
+  // 这样下一章加载时，就能记住你刚才的设置了
+  useEffect(() => { settingsCache.themeColor = themeColor; }, [themeColor]);
+  useEffect(() => { settingsCache.fontFamily = fontFamily; }, [fontFamily]);
+  useEffect(() => { settingsCache.fontSizeNum = fontSizeNum; }, [fontSizeNum]);
+  useEffect(() => { settingsCache.lineHeight = lineHeight; }, [lineHeight]);
+  useEffect(() => { settingsCache.paraSpacing = paraSpacing; }, [paraSpacing]);
+  useEffect(() => { settingsCache.pageWidth = pageWidth; }, [pageWidth]);
 
   const [showHint, setShowHint] = useState(false); // 新手引导提示
 
@@ -162,6 +181,31 @@ function ReaderContent() {
 
   const isActuallyDark = theme === 'dark';
   const activeTheme = isActuallyDark ? themeMap.dark : themeMap[themeColor];
+
+  useEffect(() => {
+    if (!activeTheme) return;
+
+    // 1. 如果有待执行的清理任务（说明上一章刚卸载），取消它！
+    // 因为新章节马上就接上了，不需要重置背景
+    if (bgCleanupTimer) {
+        clearTimeout(bgCleanupTimer);
+        bgCleanupTimer = null;
+    }
+
+    // 2. 立即把浏览器底色染成当前主题色
+    const color = isDesktop ? activeTheme.desk : activeTheme.bg;
+    document.body.style.backgroundColor = color;
+
+    // 3. 组件卸载时的逻辑 (延时清理)
+    return () => {
+        // 我们不立即清除背景，而是等 100ms
+        // 如果 100ms 内用户只是切章节，新组件会挂载并取消这个定时器，背景保持不变
+        // 如果 100ms 后还没新组件（说明用户真的退出了），再恢复默认背景
+        bgCleanupTimer = setTimeout(() => {
+            document.body.style.backgroundColor = '';
+        }, 100);
+    };
+}, [activeTheme, isDesktop]);
 
   const paraSpacingMap: Record<number, string> = {
     2: '0.5rem', 4: '1rem', 6: '1.5rem', 8: '2rem',
