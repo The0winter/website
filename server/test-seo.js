@@ -2,7 +2,7 @@ import { submitToIndexNow } from './utils/indexNow.js';
 
 // 填入你网站上已经存在的一个真实书籍链接
 const testUrls = [
-  'https://jiutianxiaoshuo.com/book/6983b18ede08a115b078f06b' 
+  'https://jiutianxiaoshuo.com/book/6983b18ede08a115b078f06b/6983b1ddde08a115b078f369' 
 ];
 
 console.log('🚀 开始尝试手动推送测试...');
