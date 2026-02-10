@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ReadingSettingsProvider } from "@/contexts/ReadingSettingsContext"; 
 import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 
 import { GoogleAnalytics } from '@next/third-parties/google';
 
@@ -32,6 +33,8 @@ export default function RootLayout({
             <main className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] transition-colors duration-300">
               {children}
             </main>
+            
+            <Footer />
 
           </ReadingSettingsProvider>
         </AuthProvider>
