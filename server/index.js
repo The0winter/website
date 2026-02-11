@@ -784,6 +784,9 @@ app.get('/api/forum/posts', async (req, res) => {
 app.get('/api/forum/posts/:id', async (req, res) => {
   try {
     // 浏览量 +1
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+        return res.status(400).json({ error: '无效的帖子ID' });
+    }
     const post = await ForumPost.findByIdAndUpdate(
       req.params.id, 
       { $inc: { views: 1 } }, 
@@ -808,6 +811,11 @@ app.get('/api/forum/posts/:id', async (req, res) => {
 // 4. 获取某个帖子的所有回答/评论
 app.get('/api/forum/posts/:id/replies', async (req, res) => {
   try {
+
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+        // ID 都不合法，肯定没有回复，直接回空数组
+        return res.json([]); 
+    }
     const replies = await ForumReply.find({ postId: req.params.id })
       .populate('author', 'username email _id')
       .sort({ likes: -1, createdAt: -1 }) // 赞多的排前面

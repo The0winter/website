@@ -13,11 +13,19 @@ import { forumApi, ForumPost, ForumReply } from '@/lib/api';
 function PostContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const params = useParams();
-  
-  // URL 参数
-  const postId = params.postId as string; // 这是“回答ID”
-  const fromQuestionId = searchParams.get('fromQuestion'); // 这是“问题ID”
+  const params = useParams(); // 获取路由参数对象
+
+  // 🔍 调试：看看 params 到底是个啥，打开浏览器控制台(F12)能看到
+  console.log('当前路由参数 params:', params); 
+
+  // 🛡️ 兼容性写法：不管文件夹叫 [id] 还是 [postId]，都能拿到 ID
+  // 解释：如果 params.postId 拿不到，就试着拿 params.id
+  const rawId = params?.postId || params?.id; 
+  const postId = Array.isArray(rawId) ? rawId[0] : rawId; // 防止它是数组
+
+  // const postId = params.postId as string; // ❌ 之前这行代码太脆弱了
+
+  const fromQuestionId = searchParams.get('fromQuestion'); 
 
   // 状态
   const [question, setQuestion] = useState<ForumPost | null>(null);
@@ -26,33 +34,36 @@ function PostContent() {
 
   useEffect(() => {
     const fetchData = async () => {
+      // 🛑 关键修复：如果 postId 是空的，直接不发请求，防止报错
+      if (!postId || postId === 'undefined') {
+          console.warn('❌ 无法获取 postId，跳过请求');
+          return;
+      }
+
       try {
         setLoading(true);
 
         if (fromQuestionId) {
-            // 场景 A: 这是一个“回答”，我们有来源问题 ID
+            // 场景 A: 是回答
             const [qData, replies] = await Promise.all([
                 forumApi.getById(fromQuestionId),
                 forumApi.getReplies(fromQuestionId)
             ]);
             setQuestion(qData);
-            // 在所有回答里找到当前这个
             const targetAnswer = replies.find(r => r.id === postId);
             setAnswer(targetAnswer || null);
         } else {
-            // 场景 B: 没有来源问题ID，可能是一个“文章”类型的帖子 (Post)
-            // 尝试直接作为 Post 获取
+            // 场景 B: 是文章/问题本身
             const postData = await forumApi.getById(postId);
-            // 构造一个伪装的 "Answer" 格式来展示文章内容
             setAnswer({
                 id: postData.id,
                 content: postData.content || '',
                 votes: postData.votes,
                 comments: postData.comments,
                 time: postData.created_at || '',
-                author: typeof postData.author === 'object' ? postData.author : { name: 'Unknown', id: '', avatar: '', bio: '' }
+                author: postData.author || { name: 'Unknown', id: '' }
             } as any);
-            setQuestion(postData); // 把文章标题也作为 Question 标题展示
+            setQuestion(postData);
         }
 
       } catch (error) {
@@ -61,7 +72,11 @@ function PostContent() {
         setLoading(false);
       }
     };
-    fetchData();
+
+    // 只有当 postId 真的存在时，才执行 fetchData
+    if (postId) {
+        fetchData();
+    }
   }, [postId, fromQuestionId]);
 
   if (loading) return <div className="min-h-screen bg-[#f6f6f6] flex items-center justify-center text-gray-500">加载中...</div>;
