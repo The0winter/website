@@ -86,7 +86,11 @@ export default function ForumPage() {
           {!loading && posts.map((post: any) => {
             // 🔥 核心修复：兼容 id 和 _id
             // 如果 post.id 存在就用 id，否则用 _id
+
             const realId = post.id || post._id;
+
+    // 🔥【建议新增】如果 ID 也是空的，直接不渲染这条数据，防止生成坏链接
+    if (!realId) return null; 
 
             return (
             <div 

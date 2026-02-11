@@ -32,36 +32,40 @@ function CreatePostContent() {
     setShowConfirm(true); // 显示确认框
   };
 
-  // 真正的提交逻辑
-  const handleConfirmSubmit = async () => {
+// 修改 handleConfirmSubmit 函数
+const handleConfirmSubmit = async () => {
     setShowConfirm(false);
     setIsSubmitting(true);
-
     try {
       const tagArray = tags.split(/[,，\s]+/).filter(Boolean);
-
-      // 调用接口
-      await forumApi.create({
+      
+      // ✅ 修复 1：接收 API 返回的结果 (后端返回了 { id: "...", ... })
+      const newPost = await forumApi.create({
         title,
         content: content.replace(/\n/g, '<br/>'),
         type,
         tags: tagArray
       });
 
-      // 🔥 成功：显示成功 UI，1.5秒后跳转
       setIsSubmitting(false);
       setShowSuccess(true);
-      
+
+      // ✅ 修复 2：跳转到具体的帖子详情页，而不是列表页
       setTimeout(() => {
-        router.push('/forum'); 
+        // 确保 newPost.id 存在。后端 index.txt 第 109 行返回了 id 字段
+        if (newPost && newPost.id) {
+            router.push(`/forum/question/${newPost.id}`); 
+        } else {
+            //以此为兜底，防止万一没拿到 ID
+            router.push('/forum');
+        }
       }, 1500);
 
     } catch (error: any) {
       setIsSubmitting(false);
       alert('发布失败: ' + error.message);
     }
-  };
-
+};
   return (
     <div className="min-h-screen bg-gray-50 pb-20 relative">
       
