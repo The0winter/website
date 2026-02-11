@@ -1,4 +1,6 @@
-// 智能地址逻辑：浏览器走外网，服务器走内网
+import axios from 'axios';
+
+
 const getBaseUrl = () => {
   // 1. 【浏览器端】 Client Side
   // 只要有 window 对象，说明是在用户的浏览器里运行
@@ -373,6 +375,17 @@ export const forumApi = {
     return apiCall<ForumPost>(`/forum/posts/${id}`);
   },
 
+  addReply: async (postId: string, data: { content: string }) => {
+    // 假设你的 axios 实例叫 api
+    // 注意：这里一定要用 POST 方法，且 URL 要跟后端匹配
+    const response = await axios.post(`/api/forum/posts/${postId}/replies`, data, {
+    headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}` // 别忘了带 Token
+    }
+});
+    return response.data;
+},
+
   // 3. 发布帖子 (提问/文章)
   create: async (data: { title: string; content: string; type: 'question' | 'article'; tags?: string[] }): Promise<ForumPost> => {
     return apiCall<ForumPost>('/forum/posts', {
@@ -398,3 +411,4 @@ export const forumApi = {
     });
   }
 };
+
