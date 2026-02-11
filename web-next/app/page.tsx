@@ -6,21 +6,19 @@ import Link from 'next/link';
 import { 
   BookOpen, TrendingUp, Star, Zap, ChevronRight,
   Sparkles, Sword, Building2, History, Rocket, ImageOff,
-  Search, User, Library, LayoutGrid, PenTool, Trophy
+  Search, User, Library, LayoutGrid, PenTool, Trophy,MessageSquareText
 } from 'lucide-react';
 import { booksApi, Book } from '@/lib/api';
 
 // --- 0. 分类配置 (保持不变) ---
 const categories = [
-  { name: '全部', icon: BookOpen, slug: 'all' },
+  { name: '全部分类', icon: BookOpen, slug: 'all' },
   { name: '玄幻', icon: Sparkles, slug: 'fantasy' },
   { name: '仙侠', icon: Sword, slug: 'wuxia' },
   { name: '都市', icon: Building2, slug: 'urban' },
   { name: '历史', icon: History, slug: 'history' },
   { name: '科幻', icon: Rocket, slug: 'sci-fi' },
   { name: '奇幻', icon: Sparkles, slug: 'magic' },
-  { name: '体育', icon: Rocket, slug: 'sports' },
-  { name: '军事', icon: Sword, slug: 'military' },
   { name: '悬疑', icon: History, slug: 'mystery' },
 ];
 
@@ -472,11 +470,13 @@ function HomeContent() {
 
                     <div className="w-12 h-px bg-gray-100 mx-auto"></div>
                     
-                    <Link href="/authorsList" className="flex-1 flex flex-col items-center justify-center gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
-                         <div className="p-3 rounded-full bg-pink-50 group-hover:bg-pink-100 transition-colors group-hover:scale-110 duration-300">
-                            <PenTool className="w-6 h-6 text-pink-600" />
-                         </div>
-                        <span className="text-xs font-bold tracking-wider">作者</span>
+                    {/* 将原来的 "作者" 按钮替换为 "论坛" */}
+                    <Link href="/forum" className="flex-1 flex flex-col items-center justify-center gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
+                        {/* 颜色改为蓝色系，致敬知乎蓝 */}
+                        <div className="p-3 rounded-full bg-blue-50 group-hover:bg-blue-100 transition-colors group-hover:scale-110 duration-300">
+                            <MessageSquareText className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <span className="text-xs font-bold tracking-wider">论坛</span>
                     </Link>
                 </div>
 
