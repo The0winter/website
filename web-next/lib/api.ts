@@ -27,14 +27,23 @@ export interface Profile {
 export interface Book {
   id: string;
   title: string;
+  // 保持你原有的复杂类型，防止报错
   author_id?: string | { _id: string; id: string; username: string; email: string } | null;
-  author?: string;
+  author?: string; // 作者名
   description: string;
   cover_image?: string;
   category?: string;
   status?: 'ongoing' | 'completed';
-  views?: number;
-  updated_at?: string; // 或者 Date，取决于后端返回的是字符串还是日期对象
+  
+  // --- 🔥🔥🔥 新增/修改这部分开始 🔥🔥🔥 ---
+  views?: number;         // 总点击
+  weekly_views?: number;  // 周点击 (新增)
+  monthly_views?: number; // 月点击 (新增)
+  daily_views?: number;   // 日点击 (新增)
+  rating?: number;        // 评分 (新增，例如 0-5.0)
+  // --- 🔥🔥🔥 新增/修改这部分结束 🔥🔥🔥 ---
+
+  updated_at?: string; 
   created_at?: string;
   profiles?: Profile;
 }

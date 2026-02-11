@@ -2,24 +2,33 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { booksApi, Book } from '@/lib/api'; // 引入 Book 类型
+import { booksApi, Book } from '@/lib/api';
 import { 
   Trophy, Flame, Calendar, Clock, Sparkles, 
-  LayoutGrid, Loader2, BookOpen, Crown 
+  LayoutGrid, Loader2, BookOpen, Crown, Medal // 👈 新增引入 Medal 图标
 } from 'lucide-react';
 
-// --- 1. 榜单配置 (已根据要求修改：去掉好评榜，重命名其他榜单) ---
+// --- 1. 榜单配置 ---
 const RANK_TYPES = [
-  // 综合榜：周浏览量 + 评分加权
   { id: 'rec', name: '综合榜', icon: Sparkles, desc: '口碑与热度双高', color: 'text-purple-600', bg: 'bg-purple-50' },
-  // 浏览量维度
   { id: 'month', name: '月榜', icon: Calendar, desc: '近30天阅读热度', color: 'text-pink-600', bg: 'bg-pink-50' },
   { id: 'week', name: '周榜', icon: Flame, desc: '本周读者都在看', color: 'text-red-600', bg: 'bg-red-50' },
   { id: 'day', name: '日榜', icon: Clock, desc: '今日实时上升', color: 'text-blue-600', bg: 'bg-blue-50' },
   { id: 'total', name: '总榜', icon: Crown, desc: '全站历史最强', color: 'text-yellow-600', bg: 'bg-yellow-50' },
 ];
 
-// 顶部分类
+// 数字格式化函数：1.2k, 1.5M
+const formatViews = (num: number) => {
+  if (!num) return '0';
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1) + 'M';
+  }
+  if (num >= 1000) {
+    return (num / 1000).toFixed(1) + 'K';
+  }
+  return num.toString();
+};
+
 const CATEGORIES = [
   { name: '全部分类', slug: 'all' },
   { name: '玄幻', slug: 'fantasy' },
@@ -36,10 +45,9 @@ export default function RankingPage() {
   const [loading, setLoading] = useState(true);
 
   // --- 状态管理 ---
-  const [activeRank, setActiveRank] = useState('rec'); // 默认选中综合榜
+  const [activeRank, setActiveRank] = useState('rec'); 
   const [activeCategory, setActiveCategory] = useState('all');
 
-  // 获取数据
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -55,10 +63,11 @@ export default function RankingPage() {
     fetchData();
   }, []);
 
-  // --- 核心逻辑：交叉检索 (Cross-Filtering) ---
+  // --- 核心逻辑：交叉检索 ---
   const displayBooks = useMemo(() => {
-    // 1. 先过滤分类
     let filtered = allBooks;
+    
+    // 1. 过滤分类
     if (activeCategory !== 'all') {
         const targetCatName = CATEGORIES.find(c => c.slug === activeCategory)?.name;
         if (targetCatName && targetCatName !== '全部分类') {
@@ -66,35 +75,26 @@ export default function RankingPage() {
         }
     }
 
-    // 2. 再根据榜单类型排序
+    // 2. 排序算法
     return [...filtered].sort((a, b) => {
-      // 这里的 as any 是为了防止 TS 报错，因为 api.ts 的 interface 里还没定义 weekly_views 等字段
+      // 类型断言，防止 TS 报错
       const getVal = (obj: Book, key: string) => (obj as any)[key] || 0;
       const getRating = (obj: Book) => (obj as any).rating || 0;
       
       switch (activeRank) {
         case 'month':
-          // 月榜：按 monthly_views 排序
           return getVal(b, 'monthly_views') - getVal(a, 'monthly_views');
-        
         case 'week':
-          // 周榜：按 weekly_views 排序
           return getVal(b, 'weekly_views') - getVal(a, 'weekly_views');
-        
         case 'day':
-          // 日榜：按 daily_views 排序
           return getVal(b, 'daily_views') - getVal(a, 'daily_views');
-        
         case 'rec':
-          // 综合榜：周浏览量(40%) + 评分(60%) 加权
-          // 评分 * 100 是为了平衡量级 (比如 4.5分 vs 1000浏览量)
+          // 综合算法：周流量(40%) + 评分x100(60%)
           const scoreA = (getVal(a, 'weekly_views') * 0.4) + (getRating(a) * 100 * 0.6);
           const scoreB = (getVal(b, 'weekly_views') * 0.4) + (getRating(b) * 100 * 0.6);
           return scoreB - scoreA;
-
         case 'total':
         default:
-          // 总榜：按 views 排序
           return (b.views || 0) - (a.views || 0);
       }
     });
@@ -106,7 +106,7 @@ export default function RankingPage() {
     <div className="min-h-screen bg-[#f4f5f7] py-6">
       <div className="max-w-[1200px] mx-auto px-4 flex flex-col md:flex-row gap-6">
         
-        {/* === 左侧：榜单导航栏 === */}
+        {/* 左侧导航 */}
         <aside className="w-full md:w-[240px] flex-shrink-0 flex flex-col gap-4">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sticky top-4">
             <h2 className="text-lg font-black text-gray-800 mb-4 px-2 flex items-center gap-2">
@@ -139,10 +139,8 @@ export default function RankingPage() {
           </div>
         </aside>
 
-        {/* === 右侧：主内容区 === */}
+        {/* 右侧内容 */}
         <main className="flex-1 flex flex-col gap-4 min-w-0">
-          
-          {/* 1. 顶部：分类筛选器 & 标题 */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center justify-between mb-6">
                 <div>
@@ -158,7 +156,6 @@ export default function RankingPage() {
                 </div>
             </div>
 
-            {/* 分类 Tags */}
             <div className="flex flex-wrap gap-2">
               {CATEGORIES.map((cat) => (
                 <button
@@ -176,7 +173,6 @@ export default function RankingPage() {
             </div>
           </div>
 
-          {/* 2. 书籍列表 */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[600px]">
             {loading ? (
                 <div className="flex flex-col items-center justify-center h-60 gap-3 text-gray-400">
@@ -199,23 +195,23 @@ export default function RankingPage() {
                         
                         return (
                             <div key={book.id} className="group flex p-5 gap-5 hover:bg-gray-50 transition-colors relative">
-                                {/* 排名数字 */}
+                                
+                                {/* 🔥🔥🔥 修复点：使用 SVG 组件代替 img 标签，防止破图 🔥🔥🔥 */}
                                 <div className="w-12 flex-shrink-0 flex flex-col items-center pt-1">
-                                    {isTop1 && <img src="https://img.icons8.com/fluency/48/medal2--v1.png" className="w-8 h-8 mb-1" alt="1" />}
-                                    {isTop2 && <img src="https://img.icons8.com/fluency/48/medal-second-place--v1.png" className="w-8 h-8 mb-1" alt="2" />}
-                                    {isTop3 && <img src="https://img.icons8.com/fluency/48/medal-third-place--v1.png" className="w-8 h-8 mb-1" alt="3" />}
+                                    {isTop1 && <Medal className="w-8 h-8 mb-1 text-yellow-500 fill-yellow-100" />}
+                                    {isTop2 && <Medal className="w-8 h-8 mb-1 text-gray-400 fill-gray-100" />}
+                                    {isTop3 && <Medal className="w-8 h-8 mb-1 text-orange-600 fill-orange-100" />}
                                     
                                     <span className={`text-xl font-black italic font-mono 
-                                        ${isTop1 ? 'text-red-500 text-3xl' : ''}
-                                        ${isTop2 ? 'text-orange-500 text-2xl' : ''}
-                                        ${isTop3 ? 'text-yellow-500 text-2xl' : ''}
+                                        ${isTop1 ? 'text-yellow-600 text-3xl' : ''}
+                                        ${isTop2 ? 'text-gray-500 text-2xl' : ''}
+                                        ${isTop3 ? 'text-orange-500 text-2xl' : ''}
                                         ${rank > 3 ? 'text-gray-300' : ''}
                                     `}>
                                         {rank}
                                     </span>
                                 </div>
 
-                                {/* 书封 */}
                                 <Link href={`/book/${book.id}`} className="relative flex-shrink-0 w-24 h-32 md:w-28 md:h-36 shadow-md rounded overflow-hidden group-hover:shadow-lg transition-all border border-gray-200">
                                      {book.cover_image ? (
                                          <img src={book.cover_image} alt={book.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -229,7 +225,6 @@ export default function RankingPage() {
                                      )}
                                 </Link>
 
-                                {/* 信息内容 */}
                                 <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
@@ -239,13 +234,14 @@ export default function RankingPage() {
                                             {/* 右侧数据展示 */}
                                             <div className="hidden md:flex flex-col items-end">
                                                 <span className={`text-xl font-black font-mono ${currentRankInfo?.color}`}>
-                                                    {/* 显示热度数值 */}
-                                                    {(activeRank === 'rec' 
+                                                    {/* 调用格式化函数 */}
+                                                    {formatViews(
+                                                        activeRank === 'rec' 
                                                         ? (( (book as any).weekly_views || 0) * 0.4 + ((book as any).rating || 0) * 100 * 0.6) 
                                                         : ((book as any)[activeRank === 'total' ? 'views' : `${activeRank}_views`] || 0)
-                                                    ).toLocaleString()}
+                                                    )}
                                                     <span className="text-xs font-normal text-gray-400 ml-1">
-                                                        {activeRank === 'rec' ? '综合指数' : '热度'}
+                                                        浏览量
                                                     </span>
                                                 </span>
                                             </div>
@@ -258,7 +254,6 @@ export default function RankingPage() {
                                             </span>
                                             <span className="w-px h-3 bg-gray-300"></span>
                                             <span className="flex items-center gap-1">
-                                                {/* 🔥🔥🔥 修正这里：根据 api.ts 自动查找作者名 */}
                                                 <span className="text-gray-900 font-medium">
                                                     {book.author || book.profiles?.username || '佚名'}
                                                 </span>
@@ -273,11 +268,8 @@ export default function RankingPage() {
                                         </p>
                                     </div>
 
-                                    {/* 底部操作栏 (已去掉必读好书标签) */}
                                     <div className="flex items-center justify-between mt-auto">
-                                        <div className="flex items-center gap-2">
-                                           {/* 如果有其他标签可以放这里 */}
-                                        </div>
+                                        <div className="flex items-center gap-2"></div>
                                         <Link 
                                             href={`/book/${book.id}`}
                                             className="px-6 py-2 bg-gray-900 text-white text-sm font-bold rounded-full hover:bg-blue-600 hover:shadow-lg hover:shadow-blue-200 transition-all transform active:scale-95"
