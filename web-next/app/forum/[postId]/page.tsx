@@ -39,22 +39,28 @@ function PostContent() {
           console.warn('❌ 无法获取 postId，跳过请求');
           return;
       }
+      const validFromQuestionId = (fromQuestionId && fromQuestionId !== 'undefined') 
+                                  ? fromQuestionId 
+                                  : null;
 
       try {
         setLoading(true);
 
-        if (fromQuestionId) {
-            // 场景 A: 是回答
+        // 使用检查过的 validFromQuestionId
+        if (validFromQuestionId) {
+            // 场景 A: 有来源问题 ID
             const [qData, replies] = await Promise.all([
-                forumApi.getById(fromQuestionId),
-                forumApi.getReplies(fromQuestionId)
+                forumApi.getById(validFromQuestionId),
+                forumApi.getReplies(validFromQuestionId)
             ]);
             setQuestion(qData);
             const targetAnswer = replies.find(r => r.id === postId);
             setAnswer(targetAnswer || null);
         } else {
-            // 场景 B: 是文章/问题本身
+            // 场景 B: 单帖模式 (或者 fromQuestionId 无效)
             const postData = await forumApi.getById(postId);
+            
+            // ... (下面构造 Answer 对象的代码保持不变)
             setAnswer({
                 id: postData.id,
                 content: postData.content || '',
@@ -72,13 +78,10 @@ function PostContent() {
         setLoading(false);
       }
     };
-
-    // 只有当 postId 真的存在时，才执行 fetchData
-    if (postId) {
-        fetchData();
-    }
+    
+    if (postId) fetchData();
   }, [postId, fromQuestionId]);
-
+  
   if (loading) return <div className="min-h-screen bg-[#f6f6f6] flex items-center justify-center text-gray-500">加载中...</div>;
   if (!answer || !question) return <div className="min-h-screen bg-[#f6f6f6] flex items-center justify-center text-gray-500">内容不存在</div>;
 
