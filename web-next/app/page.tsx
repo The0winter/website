@@ -452,7 +452,7 @@ function HomeContent() {
                     4. text-gray-600: 字体颜色变深，适配白底
                 */}
                 <div className="hidden md:flex flex-col w-[110px] bg-white rounded-2xl shadow-sm border border-gray-100 shrink-0 z-10 py-2 justify-between">
-                    <Link href="#ranking" className="flex-1 flex flex-col items-center justify-center gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
+                    <Link href="/ranking" className="flex-1 flex flex-col items-center justify-center gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
                         <div className="p-3 rounded-full bg-yellow-50 group-hover:bg-yellow-100 transition-colors group-hover:scale-110 duration-300">
                            <Trophy className="w-6 h-6 text-yellow-600" />
                         </div>
