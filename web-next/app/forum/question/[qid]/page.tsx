@@ -69,7 +69,7 @@ export default function QuestionPage() {
 
     setIsSubmitting(true);
     try {
-      await forumApi.addReply(qid, { content: replyContent });
+      await forumApi.addReply(qid, { content: replyContent.replace(/\n/g, '<br/>') });
       
       setReplyContent('');
       setShowEditor(false);
