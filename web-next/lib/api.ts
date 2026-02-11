@@ -14,6 +14,39 @@ const getBaseUrl = () => {
   return 'http://127.0.0.1:5000';
 };
 
+// 🔥 新增：论坛帖子类型
+export interface ForumPost {
+  id: string;
+  title: string;
+  excerpt?: string;   // 列表页用的摘要
+  content?: string;   // 详情页用的内容
+  // 后端返回的 author 在列表页是 string，在详情页是 object，这里做兼容
+  author: string | { name: string; id: string; avatar?: string; bio?: string }; 
+  authorId?: string;
+  votes: number;      // 点赞数
+  comments: number;   // 评论数
+  tags: string[];
+  isHot: boolean;
+  type: 'question' | 'article';
+  views?: number;
+  created_at?: string;
+}
+
+// 🔥 新增：论坛回答类型
+export interface ForumReply {
+  id: string;
+  content: string;
+  votes: number;
+  comments: number;
+  time: string;
+  author: {
+    name: string;
+    bio: string;
+    avatar: string;
+    id: string;
+  };
+}
+
 // 导出最终地址 (一定要加 export！)
 export const API_BASE_URL = `${getBaseUrl()}/api`;
 
@@ -321,4 +354,38 @@ export const authApi = {
     return res.json();
   },
 
+};
+
+// 🔥 新增：论坛接口
+export const forumApi = {
+  // 1. 获取帖子列表 (支持 tab: 'recommend' | 'hot' | 'follow')
+  getPosts: async (tab: string = 'recommend', page: number = 1): Promise<ForumPost[]> => {
+    return apiCall<ForumPost[]>(`/forum/posts?tab=${tab}&page=${page}`);
+  },
+
+  // 2. 获取单个帖子详情
+  getById: async (id: string): Promise<ForumPost> => {
+    return apiCall<ForumPost>(`/forum/posts/${id}`);
+  },
+
+  // 3. 发布帖子 (提问/文章)
+  create: async (data: { title: string; content: string; type: 'question' | 'article'; tags?: string[] }): Promise<ForumPost> => {
+    return apiCall<ForumPost>('/forum/posts', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // 4. 获取某个帖子的回复列表
+  getReplies: async (postId: string): Promise<ForumReply[]> => {
+    return apiCall<ForumReply[]>(`/forum/posts/${postId}/replies`);
+  },
+
+  // 5. 发布回复/回答
+  createReply: async (postId: string, content: string): Promise<ForumReply> => {
+    return apiCall<ForumReply>(`/forum/posts/${postId}/replies`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  }
 };

@@ -15,6 +15,8 @@ import User from './models/User.js';
 import Book from './models/Book.js';
 import Chapter from './models/Chapter.js';
 import Bookmark from './models/Bookmark.js';
+import ForumPost from './models/ForumPost.js';  
+import ForumReply from './models/ForumReply.js';
 
 import VerificationCode from './models/VerificationCode.js';
 import sendVerificationEmail from './utils/sendEmail.js';
@@ -700,6 +702,159 @@ app.post('/api/upload/cover',
         res.status(500).json({ error: '上传失败: ' + error.message });
       }
 });
+
+// ================= 论坛 (Forum) API =================
+
+// 1. 发布帖子 (提问 / 写文章)
+app.post('/api/forum/posts', authMiddleware, async (req, res) => {
+  try {
+    const { title, content, type, tags } = req.body;
+    
+    // 生成摘要 (取前100个字，去掉HTML标签)
+    const cleanText = content.replace(/<[^>]+>/g, ''); 
+    const summary = cleanText.substring(0, 100) + (cleanText.length > 100 ? '...' : '');
+
+    const newPost = await ForumPost.create({
+      title,
+      content,
+      summary,
+      type: type || 'question', // 'question' 或 'article'
+      tags: tags || [],
+      author: req.user.id
+    });
+
+    res.status(201).json(newPost);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. 获取帖子列表 (支持 推荐/热榜/最新)
+app.get('/api/forum/posts', async (req, res) => {
+  try {
+    const { tab = 'recommend', page = 1 } = req.query;
+    const limit = 20;
+    const skip = (page - 1) * limit;
+
+    let sort = {};
+    let filter = {};
+
+    if (tab === 'hot') {
+      // 热榜：按浏览量倒序
+      sort = { views: -1, replyCount: -1 }; 
+    } else if (tab === 'follow') {
+      // 关注：暂时按最新时间 (以后可以加关注逻辑)
+      sort = { createdAt: -1 };
+    } else {
+      // 推荐 (默认)：综合排序 (这里简单按最后回复时间)
+      sort = { lastReplyAt: -1, views: -1 };
+    }
+
+    const posts = await ForumPost.find(filter)
+      .populate('author', 'username email _id') // 关联作者信息
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .lean(); // 转为普通 JSON 对象
+
+    // 格式化数据，兼容前端
+    const formattedPosts = posts.map(p => ({
+      id: p._id,
+      title: p.title,
+      excerpt: p.summary,
+      author: p.author?.username || '匿名',
+      authorId: p.author?._id,
+      votes: p.likes, // 暂时用 likes 代替 votes
+      comments: p.replyCount,
+      tags: p.tags,
+      isHot: p.views > 1000, // 假定大于1000算热帖
+      type: p.type
+    }));
+
+    res.json(formattedPosts);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. 获取单个帖子详情 (问题页)
+app.get('/api/forum/posts/:id', async (req, res) => {
+  try {
+    // 浏览量 +1
+    const post = await ForumPost.findByIdAndUpdate(
+      req.params.id, 
+      { $inc: { views: 1 } }, 
+      { new: true }
+    ).populate('author', 'username email _id').lean();
+
+    if (!post) return res.status(404).json({ error: '帖子不存在' });
+
+    res.json({
+      ...post,
+      id: post._id,
+      author: {
+        name: post.author?.username,
+        id: post.author?._id
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4. 获取某个帖子的所有回答/评论
+app.get('/api/forum/posts/:id/replies', async (req, res) => {
+  try {
+    const replies = await ForumReply.find({ postId: req.params.id })
+      .populate('author', 'username email _id')
+      .sort({ likes: -1, createdAt: -1 }) // 赞多的排前面
+      .lean();
+
+    const formattedReplies = replies.map(r => ({
+      id: r._id,
+      content: r.content,
+      votes: r.likes,
+      comments: r.comments,
+      time: new Date(r.createdAt).toLocaleString(),
+      author: {
+        name: r.author?.username,
+        bio: '暂无介绍', // 以后可以在 User 表加 bio 字段
+        avatar: '', 
+        id: r.author?._id
+      }
+    }));
+
+    res.json(formattedReplies);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 5. 发布回答/评论
+app.post('/api/forum/posts/:id/replies', authMiddleware, async (req, res) => {
+  try {
+    const { content } = req.body;
+    const postId = req.params.id;
+
+    const newReply = await ForumReply.create({
+      postId,
+      author: req.user.id,
+      content
+    });
+
+    // 更新主帖的回复数、最后回复时间
+    await ForumPost.findByIdAndUpdate(postId, {
+      $inc: { replyCount: 1 },
+      lastReplyAt: new Date()
+    });
+
+    res.status(201).json(newReply);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===========================================
 
 // --- Books ---
 app.get('/api/books', async (req, res) => {
