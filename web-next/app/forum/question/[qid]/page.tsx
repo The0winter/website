@@ -2,31 +2,37 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+// ✅ 1. 引入 useParams
+import { useRouter, useParams } from 'next/navigation'; 
 import { 
   MessageSquare, Share2, Plus, MoreHorizontal, 
   ChevronDown, ArrowUp, MessageCircle, User, ArrowLeft 
 } from 'lucide-react';
-// 🔥 引入 API
 import { forumApi, ForumPost, ForumReply } from '@/lib/api';
 
-export default function QuestionPage({ params }: { params: { qid: string } }) {
+// ✅ 2. 去掉 props 里的 params
+export default function QuestionPage() { 
   const router = useRouter();
-  
-  // 🔥 新增状态
+  // ✅ 3. 使用 hook 获取参数
+  const params = useParams(); 
+  // 拿到 qid (注意：params 可能包含 array，所以最好强转一下 string)
+  const qid = params?.qid as string; 
+
   const [question, setQuestion] = useState<ForumPost | null>(null);
   const [answers, setAnswers] = useState<ForumReply[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 🔥 获取数据
   useEffect(() => {
+    // ✅ 4. 增加安全检查
+    if (!qid) return;
+
     const fetchData = async () => {
       try {
         setLoading(true);
-        // 并行请求：同时获取问题详情和回答列表
+        // ✅ 5. 这里用 qid 变量，而不是 params.qid
         const [qData, rData] = await Promise.all([
-          forumApi.getById(params.qid),
-          forumApi.getReplies(params.qid)
+          forumApi.getById(qid),
+          forumApi.getReplies(qid)
         ]);
         setQuestion(qData);
         setAnswers(rData);
@@ -37,7 +43,7 @@ export default function QuestionPage({ params }: { params: { qid: string } }) {
       }
     };
     fetchData();
-  }, [params.qid]);
+  }, [qid]);
 
   if (loading) return <div className="min-h-screen bg-[#f6f6f6] flex items-center justify-center text-gray-500">加载中...</div>;
   if (!question) return <div className="min-h-screen bg-[#f6f6f6] flex items-center justify-center text-gray-500">问题不存在</div>;
