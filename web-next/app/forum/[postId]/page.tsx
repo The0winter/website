@@ -9,7 +9,6 @@ import {
 import { forumApi, ForumPost, ForumReply } from '@/lib/api';
 
 function PostContent() {
-    console.log("🔥 我是最新修改的代码！！！如果不显示这行就是没更新！"); // <--- 加上这一句
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams(); 
