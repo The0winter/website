@@ -84,7 +84,11 @@ const globalLimiter = rateLimit({
   max: 500, 
   message: '请求过于频繁，请稍后再试',
   keyGenerator: getClientIp, 
-  validate: { ip: false } 
+  validate: { 
+      ip: false, 
+      trustProxy: false,  // 🔥 新增：防止 IPv6 报错
+      xForwardedForHeader: false // 🔥 新增：防止误报
+  }
 });
 app.use('/api/', globalLimiter);
 
@@ -93,7 +97,11 @@ const authLimiter = rateLimit({
   max: 20, 
   message: '操作太频繁',
   keyGenerator: getClientIp,
-  validate: { ip: false }
+  validate: { 
+      ip: false, 
+      trustProxy: false, 
+      xForwardedForHeader: false 
+  }
 });
 app.use('/api/auth/', authLimiter);
 
