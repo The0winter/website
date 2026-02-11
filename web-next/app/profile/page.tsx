@@ -261,7 +261,7 @@ return (
                         <PenTool className="h-4 w-4 sm:h-5 sm:w-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-slate-900 text-sm truncate">作家专区</h3>
+                        <h3 className="font-bold text-slate-900 text-sm truncate">创作管理</h3>
                         <p className="text-xs text-slate-500 truncate">创作中心</p>
                     </div>
                     <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-amber-400 hidden sm:block shrink-0" />

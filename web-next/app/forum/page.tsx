@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { 
   MessageSquare, ThumbsUp, MessageCircle, Share2, 
-  MoreHorizontal, PenSquare, BookOpen, Flame, ChevronRight 
+  MoreHorizontal, PenSquare, BookOpen, Flame, ChevronRight,HelpCircle
 } from 'lucide-react';
 
 // --- 模拟数据 ---
@@ -153,37 +153,51 @@ export default function ForumPage() {
         {/* === 右侧：侧边栏 === */}
         <div className="hidden md:flex flex-col gap-3">
           
-          {/* 创作中心卡片 */}
-          <div className="bg-white rounded-sm shadow-sm p-4">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                 <div className="bg-yellow-100 p-1 rounded">
-                    <PenSquare className="w-4 h-4 text-yellow-600" />
-                 </div>
-                 <span className="text-sm font-medium text-gray-700">创作中心</span>
-              </div>
-              <span className="text-xs text-blue-500 cursor-pointer">草稿箱 (0)</span>
+        {/* 创作中心卡片 */}
+        <div className="bg-white rounded-sm shadow-sm p-4">
+        <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+                <div className="bg-yellow-100 p-1 rounded">
+                <PenSquare className="w-4 h-4 text-yellow-600" />
+                </div>
+                <span className="text-sm font-medium text-gray-700">创作中心</span>
             </div>
+            <span className="text-xs text-blue-500 cursor-pointer">草稿箱 (0)</span>
+        </div>
+
+        {/* 🔥 修改点：grid-cols-2 改为 grid-cols-3 */}
+        <div className="grid grid-cols-3 gap-2">
             
-            <div className="grid grid-cols-2 gap-2">
-                <button className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group">
-                    <div className="bg-blue-50 p-2 rounded-full group-hover:bg-blue-100">
-                        <MessageSquare className="w-6 h-6 text-blue-500" />
-                    </div>
-                    <span className="text-xs text-gray-600">回答问题</span>
-                </button>
-                <button className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group">
-                    <div className="bg-orange-50 p-2 rounded-full group-hover:bg-orange-100">
-                        <PenSquare className="w-6 h-6 text-orange-500" />
-                    </div>
-                    <span className="text-xs text-gray-600">写文章</span>
-                </button>
-            </div>
-            
-            <button className="w-full mt-3 py-2 border border-blue-600 text-blue-600 text-sm rounded hover:bg-blue-50 transition-colors">
-                开始创作
+            {/* 🔥 新增：提问按钮 (放在第一个或任意位置) */}
+            <button className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group">
+                <div className="bg-green-50 p-2 rounded-full group-hover:bg-green-100">
+                    <HelpCircle className="w-6 h-6 text-green-600" />
+                </div>
+                <span className="text-xs text-gray-600">提问</span>
             </button>
-          </div>
+
+            {/* 原有：回答问题 */}
+            <button className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group">
+                <div className="bg-blue-50 p-2 rounded-full group-hover:bg-blue-100">
+                    <MessageSquare className="w-6 h-6 text-blue-500" />
+                </div>
+                <span className="text-xs text-gray-600">回答</span>
+            </button>
+
+            {/* 原有：写文章 */}
+            <button className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group">
+                <div className="bg-orange-50 p-2 rounded-full group-hover:bg-orange-100">
+                    <PenSquare className="w-6 h-6 text-orange-500" />
+                </div>
+                <span className="text-xs text-gray-600">写文章</span>
+            </button>
+
+        </div>
+        
+        <button className="w-full mt-3 py-2 border border-blue-600 text-blue-600 text-sm rounded hover:bg-blue-50 transition-colors">
+            开始创作
+        </button>
+        </div>
 
           {/* 推荐关注 */}
           <div className="bg-white rounded-sm shadow-sm p-4">

@@ -112,7 +112,7 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
                     className={`flex items-center space-x-1 ${textSecondary} ${hoverText} transition-colors`}
                   >
                     <PenTool className="h-5 w-5" />
-                    <span>作家专区</span>
+                    <span>创作管理</span>
                   </Link>
                 )}
                 
