@@ -65,39 +65,33 @@ export default function ForumPage() {
   return (
     <div className="min-h-screen bg-[#f6f6f6] pb-10">
 
-{/* 🔥 修改 1: 外层只留 sticky，去掉了 bg-white 和 shadow */}
-    <div className="sticky top-0 z-30">
-      
-      {/* 🔥 修改 2: 把白色背景、阴影、圆角加在这里，并限制宽度 max-w-[1000px] */}
-      <div className="max-w-[1000px] mx-auto bg-white shadow-sm border-b border-x border-gray-200 px-4 h-16 flex items-center rounded-b-lg">
-        
-        {/* 🔥 修改 3: nav 加上 w-full 和 justify-center，让选项卡居中分布 */}
-        <nav className="flex items-center justify-center gap-20 w-full h-full">
-            {[
-                { id: 'follow', label: '关注' },
-                { id: 'recommend', label: '推荐' },
-                { id: 'hot', label: '热榜' }
-            ].map((tab) => (
-                <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                // 修改点：text-[16px] 改为 text-[18px]，字体加大
-                className={`relative h-full px-2 text-[18px] transition-colors ${
-                    activeTab === tab.id 
-                    ? 'text-blue-600 font-bold' 
-                    : 'text-gray-600 font-medium hover:text-blue-600'
-                }`}
-                >
-                {tab.label}
-                {activeTab === tab.id && (
-                    // 修改点：底下的蓝条稍微加粗一点 h-[3px] -> h-[4px]
-                    <div className="absolute bottom-0 left-0 w-full h-[4px] bg-blue-600 rounded-t-full"></div>
-                )}
-                </button>
-            ))}
-            </nav>
-        </div>
-        </div>
+{/* 顶部导航栏 */}
+    <div className="sticky top-0 z-30 bg-[#f6f6f6]"> {/* 给外层加背景色遮挡滚动内容 */}
+      <div className="max-w-[1000px] mx-auto bg-white shadow-sm border-b border-x border-gray-200 px-0 h-14 flex items-center justify-center">
+        <nav className="flex items-center justify-center gap-12 w-full h-full"> 
+          {[
+            { id: 'follow', label: '关注' },
+            { id: 'recommend', label: '推荐' },
+            { id: 'hot', label: '热榜' }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`relative h-full px-4 text-[16px] transition-colors flex items-center ${
+                activeTab === tab.id 
+                  ? 'text-blue-600 font-bold' 
+                  : 'text-gray-600 font-medium hover:text-blue-600'
+              }`}
+            >
+              {tab.label}
+              {activeTab === tab.id && (
+                <div className="absolute bottom-0 left-0 w-full h-[3px] bg-blue-600"></div>
+              )}
+            </button>
+          ))}
+        </nav>
+      </div>
+    </div>
 
       {/* 主体内容区：双栏布局 */}
       <div className="max-w-[1000px] mx-auto px-4 mt-3 grid grid-cols-1 md:grid-cols-[1fr_296px] gap-3">

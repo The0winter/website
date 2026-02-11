@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
   MessageSquare, Share2, Plus, MoreHorizontal, 
-  ChevronDown, ArrowUp, MessageCircle, User 
+  ChevronDown, ArrowUp, MessageCircle, User,ArrowLeft 
 } from 'lucide-react';
 
 export default function QuestionPage({ params }: { params: { qid: string } }) {
@@ -54,19 +54,18 @@ return (
   <div className="min-h-screen bg-[#f6f6f6] pb-10">
     
 {/* 🔥 修改 1: 外层透明 */}
-    <div className="sticky top-0 z-30">
-       {/* 🔥 修改 2: 内层白色、阴影、圆角 */}
-       <div className="max-w-[1000px] mx-auto bg-white shadow-sm border-b border-x border-gray-200 px-4 h-14 flex items-center justify-between rounded-b-lg">
-         <button onClick={() => router.back()} className="text-gray-500 font-bold text-sm hover:text-blue-600 transition-colors">
-            ← 返回
+    <div className="sticky top-0 z-30 bg-[#f6f6f6]">
+       <div className="max-w-[1000px] mx-auto bg-white shadow-sm border-b border-x border-gray-200 px-4 h-14 flex items-center justify-between">
+         
+         <button onClick={() => router.back()} className="text-gray-500 font-bold text-sm hover:text-blue-600 transition-colors flex items-center gap-1">
+            <ArrowLeft className="w-4 h-4" /> 返回
          </button>
          
-         {/* 标题截断优化 */}
-         <span className="font-bold text-gray-900 truncate max-w-[600px] text-center">
+         <span className="font-bold text-gray-900 truncate max-w-[500px] text-center text-sm">
              {question.title}
          </span>
          
-         <MoreHorizontal className="w-5 h-5 text-gray-500 cursor-pointer" />
+         <MoreHorizontal className="w-5 h-5 text-gray-400 cursor-pointer hover:text-gray-600" />
        </div>
     </div>
 
