@@ -202,7 +202,18 @@ export default function QuestionPage() {
                     // 🔥 修改点：把 div 改回 Link，并加上 href
                     <Link 
                     href={`/forum/${answer.id}?fromQuestion=${question.id}`} // 你的原版链接逻辑
-                    key={answer.id}
+                    key={answer.id} onClick={() => {
+                        if (question) {
+                            // 我们定义一个 key，比如 'nav_cache_' + 目标ID
+                            const cacheKey = `nav_cache_${answer.id}`;
+                            const cacheData = {
+                                question: question, // 把父级问题存进去
+                                answer: answer,     // 把当前回答存进去
+                                timestamp: Date.now()
+                            };
+                            sessionStorage.setItem(cacheKey, JSON.stringify(cacheData));
+                        }
+                    }}
                     className="bg-white p-5 rounded-sm shadow-sm hover:shadow-md transition-shadow block" // 加上 block 让它占满一行
                     >
                         <div className="flex items-center gap-2 mb-2">
