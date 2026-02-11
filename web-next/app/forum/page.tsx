@@ -94,7 +94,7 @@ export default function ForumPage() {
     </div>
 
       {/* 主体内容区：双栏布局 */}
-      <div className="max-w-[1000px] mx-auto px-4 mt-3 grid grid-cols-1 md:grid-cols-[1fr_296px] gap-3">
+      <div className="max-w-[1000px] mx-auto px-4 md:px-0 mt-3 grid grid-cols-1 md:grid-cols-[1fr_296px] gap-3">
         
         {/* === 左侧：内容流 === */}
         <div className="flex flex-col gap-2">

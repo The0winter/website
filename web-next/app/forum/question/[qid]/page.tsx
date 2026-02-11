@@ -70,7 +70,7 @@ return (
     </div>
 
     {/* 主体内容：限制最大宽度 1000px 并居中 */}
-    <div className="max-w-[1000px] mx-auto mt-3 px-4">
+    <div className="max-w-[1000px] mx-auto mt-3 px-4 md:px-0">
       
       {/* === 核心区域1：问题详情 === */}
       <div className="bg-white mb-3 p-6 rounded-sm shadow-sm">
