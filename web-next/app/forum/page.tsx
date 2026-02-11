@@ -64,33 +64,35 @@ export default function ForumPage() {
 
   return (
     <div className="min-h-screen bg-[#f6f6f6] pb-10">
-      {/* 顶部导航栏 (模拟知乎二级导航) */}
-      <div className="bg-white shadow-sm sticky top-0 z-30 border-b border-gray-200">
-        <div className="max-w-[1000px] mx-auto px-4 flex items-center h-14 gap-8">
-          <nav className="flex gap-6 h-full">
+        <div className="bg-white shadow-sm sticky top-0 z-30 border-b border-gray-200">
+        {/* 修改点：h-14 改为 h-16 让高度舒服一点，max-w-[1000px] 保证内容不跑偏 */}
+        <div className="max-w-[1000px] mx-auto px-4 flex items-center h-16"> 
+            <nav className="flex gap-10 h-full"> {/* 修改点：gap-6 改为 gap-10，间距拉大 */}
             {[
-              { id: 'follow', label: '关注' },
-              { id: 'recommend', label: '推荐' },
-              { id: 'hot', label: '热榜' }
+                { id: 'follow', label: '关注' },
+                { id: 'recommend', label: '推荐' },
+                { id: 'hot', label: '热榜' }
             ].map((tab) => (
-              <button
+                <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`relative h-full px-1 text-[16px] font-medium transition-colors ${
-                  activeTab === tab.id 
+                // 修改点：text-[16px] 改为 text-[18px]，字体加大
+                className={`relative h-full px-2 text-[18px] transition-colors ${
+                    activeTab === tab.id 
                     ? 'text-blue-600 font-bold' 
-                    : 'text-gray-800 hover:text-blue-600'
+                    : 'text-gray-600 font-medium hover:text-blue-600'
                 }`}
-              >
+                >
                 {tab.label}
                 {activeTab === tab.id && (
-                  <div className="absolute bottom-0 left-0 w-full h-[3px] bg-blue-600 rounded-t-full"></div>
+                    // 修改点：底下的蓝条稍微加粗一点 h-[3px] -> h-[4px]
+                    <div className="absolute bottom-0 left-0 w-full h-[4px] bg-blue-600 rounded-t-full"></div>
                 )}
-              </button>
+                </button>
             ))}
-          </nav>
+            </nav>
         </div>
-      </div>
+        </div>
 
       {/* 主体内容区：双栏布局 */}
       <div className="max-w-[1000px] mx-auto px-4 mt-3 grid grid-cols-1 md:grid-cols-[1fr_296px] gap-3">

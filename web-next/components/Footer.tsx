@@ -35,7 +35,7 @@ export default function Footer() {
             </h3>
             <ul className="space-y-2 text-sm text-gray-500 dark:text-gray-400">
               <li><Link href="/library" className="hover:text-blue-600 transition-colors">我的书架</Link></li>
-              <li><Link href="/rank" className="hover:text-blue-600 transition-colors">排行榜</Link></li>
+              <li><Link href="/ranking" className="hover:text-blue-600 transition-colors">排行榜</Link></li>
               <li><Link href="/writer" className="hover:text-blue-600 transition-colors">作家专区</Link></li>
               <li><Link href="/sitemap.xml" className="hover:text-blue-600 transition-colors">站点地图</Link></li>
             </ul>

@@ -50,38 +50,51 @@ export default function QuestionPage({ params }: { params: { qid: string } }) {
     }
   ];
 
-  return (
-    <div className="min-h-screen bg-[#f6f6f6] pb-10">
-      
-      {/* 顶部导航 */}
-      <div className="bg-white sticky top-0 z-30 border-b border-gray-200 px-4 h-12 flex items-center justify-between shadow-sm">
-         <button onClick={() => router.back()} className="text-gray-500 font-bold text-sm">← 返回</button>
-         <span className="font-bold text-gray-900 truncate max-w-[200px]">{question.title}</span>
-         <MoreHorizontal className="w-5 h-5 text-gray-500" />
-      </div>
+return (
+  <div className="min-h-screen bg-[#f6f6f6] pb-10">
+    
+    {/* 顶部导航：背景通栏白，但内容限制在 1000px */}
+    <div className="bg-white sticky top-0 z-30 border-b border-gray-200 shadow-sm">
+       <div className="max-w-[1000px] mx-auto px-4 h-14 flex items-center justify-between">
+         <button onClick={() => router.back()} className="text-gray-500 font-bold text-sm hover:text-blue-600 transition-colors">
+            ← 返回
+         </button>
+         
+         {/* 标题截断优化 */}
+         <span className="font-bold text-gray-900 truncate max-w-[600px] text-center">
+             {question.title}
+         </span>
+         
+         <MoreHorizontal className="w-5 h-5 text-gray-500 cursor-pointer" />
+       </div>
+    </div>
 
-      {/* === 核心区域1：问题详情 (顶部) === */}
-      <div className="bg-white mb-3 p-5 shadow-sm">
+    {/* 主体内容：限制最大宽度 1000px 并居中 */}
+    <div className="max-w-[1000px] mx-auto mt-3 px-4">
+      
+      {/* === 核心区域1：问题详情 === */}
+      <div className="bg-white mb-3 p-6 rounded-sm shadow-sm">
+         {/* ... (这里的内容保持不变，因为外层已经限制了宽度) ... */}
          <div className="flex gap-2 mb-3">
             {question.tags.map(tag => (
-                <span key={tag} className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-xs">
+                <span key={tag} className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-medium">
                     {tag}
                 </span>
             ))}
          </div>
-         <h1 className="text-xl font-bold text-gray-900 mb-3 leading-snug">{question.title}</h1>
+         <h1 className="text-2xl font-bold text-gray-900 mb-4 leading-snug">{question.title}</h1>
          
-         {/* 问题描述，支持展开/收起 (这里简化为直接显示) */}
-         <p className="text-gray-600 text-sm leading-relaxed mb-4">
+         <p className="text-gray-800 text-[15px] leading-relaxed mb-6">
              {question.description}
          </p>
 
+         {/* ... 按钮组保持不变 ... */}
          <div className="flex items-center justify-between border-t border-gray-100 pt-4">
              <div className="flex gap-3">
-                 <button className="bg-blue-600 text-white px-6 py-2 rounded text-sm font-bold hover:bg-blue-700">
+                 <button className="bg-blue-600 text-white px-5 py-2 rounded-[4px] text-sm font-medium hover:bg-blue-700">
                     写回答
                  </button>
-                 <button className="bg-blue-50 text-blue-600 px-4 py-2 rounded text-sm font-bold flex items-center gap-1">
+                 <button className="bg-blue-50 text-blue-600 px-4 py-2 rounded-[4px] text-sm font-medium flex items-center gap-1 hover:bg-blue-100">
                     <Plus className="w-4 h-4" /> 关注问题
                  </button>
              </div>
@@ -91,47 +104,43 @@ export default function QuestionPage({ params }: { params: { qid: string } }) {
          </div>
       </div>
 
-      {/* === 核心区域2：回答列表 (列表流) === */}
-      <div className="flex justify-between px-4 pb-2 text-sm text-gray-500">
+      {/* === 核心区域2：回答列表 === */}
+      <div className="flex justify-between px-2 pb-2 text-sm text-gray-500">
           <span>{question.answerCount} 个回答</span>
-          <span className="flex items-center gap-1">默认排序 <ChevronDown className="w-3 h-3"/></span>
+          <span className="flex items-center gap-1 cursor-pointer">默认排序 <ChevronDown className="w-3 h-3"/></span>
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3">
           {answers.map(answer => (
-              // 点击整个卡片，跳转到具体的“回答详情页”
               <Link 
                 href={`/forum/${answer.id}?fromQuestion=${question.id}`} 
                 key={answer.id}
-                className="bg-white p-4 shadow-sm active:bg-gray-50 transition-colors block"
+                className="bg-white p-5 rounded-sm shadow-sm hover:shadow-md transition-shadow block"
               >
-                  {/* 作者栏 */}
+                  {/* ... 卡片内部代码保持不变 ... */}
                   <div className="flex items-center gap-2 mb-2">
                       <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
                           <User className="w-4 h-4 text-gray-400" />
                       </div>
                       <span className="text-sm font-bold text-gray-900">{answer.author}</span>
-                      {answer.bio && <span className="text-xs text-gray-400 truncate max-w-[150px]">{answer.bio}</span>}
+                      {answer.bio && <span className="text-xs text-gray-400 truncate max-w-[300px] border-l border-gray-300 pl-2 ml-1">{answer.bio}</span>}
                   </div>
 
-                  {/* 核心：内容预览 (被截断) */}
-                  {/* line-clamp-3 是 Tailwind 类，限制只显示3行，超出显示省略号 */}
                   <div className="text-[15px] text-gray-800 leading-relaxed line-clamp-3 mb-3">
                       {answer.preview}
                   </div>
                   
-                  {/* 底部数据栏 */}
                   <div className="flex items-center gap-4 text-gray-400 text-sm">
-                      <span className="text-blue-600 font-medium">{answer.voteCount} 赞同</span>
-                      <span className="flex items-center gap-1">
-                          <MessageCircle className="w-4 h-4" /> {answer.commentCount}
+                      <span className="text-blue-600 font-medium bg-blue-50 px-2 py-0.5 rounded text-xs">{answer.voteCount} 赞同</span>
+                      <span className="flex items-center gap-1 hover:text-gray-600 transition-colors">
+                          <MessageCircle className="w-4 h-4" /> {answer.commentCount} 条评论
                       </span>
-                      <span className="text-xs mt-0.5">2小时前</span>
                   </div>
               </Link>
           ))}
       </div>
       
     </div>
-  );
+  </div>
+);
 }
