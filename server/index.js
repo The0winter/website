@@ -71,10 +71,10 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // ================= 2. 限流配置 =================
 
+// ✅ 修复版：加上 .replace 去掉 IPv6 的杂质，防止报错
 const getClientIp = (req) => {
     const ip = req.headers['cf-connecting-ip'] || req.ip || '127.0.0.1';
-    // 强制转换为字符串，防止某些库对 IPv6 对象格式处理异常
-    return String(ip);
+    return String(ip).replace(/:\d+[^:]*$/, ''); 
 };
 
 const globalLimiter = rateLimit({
