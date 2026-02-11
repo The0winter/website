@@ -188,12 +188,15 @@ export default function ForumPage() {
                         <span className="text-xs text-gray-600">写文章</span>
                     </Link>
 
-                    <Link 
-                        href="/forum/create?type=article" 
-                        className="block w-full text-center mt-3 py-2 border border-blue-600 text-blue-600 text-sm rounded hover:bg-blue-50 transition-colors"
-                    >
-                        开始创作
-                    </Link> 
+                    </div>
+                <Link 
+                    href="/forum/create?type=article" 
+                    className="block w-full text-center mt-3 py-2 border border-blue-600 text-blue-600 text-sm rounded hover:bg-blue-50 transition-colors"
+                >
+                    开始创作
+                </Link>
+            </div>
+            
            {/* 热榜侧栏 (保留) */}
            <div className="bg-white rounded-sm shadow-sm p-4">
              <div className="flex justify-between items-center mb-3">
