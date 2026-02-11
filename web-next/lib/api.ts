@@ -376,14 +376,29 @@ export const forumApi = {
   },
 
   addReply: async (postId: string, data: { content: string }) => {
-    // 假设你的 axios 实例叫 api
-    // 注意：这里一定要用 POST 方法，且 URL 要跟后端匹配
-    const response = await axios.post(`/api/forum/posts/${postId}/replies`, data, {
-    headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}` // 别忘了带 Token
+    // 1. 尝试获取 token (如果你存的是其他名字，请修改这里)
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
+
+    // 2. 使用原生 fetch 发送请求
+    // 注意：如果是生产环境构建，这里的 URL 可能需要包含域名，
+    // 或者你的 Next.js 配置了 rewrites 代理
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'; 
+    
+    const response = await fetch(`${baseUrl}/api/forum/posts/${postId}/replies`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            // 如果有 token 就带上
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+        throw new Error('发布回答失败');
     }
-});
-    return response.data;
+
+    return response.json();
 },
 
   // 3. 发布帖子 (提问/文章)
