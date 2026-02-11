@@ -151,31 +151,49 @@ export default function ForumPage() {
                   </div>
                   <span className="text-xs text-blue-500 cursor-pointer">草稿箱 (0)</span>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                  <button className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group">
-                      <div className="bg-green-50 p-2 rounded-full group-hover:bg-green-100">
-                          <HelpCircle className="w-6 h-6 text-green-600" />
-                      </div>
-                      <span className="text-xs text-gray-600">提问</span>
-                  </button>
-                  <button className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group">
-                      <div className="bg-blue-50 p-2 rounded-full group-hover:bg-blue-100">
-                          <MessageSquare className="w-6 h-6 text-blue-500" />
-                      </div>
-                      <span className="text-xs text-gray-600">回答</span>
-                  </button>
-                  <button className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group">
-                      <div className="bg-orange-50 p-2 rounded-full group-hover:bg-orange-100">
-                          <PenSquare className="w-6 h-6 text-orange-500" />
-                      </div>
-                      <span className="text-xs text-gray-600">写文章</span>
-                  </button>
-              </div>
-              <button className="w-full mt-3 py-2 border border-blue-600 text-blue-600 text-sm rounded hover:bg-blue-50 transition-colors">
-                  开始创作
-              </button>
-           </div>
-           
+              {/* 🔥 修改点：grid-cols-3 内部的内容全部替换为 Link */}
+                <div className="grid grid-cols-3 gap-2">
+                    
+                    {/* 1. 提问 -> 跳到发布页 (默认 question) */}
+                    <Link 
+                    href="/forum/create?type=question" 
+                    className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group cursor-pointer"
+                    >
+                        <div className="bg-green-50 p-2 rounded-full group-hover:bg-green-100">
+                            <HelpCircle className="w-6 h-6 text-green-600" />
+                        </div>
+                        <span className="text-xs text-gray-600">提问</span>
+                    </Link>
+
+                    {/* 2. 回答 -> 跳到热榜 (去找问题回答) */}
+                    <Link 
+                    href="/forum?tab=hot" 
+                    onClick={() => setActiveTab('hot')} // 如果在当前页，顺便切换 state
+                    className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group cursor-pointer"
+                    >
+                        <div className="bg-blue-50 p-2 rounded-full group-hover:bg-blue-100">
+                            <MessageSquare className="w-6 h-6 text-blue-500" />
+                        </div>
+                        <span className="text-xs text-gray-600">回答</span>
+                    </Link>
+
+                    {/* 3. 写文章 -> 跳到发布页 (参数 article) */}
+                    <Link 
+                    href="/forum/create?type=article" 
+                    className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group cursor-pointer"
+                    >
+                        <div className="bg-orange-50 p-2 rounded-full group-hover:bg-orange-100">
+                            <PenSquare className="w-6 h-6 text-orange-500" />
+                        </div>
+                        <span className="text-xs text-gray-600">写文章</span>
+                    </Link>
+
+                    <Link 
+                        href="/forum/create?type=article" 
+                        className="block w-full text-center mt-3 py-2 border border-blue-600 text-blue-600 text-sm rounded hover:bg-blue-50 transition-colors"
+                    >
+                        开始创作
+                    </Link> 
            {/* 热榜侧栏 (保留) */}
            <div className="bg-white rounded-sm shadow-sm p-4">
              <div className="flex justify-between items-center mb-3">
