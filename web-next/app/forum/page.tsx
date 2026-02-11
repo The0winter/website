@@ -97,46 +97,51 @@ export default function ForumPage() {
         
         {/* === 左侧：内容流 === */}
         <div className="flex flex-col gap-2">
-          {MOCK_POSTS.map((post) => (
-            <Link 
-                href={`/forum/${post.id}`} 
-                key={post.id} 
-                className="block bg-white p-5 rounded-sm shadow-sm hover:shadow-md transition-shadow cursor-pointer mb-2"
-            >
-              {/* 标题 */}
-              <h2 className="text-[18px] font-bold text-gray-900 mb-2 hover:text-blue-600 leading-snug">
+        {MOCK_POSTS.map((post) => (
+        // 🔥 修改 1：这里原来是 <Link>，现在直接删掉，只留 div 作为容器
+        <div 
+            key={post.id} 
+            className="bg-white p-5 rounded-sm shadow-sm hover:shadow-md transition-shadow mb-2"
+        >
+            {/* 1. 标题 -> 链接到【问题页】 */}
+            <Link href={`/forum/question/${post.id}`}>
+            <h2 className="text-[18px] font-bold text-gray-900 mb-2 hover:text-blue-600 leading-snug cursor-pointer">
                 {post.title}
-              </h2>
-              
-              {/* 摘要 */}
-              <div className="text-[15px] text-gray-800 leading-relaxed mb-3 cursor-text">
-                {post.excerpt}
-                <span className="text-blue-500 hover:underline ml-1 text-sm cursor-pointer">阅读全文 <ChevronRight className="inline w-4 h-4" /></span>
-              </div>
-
-              {/* 底部操作栏 */}
-              <div className="flex items-center gap-4">
-                <button className="flex items-center gap-1 bg-blue-50 text-blue-600 px-3 py-1.5 rounded-[4px] text-sm font-medium hover:bg-blue-100 transition-colors">
-                  <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-b-[6px] border-b-blue-600 mb-0.5"></div>
-                  赞同 {post.votes > 1000 ? (post.votes/1000).toFixed(1) + '万' : post.votes}
-                </button>
-                
-                <button className="flex items-center gap-1.5 text-gray-500 hover:text-gray-600 text-sm font-medium">
-                  <MessageCircle className="w-5 h-5 text-gray-400" />
-                  {post.comments} 条评论
-                </button>
-                
-                <button className="flex items-center gap-1.5 text-gray-400 hover:text-gray-500 text-sm font-medium">
-                  <Share2 className="w-4 h-4" />
-                  分享
-                </button>
-
-                <button className="flex items-center gap-1.5 text-gray-400 hover:text-gray-500 text-sm font-medium ml-auto">
-                  <MoreHorizontal className="w-5 h-5" />
-                </button>
-              </div>
+            </h2>
             </Link>
-          ))}
+
+            {/* 2. 摘要/内容 -> 链接到【回答详情页】 */}
+            <Link href={`/forum/${post.id}`}>
+            <div className="text-[15px] text-gray-800 leading-relaxed mb-3 cursor-pointer hover:text-gray-600">
+                {post.excerpt}
+                <span className="text-blue-500 text-sm ml-1">阅读全文 &rarr;</span>
+            </div>
+            </Link>
+
+            {/* 底部操作栏 (保持不变) */}
+            <div className="flex items-center gap-4">
+            <button className="flex items-center gap-1 bg-blue-50 text-blue-600 px-3 py-1.5 rounded-[4px] text-sm font-medium hover:bg-blue-100 transition-colors">
+                <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-b-[6px] border-b-blue-600 mb-0.5"></div>
+                赞同 {post.votes > 1000 ? (post.votes/1000).toFixed(1) + '万' : post.votes}
+            </button>
+            
+            <button className="flex items-center gap-1.5 text-gray-500 hover:text-gray-600 text-sm font-medium">
+                <MessageCircle className="w-5 h-5 text-gray-400" />
+                {post.comments} 条评论
+            </button>
+            
+            <button className="flex items-center gap-1.5 text-gray-400 hover:text-gray-500 text-sm font-medium">
+                <Share2 className="w-4 h-4" />
+                分享
+            </button>
+
+            <button className="flex items-center gap-1.5 text-gray-400 hover:text-gray-500 text-sm font-medium ml-auto">
+                <MoreHorizontal className="w-5 h-5" />
+            </button>
+            </div>
+
+        </div> // 🔥 修改 2：这里原来是 </Link>，现在改成 </div> 来闭合最上面的 div
+        ))}
           
           {/* 加载更多 */}
           <div className="bg-white p-4 text-center text-gray-500 text-sm rounded-sm cursor-pointer hover:bg-gray-50">

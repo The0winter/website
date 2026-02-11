@@ -2,11 +2,15 @@
 
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { 
   MessageSquare, ThumbsUp, ThumbsDown, MessageCircle, Share2, 
   MoreHorizontal, Plus, Star, Flag, ChevronUp, ChevronDown 
 } from 'lucide-react';
+
+const searchParams = useSearchParams();
+const fromQuestionId = searchParams.get('fromQuestion'); // 获取参数
 
 export default function PostDetailPage() {
   const params = useParams();
@@ -75,6 +79,25 @@ export default function PostDetailPage() {
       {/* 2. 问题头部区域 (知乎风格：白色背景，包含标题、描述、操作栏) */}
       <div className="bg-white shadow-sm mb-3 border-b border-gray-200">
           <div className="max-w-[1000px] mx-auto px-4 py-6 flex gap-8">
+            <Link 
+           href={`/forum/question/1`} // 这里写死 ID 1 模拟，实际用 question.id
+           className="group block mb-4"
+        >
+            <div className="flex gap-2 mb-2">
+                {question.tags.map(tag => (
+                    <span key={tag} className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full text-xs">
+                        {tag}
+                    </span>
+                ))}
+                <span className="bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full text-xs group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                    查看全部 {question.commentCount} 个回答 &rarr;
+                </span>
+            </div>
+            
+            <h1 className="text-2xl font-bold text-gray-900 leading-snug group-hover:text-blue-600 transition-colors">
+                {question.title}
+            </h1>
+        </Link>
               <div className="flex-1">
                   {/* 标签 */}
                   <div className="flex gap-2 mb-3">
