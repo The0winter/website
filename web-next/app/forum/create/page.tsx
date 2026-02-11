@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, Suspense } from 'react'; // 1. 引入 Suspense
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, HelpCircle, PenTool, Loader2 } from 'lucide-react';
 import { forumApi } from '@/lib/api';
 
-export default function CreatePostPage() {
+// 2. 把原来的页面逻辑拆分成一个子组件：CreatePostContent
+function CreatePostContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   // 获取 URL 参数 ?type=article 还是 question
@@ -29,16 +30,16 @@ export default function CreatePostPage() {
       // 分割标签字符串，如 "社会学 经济" -> ["社会学", "经济"]
       const tagArray = tags.split(/[,，\s]+/).filter(Boolean);
 
-      // 🔥 调用后端接口
+      // 调用后端接口
       await forumApi.create({
         title,
-        content: content.replace(/\n/g, '<br/>'), // 简单把换行转为 HTML
+        content: content.replace(/\n/g, '<br/>'),
         type,
         tags: tagArray
       });
 
       alert('发布成功！');
-      router.push('/forum'); // 跳回论坛首页
+      router.push('/forum'); 
     } catch (error: any) {
       alert('发布失败: ' + error.message);
     } finally {
@@ -98,7 +99,7 @@ export default function CreatePostPage() {
            
            <hr className="border-gray-100" />
 
-           {/* 内容输入 (简单 Textarea，实际项目可用富文本编辑器) */}
+           {/* 内容输入 */}
            <textarea 
              className="w-full h-[400px] resize-none text-lg text-gray-700 placeholder-gray-300 border-none outline-none ring-0 p-0"
              placeholder={type === 'question' ? "详细描述你的问题背景、条件等..." : "开始你的创作..."}
@@ -122,5 +123,14 @@ export default function CreatePostPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// 3. 默认导出只负责用 Suspense 包裹上面的组件
+export default function CreatePostPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">加载编辑器...</div>}>
+      <CreatePostContent />
+    </Suspense>
   );
 }
