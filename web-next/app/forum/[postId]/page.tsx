@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { forumApi } from '@/lib/api';
 
-// 💀 1. 骨架屏组件
+// 💀 1. 骨架屏组件 (加载时显示)
 function PostSkeleton() {
   return (
     <div className="min-h-screen bg-[#f6f6f6]">
@@ -23,6 +23,7 @@ function PostSkeleton() {
               <div className="h-4 bg-gray-200 rounded w-full"></div>
               <div className="h-4 bg-gray-200 rounded w-full"></div>
               <div className="h-4 bg-gray-200 rounded w-full"></div>
+              <div className="h-4 bg-gray-200 rounded w-2/3"></div>
            </div>
         </div>
       </div>
@@ -40,68 +41,30 @@ function PostContent() {
   const rawId = params?.postId || params?.id;
   const postId = Array.isArray(rawId) ? rawId[0] : rawId;
   const fromQuestionId = searchParams.get('fromQuestion');
-    const [post, setPost] = useState<any>(null);
+
+  // 🔥 核心修改：使用 <any> 绕过 TypeScript 的严格检查
+  // 这样无论 post 里有什么字段 (likes, votes, created_at) 都不会报错
+  const [post, setPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
 
   // 加载数据
   useEffect(() => {
     if (!postId) return;
-
     const fetchData = async () => {
       try {
         setLoading(true);
-        setErrorMsg('');
-
-        // 🔥 核心修复逻辑：区分“回答”和“帖子”
-        if (fromQuestionId && fromQuestionId !== 'undefined') {
-            // === 情况 A: 这是一个回答 ===
-            // 逻辑：先获取父问题信息，再获取所有回答，从中找到当前这个
-            console.log("正在加载回答，所属问题ID:", fromQuestionId);
-            
-            const [parentQuestion, allReplies] = await Promise.all([
-                forumApi.getById(fromQuestionId),
-                forumApi.getReplies(fromQuestionId)
-            ]);
-
-            // 在回答列表里找到当前这个回答
-            const targetReply = allReplies.find((r: any) => r.id === postId);
-
-            if (targetReply) {
-                setPost({
-                    ...targetReply,
-                    // 借用父问题的标题，并在前面加上前缀
-                    title: `回复：${parentQuestion.title}`,
-                    type: 'answer',
-                    // 统一字段名，防止报错
-                    likes: targetReply.votes || targetReply.likes || 0,
-                    replyCount: targetReply.comments || 0,
-                    created_at: targetReply.time || targetReply.createdAt
-                });
-            } else {
-                throw new Error("未找到该回答");
-            }
-
-        } else {
-            // === 情况 B: 这是一个普通帖子/问题 ===
-            const data = await forumApi.getById(postId);
-            setPost(data);
-        }
-
+        const data = await forumApi.getById(postId);
+        setPost(data);
       } catch (error: any) {
         console.error('加载失败:', error);
-        // 如果是 404，提示更友好一点
-        if (error.message?.includes('404') || error.response?.status === 404) {
-            setErrorMsg('内容不存在或已被删除');
-        } else {
-            setErrorMsg('加载出错，请稍后重试');
-        }
+        setErrorMsg('内容加载失败，可能已被删除');
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [postId, fromQuestionId]);
+  }, [postId]);
 
   // 渲染判断
   if (loading) return <PostSkeleton />;
@@ -115,7 +78,7 @@ function PostContent() {
     );
   }
 
-  // 数据清洗：处理 author 
+  // 数据清洗：处理 author 可能是字符串或对象的情况
   const safeAuthor = typeof post.author === 'string' 
     ? { name: '匿名用户', avatar: null, id: '' } 
     : { 
@@ -124,7 +87,8 @@ function PostContent() {
         id: post.author?.id || ''
       };
 
-  const postTime = post.created_at || post.createdAt || post.time;
+  // 兼容时间字段 (后端可能是 createdAt 也可能是 created_at)
+  const postTime = post.created_at || post.createdAt;
   const displayTime = postTime ? new Date(postTime).toLocaleString() : '刚刚';
 
   // 兼容互动字段
@@ -143,8 +107,8 @@ function PostContent() {
               <ArrowLeft className="w-5 h-5" /> 
               {fromQuestionId ? '返回问题' : '返回'}
            </button>
-           <span className="font-bold text-gray-900 text-sm hidden md:block truncate max-w-[200px]">
-             {post.type === 'answer' ? '回答详情' : '问题详情'}
+           <span className="font-bold text-gray-900 text-sm hidden md:block">
+             {post.type === 'question' ? '问题详情' : '回答详情'}
            </span>
            <MoreHorizontal className="w-5 h-5 text-gray-400 cursor-pointer hover:text-gray-600" />
         </div>
@@ -173,17 +137,8 @@ function PostContent() {
                   </div>
               </div>
 
-              {/* 标题 (只有当它是帖子时才显示大标题，回答通常不需要) */}
-              {post.type !== 'answer' && post.title && (
-                  <h1 className="text-2xl font-bold text-gray-900 leading-snug mb-6">{post.title}</h1>
-              )}
-              
-              {/* 如果是回答，可以显示一个小提示是针对哪个问题的 */}
-              {post.type === 'answer' && (
-                  <div className="mb-4 text-sm text-gray-500 bg-gray-50 p-2 rounded">
-                      {post.title}
-                  </div>
-              )}
+              {/* 标题 */}
+              {post.title && <h1 className="text-2xl font-bold text-gray-900 leading-snug mb-6">{post.title}</h1>}
 
               {/* 正文内容 */}
               <div 
@@ -209,7 +164,7 @@ function PostContent() {
   );
 }
 
-// 🚀 3. 主页面入口
+// 🚀 3. 主页面入口 (导出)
 export default function PostDetailPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-[#f6f6f6]"></div>}>

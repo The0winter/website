@@ -69,7 +69,7 @@ export default function QuestionPage() {
 
     setIsSubmitting(true);
     try {
-      await forumApi.addReply(qid, { content: replyContent.replace(/\n/g, '<br/>') });
+      await forumApi.addReply(qid, { content: replyContent.replace(/\n/g, '<br/>' ) });
       
       setReplyContent('');
       setShowEditor(false);
@@ -209,7 +209,6 @@ export default function QuestionPage() {
                             <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
                             {answer.author?.avatar ? (
                                 <img src={answer.author.avatar} alt="avatar" className="w-full h-full object-cover"/>
-                                
                             ) : (
                                 <User className="w-4 h-4 text-gray-400" />
                             )}
