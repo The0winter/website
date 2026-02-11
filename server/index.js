@@ -74,7 +74,7 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // ================= 2. 限流配置 =================
 
 // ✅ 修复版：加上 .replace 去掉 IPv6 的杂质，防止报错
-const getClientIp = (req) => {
+const getClientIp = (req, res) => {
     const ip = req.headers['cf-connecting-ip'] || req.ip || '127.0.0.1';
     return String(ip).replace(/:\d+[^:]*$/, ''); 
 };
@@ -84,11 +84,11 @@ const globalLimiter = rateLimit({
   max: 500, 
   message: '请求过于频繁，请稍后再试',
   keyGenerator: getClientIp, 
-  validate: { 
-      ip: false, 
-      trustProxy: false,  // 🔥 新增：防止 IPv6 报错
-      xForwardedForHeader: false // 🔥 新增：防止误报
-  }
+  // validate: { 
+  //     ip: false, 
+  //     trustProxy: false,  // 🔥 新增：防止 IPv6 报错
+  //     xForwardedForHeader: false // 🔥 新增：防止误报
+  // }
 });
 app.use('/api/', globalLimiter);
 
@@ -97,11 +97,11 @@ const authLimiter = rateLimit({
   max: 20, 
   message: '操作太频繁',
   keyGenerator: getClientIp,
-  validate: { 
-      ip: false, 
-      trustProxy: false, 
-      xForwardedForHeader: false 
-  }
+  // validate: { 
+  //     ip: false, 
+  //     trustProxy: false, 
+  //     xForwardedForHeader: false 
+  // }
 });
 app.use('/api/auth/', authLimiter);
 
