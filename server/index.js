@@ -703,14 +703,15 @@ app.post('/api/upload/cover',
       }
 });
 
+
 // ================= 论坛 (Forum) API =================
 
-// 1. 发布帖子 (提问 / 写文章)
+// 1. 发布帖子 (修复：返回 id 字段)
 app.post('/api/forum/posts', authMiddleware, async (req, res) => {
   try {
     const { title, content, type, tags } = req.body;
     
-    // 生成摘要 (取前100个字，去掉HTML标签)
+    // 生成摘要
     const cleanText = content.replace(/<[^>]+>/g, ''); 
     const summary = cleanText.substring(0, 100) + (cleanText.length > 100 ? '...' : '');
 
@@ -718,18 +719,22 @@ app.post('/api/forum/posts', authMiddleware, async (req, res) => {
       title,
       content,
       summary,
-      type: type || 'question', // 'question' 或 'article'
+      type: type || 'question', 
       tags: tags || [],
       author: req.user.id
     });
 
-    res.status(201).json(newPost);
+    // 🔥 修复点：明确返回 id 字符串，防止前端拿到 undefined
+    res.status(201).json({
+        ...newPost.toObject(),
+        id: newPost._id.toString() 
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// 2. 获取帖子列表 (支持 推荐/热榜/最新)
+// 2. 获取帖子列表 (修复：确保 id 存在)
 app.get('/api/forum/posts', async (req, res) => {
   try {
     const { tab = 'recommend', page = 1 } = req.query;
@@ -740,35 +745,33 @@ app.get('/api/forum/posts', async (req, res) => {
     let filter = {};
 
     if (tab === 'hot') {
-      // 热榜：按浏览量倒序
       sort = { views: -1, replyCount: -1 }; 
     } else if (tab === 'follow') {
-      // 关注：暂时按最新时间 (以后可以加关注逻辑)
       sort = { createdAt: -1 };
     } else {
-      // 推荐 (默认)：综合排序 (这里简单按最后回复时间)
       sort = { lastReplyAt: -1, views: -1 };
     }
 
     const posts = await ForumPost.find(filter)
-      .populate('author', 'username email _id') // 关联作者信息
+      .populate('author', 'username email _id') 
       .sort(sort)
       .skip(skip)
       .limit(limit)
-      .lean(); // 转为普通 JSON 对象
+      .lean(); 
 
-    // 格式化数据，兼容前端
+    // 🔥 修复点：强制转换 _id 为 id
     const formattedPosts = posts.map(p => ({
-      id: p._id,
+      id: p._id.toString(), // 确保是字符串
       title: p.title,
       excerpt: p.summary,
       author: p.author?.username || '匿名',
-      authorId: p.author?._id,
-      votes: p.likes, // 暂时用 likes 代替 votes
+      authorId: p.author?._id?.toString(),
+      votes: p.likes, 
       comments: p.replyCount,
       tags: p.tags,
-      isHot: p.views > 1000, // 假定大于1000算热帖
-      type: p.type
+      isHot: p.views > 1000, 
+      type: p.type,
+      views: p.views
     }));
 
     res.json(formattedPosts);
