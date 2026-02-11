@@ -42,10 +42,10 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
           <Icon className={`w-5 h-5 ${rankColor}`} />
           <h3 className="font-extrabold text-gray-800 text-lg">{title}</h3>
         </div>
-        <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold bg-white px-1.5 py-0.5 rounded border border-gray-100">TOP 10</span>
+        <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold bg-white px-1.5 py-0.5 rounded border border-gray-100">TOP 5</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-[600px] scrollbar-thin scrollbar-thumb-gray-200">
+      <div className="flex-1 overflow-y-auto min-h-[450px] scrollbar-thin scrollbar-thumb-gray-200">
         
         {/* === 移动端视图 === */}
         <div className="md:hidden">
@@ -312,10 +312,10 @@ function HomeContent() {
         const scoreA = ((a.rating || 0) * 100 * 0.6) + ((a.weekly_views || 0) * 0.4);
         const scoreB = ((b.rating || 0) * 100 * 0.6) + ((b.weekly_views || 0) * 0.4);
         return scoreB - scoreA;
-    }).slice(0, 10);
+    }).slice(0, 5);
 
-    const week = [...allBooks].sort((a: any, b: any) => (b.weekly_views || 0) - (a.weekly_views || 0)).slice(0, 10);
-    const day = [...allBooks].sort((a: any, b: any) => (b.daily_views || 0) - (a.daily_views || 0)).slice(0, 10);
+    const week = [...allBooks].sort((a: any, b: any) => (b.weekly_views || 0) - (a.weekly_views || 0)).slice(0, 5);
+    const day = [...allBooks].sort((a: any, b: any) => (b.daily_views || 0) - (a.daily_views || 0)).slice(0, 5);
 
     return { recList: rec, weekList: week, dayList: day };
   }, [allBooks]);

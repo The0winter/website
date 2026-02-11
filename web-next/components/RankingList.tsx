@@ -45,10 +45,10 @@ const RankingList = ({
           <Icon className={`w-5 h-5 ${rankColor}`} />
           <h3 className="font-extrabold text-gray-800 text-lg">{title}</h3>
         </div>
-        <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold bg-white px-1.5 py-0.5 rounded border border-gray-100">TOP 10</span>
+        <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold bg-white px-1.5 py-0.5 rounded border border-gray-100">TOP 5</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-[600px] scrollbar-thin scrollbar-thumb-gray-200">
+      <div className="flex-1 overflow-y-auto min-h-[450px] scrollbar-thin scrollbar-thumb-gray-200">
         
         {/* === 移动端视图 (列表模式) === */}
         <div className="md:hidden">
