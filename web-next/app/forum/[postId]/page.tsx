@@ -4,90 +4,91 @@ import { Suspense, useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { 
-  MessageSquare, Share2, Star, Plus, ChevronDown, MessageCircle, 
-  ArrowLeft, MoreHorizontal, ThumbsUp, Heart 
+  ArrowLeft, MoreHorizontal, ThumbsUp, MessageCircle, Share2, ChevronDown 
 } from 'lucide-react';
 import { forumApi, ForumPost, ForumReply } from '@/lib/api';
 
-// === 子组件：内容展示 ===
 function PostContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const params = useParams(); // 获取路由参数对象
+  const params = useParams(); 
+  
+  // 🔍 核心修复 1: 兼容获取 ID (不管文件夹叫 [id] 还是 [postId])
+  // params 刚加载时可能是 null，所以要用 ?.
+  const rawId = params?.postId || params?.id;
+  const postId = Array.isArray(rawId) ? rawId[0] : rawId;
 
-  // 🔍 调试：看看 params 到底是个啥，打开浏览器控制台(F12)能看到
-  console.log('当前路由参数 params:', params); 
-
-  // 🛡️ 兼容性写法：不管文件夹叫 [id] 还是 [postId]，都能拿到 ID
-  // 解释：如果 params.postId 拿不到，就试着拿 params.id
-  const rawId = params?.postId || params?.id; 
-  const postId = Array.isArray(rawId) ? rawId[0] : rawId; // 防止它是数组
-
-  // const postId = params.postId as string; // ❌ 之前这行代码太脆弱了
-
-  const fromQuestionId = searchParams.get('fromQuestion'); 
+  const fromQuestionId = searchParams.get('fromQuestion');
 
   // 状态
   const [question, setQuestion] = useState<ForumPost | null>(null);
   const [answer, setAnswer] = useState<ForumReply | null>(null);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
+    // 🔍 核心修复 2: 调试日志 (按 F12 看控制台)
+    console.log('📌 页面参数检查:', { params, postId, fromQuestionId });
+
     const fetchData = async () => {
-      // 🛑 关键修复：如果 postId 是空的，直接不发请求，防止报错
-      if (!postId || postId === 'undefined') {
-          console.warn('❌ 无法获取 postId，跳过请求');
+      // 🛑 核心修复 3: 绝对拦截！如果没有 ID，或者 ID 是 "undefined" 字符串，直接不跑！
+      if (!postId || postId === 'undefined' || postId === 'null') {
+          console.warn('⏳ 等待有效 ID...');
           return;
       }
-      const validFromQuestionId = (fromQuestionId && fromQuestionId !== 'undefined') 
-                                  ? fromQuestionId 
-                                  : null;
 
       try {
         setLoading(true);
+        setErrorMsg('');
 
-        // 使用检查过的 validFromQuestionId
-        if (validFromQuestionId) {
-            // 场景 A: 有来源问题 ID
+        if (fromQuestionId && fromQuestionId !== 'undefined') {
+            // 模式 A: 从问题跳过来的回答
             const [qData, replies] = await Promise.all([
-                forumApi.getById(validFromQuestionId),
-                forumApi.getReplies(validFromQuestionId)
+                forumApi.getById(fromQuestionId),
+                forumApi.getReplies(fromQuestionId)
             ]);
             setQuestion(qData);
             const targetAnswer = replies.find(r => r.id === postId);
             setAnswer(targetAnswer || null);
         } else {
-            // 场景 B: 单帖模式 (或者 fromQuestionId 无效)
+            // 模式 B: 直接看帖子/文章
+            console.log('🚀 发起请求 getById:', postId);
             const postData = await forumApi.getById(postId);
             
-            // ... (下面构造 Answer 对象的代码保持不变)
+            // 构造显示数据
             setAnswer({
                 id: postData.id,
                 content: postData.content || '',
                 votes: postData.votes,
                 comments: postData.comments,
                 time: postData.created_at || '',
-                author: postData.author || { name: 'Unknown', id: '' }
+                author: typeof postData.author === 'string' ? { name: postData.author, id: '', bio: '', avatar: '' } : postData.author
             } as any);
             setQuestion(postData);
         }
 
-      } catch (error) {
-        console.error('加载详情失败:', error);
+      } catch (error: any) {
+        console.error('❌ 加载详情失败:', error);
+        setErrorMsg(error.message || '加载失败');
       } finally {
         setLoading(false);
       }
     };
-    
-    if (postId) fetchData();
+
+    // 只有当 postId 有值时，才执行
+    if (postId) {
+        fetchData();
+    }
   }, [postId, fromQuestionId]);
+
+  if (loading) return <div className="min-h-screen bg-[#f6f6f6] flex items-center justify-center text-gray-500">加载中... (ID: {postId})</div>;
   
-  if (loading) return <div className="min-h-screen bg-[#f6f6f6] flex items-center justify-center text-gray-500">加载中...</div>;
-  if (!answer || !question) return <div className="min-h-screen bg-[#f6f6f6] flex items-center justify-center text-gray-500">内容不存在</div>;
+  if (errorMsg) return <div className="min-h-screen bg-[#f6f6f6] flex items-center justify-center text-red-500">出错了: {errorMsg}</div>;
+
+  if (!answer || !question) return <div className="min-h-screen bg-[#f6f6f6] flex items-center justify-center text-gray-500">内容不存在 (ID: {postId})</div>;
 
   return (
     <div className="min-h-screen bg-[#f6f6f6] pb-20">
-      
       {/* 顶部导航 */}
       <div className="sticky top-0 z-30 bg-[#f6f6f6]">
         <div className="max-w-[1000px] mx-auto bg-white shadow-sm border-b border-x border-gray-200 px-4 h-14 flex items-center justify-between">
@@ -99,111 +100,37 @@ function PostContent() {
         </div>
       </div>
 
-      {/* 问题卡片 (简略版，点击跳回完整问题页) */}
+      {/* 内容卡片 */}
       <div className="max-w-[1000px] mx-auto mt-3">
           <div className="bg-white p-6 shadow-sm border border-gray-200 mb-3">
-              <div className="flex gap-2 mb-3">
-                  {question.tags?.map((tag: string) => (
-                      <span key={tag} className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-medium">
-                          {tag}
-                      </span>
-                  ))}
-              </div>
-
-              {/* 点击标题跳回问题页 */}
-              <Link 
-                 href={`/forum/question/${question.id}`} 
-                 className="block group"
-              >
-                  <h1 className="text-2xl font-bold text-gray-900 leading-snug group-hover:text-blue-600 transition-colors mb-4">
-                      {question.title}
-                  </h1>
-              </Link>
-              
-              <div className="flex items-center gap-4">
-                  <button className="bg-blue-600 text-white px-5 py-2 rounded-[4px] text-sm font-medium hover:bg-blue-700 transition-colors">
-                      写回答
-                  </button>
-                  <Link 
-                    href={`/forum/question/${question.id}`} 
-                    className="bg-white border border-gray-300 text-gray-600 px-4 py-2 rounded-[4px] text-sm font-medium hover:bg-gray-50 transition-colors"
-                  >
-                      查看全部 {question.comments} 个回答
-                  </Link>
-              </div>
+              <h1 className="text-2xl font-bold text-gray-900 leading-snug mb-4">
+                  {question.title}
+              </h1>
           </div>
 
-          {/* 双栏布局 */}
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_296px] gap-3">
+          <div className="bg-white p-6 shadow-sm border border-gray-200 min-h-[500px]">
+              <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center text-gray-500 font-bold">
+                      {answer.author.name?.[0]?.toUpperCase()}
+                  </div>
+                  <div>
+                      <div className="font-bold text-gray-900 text-[15px]">{answer.author.name}</div>
+                  </div>
+              </div>
+
+              {/* 内容 */}
+              <div className="rich-text-content text-gray-800 leading-7 space-y-4" dangerouslySetInnerHTML={{ __html: answer.content }}></div>
               
-              {/* 左侧：回答详情 */}
-              <div className="bg-white p-6 shadow-sm border border-gray-200 min-h-[500px]">
-                  {/* 作者信息栏 */}
-                  <div className="flex items-center gap-3 mb-6">
-                      <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center text-gray-500 font-bold">
-                          {answer.author.name?.[0]?.toUpperCase()}
-                      </div>
-                      <div>
-                          <div className="font-bold text-gray-900 text-[15px]">{answer.author.name}</div>
-                          <div className="text-xs text-gray-500">{answer.author.bio || '暂无介绍'}</div>
-                      </div>
-                  </div>
-
-                  {/* 核心文章内容 (HTML渲染) */}
-                  <div className="rich-text-content text-gray-800 leading-7 space-y-4" dangerouslySetInnerHTML={{ __html: answer.content }}></div>
-                  
-                  <div className="text-sm text-gray-400 mt-8 mb-6">发布于 {answer.time}</div>
-
-                  {/* 底部悬浮操作栏 */}
-                  <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm pt-4 pb-2 border-t border-gray-100 flex items-center gap-4 -mx-6 px-6">
-                      <button className="flex items-center gap-1 bg-blue-50 text-blue-600 px-4 py-2 rounded text-sm font-medium hover:bg-blue-100 transition-colors">
-                          <ThumbsUp className="w-4 h-4 fill-current" />
-                          赞同 {answer.votes}
-                      </button>
-                      <button className="flex items-center gap-1 bg-gray-50 text-gray-500 px-4 py-2 rounded text-sm font-medium hover:bg-gray-100 transition-colors">
-                          <ChevronDown className="w-4 h-4" />
-                      </button>
-                      
-                      <div className="flex items-center gap-6 ml-auto text-gray-500 text-sm font-medium">
-                           <button className="flex items-center gap-1.5 hover:text-gray-700">
-                              <MessageCircle className="w-5 h-5" /> 评论
-                           </button>
-                           <button className="flex items-center gap-1.5 hover:text-gray-700">
-                               <Share2 className="w-5 h-5" /> 分享
-                           </button>
-                      </div>
-                  </div>
-              </div>
-
-              {/* 右侧：侧边栏 (作者信息) */}
-              <div className="hidden md:flex flex-col gap-3">
-                  <div className="bg-white p-4 shadow-sm border border-gray-200">
-                      <h3 className="font-bold text-gray-800 text-sm mb-3">关于作者</h3>
-                      <div className="flex items-center gap-3 mb-3">
-                           <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                                {answer.author.name?.[0]}
-                           </div>
-                           <div>
-                               <div className="font-bold text-gray-900">{answer.author.name}</div>
-                           </div>
-                      </div>
-                      <div className="flex gap-2">
-                          <button className="flex-1 bg-blue-600 text-white text-sm py-1.5 rounded hover:bg-blue-700 transition-colors">
-                              + 关注
-                          </button>
-                      </div>
-                  </div>
-              </div>
+              <div className="text-sm text-gray-400 mt-8 mb-6">发布于 {new Date(answer.time).toLocaleString()}</div>
           </div>
       </div>
     </div>
   );
 }
 
-// 导出组件
 export default function PostDetailPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#f6f6f6]"></div>}>
+    <Suspense fallback={<div>Loading...</div>}>
        <PostContent />
     </Suspense>
   );
