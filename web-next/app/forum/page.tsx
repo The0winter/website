@@ -3,13 +3,12 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
-  MessageSquare, ThumbsUp, MessageCircle, Share2, 
-  MoreHorizontal, PenSquare, BookOpen, Flame, ChevronRight, HelpCircle
+  MessageSquare, MessageCircle, PenSquare, HelpCircle,
 } from 'lucide-react';
-// 🔥 1. 引入 API 和类型
+// 引入 API 和类型
 import { forumApi, ForumPost } from '@/lib/api';
 
-// 热门话题 (暂时保留静态，或者以后也可以做成 API)
+// 热门话题
 const HOT_TOPICS = [
   "官方通报南京博物院事件",
   "梦舟飞船又一次试验成功",
@@ -20,17 +19,16 @@ const HOT_TOPICS = [
 
 export default function ForumPage() {
   const [activeTab, setActiveTab] = useState<'recommend' | 'hot' | 'follow'>('recommend');
-  
-  // 🔥 2. 新增状态管理
   const [posts, setPosts] = useState<ForumPost[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 🔥 3. 获取数据
+  // 获取数据
   useEffect(() => {
     const fetchPosts = async () => {
       try {
         setLoading(true);
         const data = await forumApi.getPosts(activeTab);
+        console.log('📋 帖子列表数据:', data); // 调试：看看控制台打印的是 id 还是 _id
         setPosts(data);
       } catch (error) {
         console.error('获取帖子失败:', error);
@@ -85,21 +83,26 @@ export default function ForumPage() {
           )}
 
           {/* 真实数据列表 */}
-          {!loading && posts.map((post) => (
+          {!loading && posts.map((post: any) => {
+            // 🔥 核心修复：兼容 id 和 _id
+            // 如果 post.id 存在就用 id，否则用 _id
+            const realId = post.id || post._id;
+
+            return (
             <div 
-                key={post.id} 
+                key={realId} 
                 className="bg-white p-5 rounded-sm shadow-sm hover:shadow-md transition-shadow mb-2"
             >
                 {/* 1. 标题 -> 链接到【问题页】 */}
-                {/* 如果是问题，跳 question/[id]；如果是文章，跳 [id] (这里暂时统一跳 question 路由，或者你可以根据 post.type 判断) */}
-                <Link href={`/forum/question/${post.id}`}>
+                {/* 🛡️ 使用 realId 替换 post.id */}
+                <Link href={`/forum/question/${realId}`}>
                   <h2 className="text-[18px] font-bold text-gray-900 mb-2 hover:text-blue-600 leading-snug cursor-pointer">
                       {post.title}
                   </h2>
                 </Link>
 
-                {/* 2. 摘要 -> 链接到【问题页】(通常摘要也是为了吸引人点进去看全貌) */}
-                <Link href={`/forum/question/${post.id}`}>
+                {/* 2. 摘要 */}
+                <Link href={`/forum/question/${realId}`}>
                   <div className="text-[15px] text-gray-800 leading-relaxed mb-3 cursor-pointer hover:text-gray-600 line-clamp-3">
                       {post.excerpt || '暂无摘要...'}
                       <span className="text-blue-500 text-sm ml-1">阅读全文 &rarr;</span>
@@ -110,22 +113,24 @@ export default function ForumPage() {
                 <div className="flex items-center gap-4 text-sm">
                   <button className="flex items-center gap-1 bg-blue-50 text-blue-600 px-3 py-1.5 rounded-[4px] font-medium hover:bg-blue-100 transition-colors">
                       <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-b-[6px] border-b-blue-600 mb-0.5"></div>
-                      赞同 {post.votes > 1000 ? (post.votes/1000).toFixed(1) + '万' : post.votes}
+                      赞同 {post.votes > 1000 ? (post.votes/1000).toFixed(1) + '万' : post.votes || 0}
                   </button>
                   
                   <button className="flex items-center gap-1.5 text-gray-500 hover:text-gray-600 font-medium">
                       <MessageCircle className="w-5 h-5 text-gray-400" />
-                      {post.comments} 条评论
+                      {post.comments || 0} 条评论
                   </button>
                   
                   {/* 作者展示 */}
                   <span className="text-gray-400 flex items-center gap-1">
                       <PenSquare className="w-4 h-4" />
-                      {typeof post.author === 'string' ? post.author : post.author?.name || '匿名'}
+                      {/* 兼容作者可能是对象也可能是字符串的情况 */}
+                      {typeof post.author === 'string' ? post.author : (post.author?.username || post.author?.name || '匿名')}
                   </span>
                 </div>
             </div>
-          ))}
+            );
+          })}
 
           {!loading && posts.length === 0 && (
              <div className="bg-white p-10 text-center text-gray-400">暂无内容，快来发布第一个帖子吧！</div>
@@ -137,10 +142,8 @@ export default function ForumPage() {
           </div>
         </div>
 
-        {/* === 右侧：侧边栏 (保持不变) === */}
+        {/* === 右侧：侧边栏 === */}
         <div className="hidden md:flex flex-col gap-3">
-           {/* ... 这里的侧边栏代码和你原来的一样，不需要改动 ... */}
-           {/* (为了篇幅我折叠了这部分，直接保留你原来的代码即可) */}
            <div className="bg-white rounded-sm shadow-sm p-4">
               <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
@@ -151,53 +154,39 @@ export default function ForumPage() {
                   </div>
                   <span className="text-xs text-blue-500 cursor-pointer">草稿箱 (0)</span>
               </div>
-              {/* 🔥 修改点：grid-cols-3 内部的内容全部替换为 Link */}
-                <div className="grid grid-cols-3 gap-2">
-                    
-                    {/* 1. 提问 -> 跳到发布页 (默认 question) */}
-                    <Link 
-                    href="/forum/create?type=question" 
-                    className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group cursor-pointer"
-                    >
+              
+              <div className="grid grid-cols-3 gap-2">
+                    {/* 1. 提问 */}
+                    <Link href="/forum/create?type=question" className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group cursor-pointer">
                         <div className="bg-green-50 p-2 rounded-full group-hover:bg-green-100">
                             <HelpCircle className="w-6 h-6 text-green-600" />
                         </div>
                         <span className="text-xs text-gray-600">提问</span>
                     </Link>
 
-                    {/* 2. 回答 -> 跳到热榜 (去找问题回答) */}
-                    <Link 
-                    href="/forum?tab=hot" 
-                    onClick={() => setActiveTab('hot')} // 如果在当前页，顺便切换 state
-                    className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group cursor-pointer"
-                    >
+                    {/* 2. 回答 */}
+                    <Link href="/forum?tab=hot" onClick={() => setActiveTab('hot')} className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group cursor-pointer">
                         <div className="bg-blue-50 p-2 rounded-full group-hover:bg-blue-100">
                             <MessageSquare className="w-6 h-6 text-blue-500" />
                         </div>
                         <span className="text-xs text-gray-600">回答</span>
                     </Link>
 
-                    {/* 3. 写文章 -> 跳到发布页 (参数 article) */}
-                    <Link 
-                    href="/forum/create?type=article" 
-                    className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group cursor-pointer"
-                    >
+                    {/* 3. 写文章 */}
+                    <Link href="/forum/create?type=article" className="flex flex-col items-center justify-center gap-2 py-4 hover:bg-gray-50 rounded transition-colors group cursor-pointer">
                         <div className="bg-orange-50 p-2 rounded-full group-hover:bg-orange-100">
                             <PenSquare className="w-6 h-6 text-orange-500" />
                         </div>
                         <span className="text-xs text-gray-600">写文章</span>
                     </Link>
+                </div>
 
-                    </div>
-                <Link 
-                    href="/forum/create?type=article" 
-                    className="block w-full text-center mt-3 py-2 border border-blue-600 text-blue-600 text-sm rounded hover:bg-blue-50 transition-colors"
-                >
+                <Link href="/forum/create?type=article" className="block w-full text-center mt-3 py-2 border border-blue-600 text-blue-600 text-sm rounded hover:bg-blue-50 transition-colors">
                     开始创作
                 </Link>
             </div>
             
-           {/* 热榜侧栏 (保留) */}
+           {/* 热榜侧栏 */}
            <div className="bg-white rounded-sm shadow-sm p-4">
              <div className="flex justify-between items-center mb-3">
                  <h3 className="font-semibold text-gray-700 text-sm">全站热榜</h3>
@@ -214,7 +203,7 @@ export default function ForumPage() {
                      </li>
                  ))}
              </ul>
-          </div>
+           </div>
         </div>
       </div>
     </div>

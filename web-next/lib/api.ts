@@ -365,6 +365,11 @@ export const forumApi = {
 
   // 2. 获取单个帖子详情
   getById: async (id: string): Promise<ForumPost> => {
+    // 🛑 核心修复：如果是 undefined 字符串，直接报错或返回空，不发请求！
+    if (!id || id === 'undefined' || id === 'null') {
+        console.warn('🛑 拦截到无效 ID，阻止请求');
+        return Promise.reject(new Error('无效的帖子ID'));
+    }
     return apiCall<ForumPost>(`/forum/posts/${id}`);
   },
 
@@ -378,6 +383,10 @@ export const forumApi = {
 
   // 4. 获取某个帖子的回复列表
   getReplies: async (postId: string): Promise<ForumReply[]> => {
+    // 🛑 核心修复：同样拦截回复列表
+    if (!postId || postId === 'undefined' || postId === 'null') {
+        return []; // ID 不对直接返回空数组，页面就不会报错了
+    }
     return apiCall<ForumReply[]>(`/forum/posts/${postId}/replies`);
   },
 
