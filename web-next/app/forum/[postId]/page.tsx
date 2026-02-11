@@ -45,9 +45,10 @@ export default function PostDetailPage() {
     return (
     <div className="min-h-screen bg-[#f6f6f6] pb-20">
         
-        {/* 顶部导航：内容限制宽度 1000px */}
-        <div className="bg-white shadow-sm sticky top-0 z-30 border-b border-gray-200">
-        <div className="max-w-[1000px] mx-auto px-4 h-14 flex items-center justify-between">
+{/* 🔥 修改 1: 外层透明 */}
+    <div className="sticky top-0 z-30">
+      {/* 🔥 修改 2: 内层白色、阴影、圆角 */}
+      <div className="max-w-[1000px] mx-auto bg-white shadow-sm border-b border-x border-gray-200 px-4 h-14 flex items-center justify-between rounded-b-lg">
             <button onClick={() => router.back()} className="text-gray-500 hover:text-blue-600 flex items-center gap-1 text-sm font-bold">
                 ← 返回列表
             </button>

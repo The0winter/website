@@ -53,9 +53,10 @@ export default function QuestionPage({ params }: { params: { qid: string } }) {
 return (
   <div className="min-h-screen bg-[#f6f6f6] pb-10">
     
-    {/* 顶部导航：背景通栏白，但内容限制在 1000px */}
-    <div className="bg-white sticky top-0 z-30 border-b border-gray-200 shadow-sm">
-       <div className="max-w-[1000px] mx-auto px-4 h-14 flex items-center justify-between">
+{/* 🔥 修改 1: 外层透明 */}
+    <div className="sticky top-0 z-30">
+       {/* 🔥 修改 2: 内层白色、阴影、圆角 */}
+       <div className="max-w-[1000px] mx-auto bg-white shadow-sm border-b border-x border-gray-200 px-4 h-14 flex items-center justify-between rounded-b-lg">
          <button onClick={() => router.back()} className="text-gray-500 font-bold text-sm hover:text-blue-600 transition-colors">
             ← 返回
          </button>

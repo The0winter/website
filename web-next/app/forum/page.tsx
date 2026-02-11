@@ -64,10 +64,15 @@ export default function ForumPage() {
 
   return (
     <div className="min-h-screen bg-[#f6f6f6] pb-10">
-        <div className="bg-white shadow-sm sticky top-0 z-30 border-b border-gray-200">
-        {/* 修改点：h-14 改为 h-16 让高度舒服一点，max-w-[1000px] 保证内容不跑偏 */}
-        <div className="max-w-[1000px] mx-auto px-4 flex items-center h-16"> 
-            <nav className="flex gap-10 h-full"> {/* 修改点：gap-6 改为 gap-10，间距拉大 */}
+
+{/* 🔥 修改 1: 外层只留 sticky，去掉了 bg-white 和 shadow */}
+    <div className="sticky top-0 z-30">
+      
+      {/* 🔥 修改 2: 把白色背景、阴影、圆角加在这里，并限制宽度 max-w-[1000px] */}
+      <div className="max-w-[1000px] mx-auto bg-white shadow-sm border-b border-x border-gray-200 px-4 h-16 flex items-center rounded-b-lg">
+        
+        {/* 🔥 修改 3: nav 加上 w-full 和 justify-center，让选项卡居中分布 */}
+        <nav className="flex items-center justify-center gap-20 w-full h-full">
             {[
                 { id: 'follow', label: '关注' },
                 { id: 'recommend', label: '推荐' },
