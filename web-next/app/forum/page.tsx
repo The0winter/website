@@ -98,7 +98,11 @@ export default function ForumPage() {
         {/* === 左侧：内容流 === */}
         <div className="flex flex-col gap-2">
           {MOCK_POSTS.map((post) => (
-            <div key={post.id} className="bg-white p-5 rounded-sm shadow-sm hover:shadow-md transition-shadow cursor-pointer">
+            <Link 
+                href={`/forum/${post.id}`} 
+                key={post.id} 
+                className="block bg-white p-5 rounded-sm shadow-sm hover:shadow-md transition-shadow cursor-pointer mb-2"
+            >
               {/* 标题 */}
               <h2 className="text-[18px] font-bold text-gray-900 mb-2 hover:text-blue-600 leading-snug">
                 {post.title}
@@ -131,7 +135,7 @@ export default function ForumPage() {
                   <MoreHorizontal className="w-5 h-5" />
                 </button>
               </div>
-            </div>
+            </Link>
           ))}
           
           {/* 加载更多 */}
