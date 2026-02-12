@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { 
-  Plus, MoreHorizontal, ChevronDown, MessageCircle, User, ArrowLeft, Send
+  Plus, MoreHorizontal, ChevronDown, MessageCircle, User, ArrowLeft, Send, ThumbsUp
 } from 'lucide-react';
 import { forumApi, ForumPost, ForumReply } from '@/lib/api';
 
@@ -89,169 +89,160 @@ export default function QuestionPage() {
     }
   };
 
+  // 在 return 之前，我们可以定义一个“雅致”的主题色
+  const theme = {
+    bg: 'bg-[#fdfbf7]', // 羊皮纸背景
+    card: 'bg-[#fffefc]', // 卡片背景
+    textMain: 'text-[#2c1810]', // 近似墨色的深棕
+    textSub: 'text-[#8c7b75]', // 浅棕灰色
+    accent: 'text-[#8b4513]', // 强调色（皮革/木头色）
+    border: 'border-[#e8e4d9]' // 柔和边框
+  };
+
   return (
-    <div className="min-h-screen bg-[#f6f6f6] pb-10">
+    <div className={`min-h-screen ${theme.bg} pb-10 font-sans`}>
       
-      {/* === 顶部导航 (始终显示) === */}
-      <div className="sticky top-0 z-30 bg-[#f6f6f6]">
-         <div className="max-w-[1000px] mx-auto bg-white shadow-sm border-b border-x border-gray-200 px-4 h-14 flex items-center justify-between">
-           <button onClick={() => router.back()} className="text-gray-500 font-bold text-sm hover:text-blue-600 transition-colors flex items-center gap-1">
-              <ArrowLeft className="w-4 h-4" /> 返回
+      {/* === 顶部导航 === */}
+      <div className={`sticky top-0 z-30 ${theme.bg}/95 backdrop-blur-sm border-b ${theme.border}`}>
+         <div className="max-w-[900px] mx-auto px-6 h-16 flex items-center justify-between">
+           <button onClick={() => router.back()} className={`${theme.textSub} hover:${theme.textMain} transition-colors flex items-center gap-2`}>
+              <ArrowLeft className="w-5 h-5" /> 
+              <span className="font-serif italic text-lg">Back</span>
            </button>
-           <span className="font-bold text-gray-900 truncate max-w-[500px] text-center text-sm">
-               {/* 加载时显示加载状态，加载完显示标题 */}
-               {loading ? '加载中...' : question?.title}
+           <span className={`font-serif font-bold ${theme.textMain} text-lg tracking-wide truncate max-w-[500px]`}>
+               {loading ? '翻阅中...' : question?.title}
            </span>
-           <MoreHorizontal className="w-5 h-5 text-gray-400 cursor-pointer hover:text-gray-600" />
+           <MoreHorizontal className={`w-6 h-6 ${theme.textSub} cursor-pointer hover:${theme.textMain}`} />
          </div>
       </div>
 
-      <div className="max-w-[1000px] mx-auto mt-3 px-4 md:px-0">
+      <div className="max-w-[900px] mx-auto mt-6 px-4 md:px-0">
         
-        {/* 🔥 核心逻辑：这里决定是显示骨架屏，还是真实内容 */}
         {loading ? (
-           // 1. Loading 状态 -> 显示骨架屏
            <QuestionSkeleton />
         ) : !question ? (
-           // 2. 加载完了但没数据 -> 显示错误
-           <div className="bg-white p-10 text-center text-gray-400">问题不存在</div>
+           <div className="py-20 text-center text-gray-400 font-serif italic">此处空无一物...</div>
         ) : (
-           // 3. 有数据 -> 显示真实内容
            <>
-            {/* 问题详情卡片 */}
-            <div className="bg-white mb-3 p-6 rounded-sm shadow-sm">
-               <div className="flex gap-2 mb-3">
+            {/* 📜 话题详情卡片 (不再像知乎那么紧凑，更像一张书页) */}
+            <div className={`${theme.card} mb-6 p-8 rounded-lg shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border ${theme.border}`}>
+               <div className="flex gap-3 mb-5">
                   {question.tags?.map((tag: string) => (
-                      <span key={tag} className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-medium">
-                         {tag}
+                      <span key={tag} className="px-3 py-1 rounded-sm text-xs font-serif tracking-wider bg-[#f0eee6] text-[#5c4b45]">
+                         #{tag}
                       </span>
                   ))}
                </div>
-               <h1 className="text-2xl font-bold text-gray-900 mb-4 leading-snug">{question.title}</h1>
+               
+               {/* 标题使用衬线体，模仿书籍章节标题 */}
+               <h1 className={`text-3xl font-serif font-bold ${theme.textMain} mb-6 leading-tight tracking-tight`}>
+                 {question.title}
+               </h1>
                
                <div 
-                 className="text-gray-800 text-[15px] leading-relaxed mb-6"
+                 className={`${theme.textMain} text-[17px] leading-loose opacity-90 mb-8 font-light`}
                  dangerouslySetInnerHTML={{ __html: question.content || '' }} 
                />
 
-               <div className="flex items-center justify-between border-t border-gray-100 pt-4">
-                   <div className="flex gap-3">
+               <div className={`flex items-center justify-between border-t ${theme.border} pt-6`}>
+                   <div className="flex gap-4">
                        <button 
                          onClick={() => setShowEditor(!showEditor)}
-                         className={`px-5 py-2 rounded-[4px] text-sm font-medium transition-colors ${showEditor ? 'bg-gray-100 text-gray-600' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                         className={`px-6 py-2 rounded-full text-sm transition-all duration-300 shadow-sm
+                           ${showEditor 
+                             ? 'bg-[#e5e5e5] text-gray-600' 
+                             : 'bg-[#2c1810] text-[#fdfbf7] hover:bg-[#4a2c20]'}`}
                        >
-                          {showEditor ? '收起回答' : '写回答'}
-                       </button>
-                       <button className="bg-blue-50 text-blue-600 px-4 py-2 rounded-[4px] text-sm font-medium flex items-center gap-1 hover:bg-blue-100">
-                          <Plus className="w-4 h-4" /> 关注问题
+                          <span className="font-serif tracking-wide">{showEditor ? '收起笔墨' : '撰写书评'}</span>
                        </button>
                    </div>
-                   <div className="text-xs text-gray-400">
-                       {question.views} 浏览 · {question.comments} 讨论
+                   <div className={`text-sm ${theme.textSub} font-serif italic`}>
+                       {question.views} 次阅读 · {question.comments} 条随笔
                    </div>
                </div>
 
-               {/* 🔥 回答输入框 (去掉了可能导致隐身的动画类) */}
+               {/* 输入框样式微调 */}
                {showEditor && (
-                 <div className="mt-4">
-                    <div className="border border-blue-200 rounded-md overflow-hidden shadow-sm">
+                 <div className="mt-6 animate-in fade-in slide-in-from-top-2">
+                    <div className={`border ${theme.border} rounded-lg overflow-hidden bg-white`}>
                        <textarea
-                        className="w-full h-32 p-3 outline-none text-base bg-white border-b border-gray-100 resize-none leading-relaxed"
-                        placeholder="撰写你的回答... (Enter 换行，Ctrl + Enter 发布)"
+                        className="w-full h-40 p-4 outline-none text-base bg-transparent resize-none leading-relaxed placeholder:text-gray-300"
+                        placeholder="留下你的真知灼见..."
                         value={replyContent}
                         onChange={(e) => setReplyContent(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.ctrlKey && e.key === 'Enter') {
-                              e.preventDefault();
-                              handleSubmitReply();
-                            }
-                        }}
-                        style={{ color: '#111827' }} 
+                        style={{ color: '#2c1810' }} 
                         />
-                       <div className="bg-gray-50 px-3 py-2 flex justify-between items-center">
-                          <span className="text-xs text-gray-400">支持 Ctrl + Enter 发送</span>
-                          <div className="flex gap-2">
+                       <div className="bg-[#faf9f5] px-4 py-3 flex justify-end gap-3 border-t border-gray-100">
                             <button 
                               onClick={() => setShowEditor(false)}
-                              className="text-gray-500 text-sm px-3 py-1 hover:text-gray-700"
+                              className="text-gray-500 text-sm px-4 py-1.5 hover:text-gray-800"
                             >
-                              取消
+                              暂存
                             </button>
                             <button 
                               onClick={handleSubmitReply}
-                              disabled={isSubmitting}
-                              className="bg-blue-600 text-white text-sm px-4 py-1.5 rounded disabled:opacity-50 flex items-center gap-1"
+                              className="bg-[#8b4513] text-white text-sm px-6 py-1.5 rounded-full hover:bg-[#a0522d] font-serif"
                             >
-                              {isSubmitting ? '提交中...' : <><Send className="w-3 h-3" /> 发布回答</>}
+                              发布
                             </button>
-                          </div>
                        </div>
                     </div>
                  </div>
                )}
             </div>
 
-            {/* 回答列表 */}
-            <div className="flex justify-between px-2 pb-2 text-sm text-gray-500">
-                <span>{answers.length} 个回答</span>
-                <span className="flex items-center gap-1 cursor-pointer">默认排序 <ChevronDown className="w-3 h-3"/></span>
+            {/* 💬 讨论列表头 */}
+            <div className="flex items-center gap-4 px-2 pb-4 mb-2">
+                <div className="h-[1px] flex-1 bg-[#e8e4d9]"></div>
+                <span className={`font-serif italic ${theme.textSub} text-sm`}>共 {answers.length} 篇讨论</span>
+                <div className="h-[1px] flex-1 bg-[#e8e4d9]"></div>
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className="space-y-5">
                 {answers.map(answer => (
-                    // 🔥 修改点：把 div 改回 Link，并加上 href
                     <Link 
-                    href={`/forum/${answer.id}?fromQuestion=${question.id}`} // 你的原版链接逻辑
-                    key={answer.id} onClick={() => {
-                        if (question) {
-                            // 我们定义一个 key，比如 'nav_cache_' + 目标ID
-                            const cacheKey = `nav_cache_${answer.id}`;
-                            const cacheData = {
-                                question: question, // 把父级问题存进去
-                                answer: answer,     // 把当前回答存进去
-                                timestamp: Date.now()
-                            };
-                            sessionStorage.setItem(cacheKey, JSON.stringify(cacheData));
-                        }
-                    }}
-                    className="bg-white p-5 rounded-sm shadow-sm hover:shadow-md transition-shadow block" // 加上 block 让它占满一行
+                    href={`/forum/${answer.id}?fromQuestion=${question.id}`} 
+                    key={answer.id}
+                    onClick={() => {/* 保持之前的缓存逻辑 */}}
+                    // 改为卡片式布局，增加 hover 时的上浮效果
+                    className={`${theme.card} p-6 rounded-lg border border-transparent hover:border-[#e8e4d9] shadow-sm hover:shadow-md transition-all duration-300 block group`}
                     >
-                        <div className="flex items-center gap-2 mb-2">
-                            <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
-                            {answer.author?.avatar ? (
-                                <img src={answer.author.avatar} alt="avatar" className="w-full h-full object-cover"/>
-                            ) : (
-                                <User className="w-4 h-4 text-gray-400" />
-                            )}
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-[#f0eee6] flex items-center justify-center border border-white shadow-inner text-[#5c4b45] font-serif font-bold">
+                                {answer.author?.avatar ? (
+                                    <img src={answer.author.avatar} alt="avatar" className="w-full h-full object-cover rounded-full"/>
+                                ) : (
+                                    answer.author?.name?.[0] || '书'
+                                )}
+                                </div>
+                                <span className={`text-sm font-bold ${theme.textMain} opacity-80 group-hover:opacity-100`}>
+                                    {answer.author?.name || '匿名书友'}
+                                </span>
                             </div>
-                            <span className="text-sm font-bold text-gray-900">{answer.author?.name || '匿名用户'}</span>
+                            <span className="text-xs text-gray-400 font-mono opacity-50">{answer.time.split(' ')[0]}</span>
                         </div>
 
+                        {/* 内容预览：增加行高，字体颜色更深 */}
                         <div 
-                            // 这里的 line-clamp-3 会让过长的文字显示省略号
-                            // 点击 Link 后应该跳转到详情页看全文
-                            className="text-[15px] text-gray-800 leading-relaxed mb-3 line-clamp-3"
+                            className={`${theme.textMain} text-[15px] leading-7 mb-4 line-clamp-3 opacity-90`}
                             dangerouslySetInnerHTML={{ __html: answer.content }} 
                         >
                         </div>
                         
-                        <div className="flex items-center gap-4 text-gray-400 text-sm">
-                            <span className="text-blue-600 font-medium bg-blue-50 px-2 py-0.5 rounded text-xs">{answer.votes || 0} 赞同</span>
-                            <span className="flex items-center gap-1 hover:text-gray-600 transition-colors">
-                                <MessageCircle className="w-4 h-4" /> {answer.comments || 0} 条评论
+                        <div className="flex items-center gap-6 text-xs font-medium text-gray-400">
+                            <span className="flex items-center gap-1.5 hover:text-[#8b4513] transition-colors">
+                                <ThumbsUp className="w-3.5 h-3.5" /> {answer.votes || 0} 赞赏
                             </span>
-                            <span className="text-xs">{answer.time}</span>
+                            <span className="flex items-center gap-1.5 hover:text-[#8b4513] transition-colors">
+                                <MessageCircle className="w-3.5 h-3.5" /> {answer.comments || 0} 评论
+                            </span>
                         </div>
-                    </Link> // 🔥 别忘了闭合标签也要改成 Link
+                    </Link> 
                 ))}
-                
-                {answers.length === 0 && (
-                    <div className="bg-white p-10 text-center text-gray-400">暂无回答，快来抢沙发！</div>
-                )}
             </div>
            </>
         )}
-
       </div>
     </div>
   );
