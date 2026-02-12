@@ -20,6 +20,10 @@ const forumPostSchema = new mongoose.Schema({
   // 数据统计
   views: { type: Number, default: 0 },
   likes: { type: Number, default: 0 },
+  likedBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
   replyCount: { type: Number, default: 0 }, // 回答/评论数量
 
   isHot: { type: Boolean, default: false }, // 是否热榜

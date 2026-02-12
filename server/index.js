@@ -211,6 +211,19 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
+const getOptionalUserId = (req) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return null;
+
+  try {
+    const verified = jwt.verify(token, JWT_SECRET);
+    return verified?.id ? String(verified.id) : null;
+  } catch {
+    return null;
+  }
+};
+
 const adminMiddleware = async (req, res, next) => {
     try {
         const user = await User.findById(req.user.id);
@@ -746,6 +759,7 @@ app.post('/api/forum/posts', authMiddleware, async (req, res) => {
 app.get('/api/forum/posts', async (req, res) => {
   try {
     const { tab = 'recommend', page = 1 } = req.query;
+    const currentUserId = getOptionalUserId(req);
     const limit = 20;
     const skip = (page - 1) * limit;
 
@@ -776,6 +790,9 @@ app.get('/api/forum/posts', async (req, res) => {
       authorId: p.author?._id?.toString(),
       votes: p.likes, 
       comments: p.replyCount,
+      hasLiked: currentUserId
+        ? (p.likedBy || []).some(uid => String(uid) === currentUserId)
+        : false,
       tags: p.tags,
       isHot: p.views > 1000, 
       type: p.type,
@@ -791,6 +808,7 @@ app.get('/api/forum/posts', async (req, res) => {
 // 3. 获取单个帖子详情 (问题页)
 app.get('/api/forum/posts/:id', async (req, res) => {
   try {
+    const currentUserId = getOptionalUserId(req);
     // 浏览量 +1
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
         return res.status(400).json({ error: '无效的帖子ID' });
@@ -806,6 +824,9 @@ app.get('/api/forum/posts/:id', async (req, res) => {
     res.json({
       ...post,
       id: post._id,
+      hasLiked: currentUserId
+        ? (post.likedBy || []).some(uid => String(uid) === currentUserId)
+        : false,
       author: {
         name: post.author?.username,
         id: post.author?._id
@@ -819,6 +840,7 @@ app.get('/api/forum/posts/:id', async (req, res) => {
 // 4. 获取某个帖子的所有回答/评论
 app.get('/api/forum/posts/:id/replies', async (req, res) => {
   try {
+    const currentUserId = getOptionalUserId(req);
 
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
         // ID 都不合法，肯定没有回复，直接回空数组
@@ -833,6 +855,9 @@ app.get('/api/forum/posts/:id/replies', async (req, res) => {
       id: r._id,
       content: r.content,
       votes: r.likes,
+      hasLiked: currentUserId
+        ? (r.likedBy || []).some(uid => String(uid) === currentUserId)
+        : false,
       comments: r.comments,
       time: new Date(r.createdAt).toLocaleString(),
       author: {
@@ -868,6 +893,82 @@ app.post('/api/forum/posts/:id/replies', authMiddleware, async (req, res) => {
     });
 
     res.status(201).json(newReply);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 6. 点赞/取消点赞帖子（toggle）
+app.post('/api/forum/posts/:id/like', authMiddleware, async (req, res) => {
+  try {
+    const postId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(postId)) {
+      return res.status(400).json({ error: '无效的帖子ID' });
+    }
+
+    const userObjectId = new mongoose.Types.ObjectId(req.user.id);
+
+    const likedPost = await ForumPost.findOneAndUpdate(
+      { _id: postId, likedBy: { $ne: userObjectId } },
+      { $addToSet: { likedBy: userObjectId }, $inc: { likes: 1 } },
+      { new: true, select: 'likes' }
+    );
+
+    if (likedPost) {
+      return res.json({ liked: true, votes: likedPost.likes });
+    }
+
+    const unlikedPost = await ForumPost.findOneAndUpdate(
+      { _id: postId, likedBy: userObjectId },
+      { $pull: { likedBy: userObjectId }, $inc: { likes: -1 } },
+      { new: true, select: 'likes' }
+    );
+
+    if (unlikedPost) {
+      return res.json({ liked: false, votes: Math.max(0, unlikedPost.likes || 0) });
+    }
+
+    return res.status(404).json({ error: '帖子不存在' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 7. 点赞/取消点赞回答（toggle）
+app.post('/api/forum/replies/:id/like', authMiddleware, async (req, res) => {
+  try {
+    const replyId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(replyId)) {
+      return res.status(400).json({ error: '无效的回答ID' });
+    }
+
+    const userObjectId = new mongoose.Types.ObjectId(req.user.id);
+
+    const likedReply = await ForumReply.findOneAndUpdate(
+      { _id: replyId, likedBy: { $ne: userObjectId } },
+      { $addToSet: { likedBy: userObjectId }, $inc: { likes: 1 } },
+      { new: true, select: 'likes postId' }
+    );
+
+    if (likedReply) {
+      return res.json({ liked: true, votes: likedReply.likes, postId: likedReply.postId });
+    }
+
+    const unlikedReply = await ForumReply.findOneAndUpdate(
+      { _id: replyId, likedBy: userObjectId },
+      { $pull: { likedBy: userObjectId }, $inc: { likes: -1 } },
+      { new: true, select: 'likes postId' }
+    );
+
+    if (unlikedReply) {
+      return res.json({
+        liked: false,
+        votes: Math.max(0, unlikedReply.likes || 0),
+        postId: unlikedReply.postId
+      });
+    }
+
+    return res.status(404).json({ error: '回答不存在' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
