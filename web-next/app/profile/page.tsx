@@ -214,12 +214,12 @@ return (
                             <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex flex-col md:flex-row items-center gap-2 font-display tracking-tight">
                                 {user.username}
                                 <span className={`px-2.5 py-0.5 text-xs rounded-full font-medium border flex items-center gap-1 mt-1 md:mt-0 shadow-sm ${
-                                    profile?.role === 'writer' 
-                                        ? 'bg-amber-50 text-amber-700 border-amber-100' 
-                                        : 'bg-blue-50 text-blue-700 border-blue-100'
+                                    profile?.role === 'admin'
+                                        ? 'bg-purple-50 text-purple-700 border-purple-100'
+                                        : 'bg-amber-50 text-amber-700 border-amber-100'
                                 }`}>
-                                    {profile?.role === 'writer' ? <PenTool className="h-3 w-3" /> : <BookOpen className="h-3 w-3" />}
-                                    {profile?.role === 'writer' ? '签约作家' : '普通读者'}
+                                    {profile?.role === 'admin' ? <Shield className="h-3 w-3" /> : <PenTool className="h-3 w-3" />}
+                                    {profile?.role === 'admin' ? '超级管理员' : '创作者'}
                                 </span>
                             </h1>
                             <p className="text-gray-500 text-sm flex items-center justify-center md:justify-start gap-1.5 font-medium">

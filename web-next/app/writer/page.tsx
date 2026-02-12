@@ -353,7 +353,7 @@ export default function WriterDashboard() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">{(user as any).username}</p>
-                <p className="text-xs text-gray-500">{(user as any).role === 'admin' ? '超级管理员' : '作家'}</p>
+                <p className="text-xs text-gray-500">{(user as any).role === 'admin' ? '超级管理员' : '创作者'}</p>
               </div>
            </div>
         </div>

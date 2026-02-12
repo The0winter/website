@@ -9,7 +9,7 @@ interface AuthContextType {
   
   setUser: (user: AuthUser | null) => void;
   // 注册相关的不用动（除非你注册后也想直接拿到token）
-  signUp: (email: string, password: string, username: string, role: 'reader' | 'writer', code: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, username: string, role: 'reader', code: string) => Promise<{ error: Error | null }>;
   register: (username: string, email: string, password: string, code: string) => Promise<{ error: Error | null }>;
   
   // 👇👇👇 重点修改这一行 👇👇👇
@@ -67,7 +67,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     initAuth();
   }, []);
 
-const signUp = async (email: string, password: string, username: string, role: 'reader' | 'writer', code: string) => {
+const signUp = async (email: string, password: string, username: string, role: 'reader', code: string) => {
     try {
       // 调用 api 时把 code 传进去
       const { user: newUser, profile: newProfile } = await authApi.signUp(email, password, username, role, code);

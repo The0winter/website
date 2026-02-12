@@ -106,15 +106,13 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
 
             {user ? (
               <div className="flex items-center space-x-4">
-                {(user.role === 'writer' || user.role === 'admin') && (
-                  <Link 
+                <Link 
                     href="/writer"
                     className={`flex items-center space-x-1 ${textSecondary} ${hoverText} transition-colors`}
                   >
                     <PenTool className="h-5 w-5" />
                     <span>创作管理</span>
                   </Link>
-                )}
                 
                 <Link 
                   href="/profile" 

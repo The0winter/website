@@ -124,6 +124,7 @@ if (!MONGO_URL) {
 // ================= 4. 中间件 =================
 
 const generateRandomPassword = () => Math.random().toString(36).slice(-8);
+const normalizeRole = (role) => (role === 'writer' ? 'reader' : role);
 
 async function ensureAuthorExists(authorName) {
     if (!authorName || authorName === '未知') return null;
@@ -139,7 +140,7 @@ async function ensureAuthorExists(authorName) {
             username: authorName,
             email: `author_${Date.now()}_${Math.floor(Math.random() * 1000)}@auto.generated`,
             password: hashedPassword,
-            role: 'writer',
+            role: 'reader',
             created_at: new Date()
         });
         return user;
@@ -264,8 +265,13 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
             .sort({ weekly_score: -1, created_at: -1 }) // 直接按分数排，现在分数是秒级更新的
             // 4. 限制 15 条
             .limit(15);
-            
-        res.json(users);
+
+        res.json(
+            users.map((u) => ({
+                ...u.toObject(),
+                role: normalizeRole(u.role)
+            }))
+        );
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -318,21 +324,24 @@ app.post('/api/admin/impersonate/:userId', authMiddleware, adminMiddleware, asyn
         */
 
         console.log(`🕵️‍♂️ 管理员 [${req.user.id}] 影子登录 -> [${targetUser.username}]`);
+
+        const targetRole = normalizeRole(targetUser.role);
         
         const token = jwt.sign(
-            { id: targetUser._id, role: targetUser.role }, 
+            { id: targetUser._id, role: targetRole }, 
             JWT_SECRET, 
             { expiresIn: '1h' }
         );
 
         const { password: _, ...userWithoutPassword } = targetUser.toObject();
+        userWithoutPassword.role = targetRole;
         res.json({ 
             token, 
             user: { 
                 id: targetUser._id.toString(), 
                 email: targetUser.email, 
                 username: targetUser.username, 
-                role: targetUser.role 
+                role: targetRole 
             }, 
             profile: userWithoutPassword 
         });
@@ -470,7 +479,7 @@ app.post('/api/auth/signup', async (req, res) => {
       email,
       password: hashedPassword,
       username,
-      role: role || 'reader',
+      role: 'reader',
       loginAttempts: 0 
     });
     
@@ -478,7 +487,7 @@ app.post('/api/auth/signup', async (req, res) => {
     await VerificationCode.deleteOne({ _id: validCode._id });
 
     const token = jwt.sign(
-        { id: newUser._id, role: newUser.role }, 
+        { id: newUser._id, role: normalizeRole(newUser.role) }, 
         JWT_SECRET, // 注意：确保这里能访问到 JWT_SECRET 变量
         { expiresIn: '7d' }
     );
@@ -566,19 +575,20 @@ app.post('/api/auth/signin', async (req, res) => {
     }
     
     const token = jwt.sign(
-        { id: user._id, role: user.role }, 
+        { id: user._id, role: normalizeRole(user.role) }, 
         JWT_SECRET, 
         { expiresIn: '7d' }
     );
 
     const userObj = user.toObject();
+    userObj.role = normalizeRole(userObj.role);
     delete userObj.password;
     delete userObj.loginAttempts;
     delete userObj.lockUntil;
 
     res.json({ 
       token, 
-      user: { id: user._id.toString(), email: user.email, username: user.username, role: user.role }, 
+      user: { id: user._id.toString(), email: user.email, username: user.username, role: normalizeRole(user.role) }, 
       profile: userObj 
     });
 
@@ -621,8 +631,9 @@ app.get('/api/auth/session', async (req, res) => {
         if (!user) return res.json({ user: null, profile: null });
 
         const { password: _, ...userWithoutPassword } = user.toObject();
+        userWithoutPassword.role = normalizeRole(userWithoutPassword.role);
         res.json({ 
-            user: { id: user._id.toString(), email: user.email, username: user.username, role: user.role }, 
+            user: { id: user._id.toString(), email: user.email, username: user.username, role: normalizeRole(user.role) }, 
             profile: userWithoutPassword 
         });
     } catch (e) {
@@ -701,6 +712,7 @@ app.get('/api/users/:userId/profile', async (req, res) => {
     const user = await User.findById(req.params.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
     const { password, ...userWithoutPassword } = user.toObject();
+    userWithoutPassword.role = normalizeRole(userWithoutPassword.role);
     res.json(userWithoutPassword);
   } catch (error) {
     res.status(500).json({ error: error.message });

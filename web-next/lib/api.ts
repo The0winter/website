@@ -70,7 +70,7 @@ export interface ForumComment {
 export interface Profile {
   id: string;
   username: string;
-  role: 'reader' | 'writer' | 'admin';
+  role: 'reader' | 'admin';
   created_at: string;
 }
 
@@ -115,7 +115,7 @@ export interface AuthUser {
   id: string;
   email: string;
   username: string;
-  role: 'reader' | 'writer' | 'admin';
+  role: 'reader' | 'admin';
   token?: string;
   avatar?: string;
 }
@@ -250,7 +250,7 @@ export const usersApi = {
 };
 
 export const authApi = {
-  signUp: async (email: string, password: string, username: string, role: string, code: string): Promise<AuthResponse> => {
+  signUp: async (email: string, password: string, username: string, role: 'reader', code: string): Promise<AuthResponse> => {
     return apiCall<AuthResponse>('/auth/signup', {
       method: 'POST',
       body: JSON.stringify({ email, password, username, role, code }),
