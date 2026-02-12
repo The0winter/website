@@ -29,8 +29,7 @@ function PostContent() {
   // 状态
   const [question, setQuestion] = useState<ForumPost | null>(null);
   const [answer, setAnswer] = useState<ForumReply | null>(null);
-  // 新增：存储该问题下的其他回答
-  const [otherAnswers, setOtherAnswers] = useState<ForumReply[]>([]);
+  const [otherAnswers, setOtherAnswers] = useState<ForumReply[]>([]); // 存储其他回答
   
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -45,7 +44,7 @@ function PostContent() {
         let finalAnswer = null;
         let allReplies: ForumReply[] = [];
 
-        // 无论从哪里进来的，为了底部的“更多回答”，我们最好都获取一下列表
+        // 逻辑：获取当前回答 + 所属问题 + 同问题的其他回答
         if (fromQuestionId && fromQuestionId !== 'undefined') {
             const [qData, replies] = await Promise.all([
                 forumApi.getById(fromQuestionId),
@@ -55,28 +54,14 @@ function PostContent() {
             allReplies = replies;
             finalAnswer = replies.find(r => r.id === postId) || null;
         } else {
-            // 如果是直接进来的，先获取当前内容，再尝试获取所属问题的信息
-            // 注：这里假设 getById 返回的是 Post (问题) 或者 Reply (回答)
-            // 实际业务中可能需要根据 ID 类型判断。这里为了简化，我们假设 API 逻辑如下：
-            // 如果 postId 是回答 ID，我们需要知道它是哪个问题的。
-            // 暂时沿用你之前的逻辑，但在获取完 answer 后，我们需要获取同问题的其他 reply
-            
-            // *为了简化逻辑并保证“更多回答”能出来，建议统一逻辑：
-            // 真实场景通常是：先拿 Answer -> 拿到 questionId -> 拿 Question 和 OtherAnswers
-            // 这里我们简化：假设 API 能通过 postId 拿到它所属的 question
-            
-            // ⚠️ 临时方案：为了展示效果，我们假设当前就在某个问题下
-            // 如果你 API 支持，这里应该 fetch(questionId) -> fetchReplies(questionId)
+            // 只有 postId 的情况 (假设能获取到问题信息)
             const postData = await forumApi.getById(postId); 
-            finalQuestion = postData; // 这里假设 postData 包含了问题信息
-            
-            // 尝试获取该问题的所有回答（为了底部推荐）
+            finalQuestion = postData;
             if (postData.id) {
                try {
                  allReplies = await forumApi.getReplies(postData.id);
                } catch (e) { console.log('获取其他回答失败', e)}
             }
-            
             finalAnswer = {
                 id: postData.id,
                 content: postData.content || '',
@@ -90,11 +75,11 @@ function PostContent() {
         if (finalQuestion) setQuestion(finalQuestion);
         if (finalAnswer) setAnswer(finalAnswer);
 
-        // 🔥 过滤出“其他回答” (排除当前这个，并按点赞排序)
+        // 过滤出其他回答，并按点赞排序
         if (allReplies.length > 0 && finalAnswer) {
             const others = allReplies
                 .filter(r => r.id !== finalAnswer?.id)
-                .sort((a, b) => (b.votes || 0) - (a.votes || 0)); // 按热度排
+                .sort((a, b) => (b.votes || 0) - (a.votes || 0));
             setOtherAnswers(others);
         }
 
@@ -113,18 +98,14 @@ function PostContent() {
 
   return (
     <div className={`min-h-screen ${theme.bg} pb-20 font-sans`}>
-      {/* === 1. 顶部导航 (修改版) === */}
+      {/* 顶部导航 */}
       <div className={`sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b ${theme.border}`}>
         <div className="max-w-[800px] mx-auto px-4 h-16 flex items-center justify-between">
-           {/* 左侧：改为回首页 */}
            <Link href="/forum" className="text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1">
               <ArrowLeft className="w-5 h-5" /> 
               <span className="font-bold text-sm">首页</span>
            </Link>
-           
-           {/* 中间：留空，或者放一个 Logo */}
            <div className="flex-1"></div>
-
            <div className="flex gap-2">
               <button className="p-2 text-gray-400 hover:text-gray-900"><Share2 className="w-5 h-5" /></button>
               <button className="p-2 text-gray-400 hover:text-gray-900"><Settings className="w-5 h-5" /></button>
@@ -134,13 +115,13 @@ function PostContent() {
 
       <div className="max-w-[800px] mx-auto mt-8 px-4 md:px-0">
           
-          {/* === 2. 文章头部 (标题可点击) === */}
+          {/* 文章头部 (标题) */}
           <div className="mb-8">
-              {/* 点击标题跳转到问题详情页 (查看所有回答) */}
+              {/* 🔥 修改 1: 去掉 underline，只保留颜色变化 hover:text-blue-600 */}
               <Link href={`/forum/question/${question.id}`}>
-                <h1 className="text-3xl font-bold text-gray-900 leading-tight mb-4 tracking-tight hover:text-blue-600 hover:underline decoration-2 underline-offset-4 transition-all cursor-pointer">
+                <h1 className="text-3xl font-bold text-gray-900 leading-tight mb-4 tracking-tight hover:text-blue-600 transition-colors cursor-pointer group">
                     {question.title}
-                    <ChevronRight className="inline-block w-6 h-6 ml-1 text-gray-400 mb-1" />
+                    <ChevronRight className="inline-block w-6 h-6 ml-1 text-gray-300 group-hover:text-blue-600 transition-colors mb-1" />
                 </h1>
               </Link>
 
@@ -153,9 +134,8 @@ function PostContent() {
               </div>
           </div>
 
-          {/* === 3. 当前回答卡片 === */}
+          {/* === 当前主要回答 === */}
           <article className={`${theme.card} p-8 md:p-10 shadow-sm rounded-xl border ${theme.border} mb-12`}>
-              {/* 作者栏 */}
               <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-50">
                   <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center border border-white shadow-sm overflow-hidden">
@@ -175,7 +155,6 @@ function PostContent() {
                   </button>
               </div>
 
-              {/* 正文 */}
               <div 
                 className="rich-text-content text-gray-900 text-[17px] md:text-[18px] leading-[1.8] font-normal tracking-wide space-y-6" 
                 dangerouslySetInnerHTML={{ __html: answer.content }}
@@ -196,58 +175,72 @@ function PostContent() {
               </div>
           </article>
 
-          {/* === 4. 更多回答 (过渡区域) === */}
+          {/* === 🔥 修改 2: 其他回答 (流式直接展示) === */}
           {otherAnswers.length > 0 && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
                 
-                {/* 极简分割线 */}
-                <div className="relative flex items-center justify-center mb-8">
+                {/* 分割线：提示用户下面是其他人的回答 */}
+                <div className="relative flex items-center justify-center mb-10">
                     <div className="absolute inset-0 flex items-center">
                         <div className="w-full border-t border-gray-200"></div>
                     </div>
                     <div className="relative bg-[#f8f9fa] px-4">
-                        <span className="text-sm font-bold text-gray-400">更多讨论</span>
+                        <span className="text-sm font-bold text-gray-400">更多回答 ({otherAnswers.length})</span>
                     </div>
                 </div>
 
-                {/* 推荐列表 */}
-                <div className="flex flex-col gap-4">
+                {/* 循环渲染完整的回答卡片 */}
+                <div className="flex flex-col gap-8">
                     {otherAnswers.map(item => (
-                        <Link 
+                        <article 
                             key={item.id}
-                            // 点击跳转到新的回答详情页 (替换当前 ID)
-                            href={`/forum/${item.id}?fromQuestion=${question.id}`}
-                            className="bg-white p-6 rounded-xl border border-transparent hover:border-gray-200 hover:shadow-md transition-all duration-300 block group"
+                            className={`${theme.card} p-8 md:p-10 shadow-sm rounded-xl border ${theme.border}`}
                         >
-                            <div className="flex items-center gap-2 mb-3">
-                                <span className="text-sm font-bold text-gray-900">{item.author?.name}</span>
-                                <span className="text-xs text-gray-400">· {item.time.split(' ')[0]}</span>
+                            {/* 极简作者头 */}
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
+                                        {item.author?.avatar ? (
+                                            <img src={item.author.avatar} alt="avatar" className="w-full h-full object-cover"/>
+                                        ) : (
+                                            <span className="text-gray-400 font-bold text-sm">{item.author?.name?.[0]}</span>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-bold text-gray-900">{item.author?.name}</span>
+                                        <span className="text-xs text-gray-400">{item.time.split(' ')[0]}</span>
+                                    </div>
+                                </div>
                             </div>
                             
-                            <div className="text-gray-600 text-[15px] leading-relaxed line-clamp-2 group-hover:text-gray-900 transition-colors"
-                                 dangerouslySetInnerHTML={{ __html: item.content }}
+                            {/* 完整内容渲染 */}
+                            <div 
+                                className="rich-text-content text-gray-900 text-[17px] leading-[1.8] font-normal tracking-wide space-y-4"
+                                dangerouslySetInnerHTML={{ __html: item.content }}
                             ></div>
 
-                            <div className="mt-3 flex items-center gap-4 text-xs font-medium text-gray-400">
-                                <span>{item.votes} 赞同</span>
-                                <span>{item.comments} 评论</span>
+                            {/* 底部操作 */}
+                            <div className="mt-8 pt-6 border-t border-gray-50 flex items-center gap-6 text-gray-400">
+                                <button className="flex items-center gap-2 hover:text-gray-900 transition-colors">
+                                    <ThumbsUp className="w-4 h-4" /> <span className="text-sm font-bold">{item.votes}</span>
+                                </button>
+                                <button className="flex items-center gap-2 hover:text-gray-900 transition-colors">
+                                    <MessageCircle className="w-4 h-4" /> <span className="text-sm font-bold">{item.comments}</span>
+                                </button>
                             </div>
-                        </Link>
+                        </article>
                     ))}
-                    
-                    {/* 查看全部按钮 */}
-                    <Link 
-                        href={`/forum/question/${question.id}`}
-                        className="block text-center py-4 text-gray-500 hover:text-gray-900 text-sm font-bold transition-colors mt-2"
-                    >
-                        查看全部 {otherAnswers.length + 1} 个回答 &rarr;
-                    </Link>
+                </div>
+                
+                {/* 到底提示 */}
+                <div className="py-12 text-center text-gray-300 text-sm">
+                    - 已加载全部回答 -
                 </div>
             </div>
           )}
 
           {/* 底部留白 */}
-          <div className="h-20"></div>
+          <div className="h-10"></div>
       </div>
     </div>
   );
