@@ -64,6 +64,8 @@ function PostContent() {
   const [otherAnswers, setOtherAnswers] = useState<ForumReply[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const [likedState, setLikedState] = useState<Record<string, boolean>>({});
+  const [likePending, setLikePending] = useState<Record<string, boolean>>({});
 
   // 点击外部关闭设置面板
   useEffect(() => {
@@ -104,6 +106,7 @@ function PostContent() {
                 id: postData.id,
                 content: postData.content || '',
                 votes: postData.votes,
+                hasLiked: (postData as any).hasLiked,
                 comments: postData.comments,
                 time: postData.created_at || '',
                 author: typeof postData.author === 'string' ? { name: postData.author, avatar: '' } : postData.author
@@ -119,6 +122,18 @@ function PostContent() {
                 .sort((a, b) => (b.votes || 0) - (a.votes || 0));
             setOtherAnswers(others);
         }
+
+        const nextLikedState: Record<string, boolean> = {};
+        if ((finalQuestion as any)?.id) {
+          nextLikedState[(finalQuestion as any).id] = Boolean((finalQuestion as any).hasLiked);
+        }
+        if ((finalAnswer as any)?.id) {
+          nextLikedState[(finalAnswer as any).id] = Boolean((finalAnswer as any).hasLiked);
+        }
+        allReplies.forEach((reply: any) => {
+          if (reply?.id) nextLikedState[reply.id] = Boolean(reply.hasLiked);
+        });
+        setLikedState(prev => ({ ...prev, ...nextLikedState }));
       } catch (error: any) {
         setErrorMsg(error.message || '加载失败');
       } finally {
@@ -127,6 +142,42 @@ function PostContent() {
     };
     fetchData();
   }, [postId, fromQuestionId]);
+
+  const requireLogin = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (!token) {
+      alert('请先登录再点赞');
+      router.push('/login');
+      return false;
+    }
+    return true;
+  };
+
+  const handleLike = async (targetId: string, targetType: 'post' | 'reply') => {
+    if (!targetId || likePending[targetId]) return;
+    if (!requireLogin()) return;
+
+    setLikePending(prev => ({ ...prev, [targetId]: true }));
+    try {
+      const result = targetType === 'post'
+        ? await forumApi.togglePostLike(targetId)
+        : await forumApi.toggleReplyLike(targetId);
+
+      setLikedState(prev => ({ ...prev, [targetId]: result.liked }));
+      setAnswer(prev => prev && prev.id === targetId ? { ...prev, votes: result.votes } : prev);
+      setOtherAnswers(prev => prev.map(item => item.id === targetId ? { ...item, votes: result.votes } : item));
+      setQuestion(prev => prev && prev.id === targetId ? ({ ...prev, votes: result.votes } as ForumPost) : prev);
+    } catch (error: any) {
+      if (error?.message?.includes('401') || error?.message?.includes('403')) {
+        alert('登录状态失效，请重新登录');
+        router.push('/login');
+      } else {
+        alert('点赞失败，请稍后重试');
+      }
+    } finally {
+      setLikePending(prev => ({ ...prev, [targetId]: false }));
+    }
+  };
 
   if (loading) return <div className={`min-h-screen ${currentTheme.bg} pt-20 text-center ${currentTheme.textSub}`}>加载中...</div>;
   if (errorMsg) return <div className={`min-h-screen ${currentTheme.bg} flex items-center justify-center text-red-500`}>出错: {errorMsg}</div>;
@@ -260,7 +311,11 @@ function PostContent() {
                       发布于 {new Date(answer.time).toLocaleDateString()}
                   </div>
                   <div className="flex gap-6">
-                       <button className={`flex items-center gap-2 ${currentTheme.icon} transition-colors`}>
+                       <button
+                          onClick={() => handleLike(answer.id, answer.id === question.id ? 'post' : 'reply')}
+                          disabled={!!likePending[answer.id]}
+                          className={`flex items-center gap-2 transition-colors ${likedState[answer.id] ? 'text-blue-500' : currentTheme.icon} disabled:opacity-60`}
+                       >
                           <ThumbsUp className="w-5 h-5" /> <span className="font-bold">{answer.votes || 0}</span>
                        </button>
                        <button className={`flex items-center gap-2 ${currentTheme.icon} transition-colors`}>
@@ -314,7 +369,11 @@ function PostContent() {
                             ></div>
 
                             <div className={`mt-8 pt-6 border-t ${currentTheme.divider} flex items-center gap-6 ${currentTheme.textSub}`}>
-                                <button className={`flex items-center gap-2 hover:${currentTheme.textMain} transition-colors`}>
+                                <button
+                                    onClick={() => handleLike(item.id, 'reply')}
+                                    disabled={!!likePending[item.id]}
+                                    className={`flex items-center gap-2 transition-colors ${likedState[item.id] ? 'text-blue-500' : currentTheme.icon} disabled:opacity-60`}
+                                >
                                     <ThumbsUp className="w-4 h-4" /> <span className="text-sm font-bold">{item.votes}</span>
                                 </button>
                                 <button className={`flex items-center gap-2 hover:${currentTheme.textMain} transition-colors`}>

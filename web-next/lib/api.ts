@@ -424,6 +424,17 @@ export const forumApi = {
       method: 'POST',
       body: JSON.stringify({ content }),
     });
+  },
+
+  togglePostLike: async (postId: string): Promise<{ liked: boolean; votes: number }> => {
+    return apiCall<{ liked: boolean; votes: number }>(`/forum/posts/${postId}/like`, {
+      method: 'POST',
+    });
+  },
+
+  toggleReplyLike: async (replyId: string): Promise<{ liked: boolean; votes: number; postId?: string }> => {
+    return apiCall<{ liked: boolean; votes: number; postId?: string }>(`/forum/replies/${replyId}/like`, {
+      method: 'POST',
+    });
   }
 };
-
