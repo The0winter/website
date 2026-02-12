@@ -17,6 +17,7 @@ import Chapter from './models/Chapter.js';
 import Bookmark from './models/Bookmark.js';
 import ForumPost from './models/ForumPost.js';  
 import ForumReply from './models/ForumReply.js';
+import ForumReplyComment from './models/ForumReplyComment.js';
 
 import VerificationCode from './models/VerificationCode.js';
 import sendVerificationEmail from './utils/sendEmail.js';
@@ -969,6 +970,167 @@ app.post('/api/forum/replies/:id/like', authMiddleware, async (req, res) => {
     }
 
     return res.status(404).json({ error: '回答不存在' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 8. 获取回答评论（含一级和二级，二级不再嵌套）
+app.get('/api/forum/replies/:id/comments', async (req, res) => {
+  try {
+    const replyId = req.params.id;
+    const currentUserId = getOptionalUserId(req);
+
+    if (!mongoose.Types.ObjectId.isValid(replyId)) {
+      return res.json([]);
+    }
+
+    const comments = await ForumReplyComment.find({ replyId })
+      .populate('author', 'username _id avatar')
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const formatted = comments.map(c => ({
+      id: c._id.toString(),
+      postId: c.postId?.toString(),
+      replyId: c.replyId?.toString(),
+      parentCommentId: c.parentCommentId ? c.parentCommentId.toString() : null,
+      content: c.content,
+      votes: c.likes || 0,
+      hasLiked: currentUserId
+        ? (c.likedBy || []).some(uid => String(uid) === currentUserId)
+        : false,
+      replyCount: c.replyCount || 0,
+      time: new Date(c.createdAt).toLocaleString(),
+      author: {
+        name: c.author?.username || '匿名',
+        avatar: c.author?.avatar || '',
+        id: c.author?._id?.toString() || ''
+      }
+    }));
+
+    res.json(formatted);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 9. 发表评论（支持二级回复，最多两级）
+app.post('/api/forum/replies/:id/comments', authMiddleware, async (req, res) => {
+  try {
+    const replyId = req.params.id;
+    const { content, parentCommentId } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(replyId)) {
+      return res.status(400).json({ error: '无效的回答ID' });
+    }
+    if (!content || !String(content).trim()) {
+      return res.status(400).json({ error: '评论内容不能为空' });
+    }
+
+    const reply = await ForumReply.findById(replyId).select('_id postId');
+    if (!reply) {
+      return res.status(404).json({ error: '回答不存在' });
+    }
+
+    let parent = null;
+    let finalParentId = null;
+
+    if (parentCommentId) {
+      if (!mongoose.Types.ObjectId.isValid(parentCommentId)) {
+        return res.status(400).json({ error: '无效的父评论ID' });
+      }
+
+      parent = await ForumReplyComment.findOne({
+        _id: parentCommentId,
+        replyId: reply._id
+      }).select('_id parentCommentId');
+
+      if (!parent) {
+        return res.status(404).json({ error: '父评论不存在' });
+      }
+
+      if (parent.parentCommentId) {
+        return res.status(400).json({ error: '仅支持二级评论' });
+      }
+
+      finalParentId = parent._id;
+    }
+
+    const created = await ForumReplyComment.create({
+      postId: reply.postId,
+      replyId: reply._id,
+      parentCommentId: finalParentId,
+      author: req.user.id,
+      content: String(content).trim()
+    });
+
+    if (finalParentId) {
+      await ForumReplyComment.findByIdAndUpdate(finalParentId, {
+        $inc: { replyCount: 1 }
+      });
+    }
+
+    await ForumReply.findByIdAndUpdate(reply._id, {
+      $inc: { comments: 1 }
+    });
+
+    const populated = await ForumReplyComment.findById(created._id)
+      .populate('author', 'username _id avatar')
+      .lean();
+
+    return res.status(201).json({
+      id: populated._id.toString(),
+      postId: populated.postId?.toString(),
+      replyId: populated.replyId?.toString(),
+      parentCommentId: populated.parentCommentId ? populated.parentCommentId.toString() : null,
+      content: populated.content,
+      votes: populated.likes || 0,
+      hasLiked: false,
+      replyCount: populated.replyCount || 0,
+      time: new Date(populated.createdAt).toLocaleString(),
+      author: {
+        name: populated.author?.username || '匿名',
+        avatar: populated.author?.avatar || '',
+        id: populated.author?._id?.toString() || ''
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 10. 点赞/取消点赞评论（toggle）
+app.post('/api/forum/comments/:id/like', authMiddleware, async (req, res) => {
+  try {
+    const commentId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(commentId)) {
+      return res.status(400).json({ error: '无效的评论ID' });
+    }
+
+    const userObjectId = new mongoose.Types.ObjectId(req.user.id);
+
+    const likedComment = await ForumReplyComment.findOneAndUpdate(
+      { _id: commentId, likedBy: { $ne: userObjectId } },
+      { $addToSet: { likedBy: userObjectId }, $inc: { likes: 1 } },
+      { new: true, select: 'likes' }
+    );
+
+    if (likedComment) {
+      return res.json({ liked: true, votes: likedComment.likes });
+    }
+
+    const unlikedComment = await ForumReplyComment.findOneAndUpdate(
+      { _id: commentId, likedBy: userObjectId },
+      { $pull: { likedBy: userObjectId }, $inc: { likes: -1 } },
+      { new: true, select: 'likes' }
+    );
+
+    if (unlikedComment) {
+      return res.json({ liked: false, votes: Math.max(0, unlikedComment.likes || 0) });
+    }
+
+    return res.status(404).json({ error: '评论不存在' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -32,6 +32,7 @@ export interface ForumPost {
   type: 'question' | 'article';
   views?: number;
   created_at?: string;
+  hasLiked?: boolean;
 }
 
 // 🔥 新增：论坛回答类型
@@ -39,11 +40,29 @@ export interface ForumReply {
   id: string;
   content: string;
   votes: number;
+  hasLiked?: boolean;
   comments: number;
   time: string;
   author: {
     name: string;
     bio: string;
+    avatar: string;
+    id: string;
+  };
+}
+
+export interface ForumComment {
+  id: string;
+  postId: string;
+  replyId: string;
+  parentCommentId: string | null;
+  content: string;
+  votes: number;
+  hasLiked?: boolean;
+  replyCount: number;
+  time: string;
+  author: {
+    name: string;
     avatar: string;
     id: string;
   };
@@ -434,6 +453,29 @@ export const forumApi = {
 
   toggleReplyLike: async (replyId: string): Promise<{ liked: boolean; votes: number; postId?: string }> => {
     return apiCall<{ liked: boolean; votes: number; postId?: string }>(`/forum/replies/${replyId}/like`, {
+      method: 'POST',
+    });
+  },
+
+  getReplyComments: async (replyId: string): Promise<ForumComment[]> => {
+    if (!replyId || replyId === 'undefined' || replyId === 'null') {
+      return [];
+    }
+    return apiCall<ForumComment[]>(`/forum/replies/${replyId}/comments`);
+  },
+
+  createReplyComment: async (
+    replyId: string,
+    data: { content: string; parentCommentId?: string | null }
+  ): Promise<ForumComment> => {
+    return apiCall<ForumComment>(`/forum/replies/${replyId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  toggleCommentLike: async (commentId: string): Promise<{ liked: boolean; votes: number }> => {
+    return apiCall<{ liked: boolean; votes: number }>(`/forum/comments/${commentId}/like`, {
       method: 'POST',
     });
   }
