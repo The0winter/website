@@ -1,4 +1,4 @@
-import 'dotenv/config'; 
+﻿import 'dotenv/config'; 
 import express from 'express';
 import mongoose from 'mongoose';
 import { submitToIndexNow } from './utils/indexNow.js'
@@ -782,8 +782,41 @@ app.get('/api/forum/posts', async (req, res) => {
       .limit(limit)
       .lean(); 
 
+    const postIds = posts.map(p => p._id);
+    const topReplyMap = new Map();
+    if (postIds.length > 0) {
+      const replies = await ForumReply.find({ postId: { $in: postIds } })
+        .populate('author', 'username _id avatar')
+        .sort({ postId: 1, likes: -1, createdAt: -1 })
+        .lean();
+
+      for (const reply of replies) {
+        const key = String(reply.postId);
+        if (!topReplyMap.has(key)) {
+          topReplyMap.set(key, reply);
+        }
+      }
+    }
+
     // 🔥 修复点：强制转换 _id 为 id
     const formattedPosts = posts.map(p => ({
+      topReply: (() => {
+        const topReply = topReplyMap.get(String(p._id));
+        if (!topReply) return null;
+        const plainContent = String(topReply.content || '').replace(/<[^>]+>/g, '');
+        const preview = plainContent.slice(0, 180) + (plainContent.length > 180 ? '...' : '');
+        return {
+          id: String(topReply._id),
+          content: preview,
+          votes: topReply.likes || 0,
+          comments: topReply.comments || 0,
+          author: {
+            id: topReply.author?._id ? String(topReply.author._id) : '',
+            name: topReply.author?.username || '匿名',
+            avatar: topReply.author?.avatar || ''
+          }
+        };
+      })(),
       id: p._id.toString(), // 确保是字符串
       title: p.title,
       excerpt: p.summary,

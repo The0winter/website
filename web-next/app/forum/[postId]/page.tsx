@@ -44,6 +44,7 @@ const THEMES = {
 };
 
 type ThemeMode = 'light' | 'dark';
+const READER_SETTINGS_KEY = 'forum_reader_settings_v1';
 
 function PostContent() {
   const router = useRouter();
@@ -87,6 +88,30 @@ function PostContent() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(READER_SETTINGS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.themeMode === 'light' || parsed?.themeMode === 'dark') {
+        setThemeMode(parsed.themeMode);
+      }
+      if (typeof parsed?.fontSize === 'number' && parsed.fontSize >= 14 && parsed.fontSize <= 24) {
+        setFontSize(parsed.fontSize);
+      }
+    } catch {
+      // ignore broken local settings
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify({ themeMode, fontSize }));
+    } catch {
+      // ignore storage write failure
+    }
+  }, [themeMode, fontSize]);
 
   useEffect(() => {
     const fetchData = async () => {
