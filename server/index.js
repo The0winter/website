@@ -728,21 +728,115 @@ app.post('/api/upload/cover',
 
 // ================= 论坛 (Forum) API =================
 
+const FORUM_LIMITS = {
+  titleMax: 120,
+  postContentMax: 30000,
+  replyContentMax: 12000,
+  commentContentMax: 2000,
+  maxTags: 8,
+  maxTagLength: 20,
+  duplicateWindowMs: 60 * 1000
+};
+
+const sanitizeForumHtml = (input = '') => String(input)
+  .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+  .replace(/javascript:/gi, '')
+  .trim();
+
+const stripHtml = (input = '') => String(input)
+  .replace(/<[^>]+>/g, ' ')
+  .replace(/&nbsp;/gi, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const getForumActorKey = (req) => {
+  if (req.user?.id) return `uid:${req.user.id}`;
+
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (token) {
+    try {
+      const verified = jwt.verify(token, JWT_SECRET);
+      if (verified?.id) return `uid:${verified.id}`;
+    } catch {
+      // ignore bad token and fallback to IP
+    }
+  }
+
+  return `ip:${getClientIp(req)}`;
+};
+
+const forumPostCreateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 15,
+  message: '发帖过于频繁，请稍后再试',
+  keyGenerator: getForumActorKey
+});
+
+const forumReplyCreateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 40,
+  message: '回答提交过于频繁，请稍后再试',
+  keyGenerator: getForumActorKey
+});
+
+const forumCommentCreateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 80,
+  message: '评论提交过于频繁，请稍后再试',
+  keyGenerator: getForumActorKey
+});
+
 // 1. 发布帖子 (修复：返回 id 字段)
-app.post('/api/forum/posts', authMiddleware, async (req, res) => {
+app.post('/api/forum/posts', authMiddleware, forumPostCreateLimiter, async (req, res) => {
   try {
     const { title, content, type, tags } = req.body;
-    
-    // 生成摘要
-    const cleanText = content.replace(/<[^>]+>/g, ''); 
-    const summary = cleanText.substring(0, 100) + (cleanText.length > 100 ? '...' : '');
+
+    const finalType = type === 'article' ? 'article' : 'question';
+    const safeTitle = stripHtml(title);
+    const safeContent = sanitizeForumHtml(content);
+    const plainContent = stripHtml(safeContent);
+
+    if (!safeTitle) {
+      return res.status(400).json({ error: '标题不能为空' });
+    }
+    if (!plainContent) {
+      return res.status(400).json({ error: '内容不能为空' });
+    }
+    if (safeTitle.length > FORUM_LIMITS.titleMax) {
+      return res.status(400).json({ error: `标题不能超过 ${FORUM_LIMITS.titleMax} 字` });
+    }
+    if (plainContent.length > FORUM_LIMITS.postContentMax) {
+      return res.status(400).json({ error: `内容不能超过 ${FORUM_LIMITS.postContentMax} 字` });
+    }
+    if (finalType === 'question' && !/[?？]\s*$/.test(safeTitle)) {
+      return res.status(400).json({ error: '提问标题必须以问号结尾' });
+    }
+
+    const normalizedTags = Array.isArray(tags)
+      ? [...new Set(tags.map(tag => stripHtml(tag).slice(0, FORUM_LIMITS.maxTagLength)).filter(Boolean))]
+          .slice(0, FORUM_LIMITS.maxTags)
+      : [];
+
+    const duplicatePost = await ForumPost.findOne({
+      author: req.user.id,
+      title: safeTitle,
+      type: finalType,
+      createdAt: { $gte: new Date(Date.now() - FORUM_LIMITS.duplicateWindowMs) }
+    }).select('_id');
+
+    if (duplicatePost) {
+      return res.status(429).json({ error: '请勿短时间重复发布相同内容' });
+    }
+
+    const summary = plainContent.substring(0, 100) + (plainContent.length > 100 ? '...' : '');
 
     const newPost = await ForumPost.create({
-      title,
-      content,
+      title: safeTitle,
+      content: safeContent,
       summary,
-      type: type || 'question', 
-      tags: tags || [],
+      type: finalType,
+      tags: normalizedTags,
       author: req.user.id
     });
 
@@ -909,15 +1003,44 @@ app.get('/api/forum/posts/:id/replies', async (req, res) => {
 });
 
 // 5. 发布回答/评论
-app.post('/api/forum/posts/:id/replies', authMiddleware, async (req, res) => {
+app.post('/api/forum/posts/:id/replies', authMiddleware, forumReplyCreateLimiter, async (req, res) => {
   try {
     const { content } = req.body;
     const postId = req.params.id;
 
+    if (!mongoose.Types.ObjectId.isValid(postId)) {
+      return res.status(400).json({ error: '无效的帖子ID' });
+    }
+
+    const safeContent = sanitizeForumHtml(content);
+    const plainContent = stripHtml(safeContent);
+    if (!plainContent) {
+      return res.status(400).json({ error: '回答内容不能为空' });
+    }
+    if (plainContent.length > FORUM_LIMITS.replyContentMax) {
+      return res.status(400).json({ error: `回答不能超过 ${FORUM_LIMITS.replyContentMax} 字` });
+    }
+
+    const postExists = await ForumPost.exists({ _id: postId });
+    if (!postExists) {
+      return res.status(404).json({ error: '帖子不存在' });
+    }
+
+    const duplicateReply = await ForumReply.findOne({
+      postId,
+      author: req.user.id,
+      content: safeContent,
+      createdAt: { $gte: new Date(Date.now() - FORUM_LIMITS.duplicateWindowMs) }
+    }).select('_id');
+
+    if (duplicateReply) {
+      return res.status(429).json({ error: '请勿短时间重复提交相同回答' });
+    }
+
     const newReply = await ForumReply.create({
       postId,
       author: req.user.id,
-      content
+      content: safeContent
     });
 
     // 更新主帖的回复数、最后回复时间
@@ -1049,7 +1172,7 @@ app.get('/api/forum/replies/:id/comments', async (req, res) => {
 });
 
 // 9. 发表评论（支持二级回复，最多两级）
-app.post('/api/forum/replies/:id/comments', authMiddleware, async (req, res) => {
+app.post('/api/forum/replies/:id/comments', authMiddleware, forumCommentCreateLimiter, async (req, res) => {
   try {
     const replyId = req.params.id;
     const { content, parentCommentId } = req.body;
@@ -1057,8 +1180,14 @@ app.post('/api/forum/replies/:id/comments', authMiddleware, async (req, res) => 
     if (!mongoose.Types.ObjectId.isValid(replyId)) {
       return res.status(400).json({ error: '无效的回答ID' });
     }
-    if (!content || !String(content).trim()) {
+    const safeContent = sanitizeForumHtml(content);
+    const plainContent = stripHtml(safeContent);
+
+    if (!plainContent) {
       return res.status(400).json({ error: '评论内容不能为空' });
+    }
+    if (plainContent.length > FORUM_LIMITS.commentContentMax) {
+      return res.status(400).json({ error: `评论不能超过 ${FORUM_LIMITS.commentContentMax} 字` });
     }
 
     const reply = await ForumReply.findById(replyId).select('_id postId');
@@ -1090,12 +1219,23 @@ app.post('/api/forum/replies/:id/comments', authMiddleware, async (req, res) => 
       finalParentId = parent._id;
     }
 
+    const duplicateComment = await ForumReplyComment.findOne({
+      replyId: reply._id,
+      author: req.user.id,
+      content: safeContent,
+      createdAt: { $gte: new Date(Date.now() - FORUM_LIMITS.duplicateWindowMs) }
+    }).select('_id');
+
+    if (duplicateComment) {
+      return res.status(429).json({ error: '请勿短时间重复提交相同评论' });
+    }
+
     const created = await ForumReplyComment.create({
       postId: reply.postId,
       replyId: reply._id,
       parentCommentId: finalParentId,
       author: req.user.id,
-      content: String(content).trim()
+      content: safeContent
     });
 
     if (finalParentId) {
