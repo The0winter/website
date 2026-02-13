@@ -324,17 +324,17 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
   }, [chapters]);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-12">
+    // 修改1：增加手机端底部 padding (pb-24)，防止被常驻底栏遮挡内容
+    <div className="min-h-screen bg-gray-50 pb-24 md:pb-12">
       <div className="h-[10px] md:h-[20px]"></div> 
 
-      {/* ⚠️ 移动端：减少边距 padding (px-3 py-4) */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 md:py-8 space-y-3 md:space-y-6">
+      {/* ⚠️ 修改2：将 space-y 替换为 flex flex-col 和 gap，以便利用 order 属性实现手机端模块换位 */}
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 md:py-8 flex flex-col gap-3 md:gap-6">
         
-        {/* === 第一部分：书籍核心信息 (响应式重构) === */}
-        <div className="bg-white rounded-lg shadow-sm p-4 md:p-8">
+        {/* === 第一部分：书籍核心信息 === */}
+        <div className="bg-white rounded-lg shadow-sm p-4 md:p-8 order-1">
             <div className="flex flex-row gap-4 md:gap-8">
-              
-              {/* 左侧封面：手机端 w-24, 电脑端 w-48 */}
+              {/* 左侧封面 */}
               <div className="flex-shrink-0">
                 {book.cover_image ? (
                   <img src={book.cover_image} alt={book.title} className="w-24 h-32 md:w-48 md:h-64 object-cover rounded shadow-md" />
@@ -347,10 +347,17 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
 
               {/* 右侧信息 */}
               <div className="flex-1 flex flex-col justify-between md:justify-start">
-                 {/* 标题：手机端 sm, 电脑端 3xl */}
-                 <h1 className="text-lg md:text-3xl font-bold text-gray-900 mb-1 md:mb-4 line-clamp-2">{book.title}</h1>
+                 {/* 标题与手机端评分 */}
+                 <div className="flex items-start justify-between mb-1 md:mb-4">
+                     <h1 className="text-lg md:text-3xl font-bold text-gray-900 line-clamp-2">{book.title}</h1>
+                     {/* 🔥 新增：手机端评分角标 */}
+                     <div className="md:hidden flex-shrink-0 flex items-center bg-yellow-50 px-2 py-0.5 rounded border border-yellow-100 text-yellow-600 text-xs font-bold whitespace-nowrap ml-2 mt-0.5">
+                         <Star className="w-3 h-3 fill-yellow-400 text-yellow-400 mr-1" />
+                         {displayRating}分
+                     </div>
+                 </div>
 
-                 {/* 信息列表：手机端 xs, 电脑端 sm */}
+                 {/* 信息列表 */}
                  <div className="flex flex-col space-y-1 md:space-y-2 mb-2 md:mb-8 text-xs md:text-sm text-gray-600">
                      <div className="flex items-center">
                         <span className="text-gray-500 w-12 md:w-16">作者:</span>
@@ -382,18 +389,17 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
                      </div>
                  </div>
 
-                 {/* 电脑端的大按钮组 (手机端隐藏) */}
+                 {/* 电脑端的大按钮组 (手机端已移除，改为常驻底栏) */}
                  <div className="hidden md:flex flex-wrap gap-4 mt-auto">
                     {chapters.length > 0 ? (
                         <Link 
                         href={firstChapterId ? `/book/${book.id}/${firstChapterId}` : '#'} 
                         className="bg-blue-600 text-white px-8 py-3 rounded-md hover:bg-blue-700 font-semibold transition-colors shadow-sm">
-                        开始阅读
+                         开始阅读
                       </Link>
                     ) : (
                         <button disabled className="bg-gray-400 text-white px-8 py-3 rounded-md cursor-not-allowed font-semibold">暂无章节</button>
                     )}
-        
                     <button 
                         onClick={handleToggleBookmark} 
                         disabled={loading}
@@ -409,7 +415,7 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
                 </div>
               </div>
 
-              {/* 电脑端评分栏 (手机端隐藏) */}
+              {/* 电脑端评分栏 */}
               <div className="hidden md:block w-[280px] border-l border-gray-100 pl-6 pt-2">
                  <div className="flex items-end space-x-2 mb-2">
                     <span className="text-gray-500 text-xs">书友评分</span>
@@ -421,123 +427,48 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
                         <span className="text-xs text-blue-600 mt-1 hover:underline cursor-pointer">{book.numReviews || 0} 人评价</span>
                     </div>
                  </div>
-                 {/* 评分条省略... */}
                  <div className="mt-4 pt-4 border-t border-gray-100 text-right">
                      <span className="text-xs text-gray-400">评分来自真实用户</span>
                  </div>
               </div>
             </div>
 
-            {/* 🔥 手机端按钮组 (移到封面下方) */}
-            <div className="flex md:hidden gap-3 mt-4">
-            <Link 
-                href={firstChapterId ? `/book/${book.id}/${firstChapterId}` : '#'} 
-                className={`flex-1 py-2.5 rounded text-center text-sm font-bold text-white shadow-sm ${firstChapterId ? 'bg-blue-600' : 'bg-gray-400'}`}
-            >
-                开始阅读
-            </Link>
-                 <button 
-                    onClick={handleToggleBookmark}
-                    className={`flex-1 py-2.5 rounded text-center text-sm font-bold border ${isBookmarked ? 'border-gray-300 bg-gray-100 text-gray-600' : 'border-blue-600 text-blue-600 bg-white'}`}
-                 >
-                    {isBookmarked ? '已在书架' : '加入书架'}
-                 </button>
+            {/* 🔥 新增：手机端专属作品简介 (紧贴封面下方，支持折叠) */}
+            <div className="md:hidden mt-4 pt-3 border-t border-gray-100">
+                <div className="relative">
+                    <div className={`text-gray-600 leading-relaxed text-sm whitespace-pre-wrap transition-all duration-300 ${!isDescExpanded ? 'line-clamp-2' : ''}`}>
+                        {book.description || '暂无简介'}
+                    </div>
+                    <button 
+                        onClick={() => setIsDescExpanded(!isDescExpanded)}
+                        className="w-full mt-1.5 flex items-center justify-center text-blue-500 bg-blue-50/50 rounded py-1 text-xs font-medium active:bg-blue-100 transition-colors"
+                    >
+                        {isDescExpanded ? (
+                            <><ChevronUp className="w-3 h-3 mr-1"/> 收起简介</>
+                        ) : (
+                            <><ChevronDown className="w-3 h-3 mr-1"/> 展开简介</>
+                        )}
+                    </button>
+                </div>
             </div>
         </div>
 
-        {/* === 第二部分：作品简介 (支持折叠) === */}
-        <div className="bg-white rounded-lg shadow-sm p-4 md:p-8">
+        {/* === 第二部分：作品简介 (⚠️ 设为 hidden md:block 仅电脑端独立一栏显示，电脑端排在第2) === */}
+        <div className="hidden md:block bg-white rounded-lg shadow-sm p-4 md:p-8 order-2">
           <div className="flex justify-between items-center mb-2 md:mb-4">
                <h2 className="text-base md:text-xl font-bold text-gray-900 border-l-4 border-blue-600 pl-3">作品简介</h2>
           </div>
-          
-          <div className="relative">
-              {/* 电脑端不折叠 (md:line-clamp-none)，手机端根据状态折叠 */}
-              <div className={`text-gray-700 leading-6 text-sm whitespace-pre-wrap ${!isDescExpanded ? 'line-clamp-3 md:line-clamp-none' : ''}`}>
-                 {book.description || '暂无简介'}
-              </div>
-              
-              {/* 手机端展开按钮 (md:hidden) */}
-              <button 
-                 onClick={() => setIsDescExpanded(!isDescExpanded)}
-                 className="md:hidden w-full mt-2 pt-2 border-t border-gray-50 flex items-center justify-center text-gray-400 text-xs"
-              >
-                 {isDescExpanded ? (
-                     <><ChevronUp className="w-3 h-3 mr-1"/> 收起</>
-                 ) : (
-                     <><ChevronDown className="w-3 h-3 mr-1"/> 展开更多</>
-                 )}
-              </button>
+          <div className="text-gray-700 leading-6 text-sm whitespace-pre-wrap">
+              {book.description || '暂无简介'}
           </div>
         </div>
 
-        {/* === 🔥 第三部分：目录 (新版：精简+弹窗) === */}
-        <div className="bg-white rounded-lg shadow-sm">
-          <div className="p-4 md:p-8">
-            <div className="flex justify-between items-center mb-3 md:mb-6">
-                <h2 className="text-base md:text-xl font-bold text-gray-900 flex items-center space-x-2 border-l-4 border-blue-600 pl-3">
-                    <span>目录</span>
-                    <span className="text-xs md:text-sm font-normal text-gray-500 ml-2">{book.status === 'completed' ? '已完结' : '连载中'} · 共{chapters.length}章</span>
-                </h2>
-                
-                <button 
-                    onClick={() => setIsReversed(!isReversed)} 
-                    className="flex items-center space-x-1 text-xs md:text-sm text-gray-600 hover:text-blue-600 transition-colors"
-                >
-                    <ArrowUpDown className="w-3 h-3 md:w-4 md:h-4" />
-                    <span>{isReversed ? '倒序' : '正序'}</span>
-                </button>
-            </div>
-
-            {loadingChapters ? (
-               <div className="py-6 md:py-10 text-center text-gray-500 flex flex-col items-center">
-                  <Loader2 className="w-6 h-6 md:w-8 md:h-8 animate-spin mb-2 text-blue-500" />
-                  <p className="text-xs md:text-sm">加载目录...</p>
-               </div>
-            ) : chapters.length === 0 ? (
-              <p className="text-gray-600 text-sm">暂无章节</p>
-            ) : (
-              <div>
-                {/* 1. 目录列表 (手机端隐藏第8章以后的，电脑端显示30章) */}
-                {/* grid-cols-2 (手机双列) md:grid-cols-3 (电脑三列) */}
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
-                    {previewChapters.map((chapter, index) => (
-                        <Link
-                            key={chapter.id}
-                            href={`/book/${book.id}/${chapter.id}`}
-                            // 🔥 核心逻辑：index >= 8 时，手机端隐藏 (hidden)，电脑端显示 (md:flex)
-                            className={`group items-center p-2 bg-gray-50 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200 transition-all text-xs md:text-sm 
-                                ${index >= 8 ? 'hidden md:flex' : 'flex'}`}
-                        >
-                            <span className="text-gray-700 truncate group-hover:text-blue-600 w-full">
-                                {chapter.title.trim().startsWith('第') ? chapter.title : `第${chapter.chapter_number}章 ${chapter.title}`}
-                            </span>
-                        </Link>
-                    ))}
-                </div>
-
-                {/* 2. 底部“查看全部”按钮 (样式优化) */}
-                <div className="mt-4 md:mt-6 text-center">
-                    <button 
-                        onClick={() => setShowAllChapters(true)}
-                        className="w-full md:w-auto bg-gray-100 md:bg-gray-100 text-gray-700 md:px-12 py-3 rounded-lg md:rounded-full hover:bg-gray-200 transition-colors font-medium text-sm flex items-center justify-center mx-auto space-x-2"
-                    >
-                        <span>查看完整目录 ({chapters.length}章)</span>
-                        <ChevronRight className="w-4 h-4" />
-                    </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* === 第四部分：书友评价区 (保留原样，微调间距) === */}
-        <div id="reviews-section" className="bg-white rounded-lg shadow-sm p-4 md:p-8">
+        {/* === 第三部分：书友评价区 (⚠️ 利用 order-3 md:order-4 在手机端提到目录前面，电脑端仍为第4) === */}
+        <div id="reviews-section" className="bg-white rounded-lg shadow-sm p-4 md:p-8 order-3 md:order-4">
             <div className="flex items-center justify-between mb-4 md:mb-6">
                 <h2 className="text-base md:text-xl font-bold text-gray-900 flex items-center space-x-2 border-l-4 border-blue-600 pl-3">
                     <span>书友评价 ({reviews.length})</span>
                 </h2>
-                
                 {!showReviewForm && !myReview && (
                      <button 
                         onClick={() => {
@@ -550,9 +481,9 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
                      </button>
                 )}
             </div>
-            {/* ... 评论内容保持不变，复用已有逻辑 ... */}
-             {/* B. 评论表单 */}
-             {showReviewForm && (
+            
+            {/* 评论表单 */}
+            {showReviewForm && (
                 <div className="mb-8 p-4 md:p-6 bg-gray-50 rounded-lg border border-blue-100 shadow-inner animation-fade-in relative">
                     <button onClick={() => setShowReviewForm(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
                     <form onSubmit={handleSubmitReview}>
@@ -583,7 +514,7 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
                 </div>
             )}
 
-            {/* C. 评论列表 */}
+            {/* 评论列表 */}
             <div className="space-y-6 md:space-y-8">
                 {reviews.length === 0 ? (
                     <div className="text-gray-500 text-sm text-center py-4">还没有人评价，快来抢沙发！</div>
@@ -614,7 +545,6 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
                                             <span className="text-xs text-gray-400">
                                                 {new Date(review.createdAt).toISOString().split('T')[0]}
                                             </span>
-                                            
                                             {isMyReview && (
                                                 <button 
                                                     onClick={handleEditClick}
@@ -634,9 +564,97 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
             </div>
         </div>
 
+        {/* === 第四部分：目录 (⚠️ 利用 order-4 md:order-3 在手机端沉底，电脑端仍为第3) === */}
+        <div className="bg-white rounded-lg shadow-sm order-4 md:order-3">
+          <div className="p-4 md:p-8">
+            <div className="flex justify-between items-center mb-3 md:mb-6">
+                <h2 className="text-base md:text-xl font-bold text-gray-900 flex items-center space-x-2 border-l-4 border-blue-600 pl-3">
+                    <span>目录</span>
+                    <span className="text-xs md:text-sm font-normal text-gray-500 ml-2">{book.status === 'completed' ? '已完结' : '连载中'} · 共{chapters.length}章</span>
+                </h2>
+                <button 
+                    onClick={() => setIsReversed(!isReversed)} 
+                    className="flex items-center space-x-1 text-xs md:text-sm text-gray-600 hover:text-blue-600 transition-colors"
+                >
+                    <ArrowUpDown className="w-3 h-3 md:w-4 md:h-4" />
+                    <span>{isReversed ? '倒序' : '正序'}</span>
+                </button>
+            </div>
+
+            {loadingChapters ? (
+               <div className="py-6 md:py-10 text-center text-gray-500 flex flex-col items-center">
+                  <Loader2 className="w-6 h-6 md:w-8 md:h-8 animate-spin mb-2 text-blue-500" />
+                  <p className="text-xs md:text-sm">加载目录...</p>
+               </div>
+            ) : chapters.length === 0 ? (
+              <p className="text-gray-600 text-sm">暂无章节</p>
+            ) : (
+              <div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
+                    {previewChapters.map((chapter, index) => (
+                        <Link
+                            key={chapter.id}
+                            href={`/book/${book.id}/${chapter.id}`}
+                            className={`group items-center p-2 bg-gray-50 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200 transition-all text-xs md:text-sm ${index >= 8 ? 'hidden md:flex' : 'flex'}`}
+                        >
+                            <span className="text-gray-700 truncate group-hover:text-blue-600 w-full">
+                                {chapter.title.trim().startsWith('第') ? chapter.title : `第${chapter.chapter_number}章 ${chapter.title}`}
+                            </span>
+                        </Link>
+                    ))}
+                </div>
+                <div className="mt-4 md:mt-6 text-center">
+                    <button 
+                        onClick={() => setShowAllChapters(true)}
+                        className="w-full md:w-auto bg-gray-100 md:bg-gray-100 text-gray-700 md:px-12 py-3 rounded-lg md:rounded-full hover:bg-gray-200 transition-colors font-medium text-sm flex items-center justify-center mx-auto space-x-2"
+                    >
+                        <span>查看完整目录 ({chapters.length}章)</span>
+                        <ChevronRight className="w-4 h-4" />
+                    </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
       </div>
 
-      {/* === 🔥 全屏目录弹窗 (复用原有逻辑) === */}
+      {/* === 🔥 新增：移动端常驻悬浮底栏 === */}
+      <div 
+        className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-100 z-40 shadow-[0_-8px_20px_rgba(0,0,0,0.06)]"
+        // 兼容 iOS 底部安全区
+        style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))', paddingTop: '0.75rem', paddingLeft: '1rem', paddingRight: '1rem' }}
+      >
+        <div className="flex gap-3 max-w-md mx-auto h-11">
+            <button 
+                onClick={handleToggleBookmark}
+                className={`flex-1 flex items-center justify-center space-x-1.5 rounded-full text-sm font-bold transition-all active:scale-95 ${
+                    isBookmarked 
+                    ? 'bg-gray-100 text-gray-500 border border-gray-200' 
+                    : 'bg-blue-50 text-blue-600 border border-blue-200'
+                }`}
+            >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : isBookmarked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+                <span>{isBookmarked ? '已在书架' : '加入书架'}</span>
+            </button>
+            
+            {chapters.length > 0 ? (
+                <Link 
+                    href={firstChapterId ? `/book/${book.id}/${firstChapterId}` : '#'} 
+                    className="flex-[1.2] flex items-center justify-center space-x-1.5 rounded-full text-sm font-bold text-white shadow-md transition-all active:scale-95 bg-gradient-to-r from-blue-500 to-blue-600 active:from-blue-600 active:to-blue-700"
+                >
+                    <BookOpen className="w-4 h-4" />
+                    <span>开始阅读</span>
+                </Link>
+            ) : (
+                <button disabled className="flex-[1.2] flex items-center justify-center space-x-1.5 rounded-full text-sm font-bold text-white shadow-md bg-gray-400 cursor-not-allowed">
+                    暂无章节
+                </button>
+            )}
+        </div>
+      </div>
+
+      {/* === 全屏目录弹窗 (保留原有逻辑，原封不动) === */}
       {showAllChapters && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 sm:p-6" onClick={() => setShowAllChapters(false)}>
             <div 

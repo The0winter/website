@@ -297,7 +297,6 @@ return (
                 <span className={`ml-2 text-lg font-black tracking-tighter ${currentTheme.textMain} hidden sm:block`}>九天</span>
               </Link>
               <div className={`mx-3 h-4 w-px ${themeMode === 'light' ? 'bg-gray-300' : 'bg-[#30353c]'} hidden sm:block`}></div>
-              <span className={`text-lg font-bold tracking-tight ${currentTheme.textMain}`}>论坛</span>
             </div>
 
             {/* 2. 中间：带提示字样的搜索框 */}
