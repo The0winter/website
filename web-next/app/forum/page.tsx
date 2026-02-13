@@ -74,68 +74,45 @@ function formatCount(value: number) {
 
 export default function ForumPage() {
   const [activeTab, setActiveTab] = useState<FeedTab>('recommend');
-  const [posts, setPosts] = useState<ForumPost[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // ====== 状态升级：缓存多页数据与加载状态 ======
+  const [postsCache, setPostsCache] = useState<Record<string, ForumPost[]>>({});
+  const [loadingState, setLoadingState] = useState<Record<string, boolean>>({
+    follow: true, recommend: true, hot: true
+  });
+  const initializedRef = useRef(false);
+
+  // ====== 基础设置状态 ======
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
   const [fontSize, setFontSize] = useState(16);
   const [showSettings, setShowSettings] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const currentTheme = THEMES[themeMode];
-// ====== 新增：用于处理滑动切换选项卡的状态和逻辑 ======
-  const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
-  const [touchEnd, setTouchEnd] = useState<{x: number, y: number} | null>(null);
-  
-  // 触发滑动的最小距离
-  const minSwipeDistance = 50;
 
-  const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
-  };
+  // ====== 滑动轮播专属状态 ======
+  const activeIndex = TABS.findIndex(t => t.id === activeTab);
+  const [touchStartPos, setTouchStartPos] = useState<{x: number, y: number} | null>(null);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [swipeDir, setSwipeDir] = useState<'h' | 'v' | null>(null);
 
-  const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
-  };
-
-  const onTouchEndHandler = () => {
-    if (!touchStart || !touchEnd) return;
-    const distanceX = touchStart.x - touchEnd.x;
-    const distanceY = touchStart.y - touchEnd.y;
-    
-    // 确保是水平滑动（X轴位移大于Y轴位移），避免用户正常上下滚动时误触
-    if (Math.abs(distanceX) > Math.abs(distanceY) && Math.abs(distanceX) > minSwipeDistance) {
-      const isLeftSwipe = distanceX > minSwipeDistance;
-      const isRightSwipe = distanceX < -minSwipeDistance;
-      
-      const currentIndex = TABS.findIndex(t => t.id === activeTab);
-      
-      if (isLeftSwipe && currentIndex < TABS.length - 1) {
-        // 向左滑，切换到下一个 Tab
-        setActiveTab(TABS[currentIndex + 1].id);
-      }
-      if (isRightSwipe && currentIndex > 0) {
-        // 向右滑，切换到上一个 Tab
-        setActiveTab(TABS[currentIndex - 1].id);
-      }
-    }
-  };
-  // ====== 新增结束 ======
-
+  // 1. 初始化静默预加载所有 Tab 的数据
   useEffect(() => {
-    const fetchPosts = async () => {
-      try {
-        setLoading(true);
-        const data = await forumApi.getPosts(activeTab);
-        setPosts(data || []);
-      } catch (error) {
-        console.error('Failed to fetch forum posts:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchPosts();
-  }, [activeTab]);
+    if (initializedRef.current) return;
+    initializedRef.current = true;
 
+    TABS.forEach(tab => {
+      forumApi.getPosts(tab.id).then(data => {
+        setPostsCache(prev => ({ ...prev, [tab.id]: data || [] }));
+        setLoadingState(prev => ({ ...prev, [tab.id]: false }));
+      }).catch(error => {
+        console.error(`Failed to fetch forum posts for ${tab.id}:`, error);
+        setLoadingState(prev => ({ ...prev, [tab.id]: false }));
+      });
+    });
+  }, []);
+
+  // 2. 点击外部关闭设置面板
   useEffect(() => {
     const onClickOutside = (event: MouseEvent) => {
       if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
@@ -146,29 +123,158 @@ export default function ForumPage() {
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, []);
 
+  // 3. 读取缓存配置
   useEffect(() => {
     try {
       const raw = localStorage.getItem(READER_SETTINGS_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (parsed?.themeMode === 'light' || parsed?.themeMode === 'dark') {
-        setThemeMode(parsed.themeMode);
-      }
-      if (typeof parsed?.fontSize === 'number' && parsed.fontSize >= 14 && parsed.fontSize <= 24) {
-        setFontSize(parsed.fontSize);
-      }
-    } catch {
-      // ignore invalid cache
-    }
+      if (parsed?.themeMode === 'light' || parsed?.themeMode === 'dark') setThemeMode(parsed.themeMode);
+      if (typeof parsed?.fontSize === 'number' && parsed.fontSize >= 14 && parsed.fontSize <= 24) setFontSize(parsed.fontSize);
+    } catch { /* ignore */ }
   }, []);
 
+  // 4. 写入缓存配置
   useEffect(() => {
     try {
       localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify({ themeMode, fontSize }));
-    } catch {
-      // ignore write failure
-    }
+    } catch { /* ignore */ }
   }, [themeMode, fontSize]);
+
+  // ====== 移动端滑动事件处理 ======
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartPos({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
+    setIsDragging(true);
+    setDragOffset(0);
+    setSwipeDir(null);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartPos) return;
+    const currentX = e.targetTouches[0].clientX;
+    const currentY = e.targetTouches[0].clientY;
+    const diffX = currentX - touchStartPos.x;
+    const diffY = currentY - touchStartPos.y;
+
+    let dir = swipeDir;
+    // 滑动超过 10px 时锁定防误触方向
+    if (!dir) {
+      if (Math.abs(diffX) > 10 || Math.abs(diffY) > 10) {
+        dir = Math.abs(diffX) > Math.abs(diffY) ? 'h' : 'v';
+        setSwipeDir(dir);
+      }
+    }
+
+    if (dir === 'h') {
+      let newOffset = diffX;
+      // 边缘阻尼（首尾页拉拽时增加吃力感）
+      if ((activeIndex === 0 && diffX > 0) || (activeIndex === TABS.length - 1 && diffX < 0)) {
+        newOffset = diffX * 0.3;
+      }
+      setDragOffset(newOffset);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    if (!touchStartPos || swipeDir !== 'h') {
+      setTouchStartPos(null);
+      return;
+    }
+
+    // 滑动超过屏幕宽度 20% 触发翻页
+    const threshold = window.innerWidth * 0.2; 
+    if (dragOffset > threshold && activeIndex > 0) {
+      setActiveTab(TABS[activeIndex - 1].id);
+    } else if (dragOffset < -threshold && activeIndex < TABS.length - 1) {
+      setActiveTab(TABS[activeIndex + 1].id);
+    }
+
+    setDragOffset(0);
+    setTouchStartPos(null);
+    setSwipeDir(null);
+  };
+
+  // ====== 提取单页内容渲染器（复用） ======
+  const renderPostList = (tabId: string) => {
+    const tabPosts = postsCache[tabId] || [];
+    const isTabLoading = loadingState[tabId];
+
+    return (
+      // 移动端：去圆角(rounded-none)，只留上下边框(border-y, border-x-0)；PC端：恢复圆角和全边框
+      <div className={`overflow-hidden rounded-none md:rounded-2xl border-y border-x-0 md:border ${currentTheme.border} ${currentTheme.card} w-full min-h-[50vh]`}>
+        {isTabLoading && (
+          <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>加载中...</div>
+        )}
+
+        {!isTabLoading && tabPosts.length === 0 && (
+          <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>暂无内容</div>
+        )}
+
+        {!isTabLoading && tabPosts.map((post, index) => {
+          const realId = post.id;
+          if (!realId) return null;
+
+          const topReply = post.topReply || null;
+          const answerLink = topReply?.id ? `/forum/${topReply.id}?fromQuestion=${realId}` : `/forum/question/${realId}`;
+          const answerVotes = topReply?.votes ?? post.votes ?? 0;
+          const answerComments = topReply?.comments ?? post.comments ?? 0;
+          const authorName = topReply?.author?.name || '暂无回答';
+          const excerpt = topReply?.content || '这个问题还没有回答，点击查看并参与讨论。';
+
+          return (
+            <article
+              key={realId}
+              className={`px-4 md:px-6 py-4 md:py-5 ${index < tabPosts.length - 1 ? `border-b ${currentTheme.border}` : ''}`}
+            >
+              <Link href={`/forum/question/${realId}`} className="block">
+                <h2
+                  className={`font-bold leading-[1.42] tracking-tight ${currentTheme.textMain} hover:text-blue-600 transition-colors`}
+                  style={{ fontSize: `${fontSize + 4}px` }}
+                >
+                  {post.title}
+                </h2>
+              </Link>
+
+              <div className="mt-3 flex items-center gap-2">
+                <div className={`w-7 h-7 rounded-full overflow-hidden flex items-center justify-center ${themeMode === 'light' ? 'bg-gray-100' : 'bg-[#2c323a]'}`}>
+                  {topReply?.author?.avatar ? (
+                    <img src={topReply.author.avatar} alt="avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className={`text-[11px] font-semibold ${currentTheme.textSub}`}>
+                      {authorName.slice(0, 1)}
+                    </span>
+                  )}
+                </div>
+                <span className={`text-sm font-medium ${currentTheme.textMain}`}>{authorName}</span>
+              </div>
+
+              <Link href={answerLink} className="block">
+                <p
+                  className={`mt-2 leading-[1.65] line-clamp-2 md:line-clamp-3 ${currentTheme.textSub} hover:text-gray-700 transition-colors`}
+                  style={{ fontSize: `${fontSize}px` }}
+                >
+                  {excerpt}
+                </p>
+              </Link>
+
+              <div className={`mt-3 flex items-center gap-5 text-[13px] ${currentTheme.textSub}`}>
+                <span className="inline-flex items-center gap-1.5">
+                  <ThumbsUp className="w-3.5 h-3.5" />
+                  {formatCount(answerVotes)}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  {formatCount(answerComments)}
+                </span>
+                <span className="ml-auto text-xs">{topReply ? '查看回答' : '去回答'}</span>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className={`min-h-screen ${currentTheme.bg} pb-24 md:pb-12 font-sans transition-colors duration-300`}>
@@ -240,6 +346,7 @@ export default function ForumPage() {
             </div>
           </div>
 
+          {/* 移动端: 选项卡均分宽度; PC端(md): 恢复靠左排布 */}
           <nav className="-mb-px flex w-full justify-around md:justify-start items-center md:gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {TABS.map((tab) => {
               const isActive = activeTab === tab.id;
@@ -247,7 +354,6 @@ export default function ForumPage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  // 移动端使用 flex-1 均分宽度并居中，PC端 (md:flex-none) 恢复原状
                   className={`flex-1 md:flex-none flex justify-center items-center shrink-0 px-3 sm:px-4 h-11 border-b-2 text-[15px] font-semibold transition-colors ${isActive ? currentTheme.tabActive : currentTheme.tabIdle}`}
                 >
                   {tab.label}
@@ -258,84 +364,29 @@ export default function ForumPage() {
         </div>
       </div>
 
-      <div 
-          className="max-w-[1040px] mx-auto px-0 md:px-4 mt-1 md:mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px] gap-5 md:gap-6"
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEndHandler}
-        >
-          {/* 移动端去圆角、去左右边框；PC端(md)恢复圆角和全边框 */}
-          <div className={`overflow-hidden rounded-none md:rounded-2xl border-y border-x-0 md:border ${currentTheme.border} ${currentTheme.card}`}>
-            {loading && (
-              <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>加载中...</div>
-            )}
+      {/* 移动端: px-0 满屏, mt-1 缩短间隙; PC端(md): 恢复内边距和外边距 */}
+      <div className="max-w-[1040px] mx-auto px-0 md:px-4 mt-1 md:mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px] gap-5 md:gap-6">
+        
+        {/* ================= 移动端独享：跟手轮播容器 ================= */}
+        <div className="md:hidden w-full relative overflow-hidden" style={{ touchAction: 'pan-y' }}>
+          <div 
+            className={`flex w-full ${isDragging ? '' : 'transition-transform duration-300 ease-out'}`}
+            style={{ transform: `translateX(calc(-${activeIndex * 100}% + ${dragOffset}px))` }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {TABS.map(tab => (
+              <div key={tab.id} className="w-full shrink-0">
+                {renderPostList(tab.id)}
+              </div>
+            ))}
+          </div>
+        </div>
 
-          {!loading && posts.length === 0 && (
-            <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>暂无内容</div>
-          )}
-
-          {!loading &&
-            posts.map((post, index) => {
-              const realId = post.id;
-              if (!realId) return null;
-
-              const topReply = post.topReply || null;
-              const answerLink = topReply?.id ? `/forum/${topReply.id}?fromQuestion=${realId}` : `/forum/question/${realId}`;
-              const answerVotes = topReply?.votes ?? post.votes ?? 0;
-              const answerComments = topReply?.comments ?? post.comments ?? 0;
-              const authorName = topReply?.author?.name || '暂无回答';
-              const excerpt = topReply?.content || '这个问题还没有回答，点击查看并参与讨论。';
-
-              return (
-                <article
-                  key={realId}
-                  className={`px-4 md:px-6 py-4 md:py-5 ${index < posts.length - 1 ? `border-b ${currentTheme.border}` : ''}`}
-                >
-                  <Link href={`/forum/question/${realId}`} className="block">
-                    <h2
-                      className={`font-bold leading-[1.42] tracking-tight ${currentTheme.textMain} hover:text-blue-600 transition-colors`}
-                      style={{ fontSize: `${fontSize + 4}px` }}
-                    >
-                      {post.title}
-                    </h2>
-                  </Link>
-
-                  <div className="mt-3 flex items-center gap-2">
-                    <div className={`w-7 h-7 rounded-full overflow-hidden flex items-center justify-center ${themeMode === 'light' ? 'bg-gray-100' : 'bg-[#2c323a]'}`}>
-                      {topReply?.author?.avatar ? (
-                        <img src={topReply.author.avatar} alt="avatar" className="w-full h-full object-cover" />
-                      ) : (
-                        <span className={`text-[11px] font-semibold ${currentTheme.textSub}`}>
-                          {authorName.slice(0, 1)}
-                        </span>
-                      )}
-                    </div>
-                    <span className={`text-sm font-medium ${currentTheme.textMain}`}>{authorName}</span>
-                  </div>
-
-                  <Link href={answerLink} className="block">
-                    <p
-                      className={`mt-2 leading-[1.65] line-clamp-2 md:line-clamp-3 ${currentTheme.textSub} hover:text-gray-700 transition-colors`}
-                      style={{ fontSize: `${fontSize}px` }}
-                    >
-                      {excerpt}
-                    </p>
-                  </Link>
-
-                  <div className={`mt-3 flex items-center gap-5 text-[13px] ${currentTheme.textSub}`}>
-                    <span className="inline-flex items-center gap-1.5">
-                      <ThumbsUp className="w-3.5 h-3.5" />
-                      {formatCount(answerVotes)}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <MessageCircle className="w-3.5 h-3.5" />
-                      {formatCount(answerComments)}
-                    </span>
-                    <span className="ml-auto text-xs">{topReply ? '查看回答' : '去回答'}</span>
-                  </div>
-                </article>
-              );
-            })}
+        {/* ================= PC端独享：传统单页直出，不参与任何滑动逻辑 ================= */}
+        <div className="hidden md:block w-full">
+          {renderPostList(activeTab)}
         </div>
 
         <aside className="hidden md:flex flex-col gap-6">
