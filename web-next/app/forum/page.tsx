@@ -81,6 +81,45 @@ export default function ForumPage() {
   const [showSettings, setShowSettings] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const currentTheme = THEMES[themeMode];
+// ====== 新增：用于处理滑动切换选项卡的状态和逻辑 ======
+  const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
+  const [touchEnd, setTouchEnd] = useState<{x: number, y: number} | null>(null);
+  
+  // 触发滑动的最小距离
+  const minSwipeDistance = 50;
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
+  };
+
+  const onTouchEndHandler = () => {
+    if (!touchStart || !touchEnd) return;
+    const distanceX = touchStart.x - touchEnd.x;
+    const distanceY = touchStart.y - touchEnd.y;
+    
+    // 确保是水平滑动（X轴位移大于Y轴位移），避免用户正常上下滚动时误触
+    if (Math.abs(distanceX) > Math.abs(distanceY) && Math.abs(distanceX) > minSwipeDistance) {
+      const isLeftSwipe = distanceX > minSwipeDistance;
+      const isRightSwipe = distanceX < -minSwipeDistance;
+      
+      const currentIndex = TABS.findIndex(t => t.id === activeTab);
+      
+      if (isLeftSwipe && currentIndex < TABS.length - 1) {
+        // 向左滑，切换到下一个 Tab
+        setActiveTab(TABS[currentIndex + 1].id);
+      }
+      if (isRightSwipe && currentIndex > 0) {
+        // 向右滑，切换到上一个 Tab
+        setActiveTab(TABS[currentIndex - 1].id);
+      }
+    }
+  };
+  // ====== 新增结束 ======
 
   useEffect(() => {
     const fetchPosts = async () => {
@@ -201,14 +240,15 @@ export default function ForumPage() {
             </div>
           </div>
 
-          <nav className="-mb-px flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <nav className="-mb-px flex w-full justify-around md:justify-start items-center md:gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {TABS.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`shrink-0 px-3 sm:px-4 h-11 border-b-2 text-[15px] font-semibold transition-colors ${isActive ? currentTheme.tabActive : currentTheme.tabIdle}`}
+                  // 移动端使用 flex-1 均分宽度并居中，PC端 (md:flex-none) 恢复原状
+                  className={`flex-1 md:flex-none flex justify-center items-center shrink-0 px-3 sm:px-4 h-11 border-b-2 text-[15px] font-semibold transition-colors ${isActive ? currentTheme.tabActive : currentTheme.tabIdle}`}
                 >
                   {tab.label}
                 </button>
@@ -218,11 +258,17 @@ export default function ForumPage() {
         </div>
       </div>
 
-      <div className="max-w-[1040px] mx-auto px-4 mt-3 md:mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px] gap-5 md:gap-6">
-        <div className={`overflow-hidden rounded-2xl border ${currentTheme.border} ${currentTheme.card}`}>
-          {loading && (
-            <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>加载中...</div>
-          )}
+      <div 
+          className="max-w-[1040px] mx-auto px-0 md:px-4 mt-1 md:mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px] gap-5 md:gap-6"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEndHandler}
+        >
+          {/* 移动端去圆角、去左右边框；PC端(md)恢复圆角和全边框 */}
+          <div className={`overflow-hidden rounded-none md:rounded-2xl border-y border-x-0 md:border ${currentTheme.border} ${currentTheme.card}`}>
+            {loading && (
+              <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>加载中...</div>
+            )}
 
           {!loading && posts.length === 0 && (
             <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>暂无内容</div>

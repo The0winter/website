@@ -98,7 +98,7 @@ export default function RankingPage() {
         {/* 2. 移动端收窄宽度为 72px，桌面端保持 240px  */}
         <aside className="w-[72px] md:w-[240px] flex-shrink-0 flex flex-col gap-2 md:gap-4">
         {/* 增加 top-[35vh] 让移动端悬浮在视口偏中上的位置，保留 md:top-4 让网页端固定在顶部，加上 z-10 防层级遮挡 */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-2 md:p-4 sticky top-[35vh] md:top-4 z-10">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-2 md:p-4 sticky top-[45vh] md:top-4 z-10">
             <h2 className="text-xs md:text-lg font-black text-gray-800 mb-2 md:mb-4 px-0 md:px-2 flex flex-col md:flex-row items-center justify-center md:justify-start gap-1 md:gap-2">
                <Crown className="w-5 h-5 text-yellow-500" /> 
                <span className="hidden md:inline">排行榜</span>
