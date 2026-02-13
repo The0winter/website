@@ -336,11 +336,12 @@ function HomeContent() {
 {/* === 轮播图区域 (已修改：独立分离布局) === */}
           <section className="w-full" onMouseLeave={() => setIsPaused(false)}>
             {featuredBooks.length > 0 ? (
-              // 🔥 核心布局变化：flex gap-6 实现了“物理分离”
-              <div className="flex flex-col md:flex-row gap-4 md:gap-6 items-stretch">
+              // 🔥 修改 1：布局改为 flex-row (左右排列)，gap 缩小适配手机
+              <div className="flex flex-row gap-3 md:gap-6 items-stretch">
                 
-                {/* --- 左侧：独立的轮播图卡片 (Flex-1 占大头) --- */}
+                {/* --- 左侧：轮播图 (Flex-1 自适应剩余宽度) --- */}
                 <div className="flex-1 bg-white md:rounded-2xl shadow-sm border border-gray-100 overflow-hidden relative flex flex-col">
+                    {/* 轮播图高度保持 220px (手机) / 380px (电脑) */}
                     <div 
                       className="relative h-[220px] md:h-[380px] w-full overflow-hidden group"
                       onMouseEnter={() => setIsPaused(true)}
@@ -367,24 +368,25 @@ function HomeContent() {
                                           </div>
                                       )}
                                       
-                                      <div className="relative h-full flex items-center p-5 md:p-10 gap-10 max-w-6xl mx-auto">
+                                      {/* 内容区域：内边距调小 (p-4) 以防文字被右侧导航栏挤压 */}
+                                      <div className="relative h-full flex items-center p-4 md:p-10 gap-10 max-w-6xl mx-auto">
                                           {book.cover_image && (
                                               <img src={book.cover_image} alt={book.title} className="w-48 h-72 object-cover rounded-lg shadow-2xl border-2 border-white/10 flex-shrink-0 hidden md:block transform hover:scale-105 transition-transform duration-500" />
                                           )}
-                                          <div className="flex-1 text-white flex flex-col justify-center">
-                                            <span className="inline-block bg-red-600 text-white text-[10px] md:text-xs font-bold px-2 py-0.5 md:px-3 md:py-1 rounded-full mb-3 tracking-wide shadow-lg shadow-red-900/50 w-fit">
+                                          <div className="flex-1 text-white flex flex-col justify-center min-w-0">
+                                            <span className="inline-block bg-red-600 text-white text-[10px] md:text-xs font-bold px-2 py-0.5 md:px-3 md:py-1 rounded-full mb-2 md:mb-3 tracking-wide shadow-lg shadow-red-900/50 w-fit">
                                                 重磅推荐
                                             </span>
-                                            <h3 className="text-2xl md:text-5xl font-black mb-6 tracking-tight drop-shadow-lg line-clamp-1">
+                                            {/* 标题字号调整，防止换行太丑 */}
+                                            <h3 className="text-xl md:text-5xl font-black mb-2 md:mb-6 tracking-tight drop-shadow-lg line-clamp-2 md:line-clamp-1">
                                                 {book.title}
                                             </h3>
                                             
                                             <div className="flex items-center gap-4 text-white/80 text-xs md:text-sm font-medium">
-                                                {/* 修改：删除了作者，保留分类，增加点击提示占位 */}
-                                                <span className="bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm border border-white/20">
+                                                <span className="bg-white/10 px-2 py-0.5 md:px-3 md:py-1 rounded-full backdrop-blur-sm border border-white/20 whitespace-nowrap">
                                                     {book.category || '综合'}
                                                 </span>
-                                                <span className="text-white/60">点击查看详情 &rarr;</span>
+                                                <span className="text-white/60 hidden sm:inline">点击查看详情 &rarr;</span>
                                             </div>
                                         </div>
                                       </div>
@@ -393,8 +395,8 @@ function HomeContent() {
                           ))}
                       </div>
 
-                      {/* 轮播指示点 */}
-                      <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2 z-20">
+                      {/* 指示点：向左移动，避开右侧导航栏 */}
+                      <div className="absolute bottom-3 left-4 md:left-0 md:right-0 flex justify-start md:justify-center gap-2 z-20">
                           {featuredBooks.map((_, index) => (
                               <button
                                   key={index}
@@ -413,7 +415,7 @@ function HomeContent() {
                       </div>
                     </div>
 
-                    {/* PC端底部列表导航 (集成在左侧卡片内) */}
+                    {/* PC端底部列表导航 (保持不变) */}
                     <div className="bg-[#1a1a1a] border-t border-white/5 hidden lg:block flex-shrink-0">
                       <div className="max-w-6xl mx-auto grid grid-cols-3 divide-x divide-white/5">
                         {featuredBooks.map((book, index) => (
@@ -431,7 +433,7 @@ function HomeContent() {
                                 <div className="absolute top-0 left-0 w-full h-0.5 bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.8)]"></div>
                             )}
                             <span className={`block font-bold mb-0.5 line-clamp-1 ${
-                                (activeBookIndex % featuredBooks.length) === index ? 'text-white' : 'text-gray-400 group-hover:text-gray-200'
+                              (activeBookIndex % featuredBooks.length) === index ? 'text-white' : 'text-gray-400 group-hover:text-gray-200'
                             }`}>
                               {book.title}
                             </span>
@@ -442,82 +444,40 @@ function HomeContent() {
                     </div>
                 </div>
 
-                {/* --- 🔥🔥🔥 右侧：完全独立的白色功能栏 --- */}
-                {/* 改动点：
-                    1. bg-white: 变白了
-                    2. rounded-2xl shadow-sm: 有圆角和投影了，像一个小组件
-                    3. border border-gray-100: 增加精致感
-                    4. text-gray-600: 字体颜色变深，适配白底
+                {/* --- 🔥 修改 2：右侧功能栏 (全平台显示，适配宽度) --- */}
+                {/* Mobile: w-[86px] (紧凑)
+                    PC: w-[110px] (舒适)
+                    hidden md:flex -> flex (让它在手机上也显示)
                 */}
-                <div className="hidden md:flex flex-col w-[110px] bg-white rounded-2xl shadow-sm border border-gray-100 shrink-0 z-10 py-2 justify-between">
-                    <Link href="/ranking" className="flex-1 flex flex-col items-center justify-center gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
-                        <div className="p-3 rounded-full bg-yellow-50 group-hover:bg-yellow-100 transition-colors group-hover:scale-110 duration-300">
-                           <Trophy className="w-6 h-6 text-yellow-600" />
+                <div className="flex flex-col w-[86px] md:w-[110px] bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-100 shrink-0 z-10 py-1 md:py-2 justify-between">
+                   <Link href="/ranking" className="flex-1 flex flex-col items-center justify-center gap-1 md:gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
+                        {/* 图标容器：手机版 p-2，电脑版 p-3 */}
+                        <div className="p-2 md:p-3 rounded-full bg-yellow-50 group-hover:bg-yellow-100 transition-colors group-hover:scale-110 duration-300">
+                           <Trophy className="w-5 h-5 md:w-6 md:h-6 text-yellow-600" />
                         </div>
-                        <span className="text-xs font-bold tracking-wider">排行</span>
+                        <span className="text-[10px] md:text-xs font-bold tracking-wider">排行</span>
                     </Link>
                     
-                    <div className="w-12 h-px bg-gray-100 mx-auto"></div>
+                    <div className="w-8 md:w-12 h-px bg-gray-100 mx-auto"></div>
 
                     <Link href="#category" onClick={() => {
                         document.querySelector('.category-section')?.scrollIntoView({ behavior: 'smooth' });
-                    }} className="flex-1 flex flex-col items-center justify-center gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
-                        <div className="p-3 rounded-full bg-blue-50 group-hover:bg-blue-100 transition-colors group-hover:scale-110 duration-300">
-                            <LayoutGrid className="w-6 h-6 text-blue-600" />
+                    }} className="flex-1 flex flex-col items-center justify-center gap-1 md:gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
+                        <div className="p-2 md:p-3 rounded-full bg-blue-50 group-hover:bg-blue-100 transition-colors group-hover:scale-110 duration-300">
+                            <LayoutGrid className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
                         </div>
-                        <span className="text-xs font-bold tracking-wider">分类</span>
+                        <span className="text-[10px] md:text-xs font-bold tracking-wider">分类</span>
                     </Link>
 
-                    <div className="w-12 h-px bg-gray-100 mx-auto"></div>
+                    <div className="w-8 md:w-12 h-px bg-gray-100 mx-auto"></div>
                     
-                    {/* 将原来的 "作者" 按钮替换为 "论坛" */}
-                    <Link href="/forum" className="flex-1 flex flex-col items-center justify-center gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
-                        {/* 颜色改为蓝色系，致敬知乎蓝 */}
-                        <div className="p-3 rounded-full bg-blue-50 group-hover:bg-blue-100 transition-colors group-hover:scale-110 duration-300">
-                            <MessageSquareText className="w-6 h-6 text-blue-600" />
+                    <Link href="/forum" className="flex-1 flex flex-col items-center justify-center gap-1 md:gap-2 group hover:bg-gray-50 transition-all text-gray-500 hover:text-gray-900 relative">
+                        <div className="p-2 md:p-3 rounded-full bg-blue-50 group-hover:bg-blue-100 transition-colors group-hover:scale-110 duration-300">
+                            <MessageSquareText className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
                         </div>
-                        <span className="text-xs font-bold tracking-wider">论坛</span>
+                        <span className="text-[10px] md:text-xs font-bold tracking-wider">论坛</span>
                     </Link>
                 </div>
-                
-                {/* === 🔥🔥🔥 移动端新版导航：精致胶囊栏 (优化了间距和尺寸) === */}
-                <div className="md:hidden w-full mt-3 mb-1 px-1">
-                    <div className="bg-white rounded-xl shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] border border-gray-100 grid grid-cols-3 py-2.5 divide-x divide-gray-50">
-                        
-                        {/* 1. 排行榜 */}
-                        <Link href="/ranking" className="flex items-center justify-center gap-2 active:bg-gray-50 transition-colors group">
-                            <div className="w-8 h-8 rounded-full bg-yellow-50 flex items-center justify-center group-hover:scale-105 transition-transform">
-                                <Trophy className="w-4 h-4 text-yellow-600" />
-                            </div>
-                            <span className="text-xs font-bold text-gray-700">排行</span>
-                        </Link>
-
-                        {/* 2. 分类库 */}
-                        <Link 
-                            href="#category" 
-                            onClick={(e) => {
-                                e.preventDefault();
-                                document.querySelector('.category-section')?.scrollIntoView({ behavior: 'smooth' });
-                            }}
-                            className="flex items-center justify-center gap-2 active:bg-gray-50 transition-colors group"
-                        >
-                            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center group-hover:scale-105 transition-transform">
-                                <LayoutGrid className="w-4 h-4 text-blue-600" />
-                            </div>
-                            <span className="text-xs font-bold text-gray-700">分类</span>
-                        </Link>
-                        
-                        {/* 3. 论坛区 */}
-                        <Link href="/forum" className="flex items-center justify-center gap-2 active:bg-gray-50 transition-colors group">
-                            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center group-hover:scale-105 transition-transform">
-                                <MessageSquareText className="w-4 h-4 text-blue-600" />
-                            </div>
-                            <span className="text-xs font-bold text-gray-700">论坛</span>
-                        </Link>
-                        
-                    </div>
-                </div>
-                {/* === 插入结束 === */}
 
               </div>
             ) : (
