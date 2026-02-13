@@ -305,6 +305,30 @@ function HomeContent() {
       setTouchEnd(0);
   };
 
+  // === 新增：三大榜单的滑动切换逻辑 ===
+  const [rankTouchStart, setRankTouchStart] = useState(0);
+  const [rankTouchEnd, setRankTouchEnd] = useState(0);
+
+  const handleRankTouchStart = (e: React.TouchEvent) => setRankTouchStart(e.targetTouches[0].clientX);
+  const handleRankTouchMove = (e: React.TouchEvent) => setRankTouchEnd(e.targetTouches[0].clientX);
+  const handleRankTouchEnd = () => {
+      if (!rankTouchStart || !rankTouchEnd) return;
+      const distance = rankTouchStart - rankTouchEnd;
+      // 滑动距离超过 50px 则触发切换
+      if (distance > 50) {
+          // 向左滑 (切换到右边的榜单)
+          if (mobileTab === 'rec') setMobileTab('week');
+          else if (mobileTab === 'week') setMobileTab('day');
+      }
+      if (distance < -50) {
+          // 向右滑 (切换到左边的榜单)
+          if (mobileTab === 'day') setMobileTab('week');
+          else if (mobileTab === 'week') setMobileTab('rec');
+      }
+      setRankTouchStart(0);
+      setRankTouchEnd(0);
+  }; 
+
   const { recList, weekList, dayList } = useMemo(() => {
     const rec = [...allBooks].sort((a: any, b: any) => {
         const scoreA = ((a.rating || 0) * 100 * 0.6) + ((a.weekly_views || 0) * 0.4);
@@ -554,37 +578,50 @@ function HomeContent() {
                       {[1,2,3].map(i => <div key={i} className="h-[700px] bg-gray-200 rounded-2xl animate-pulse"></div>)}
                   </div>
               ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                      
-                      {/* 1. 综合强推 */}
-                      <div className={`${mobileTab === 'rec' ? 'block' : 'hidden'} lg:block`}>
-                          <RankingList 
-                              title="综合强推" 
-                              icon={Star} 
-                              books={recList} 
-                              rankColor="text-yellow-500"
-                              showRating={true}
-                          />
-                      </div>
+                  // 外层容器：隐藏溢出的部分，并绑定触摸事件
+                  <div 
+                      className="overflow-hidden w-full pb-2"
+                      onTouchStart={handleRankTouchStart}
+                      onTouchMove={handleRankTouchMove}
+                      onTouchEnd={handleRankTouchEnd}
+                  >
+                      {/* 内层滑动轨道：手机端 Flex 横排，电脑端恢复 Grid 布局 */}
+                      <div className={`flex lg:grid lg:grid-cols-3 lg:gap-8 transition-transform duration-300 ease-out lg:translate-x-0 ${
+                          mobileTab === 'rec' ? 'translate-x-0' : 
+                          mobileTab === 'week' ? '-translate-x-full' : 
+                          '-translate-x-[200%]'
+                      }`}>
+                          
+                          {/* 1. 综合强推 */}
+                          <div className="w-full flex-shrink-0 lg:w-auto lg:flex-shrink">
+                              <RankingList 
+                                  title="综合强推" 
+                                  icon={Star} 
+                                  books={recList} 
+                                  rankColor="text-yellow-500"
+                                  showRating={true}
+                              />
+                          </div>
 
-                      {/* 2. 本周热度 */}
-                      <div className={`${mobileTab === 'week' ? 'block' : 'hidden'} lg:block`}>
-                          <RankingList 
-                              title="本周热度" 
-                              icon={TrendingUp} 
-                              books={weekList} 
-                              rankColor="text-red-500"
-                          />
-                      </div>
+                          {/* 2. 本周热度 */}
+                          <div className="w-full flex-shrink-0 lg:w-auto lg:flex-shrink">
+                              <RankingList 
+                                  title="本周热度" 
+                                  icon={TrendingUp} 
+                                  books={weekList} 
+                                  rankColor="text-red-500"
+                              />
+                          </div>
 
-                      {/* 3. 今日上升 */}
-                      <div className={`${mobileTab === 'day' ? 'block' : 'hidden'} lg:block`}>
-                          <RankingList 
-                              title="今日上升" 
-                              icon={Zap} 
-                              books={dayList} 
-                              rankColor="text-purple-500"
-                          />
+                          {/* 3. 今日上升 */}
+                          <div className="w-full flex-shrink-0 lg:w-auto lg:flex-shrink">
+                              <RankingList 
+                                  title="今日上升" 
+                                  icon={Zap} 
+                                  books={dayList} 
+                                  rankColor="text-purple-500"
+                              />
+                          </div>
                       </div>
                   </div>
               )}
