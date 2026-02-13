@@ -479,6 +479,38 @@ function HomeContent() {
                         <span className="text-xs font-bold tracking-wider">论坛</span>
                     </Link>
                 </div>
+                
+                {/* === 🔥🔥🔥 插入开始：移动端功能栏 === */}
+                <div className="md:hidden grid grid-cols-3 gap-3 w-full mt-2">
+                    <Link href="/ranking" className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-gray-100 active:scale-95 transition-transform">
+                        <div className="p-2 rounded-full bg-yellow-50 mb-2">
+                           <Trophy className="w-5 h-5 text-yellow-600" />
+                        </div>
+                        <span className="text-xs font-bold text-gray-700">排行</span>
+                    </Link>
+
+                    <Link 
+                        href="#category" 
+                        onClick={(e) => {
+                            e.preventDefault();
+                            document.querySelector('.category-section')?.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-gray-100 active:scale-95 transition-transform"
+                    >
+                        <div className="p-2 rounded-full bg-blue-50 mb-2">
+                            <LayoutGrid className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <span className="text-xs font-bold text-gray-700">分类</span>
+                    </Link>
+                    
+                    <Link href="/forum" className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-gray-100 active:scale-95 transition-transform">
+                        <div className="p-2 rounded-full bg-blue-50 mb-2">
+                            <MessageSquareText className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <span className="text-xs font-bold text-gray-700">论坛</span>
+                    </Link>
+                </div>
+                {/* === 插入结束 === */}
 
               </div>
             ) : (
