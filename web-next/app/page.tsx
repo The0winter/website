@@ -480,35 +480,42 @@ function HomeContent() {
                     </Link>
                 </div>
                 
-                {/* === 🔥🔥🔥 插入开始：移动端功能栏 === */}
-                <div className="md:hidden grid grid-cols-3 gap-3 w-full mt-2">
-                    <Link href="/ranking" className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-gray-100 active:scale-95 transition-transform">
-                        <div className="p-2 rounded-full bg-yellow-50 mb-2">
-                           <Trophy className="w-5 h-5 text-yellow-600" />
-                        </div>
-                        <span className="text-xs font-bold text-gray-700">排行</span>
-                    </Link>
+                {/* === 🔥🔥🔥 移动端新版导航：精致胶囊栏 (优化了间距和尺寸) === */}
+                <div className="md:hidden w-full mt-3 mb-1 px-1">
+                    <div className="bg-white rounded-xl shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] border border-gray-100 grid grid-cols-3 py-2.5 divide-x divide-gray-50">
+                        
+                        {/* 1. 排行榜 */}
+                        <Link href="/ranking" className="flex items-center justify-center gap-2 active:bg-gray-50 transition-colors group">
+                            <div className="w-8 h-8 rounded-full bg-yellow-50 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                <Trophy className="w-4 h-4 text-yellow-600" />
+                            </div>
+                            <span className="text-xs font-bold text-gray-700">排行</span>
+                        </Link>
 
-                    <Link 
-                        href="#category" 
-                        onClick={(e) => {
-                            e.preventDefault();
-                            document.querySelector('.category-section')?.scrollIntoView({ behavior: 'smooth' });
-                        }}
-                        className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-gray-100 active:scale-95 transition-transform"
-                    >
-                        <div className="p-2 rounded-full bg-blue-50 mb-2">
-                            <LayoutGrid className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <span className="text-xs font-bold text-gray-700">分类</span>
-                    </Link>
-                    
-                    <Link href="/forum" className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-gray-100 active:scale-95 transition-transform">
-                        <div className="p-2 rounded-full bg-blue-50 mb-2">
-                            <MessageSquareText className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <span className="text-xs font-bold text-gray-700">论坛</span>
-                    </Link>
+                        {/* 2. 分类库 */}
+                        <Link 
+                            href="#category" 
+                            onClick={(e) => {
+                                e.preventDefault();
+                                document.querySelector('.category-section')?.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                            className="flex items-center justify-center gap-2 active:bg-gray-50 transition-colors group"
+                        >
+                            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                <LayoutGrid className="w-4 h-4 text-blue-600" />
+                            </div>
+                            <span className="text-xs font-bold text-gray-700">分类</span>
+                        </Link>
+                        
+                        {/* 3. 论坛区 */}
+                        <Link href="/forum" className="flex items-center justify-center gap-2 active:bg-gray-50 transition-colors group">
+                            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                <MessageSquareText className="w-4 h-4 text-blue-600" />
+                            </div>
+                            <span className="text-xs font-bold text-gray-700">论坛</span>
+                        </Link>
+                        
+                    </div>
                 </div>
                 {/* === 插入结束 === */}
 
