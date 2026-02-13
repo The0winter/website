@@ -253,7 +253,7 @@ export default function RankingPage() {
                                             </span>
                                             {/* 假数据：字数 (仅作展示) */}
                                             <span className="w-[1px] h-2.5 bg-gray-300 hidden sm:inline"></span>
-                                            <span className="hidden sm:inline">{(book.views / 10).toFixed(0)}万字</span>
+                                            <span className="hidden sm:inline">{((book.views ?? 0) / 10).toFixed(0)}万字</span>
                                         </div>
                                         
                                         {/* 右侧热度值 */}
