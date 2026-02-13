@@ -5,20 +5,20 @@ import Link from 'next/link';
 import { booksApi, Book } from '@/lib/api';
 import { 
   Trophy, Flame, Calendar, Clock, Sparkles, 
-  LayoutGrid, Loader2, BookOpen, Crown, Medal, Star, Eye 
+  Loader2, BookOpen, Crown, Star 
 } from 'lucide-react';
 
-// --- 1. 榜单配置 ---
+// --- 1. 榜单配置 (侧边栏菜单) ---
 const RANK_TYPES = [
-  { id: 'month', name: '月榜', icon: Calendar, desc: '近30天阅读热度', color: 'text-pink-600', bg: 'bg-pink-50' },
-  { id: 'week', name: '周榜', icon: Flame, desc: '本周读者都在看', color: 'text-red-600', bg: 'bg-red-50' },
-  { id: 'day', name: '日榜', icon: Clock, desc: '今日实时上升', color: 'text-blue-600', bg: 'bg-blue-50' },
-  { id: 'rec', name: '综合榜', icon: Sparkles, desc: '口碑与热度双高', color: 'text-purple-600', bg: 'bg-purple-50' },
-  { id: 'total', name: '总榜', icon: Crown, desc: '全站历史最强', color: 'text-yellow-600', bg: 'bg-yellow-50' },
+  { id: 'month', name: '月票榜', shortName: '月票榜', icon: Calendar, desc: '近30天阅读热度' },
+  { id: 'week', name: '畅销榜', shortName: '畅销榜', icon: Flame, desc: '本周读者都在看' },
+  { id: 'day', name: '新书榜', shortName: '新书榜', icon: Clock, desc: '今日实时上升' },
+  { id: 'rec', name: '推荐榜', shortName: '推荐榜', icon: Sparkles, desc: '口碑与热度双高' },
+  { id: 'total', name: '完结榜', shortName: '完结榜', icon: Crown, desc: '全站历史最强' },
 ];
 
 const CATEGORIES = [
-  { name: '全部分类', slug: 'all' },
+  { name: '全部', slug: 'all' },
   { name: '玄幻', slug: 'fantasy' },
   { name: '仙侠', slug: 'wuxia' },
   { name: '都市', slug: 'urban' },
@@ -28,19 +28,18 @@ const CATEGORIES = [
   { name: '悬疑', slug: 'mystery' },
 ];
 
-// 数字格式化函数
+// 数字格式化
 const formatViews = (num: number) => {
   if (!num) return '0';
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-  if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
-  return Math.round(num).toString();
+  if (num >= 100000000) return (num / 100000000).toFixed(1) + '亿'; // 适配中文习惯
+  if (num >= 10000) return (num / 10000).toFixed(1) + '万';
+  return Math.round(num).toLocaleString();
 };
 
 export default function RankingPage() {
   const [allBooks, setAllBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // --- 状态管理 ---
   const [activeRank, setActiveRank] = useState('month'); 
   const [activeCategory, setActiveCategory] = useState('all');
 
@@ -64,7 +63,8 @@ export default function RankingPage() {
     
     if (activeCategory !== 'all') {
         const targetCatName = CATEGORIES.find(c => c.slug === activeCategory)?.name;
-        if (targetCatName && targetCatName !== '全部分类') {
+        // 适配“全部”和“全部分类”名称不一致的情况
+        if (targetCatName && targetCatName !== '全部' && targetCatName !== '全部分类') {
              filtered = allBooks.filter(b => b.category === targetCatName);
         }
     }
@@ -87,37 +87,44 @@ export default function RankingPage() {
     });
   }, [allBooks, activeRank, activeCategory]);
 
-  const currentRankInfo = RANK_TYPES.find(r => r.id === activeRank);
-
   return (
-    <div className="min-h-screen bg-[#f4f5f7] md:py-6 pb-12">
-      <div className="max-w-[1200px] mx-auto md:px-4 flex flex-col md:flex-row gap-4 md:gap-6">
+    <div className="min-h-screen bg-white md:bg-[#f4f5f7] md:py-6 pb-0 md:pb-12">
+      
+      {/* === 桌面端布局容器 (限制最大宽度) === */}
+      <div className="max-w-[1200px] mx-auto md:px-4 flex flex-col md:flex-row gap-4 md:gap-6 h-[calc(100vh-60px)] md:h-auto">
         
-        {/* === 🔥🔥🔥 移动端专属：顶部吸顶榜单导航 === */}
-        <div className="md:hidden sticky top-0 z-30 bg-white border-b border-gray-100 shadow-[0_2px_10px_-5px_rgba(0,0,0,0.05)]">
-            <div className="flex items-center overflow-x-auto no-scrollbar px-2 py-2 gap-1">
+        {/* =========================================================
+            🔥🔥🔥 1. 移动端侧边导航 (仿起点左侧栏)
+           ========================================================= */}
+        <aside className="md:hidden w-[86px] flex-shrink-0 bg-[#f6f7f9] overflow-y-auto no-scrollbar pb-20 h-full fixed left-0 top-0 bottom-0 z-20 pt-[50px] md:pt-0">
+            <div className="flex flex-col">
                 {RANK_TYPES.map((rank) => {
                     const isActive = activeRank === rank.id;
-                    const Icon = rank.icon;
                     return (
                         <button
                             key={rank.id}
-                            onClick={() => setActiveRank(rank.id)}
-                            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap border
+                            onClick={() => {
+                                setActiveRank(rank.id);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className={`relative h-[56px] flex items-center justify-center text-[15px] transition-colors
                                 ${isActive 
-                                    ? `${rank.bg} ${rank.color} border-transparent` 
-                                    : 'text-gray-500 bg-transparent border-transparent'}`}
+                                    ? 'bg-white text-red-600 font-bold' 
+                                    : 'text-gray-500 font-medium hover:text-gray-900'
+                                }`}
                         >
-                            <Icon className={`w-3.5 h-3.5 ${isActive ? 'fill-current' : ''}`} />
-                            {rank.name}
-                            {isActive && <div className="w-1.5 h-1.5 rounded-full bg-current ml-1" />}
+                            {/* 选中时的左侧红条 */}
+                            {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-1 bg-red-600 rounded-r-full" />}
+                            {rank.shortName}
                         </button>
                     );
                 })}
             </div>
-        </div>
+        </aside>
 
-        {/* === PC端左侧导航 (保持原样，移动端隐藏) === */}
+        {/* =========================================================
+            2. 桌面端侧边导航 (保持原样，隐藏移动端)
+           ========================================================= */}
         <aside className="hidden md:flex w-[240px] flex-shrink-0 flex-col gap-4">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sticky top-4">
             <h2 className="text-lg font-black text-gray-800 mb-4 px-2 flex items-center gap-2">
@@ -134,15 +141,12 @@ export default function RankingPage() {
                     onClick={() => setActiveRank(rank.id)}
                     className={`group relative flex items-center gap-3 px-4 py-3.5 rounded-lg text-sm font-medium transition-all duration-200 
                       ${isActive 
-                        ? `${rank.bg} ${rank.color} shadow-sm` 
+                        ? 'bg-red-50 text-red-600 shadow-sm' 
                         : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
                       }`}
                   >
                     <Icon className={`w-5 h-5 ${isActive ? 'scale-110' : 'text-gray-400 group-hover:text-gray-600'} transition-transform`} />
                     <span>{rank.name}</span>
-                    {isActive && (
-                      <div className={`absolute right-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-l-full bg-current opacity-20`} />
-                    )}
                   </button>
                 );
               })}
@@ -150,34 +154,30 @@ export default function RankingPage() {
           </div>
         </aside>
 
-        {/* === 右侧主要内容区域 === */}
-        <main className="flex-1 flex flex-col gap-4 min-w-0">
-          {/* 头部标题与分类筛选 */}
-          <div className="bg-white md:rounded-xl shadow-sm border-b md:border border-gray-100 p-4 md:p-5">
-            <div className="flex items-center justify-between mb-4">
-                <div>
-                    <h1 className="text-lg md:text-2xl font-black text-gray-900 flex items-center gap-2">
-                        {currentRankInfo?.name}
-                        <span className="text-[10px] md:text-xs font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                            {currentRankInfo?.desc}
-                        </span>
-                    </h1>
-                </div>
-                <div className="text-[10px] md:text-xs text-gray-400">
-                    共 {displayBooks.length} 本
-                </div>
+        {/* =========================================================
+            🔥🔥🔥 3. 右侧内容区域 (移动端做了大幅调整)
+           ========================================================= */}
+        <main className="flex-1 flex flex-col min-w-0 md:gap-4 md:bg-transparent bg-white h-full md:h-auto pl-[86px] md:pl-0">
+          
+          {/* --- 顶部：分类筛选 --- */}
+          {/* 移动端：吸顶，白色背景，底部细边框 */}
+          <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm md:static md:bg-white md:rounded-xl md:shadow-sm md:border border-gray-100 p-3 md:p-5 border-b md:border-b-0 border-gray-50">
+            {/* 桌面端标题（移动端隐藏） */}
+            <div className="hidden md:flex items-center justify-between mb-4">
+               {/* ...桌面端标题代码... */}
+               <h1 className="text-2xl font-black text-gray-900">{RANK_TYPES.find(r => r.id === activeRank)?.name}</h1>
             </div>
 
-            {/* 分类筛选 (移动端横向滚动) */}
-            <div className="flex overflow-x-auto no-scrollbar gap-2 pb-1 md:pb-0 md:flex-wrap">
+            {/* 分类胶囊 (左右滑动) */}
+            <div className="flex overflow-x-auto no-scrollbar gap-2 md:gap-3 md:flex-wrap items-center">
               {CATEGORIES.map((cat) => (
                 <button
                   key={cat.slug}
                   onClick={() => setActiveCategory(cat.slug)}
-                  className={`flex-shrink-0 px-3 py-1.5 md:px-4 rounded-full text-[10px] md:text-xs font-bold transition-all border whitespace-nowrap
+                  className={`flex-shrink-0 px-3 py-1.5 md:px-4 rounded-full text-[13px] md:text-xs font-bold transition-all border whitespace-nowrap
                     ${activeCategory === cat.slug 
-                      ? 'bg-gray-900 text-white border-gray-900 shadow-md' 
-                      : 'bg-gray-50 text-gray-500 border-gray-100 hover:bg-gray-100'
+                      ? 'bg-red-50 text-red-600 border-red-100' // 仿起点的选中红
+                      : 'bg-gray-50 text-gray-500 border-transparent hover:bg-gray-100'
                     }`}
                 >
                   {cat.name}
@@ -186,28 +186,24 @@ export default function RankingPage() {
             </div>
           </div>
 
-          {/* 书籍列表区域 */}
-          <div className="bg-white md:rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[600px]">
+          {/* --- 列表区域 --- */}
+          <div className="bg-white md:rounded-xl md:shadow-sm md:border border-gray-100 overflow-hidden min-h-[calc(100vh-100px)] md:min-h-[600px]">
             {loading ? (
-                <div className="flex flex-col items-center justify-center h-60 gap-3 text-gray-400">
-                    <Loader2 className="animate-spin w-8 h-8 text-blue-500" />
-                    <p>正在计算榜单数据...</p>
+                <div className="flex flex-col items-center justify-center pt-20 gap-3 text-gray-400">
+                    <Loader2 className="animate-spin w-8 h-8 text-red-500" />
+                    <p>加载中...</p>
                 </div>
             ) : displayBooks.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-80 text-gray-400">
+                <div className="flex flex-col items-center justify-center pt-20 text-gray-400">
                     <BookOpen className="w-12 h-12 mb-2 text-gray-200" />
-                    <p>该分类下暂无上榜作品</p>
+                    <p>暂无相关作品</p>
                 </div>
             ) : (
-                <div className="divide-y divide-gray-100">
+                <div className="pb-20 md:pb-0"> 
                     {displayBooks.map((book, index) => {
                         const rank = index + 1;
-                        const isTop1 = rank === 1;
-                        const isTop2 = rank === 2;
-                        const isTop3 = rank === 3;
-                        const isTop3Book = rank <= 3;
                         
-                        // 计算显示热度
+                        // 计算热度/票数
                         const rawScore = activeRank === 'rec' 
                            ? (((book as any).weekly_views || 0) * 0.4 + ((book as any).rating || 0) * 100 * 0.6) 
                            : ((book as any)[activeRank === 'total' ? 'views' : `${activeRank}_views`] || 0);
@@ -215,85 +211,71 @@ export default function RankingPage() {
                         const displayScore = formatViews(rawScore);
 
                         return (
-                            <div key={book.id} className="group flex p-3 md:p-5 gap-3 md:gap-5 hover:bg-gray-50 transition-colors relative items-start md:items-center">
+                            <div key={book.id} className="group relative flex items-start gap-3 p-4 md:p-5 hover:bg-gray-50 transition-colors md:border-b border-gray-100">
                                 
-                                {/* 排名数字：移动端紧凑布局 */}
-                                <div className="w-8 md:w-12 flex-shrink-0 flex flex-col items-center pt-1 md:pt-0">
-                                    {isTop1 && <Medal className="w-6 h-6 md:w-8 md:h-8 mb-1 text-yellow-500 fill-yellow-100" />}
-                                    {isTop2 && <Medal className="w-6 h-6 md:w-8 md:h-8 mb-1 text-gray-400 fill-gray-100" />}
-                                    {isTop3 && <Medal className="w-6 h-6 md:w-8 md:h-8 mb-1 text-orange-600 fill-orange-100" />}
-                                    
-                                    <span className={`font-black italic font-mono leading-none
-                                        ${isTop1 ? 'text-yellow-600 text-xl md:text-3xl' : ''}
-                                        ${isTop2 ? 'text-gray-500 text-lg md:text-2xl' : ''}
-                                        ${isTop3 ? 'text-orange-500 text-lg md:text-2xl' : ''}
-                                        ${rank > 3 ? 'text-gray-400 text-base md:text-xl' : ''}
-                                    `}>
-                                        {rank}
-                                    </span>
-                                </div>
-
-                                {/* 书封：移动端缩小尺寸 */}
-                                <Link href={`/book/${book.id}`} className="relative flex-shrink-0 w-[70px] h-[98px] md:w-24 md:h-32 shadow-sm rounded overflow-hidden border border-gray-100 bg-gray-100">
+                                {/* 1. 封面图 (左侧) */}
+                                <Link href={`/book/${book.id}`} className="relative flex-shrink-0 w-[56px] h-[74px] md:w-24 md:h-32 rounded shadow-sm overflow-hidden bg-gray-100">
                                      {book.cover_image ? (
                                          <img src={book.cover_image} alt={book.title} className="w-full h-full object-cover" />
                                      ) : (
                                          <div className="w-full h-full flex items-center justify-center text-gray-300 transform scale-75"><BookOpen /></div>
                                      )}
-                                     {isTop3Book && (
-                                         <div className="absolute top-0 left-0 bg-red-600 text-white text-[8px] md:text-[10px] px-1.5 py-0.5 font-bold rounded-br-md shadow-sm z-10">
-                                            HOT
-                                         </div>
-                                     )}
                                 </Link>
 
-                                {/* 信息区域：移动端优化布局 */}
-                                <div className="flex-1 min-w-0 flex flex-col gap-1 md:gap-2 pt-0.5">
-                                    <div className="flex items-start justify-between gap-2">
-                                        <Link href={`/book/${book.id}`} className="text-base md:text-xl font-bold text-gray-900 line-clamp-2 md:line-clamp-1 leading-tight">
-                                            {book.title}
+                                {/* 2. 中间信息区 (仿起点布局) */}
+                                <div className="flex-1 min-w-0 flex flex-col justify-between h-[74px] md:h-32 py-0.5">
+                                    
+                                    {/* 标题行：排名 + 书名 */}
+                                    <div className="flex items-center justify-between">
+                                        <Link href={`/book/${book.id}`} className="flex items-center text-[16px] md:text-xl text-[#333] font-medium md:font-bold truncate pr-4">
+                                            {/* 排名：前三名用红色，其余灰色 */}
+                                            <span className={`mr-1.5 font-sans font-bold w-4 text-center ${rank <= 3 ? 'text-[#ff3b30]' : 'text-gray-400 text-[15px]'}`}>
+                                                {rank}.
+                                            </span>
+                                            <span className="truncate">{book.title}</span>
                                         </Link>
-                                        
-                                        {/* 评分显示 */}
-                                        {(book as any).rating > 0 && (
-                                            <div className="flex-shrink-0 flex items-center gap-1 bg-yellow-50 px-1.5 py-0.5 rounded text-[10px] md:text-xs font-bold text-yellow-700">
-                                                <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" />
-                                                {(book as any).rating.toFixed(1)}
-                                            </div>
-                                        )}
                                     </div>
 
-                                    <p className="text-xs md:text-sm text-gray-500 line-clamp-2 leading-relaxed h-[32px] md:h-auto">
-                                        {book.description || '暂无简介...'}
+                                    {/* 描述/副标题 (桌面端显示简介，移动端暂时隐藏简介以保持紧凑，或显示一句话) */}
+                                    <p className="hidden md:block text-sm text-gray-500 line-clamp-2 mt-1">
+                                        {book.description}
                                     </p>
-                                    
-                                    <div className="flex items-center justify-between mt-auto md:mt-1">
-                                        <div className="flex items-center gap-2 text-[10px] md:text-xs text-gray-400">
-                                            <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">
-                                                {book.category || '综合'}
-                                            </span>
-                                            <span className="hidden md:inline w-px h-3 bg-gray-300"></span>
-                                            <span className="truncate max-w-[80px]">
+
+                                    {/* 底部元数据行：作者 · 分类 · 状态 */}
+                                    <div className="flex items-center justify-between text-[12px] md:text-sm text-gray-400 md:mt-auto">
+                                        <div className="flex items-center gap-1.5 truncate max-w-[70%]">
+                                            <span className="truncate text-gray-500">
                                                 {book.author || book.profiles?.username || '佚名'}
                                             </span>
+                                            <span className="w-[1px] h-2.5 bg-gray-300"></span>
+                                            <span className="truncate">
+                                                {book.category || '综合'}
+                                            </span>
+                                            {/* 假数据：字数 (仅作展示) */}
+                                            <span className="w-[1px] h-2.5 bg-gray-300 hidden sm:inline"></span>
+                                            <span className="hidden sm:inline">{(book.views / 10).toFixed(0)}万字</span>
                                         </div>
-
-                                        <span className="flex items-center gap-1 text-[10px] md:text-xs text-red-500 font-medium bg-red-50 px-2 py-0.5 rounded-full">
-                                            <Flame className="w-3 h-3" />
-                                            {displayScore}
-                                        </span>
+                                        
+                                        {/* 右侧热度值 */}
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-red-500 md:text-gray-500 font-medium md:font-normal text-[13px] md:text-sm">
+                                                {displayScore}
+                                            </span>
+                                            {/* 移动端标签: 如 "月票" */}
+                                            <span className="md:hidden text-[10px] text-gray-400 scale-90 origin-right">
+                                                {RANK_TYPES.find(r => r.id === activeRank)?.shortName.replace('榜', '') || '热度'}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-
-                                {/* PC端阅读按钮 (移动端隐藏) */}
-                                <div className="hidden md:block pl-4 border-l border-gray-100 ml-2 self-center">
-                                  <Link 
-                                        href={`/book/${book.id}`}
-                                        className="px-5 py-2 bg-white text-gray-900 text-sm font-bold border border-gray-200 rounded-full hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-all shadow-sm whitespace-nowrap"
-                                    >
-                                        立即阅读
-                                  </Link>
+                                
+                                {/* 桌面端阅读按钮 */}
+                                <div className="hidden md:block absolute right-5 top-1/2 -translate-y-1/2">
+                                     <Link href={`/book/${book.id}`} className="px-5 py-2 border border-red-500 text-red-500 rounded-full text-sm hover:bg-red-50 transition-colors">
+                                         阅读
+                                     </Link>
                                 </div>
+
                             </div>
                         );
                     })}
