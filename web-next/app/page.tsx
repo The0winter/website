@@ -331,7 +331,7 @@ function HomeContent() {
         
         {/* 🔥🔥🔥 修改点：彻底删除了顶部的黑色导航栏 div === */}
 
-        <div className="max-w-[1400px] mx-auto md:px-4 md:py-8 flex flex-col gap-0 md:gap-10">
+        <div className="max-w-[1400px] mx-auto px-3 py-4 md:px-4 md:py-8 flex flex-col gap-4 md:gap-10">
         
 {/* === 轮播图区域 (已修改：独立分离布局) === */}
           <section className="w-full" onMouseLeave={() => setIsPaused(false)}>
@@ -340,7 +340,7 @@ function HomeContent() {
               <div className="flex flex-col md:flex-row gap-4 md:gap-6 items-stretch">
                 
                 {/* --- 左侧：独立的轮播图卡片 (Flex-1 占大头) --- */}
-                <div className="flex-1 bg-white md:rounded-2xl shadow-sm border border-gray-100 overflow-hidden relative flex flex-col">
+                <div className="flex-1 bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-100 overflow-hidden relative flex flex-col">
                     <div 
                       className="relative h-[220px] md:h-[380px] w-full overflow-hidden group"
                       onMouseEnter={() => setIsPaused(true)}
@@ -479,16 +479,16 @@ function HomeContent() {
                         <span className="text-xs font-bold tracking-wider">论坛</span>
                     </Link>
                 </div>
-                {/* === 🔥🔥🔥 移动端新版导航：悬浮玻璃态 (层叠在轮播图上方) === */}
-                <div className="md:hidden w-full px-4 -mt-5 relative z-30 mb-6">
-                    <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-white flex justify-around py-3.5 px-2">
+                {/* === 🔥🔥🔥 移动端新版导航：精致胶囊栏 (优化了间距和尺寸) === */}
+                <div className="md:hidden w-full">
+                    <div className="bg-white rounded-xl shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] border border-gray-100 grid grid-cols-3 py-2.5 divide-x divide-gray-50">
                         
                         {/* 1. 排行榜 */}
-                        <Link href="/ranking" className="flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-transform w-16">
-                            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-yellow-50 to-orange-50 flex items-center justify-center shadow-inner border border-yellow-100/50">
-                                <Trophy className="w-5 h-5 text-orange-500 drop-shadow-sm" />
+                        <Link href="/ranking" className="flex items-center justify-center gap-2 active:bg-gray-50 transition-colors group">
+                            <div className="w-8 h-8 rounded-full bg-yellow-50 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                <Trophy className="w-4 h-4 text-yellow-600" />
                             </div>
-                            <span className="text-[11px] font-bold text-gray-700 tracking-wider">排行</span>
+                            <span className="text-xs font-bold text-gray-700">排行</span>
                         </Link>
 
                         {/* 2. 分类库 */}
@@ -498,20 +498,20 @@ function HomeContent() {
                                 e.preventDefault();
                                 document.querySelector('.category-section')?.scrollIntoView({ behavior: 'smooth' });
                             }}
-                            className="flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-transform w-16"
+                            className="flex items-center justify-center gap-2 active:bg-gray-50 transition-colors group"
                         >
-                            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center shadow-inner border border-blue-100/50">
-                                <LayoutGrid className="w-5 h-5 text-blue-500 drop-shadow-sm" />
+                            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                <LayoutGrid className="w-4 h-4 text-blue-600" />
                             </div>
-                            <span className="text-[11px] font-bold text-gray-700 tracking-wider">分类</span>
+                            <span className="text-xs font-bold text-gray-700">分类</span>
                         </Link>
                         
                         {/* 3. 论坛区 */}
-                        <Link href="/forum" className="flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-transform w-16">
-                            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center shadow-inner border border-emerald-100/50">
-                                <MessageSquareText className="w-5 h-5 text-emerald-500 drop-shadow-sm" />
+                        <Link href="/forum" className="flex items-center justify-center gap-2 active:bg-gray-50 transition-colors group">
+                            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                <MessageSquareText className="w-4 h-4 text-blue-600" />
                             </div>
-                            <span className="text-[11px] font-bold text-gray-700 tracking-wider">论坛</span>
+                            <span className="text-xs font-bold text-gray-700">论坛</span>
                         </Link>
                         
                     </div>
@@ -526,74 +526,69 @@ function HomeContent() {
           </section>
 
           {/* === 三大榜单区域 === */}
-        {/* 增加 px-3 让移动端两侧留出呼吸感，不再死死贴着屏幕边缘 */}
-        <section className="w-full px-3 md:px-0" id="ranking">
-            
-            {/* 移动端 Tab 栏：iOS 分段控制器风格 */}
-            <div className="lg:hidden sticky top-0 z-40 bg-[#f8f9fa]/90 backdrop-blur-md pt-2 pb-4 -mx-3 px-4">
-                <div className="flex bg-gray-200/60 p-1 rounded-xl shadow-inner">
-                    {[
-                        { id: 'rec', label: '综合强推' },
-                        { id: 'week', label: '本周热度' },
-                        { id: 'day', label: '今日上升' }
-                    ].map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setMobileTab(tab.id as any)}
-                            className={`flex-1 py-2 text-[13px] font-bold rounded-lg transition-all duration-300 ${
-                                mobileTab === tab.id 
-                                ? 'bg-white text-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.06)] scale-[1.02]' 
-                                : 'text-gray-500 bg-transparent hover:text-gray-700'
-                            }`}
-                        >
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
+          <section className="w-full" id="ranking">
+              
+              {/* 移动端 Tab 栏 */}
+              <div className="flex border-b border-gray-100 bg-white lg:hidden sticky top-[50px] z-40">
+                  {[
+                      { id: 'rec', label: '综合强推' },
+                      { id: 'week', label: '本周热度' },
+                      { id: 'day', label: '今日上升' }
+                  ].map(tab => (
+                      <button
+                          key={tab.id}
+                          onClick={() => setMobileTab(tab.id as any)}
+                          className={`flex-1 py-3 text-sm font-bold transition-all border-b-2 ${
+                              mobileTab === tab.id 
+                              ? 'border-blue-600 text-blue-600' 
+                              : 'border-transparent text-gray-500'
+                          }`}
+                      >
+                          {tab.label}
+                      </button>
+                  ))}
+              </div>
 
-            {/* 在移动端将榜单内容包在一个统一的白底圆角卡片中，避免列表显得零散 */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 md:bg-transparent md:rounded-none md:shadow-none md:border-none overflow-hidden mb-8">
-                {loading ? (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 p-4 md:p-0">
-                        {[1,2,3].map(i => <div key={i} className="h-[400px] bg-gray-100 rounded-2xl animate-pulse"></div>)}
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* 1. 综合强推 */}
-                        <div className={`${mobileTab === 'rec' ? 'block' : 'hidden'} lg:block`}>
-                            <RankingList 
-                                title="综合强推" 
-                                icon={Star} 
-                                books={recList} 
-                                rankColor="text-yellow-500"
-                                showRating={true}
-                            />
-                        </div>
+              {loading ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                      {[1,2,3].map(i => <div key={i} className="h-[700px] bg-gray-200 rounded-2xl animate-pulse"></div>)}
+                  </div>
+              ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                      
+                      {/* 1. 综合强推 */}
+                      <div className={`${mobileTab === 'rec' ? 'block' : 'hidden'} lg:block`}>
+                          <RankingList 
+                              title="综合强推" 
+                              icon={Star} 
+                              books={recList} 
+                              rankColor="text-yellow-500"
+                              showRating={true}
+                          />
+                      </div>
 
-                        {/* 2. 本周热度 */}
-                        <div className={`${mobileTab === 'week' ? 'block' : 'hidden'} lg:block`}>
-                            <RankingList 
-                                title="本周热度" 
-                                icon={TrendingUp} 
-                                books={weekList} 
-                                rankColor="text-red-500"
-                            />
-                        </div>
+                      {/* 2. 本周热度 */}
+                      <div className={`${mobileTab === 'week' ? 'block' : 'hidden'} lg:block`}>
+                          <RankingList 
+                              title="本周热度" 
+                              icon={TrendingUp} 
+                              books={weekList} 
+                              rankColor="text-red-500"
+                          />
+                      </div>
 
-                        {/* 3. 今日上升 */}
-                        <div className={`${mobileTab === 'day' ? 'block' : 'hidden'} lg:block`}>
-                            <RankingList 
-                                title="今日上升" 
-                                icon={Zap} 
-                                books={dayList} 
-                                rankColor="text-purple-500"
-                            />
-                        </div>
-                    </div>
-                )}
-            </div>
-        </section>
+                      {/* 3. 今日上升 */}
+                      <div className={`${mobileTab === 'day' ? 'block' : 'hidden'} lg:block`}>
+                          <RankingList 
+                              title="今日上升" 
+                              icon={Zap} 
+                              books={dayList} 
+                              rankColor="text-purple-500"
+                          />
+                      </div>
+                  </div>
+              )}
+          </section>
 
           {/* === 分类浏览区域 === */}
           <section className="w-full hidden md:block category-section">
