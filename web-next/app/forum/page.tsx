@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image'; // 🔥 新增：用于显示网站标志
+import { useAuth } from '@/contexts/AuthContext'; // 🔥 新增：用于获取用户登录状态
 import {
   Feather,
   HelpCircle,
@@ -13,7 +15,8 @@ import {
   Settings,
   Sun,
   ThumbsUp,
-  Type
+  Type,
+  User // 🔥 新增：引入默认用户头像图标
 } from 'lucide-react';
 import { forumApi, ForumPost } from '@/lib/api';
 
@@ -73,6 +76,9 @@ function formatCount(value: number) {
 }
 
 export default function ForumPage() {
+  const { user } = useAuth(); // 🔥 新增：获取当前用户
+  const [searchQuery, setSearchQuery] = useState(''); // 🔥 新增：搜索框状态
+  
   const [activeTab, setActiveTab] = useState<FeedTab>('recommend');
   
   // ====== 状态升级：缓存多页数据与加载状态 ======
@@ -276,19 +282,44 @@ export default function ForumPage() {
     );
   };
 
-  return (
+return (
     <div className={`min-h-screen ${currentTheme.bg} pb-24 md:pb-12 font-sans transition-colors duration-300`}>
       <div
         className={`sticky top-0 z-40 border-b backdrop-blur-md ${currentTheme.border} ${themeMode === 'light' ? 'bg-white/90' : 'bg-[#121417]/90'}`}
       >
         <div className="max-w-[1040px] mx-auto px-4">
-          <div className="h-14 flex items-center justify-between">
-            <span className={`text-lg font-bold tracking-tight ${currentTheme.textMain}`}>论坛</span>
+          <div className="h-14 flex items-center justify-between gap-3 md:gap-6">
+            
+            {/* 1. 左侧：网站 Logo + 返回主页链接 + 论坛标题 */}
+            <div className="flex items-center shrink-0">
+              <Link href="/" className="flex items-center transition-opacity hover:opacity-80" title="返回主站">
+                <Image src="/logo.png" alt="Logo" width={28} height={28} className="w-7 h-7 object-contain" priority />
+                <span className={`ml-2 text-lg font-black tracking-tighter ${currentTheme.textMain} hidden sm:block`}>九天</span>
+              </Link>
+              <div className={`mx-3 h-4 w-px ${themeMode === 'light' ? 'bg-gray-300' : 'bg-[#30353c]'} hidden sm:block`}></div>
+              <span className={`text-lg font-bold tracking-tight ${currentTheme.textMain}`}>论坛</span>
+            </div>
 
-            <div className="relative flex items-center gap-1" ref={settingsRef}>
-              <button className={`p-2 transition-colors rounded-full ${currentTheme.icon}`} title="搜索">
-                <Search className="w-5 h-5" />
-              </button>
+            {/* 2. 中间：带提示字样的搜索框 */}
+            <div className="flex-1 max-w-xl">
+              <form onSubmit={(e) => { e.preventDefault(); /* TODO: 此处可添加论坛专属搜索逻辑 */ }} className="relative w-full">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="搜索你想看的问题..."
+                  className={`w-full pl-9 pr-4 py-1.5 md:py-2 rounded-full text-[13px] md:text-sm border transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                    themeMode === 'light'
+                      ? 'bg-gray-100 border-transparent focus:bg-white text-gray-900 placeholder-gray-500'
+                      : 'bg-[#1f242b] border-[#343a42] text-[#f4f6f8] placeholder-[#7f8791] focus:border-[#edf1f4]'
+                  }`}
+                />
+                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${themeMode === 'light' ? 'text-gray-500' : 'text-[#7f8791]'}`} />
+              </form>
+            </div>
+
+            {/* 3. 右侧：设置保留 + 个人主页头像入口 */}
+            <div className="relative flex items-center gap-2 md:gap-4 shrink-0" ref={settingsRef}>
               <button
                 onClick={() => setShowSettings((prev) => !prev)}
                 className={`p-2 transition-colors rounded-full ${showSettings ? (themeMode === 'light' ? 'bg-gray-100 text-gray-900' : 'bg-[#2f353d] text-white') : currentTheme.icon}`}
@@ -297,8 +328,17 @@ export default function ForumPage() {
                 <Settings className="w-5 h-5" />
               </button>
 
+              {/* 个人头像链接 */}
+              <Link href={user ? "/profile" : "/login"} className="shrink-0">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center overflow-hidden transition-transform hover:scale-105 ${
+                  themeMode === 'light' ? 'bg-gray-100 border border-gray-200' : 'bg-[#2c323a] border border-[#343a42]'
+                }`}>
+                   <User className={`h-4 w-4 ${themeMode === 'light' ? 'text-gray-500' : 'text-[#7f8791]'}`} />
+                </div>
+              </Link>
+
               {showSettings && (
-                <div className={`absolute right-0 top-12 w-64 p-4 rounded-xl border shadow-xl z-50 ${currentTheme.panel}`}>
+                 <div className={`absolute right-0 top-12 w-64 p-4 rounded-xl border shadow-xl z-50 ${currentTheme.panel}`}>
                   <div className="mb-4">
                     <div className="text-xs font-bold opacity-70 mb-2 px-1">主题</div>
                     <div className={`flex p-1 rounded-lg ${themeMode === 'light' ? 'bg-gray-100' : 'bg-white/10'}`}>
