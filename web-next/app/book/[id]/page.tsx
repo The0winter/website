@@ -43,20 +43,33 @@ export async function generateMetadata(
 
   const previousImages = (await parent).openGraph?.images || [];
 
+  // 🔥 修复重点 1：先处理描述文本
+  // 获取原始描述，如果没有则使用默认模版
+  const rawDesc = book.description || `在线阅读《${book.title}》，作者：${book.author}。`;
+  
+  // 🔥 修复重点 2：去除所有换行符和多余空格 (变成一行)
+  const cleanDesc = rawDesc.replace(/[\r\n\t]+/g, '').trim();
+
+  // 🔥 修复重点 3：缩短截取长度 (中文建议 80-90 字，最多不要超过 100)
+  // 之前的 150 对中文来说太长了
+  const finalDescription = cleanDesc.length > 90 
+    ? cleanDesc.slice(0, 90) + '...' 
+    : cleanDesc;
+
   return {
-    title: `${book.title} - ${book.author || '未知'} - 九天小说`,
-    description: book.description ? book.description.slice(0, 150) + '...' : `在线阅读《${book.title}》，作者：${book.author}。`,
-    openGraph: {
-      title: book.title,
-      description: book.description?.slice(0, 100),
-      url: `https://jiutianxiaoshuo.com/book/${id}`,
-      siteName: '九天小说',
-      images: book.cover_image ? [book.cover_image, ...previousImages] : previousImages,
-      locale: 'zh_CN',
-      type: 'book',
-    },
-  };
-}
+      title: `${book.title} - ${book.author || '未知'} - 九天小说`,
+      description: finalDescription, // 使用处理后的短描述
+      openGraph: {
+        title: book.title,
+        description: finalDescription, // OG 标签也用短描述
+        url: `https://jiutianxiaoshuo.com/book/${id}`,
+        siteName: '九天小说',
+        images: book.cover_image ? [book.cover_image, ...previousImages] : previousImages,
+        locale: 'zh_CN',
+        type: 'book',
+      },
+    };
+  }
 
 // 3. 页面主入口
 export default async function BookDetailPage({ params }: Props) {
