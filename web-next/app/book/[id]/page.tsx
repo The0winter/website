@@ -38,7 +38,7 @@ export async function generateMetadata(
   const book = await getBook(id);
 
   if (!book) {
-    return { title: '书籍未找到 - 九天小说' };
+    return { title: '书籍未找到 - 九天小说站' };
   }
 
   const previousImages = (await parent).openGraph?.images || [];
@@ -52,18 +52,20 @@ export async function generateMetadata(
 
   // 🔥 修复重点 3：缩短截取长度 (中文建议 80-90 字，最多不要超过 100)
   // 之前的 150 对中文来说太长了
-  const finalDescription = cleanDesc.length > 90 
-    ? cleanDesc.slice(0, 90) + '...' 
+  const MAX_DESC_LENGTH = 75; 
+
+  const finalDescription = cleanDesc.length > MAX_DESC_LENGTH
+    ? cleanDesc.slice(0, MAX_DESC_LENGTH) + '...' 
     : cleanDesc;
 
   return {
-      title: `${book.title} - ${book.author || '未知'} - 九天小说`,
+      title: `${book.title} - ${book.author || '未知'} - 九天小说站`,
       description: finalDescription, // 使用处理后的短描述
       openGraph: {
         title: book.title,
         description: finalDescription, // OG 标签也用短描述
         url: `https://jiutianxiaoshuo.com/book/${id}`,
-        siteName: '九天小说',
+        siteName: '九天小说站',
         images: book.cover_image ? [book.cover_image, ...previousImages] : previousImages,
         locale: 'zh_CN',
         type: 'book',

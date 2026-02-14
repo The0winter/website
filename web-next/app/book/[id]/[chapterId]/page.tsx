@@ -24,14 +24,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     ]);
 
     if (!chapterRes.ok || !bookRes.ok) {
-        return { title: '九天小说 - 在线阅读' };
+        return { title: '九天小说站 - 在线阅读' };
     }
 
     const chapter = await chapterRes.json();
     const book = await bookRes.json();
 
     // 生成完美的标题：第123章 逆天邪神 - 小说名
-    const finalTitle = `${chapter.title.startsWith('第') ? chapter.title : `第${chapter.chapter_number}章 ${chapter.title}`} - ${book.title} - 九天小说`;
+    const finalTitle = `${chapter.title.startsWith('第') ? chapter.title : `第${chapter.chapter_number}章 ${chapter.title}`} - ${book.title} - 九天小说站`;
     
     // 生成描述
     const description = `正在阅读《${book.title}》${finalTitle}。作者：${book.author || '未知'}...`;
@@ -44,13 +44,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         description: description,
         type: 'article',
         url: `https://jiutianxiaoshuo.com/book/${bookId}/${chapterId}`,
-        siteName: '九天小说',
+        siteName: '九天小说站',
       },
     };
 
   } catch (error) {
     console.error('SEO Metadata Error:', error);
-    return { title: '九天小说 - 在线阅读' };
+    return { title: '九天小说站 - 在线阅读' };
   }
 }
 

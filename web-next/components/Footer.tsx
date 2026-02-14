@@ -16,7 +16,7 @@ export default function Footer() {
           {/* 1. 网站简介 */}
           <div className="space-y-4">
             <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-              九天小说站
+              九天小说站站
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed max-w-xs">
               致力打造最舒适的阅读体验。
@@ -66,7 +66,7 @@ export default function Footer() {
         <div className="mt-0 md:mt-8 pt-2 md:pt-8 md:border-t md:border-gray-100 dark:md:border-[#333] flex flex-col md:flex-row justify-between items-center gap-2 md:gap-4">
           <div className="text-center md:text-left flex flex-col items-center md:items-start">
             <p className="text-[10px] md:text-xs text-gray-400">
-              &copy; {new Date().getFullYear()} 九天小说. 
+              &copy; {new Date().getFullYear()} 九天小说站. 
               <span className="ml-1 opacity-80">Design by Jiutian.</span>
             </p>
             {/* 免责声明 */}
