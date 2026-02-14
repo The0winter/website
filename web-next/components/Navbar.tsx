@@ -62,7 +62,7 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
             <Link href="/" className="flex items-center">
               {/* 🔥 修改点：电脑端 Logo */}
               <Image 
-                src="/logo.png"       // 对应 public/logo.png
+                src="/icon.jpg"       // 对应 public/icon.jpg
                 alt="Logo" 
                 width={32}            // 对应 h-8 (32px)
                 height={32} 
@@ -143,7 +143,7 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
                 <Link href="/" className="flex items-center gap-2">
                    {/* 🔥 修改点：手机端 Logo */}
                    <Image 
-                     src="/logo.png" 
+                     src="/icon.jpg" 
                      alt="Logo" 
                      width={24}  // 手机端稍微小一点
                      height={24} 
