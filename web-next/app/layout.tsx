@@ -30,8 +30,8 @@ export const metadata: Metadata = {
   keywords: ["小说", "免费小说", "在线阅读", "热门小说", "九天小说", "电子书"],
 
   icons: {
-    icon: "/icon.jpg", 
-    shortcut: "/icon.jpg",
+    icon: "/icon.png", 
+    shortcut: "/icon.png",
     apple: "/apple-icon.png", // 针对 iPhone/iPad 添加到主屏幕的图标
   },
 };

@@ -293,7 +293,7 @@ return (
             {/* 1. 左侧：网站 Logo + 返回主页链接 + 论坛标题 */}
             <div className="flex items-center shrink-0">
               <Link href="/" className="flex items-center transition-opacity hover:opacity-80" title="返回主站">
-                <Image src="/icon.jpg" alt="Logo" width={28} height={28} className="w-7 h-7 object-contain" priority />
+                <Image src="/icon.png" alt="Logo" width={28} height={28} className="w-7 h-7 object-contain" priority />
                 <span className={`ml-2 text-lg font-black tracking-tighter ${currentTheme.textMain} hidden sm:block`}>九天</span>
               </Link>
               <div className={`mx-3 h-4 w-px ${themeMode === 'light' ? 'bg-gray-300' : 'bg-[#30353c]'} hidden sm:block`}></div>
