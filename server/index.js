@@ -1324,6 +1324,21 @@ app.post('/api/forum/comments/:id/like', authMiddleware, async (req, res) => {
 // ===========================================
 
 // --- Books ---
+app.get('/api/books/sitemap-pool', async (req, res) => {
+    try {
+        // 只查 _id 和 updatedAt，不查简介和内容，速度极快
+        // limit(1000) 保证书多了也不会超时
+        const books = await Book.find({})
+            .select('_id updatedAt') 
+            .sort({ updatedAt: -1 })
+            .limit(1000); 
+
+        res.json(books);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.get('/api/books', async (req, res) => {
     try {
       const { orderBy = 'views', order = 'desc', limit, author_id } = req.query;

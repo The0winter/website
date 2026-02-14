@@ -68,7 +68,7 @@ export default async function BookDetailPage({ params }: Props) {
     notFound(); 
   }
 
-  // 🔥 方案一核心：构建结构化数据 (JSON-LD)
+  // 构建结构化数据 (JSON-LD)
   // 这段数据是隐形的，只有 Google 爬虫能看到
   const jsonLd = {
     '@context': 'https://schema.org',

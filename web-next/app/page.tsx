@@ -352,6 +352,10 @@ function HomeContent() {
 
     return (
       <div className="min-h-screen bg-[#f8f9fa] pb-12">
+
+        <h1 className="sr-only absolute w-px h-px p-0 -m-px overflow-hidden clip-rect-0 whitespace-nowrap border-0">
+        九天小说 - 您的免费在线小说图书馆
+      </h1>
         
         {/* 🔥🔥🔥 修改点：彻底删除了顶部的黑色导航栏 div === */}
 

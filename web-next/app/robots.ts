@@ -10,6 +10,6 @@ export default function robots(): MetadataRoute.Robots {
       disallow: '/admin/', // 不允许访问后台管理页（如果有的话）
     },
     // 🔥 最关键的一行：告诉爬虫地图在哪里
-    sitemap: `${baseUrl}/sitemap.xml`,
+    sitemap: `${baseUrl}/sitemap.xml`, 
   }
 }

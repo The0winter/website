@@ -11,8 +11,8 @@ async function getActiveBooks(): Promise<Book[]> {
   try {
     // 这里换成你真实的获取书籍列表的 API
     // 建议后端专门写一个接口：/api/sitemap-books，只返回 id 和 update_time，速度快
-    const res = await fetch('https://jiutianxiaoshuo.com/api/books?limit=1000&sort=popular', {
-        next: { revalidate: 3600 } // 1小时更新一次
+  const res = await fetch('https://jiutianxiaoshuo.com/api/books/sitemap-pool', {
+        next: { revalidate: 3600 }
     });
     if (!res.ok) return [];
     return await res.json();
