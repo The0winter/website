@@ -35,11 +35,11 @@ interface Book {
   id: string;
   title: string;
   description: string;
-  cover_image: string;
-  author_id: any; 
+  cover_image?: string;
+  author_id?: any; 
   author?: string;
-  status: string;
-  category: string;
+  status?: string;
+  category?: string;
   rating?: number;       
   numReviews?: number;   
   lastUpdated?: string; 
@@ -50,7 +50,7 @@ interface Chapter {
   id: string;
   title: string;
   chapter_number: number;
-  published_at: string;
+  published_at?: string;
   content?: string;
 }
 
@@ -68,21 +68,24 @@ interface Review {
 }
 
 interface BookDetailClientProps {
-  book: Book;
-  initialChapters?: Chapter[]; 
+  initialBookData: {
+    book: Book;
+    chapters: Chapter[];
+  };
 }
 
-export default function BookDetailClient({ book: initialBook, initialChapters = [] }: BookDetailClientProps) {
+export default function BookDetailClient({ initialBookData }: BookDetailClientProps) {
   const { user } = useAuth(); 
   const router = useRouter();
+  const [bookData] = useState(initialBookData);
+  const book = bookData.book;
   
-  const [book, setBook] = useState(initialBook);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // --- 章节相关状态 ---
-  const [chapters, setChapters] = useState<Chapter[]>([]); 
-  const [loadingChapters, setLoadingChapters] = useState(true);
+  const [chapters, setChapters] = useState<Chapter[]>(bookData.chapters || []); 
+  const [loadingChapters, setLoadingChapters] = useState(!(bookData.chapters && bookData.chapters.length > 0));
   
   // 🔥 目录交互状态
   const [isReversed, setIsReversed] = useState(true); // 默认倒序 (最新章节在前)
@@ -154,10 +157,15 @@ export default function BookDetailClient({ book: initialBook, initialChapters = 
 
     if (book.id) {
       fetchReviews();
-      fetchChapters(); 
+      if (bookData.chapters && bookData.chapters.length > 0) {
+        setChapters(bookData.chapters);
+        setLoadingChapters(false);
+      } else {
+        fetchChapters();
+      }
     }
 
-  }, [user, book.id]);
+  }, [user, book.id, bookData.chapters]);
 
   // --- 逻辑：章节排序与切片 ---
   const sortedChapters = useMemo(() => {

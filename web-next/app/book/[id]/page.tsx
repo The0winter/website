@@ -1,151 +1,115 @@
-// web-next/app/book/[id]/page.tsx
-
-import React from 'react';
-import { Metadata, ResolvingMetadata } from 'next';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import BookDetailClient from '@/components/BookDetailClient';
+import type { Book, Chapter } from '@/lib/api';
 
-// 定义 API 地址
-const API_BASE_URL = 'http://127.0.0.1:5000/api';
-
-// ✅ 修正：详情页只有 id，没有 chapterId
 type Props = {
   params: Promise<{ id: string }>;
 };
 
-// 1. 辅助函数：获取书籍数据
-async function getBook(id: string) {
+type BookPageData = {
+  book: Book;
+  chapters: Chapter[];
+};
+
+const API_HOST = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/+$/, '') || 'http://127.0.0.1:5000';
+const API_BASE_URL = API_HOST.endsWith('/api') ? API_HOST : `${API_HOST}/api`;
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, '') || 'https://jiutianxiaoshuo.com';
+
+async function getBookPageData(id: string): Promise<BookPageData | null> {
+
   try {
-    // 加上 no-store 或 revalidate 都可以，保证数据新鲜
-    const res = await fetch(`${API_BASE_URL}/books/${id}`, { 
-        cache: 'no-store' 
-    });
-    
-    if (!res.ok) return null;
-    return await res.json();
+    const [bookRes, chaptersRes] = await Promise.all([
+      fetch(`${API_BASE_URL}/books/${id}`, { cache: 'no-store' }),
+      fetch(`${API_BASE_URL}/books/${id}/chapters`, { cache: 'no-store' }),
+    ]);
+
+    if (!bookRes.ok || !chaptersRes.ok) return null;
+
+    const [book, chaptersRaw] = await Promise.all([
+      bookRes.json() as Promise<Book>,
+      chaptersRes.json() as Promise<Chapter[]>,
+    ]);
+
+    const chapters = Array.isArray(chaptersRaw) ? chaptersRaw : [];
+    return { book, chapters };
   } catch (error) {
-    console.error('Fetch Book Error:', error);
+    console.error('Book detail SSR fetch error:', error);
     return null;
   }
 }
 
-// 2. 生成 SEO 头部信息 (只包含书名和作者，不再去找章节)
-export async function generateMetadata(
-  { params }: Props,
-  parent: ResolvingMetadata
-): Promise<Metadata> {
+function buildDescription(book: Book): string {
+  const raw = (book.description || '').replace(/[\r\n\t]+/g, ' ').trim();
+  if (raw) return raw.length > 120 ? `${raw.slice(0, 120)}...` : raw;
+  return `${book.title} online reading`;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const book = await getBook(id);
+  const data = await getBookPageData(id);
 
-  if (!book) {
-    return { title: '书籍未找到 - 九天小说站' };
-  }
-
-  const previousImages = (await parent).openGraph?.images || [];
-
-  // 🔥 修复重点 1：先处理描述文本
-  // 获取原始描述，如果没有则使用默认模版
-  const rawDesc = book.description || `在线阅读《${book.title}》，作者：${book.author}。`;
-  
-  // 🔥 修复重点 2：去除所有换行符和多余空格 (变成一行)
-  const cleanDesc = rawDesc.replace(/[\r\n\t]+/g, '').trim();
-
-  // 🔥 修复重点 3：缩短截取长度 (中文建议 80-90 字，最多不要超过 100)
-  // 之前的 150 对中文来说太长了
-  const MAX_DESC_LENGTH = 75; 
-
-  const finalDescription = cleanDesc.length > MAX_DESC_LENGTH
-    ? cleanDesc.slice(0, MAX_DESC_LENGTH) + '...' 
-    : cleanDesc;
-
-  return {
-      title: `${book.title} - ${book.author || '未知'} - 九天小说站`,
-      description: finalDescription, // 使用处理后的短描述
-      openGraph: {
-        title: book.title,
-        description: finalDescription, // OG 标签也用短描述
-        url: `https://jiutianxiaoshuo.com/book/${id}`,
-        siteName: '九天小说站',
-        images: book.cover_image ? [book.cover_image, ...previousImages] : previousImages,
-        locale: 'zh_CN',
-        type: 'book',
-      },
+  if (!data) {
+    return {
+      title: 'Book Not Found - Jiutian Novel',
+      description: 'The book does not exist or is unavailable.',
     };
   }
 
-// 3. 页面主入口
+  const { book } = data;
+  const description = buildDescription(book);
+  const canonicalUrl = `${SITE_URL}/book/${id}`;
+
+  return {
+    title: `${book.title} - Jiutian Novel`,
+    description,
+    alternates: { canonical: canonicalUrl },
+    openGraph: {
+      title: book.title,
+      description,
+      url: canonicalUrl,
+      siteName: 'Jiutian Novel',
+      images: book.cover_image ? [book.cover_image] : [],
+      locale: 'zh_CN',
+      type: 'book',
+    },
+  };
+}
+
 export default async function BookDetailPage({ params }: Props) {
   const { id } = await params;
-  const book = await getBook(id);
+  const data = await getBookPageData(id);
 
-  if (!book) {
-    // 如果找不到书，返回 404 页面
-    notFound(); 
+  if (!data) {
+    notFound();
   }
 
-  // 构建结构化数据 (JSON-LD)
-  // 这段数据是隐形的，只有 Google 爬虫能看到
+  const { book, chapters } = data;
+  const description = buildDescription(book);
+
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Book',
-    'name': book.title,
-    'author': {
+    name: book.title,
+    author: {
       '@type': 'Person',
-      'name': book.author || '未知作者'
+      name: book.author || 'Unknown author',
     },
-    'description': book.description,
-    'image': book.cover_image,
-    'url': `https://jiutianxiaoshuo.com/book/${book.id}`,
-    'inLanguage': 'zh-CN',
-    'genre': book.category || '小说',
-    'dateModified': book.updatedAt,
-    // 🌟 星级评分 (如果有数据，Google 就会显示星星)
-    ...(book.rating && book.numReviews ? {
-      'aggregateRating': {
-        '@type': 'AggregateRating',
-        'ratingValue': book.rating,       
-        'ratingCount': book.numReviews,
-        'bestRating': '5',
-        'worstRating': '1'
-      }
-    } : {})
-  };
-
-  // 🍞 面包屑导航 Schema
-  const breadcrumbLd = {
-    '@context': 'https://schema.org',
-    '@type': 'BreadcrumbList',
-    'itemListElement': [
-      {
-        '@type': 'ListItem',
-        'position': 1,
-        'name': '首页',
-        'item': 'https://jiutianxiaoshuo.com'
-      },
-      {
-        '@type': 'ListItem',
-        'position': 2,
-        'name': book.title, // 显示书名
-        'item': `https://jiutianxiaoshuo.com/book/${book.id}`
-      }
-    ]
+    description,
+    image: book.cover_image,
+    url: `${SITE_URL}/book/${book.id}`,
+    inLanguage: 'zh-CN',
+    genre: book.category || 'Novel',
+    numberOfPages: chapters.length || undefined,
   };
 
   return (
     <>
-      {/* 👇 注入 SEO 数据 (不会影响页面显示) 👇 */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
-      />
-
-      {/* 👇 你的原有组件，完全保持不变 👇 */}
-      {/* 这里的 initialChapters={[]} 和你原来的一模一样，交给客户端去加载章节列表 */}
-      <BookDetailClient book={book} initialChapters={[]} />
+      <BookDetailClient initialBookData={{ book, chapters }} />
     </>
   );
 }

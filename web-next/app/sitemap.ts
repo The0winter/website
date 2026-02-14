@@ -1,53 +1,59 @@
 import { MetadataRoute } from 'next'
 
-// 定义一下你 API 返回的数据格式
+// 定义数据格式
 type Book = {
-  _id: string; // 或者 id
+  _id: string;
   updatedAt: string;
 }
 
-// 辅助函数：去你的后端拿前 1000 本热门书（不要一次拿几十万本，会超时）
+// 辅助函数
 async function getActiveBooks(): Promise<Book[]> {
   try {
-    // 这里换成你真实的获取书籍列表的 API
-    // 建议后端专门写一个接口：/api/sitemap-books，只返回 id 和 update_time，速度快
-  const res = await fetch('https://jiutianxiaoshuo.com/api/books/sitemap-pool', {
-        next: { revalidate: 3600 }
+    // ⚠️ 注意：这里的 API 地址通常可以用内网地址或者裸域名，不用非得加 www，只要能通就行
+    // 加上 cache: 'no-store' 或者 revalidate 防止缓存太久导致新书不出来
+    const res = await fetch('https://jiutianxiaoshuo.com/api/books/sitemap-pool', {
+      next: { revalidate: 3600 } 
     });
-    if (!res.ok) return [];
+    
+    if (!res.ok) {
+      console.error('Sitemap API Error:', res.statusText);
+      return []; 
+    }
     return await res.json();
   } catch (error) {
-    console.error('Sitemap Error:', error);
+    console.error('Sitemap Fetch Failed:', error);
     return [];
   }
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = 'https://jiutianxiaoshuo.com';
+  // ✅ 核心修改：这里必须和你在百度后台添加的域名一模一样！
+  const baseUrl = 'https://www.jiutianxiaoshuo.com';
 
-  // 1. 获取动态书籍数据
   const books = await getActiveBooks();
 
-  // 2. 生成书籍 URL 列表
   const bookUrls = books.map((book) => ({
     url: `${baseUrl}/book/${book._id}`,
     lastModified: new Date(book.updatedAt),
-    changeFrequency: 'daily' as const, // 告诉爬虫这页面每天都可能更新章节
-    priority: 0.7, // 权重 (0-1)，详情页一般给 0.6 - 0.8
+    changeFrequency: 'daily' as const,
+    priority: 0.8, // 提高一点权重，书籍详情页是核心流量入口
   }));
 
-  // 3. 定义静态页面 (首页、分类页等)
   const staticRoutes = [
     {
       url: baseUrl,
       lastModified: new Date(),
       changeFrequency: 'always' as const,
-      priority: 1, // 首页权重最高
+      priority: 1,
     },
-    // 如果你有分类页，也可以加在这里
-    // { url: `${baseUrl}/category/xuanhuan`, ... }
+    // 建议加上排行榜或书库页，这些页面权重也很高
+    {
+      url: `${baseUrl}/rank`,
+      lastModified: new Date(),
+      changeFrequency: 'daily' as const,
+      priority: 0.9,
+    },
   ];
 
-  // 4. 合并返回
   return [...staticRoutes, ...bookUrls];
 }

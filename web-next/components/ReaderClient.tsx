@@ -77,7 +77,7 @@ function useIsDesktop() {
   return isDesktop;
 }
 
-function ReaderContent() {
+function ReaderContent({ initialBook = null, initialChapter = null }: { initialBook?: Book | null; initialChapter?: Chapter | null }) {
   const params = useParams();
   //const searchParams = useSearchParams();
   const router = useRouter();
@@ -85,16 +85,18 @@ function ReaderContent() {
   
   const bookId = params.id as string;
   const chapterIdParam = params.chapterId as string;
+  const hasInitialBook = !!initialBook;
+  const hasInitialChapter = !!initialChapter;
   const { user } = useAuth();
   const [allChapters, setAllChapters] = useState<Chapter[]>([]);
   const [isBookmarked, setIsBookmarked] = useState(false);
-  const [book, setBook] = useState<Book | null>(() => bookCache.get(bookId) || null);
-  const [chapter, setChapter] = useState<Chapter | null>(() => chapterCache.get(chapterIdParam) || null);
+  const [book, setBook] = useState<Book | null>(initialBook || null);
+  const [chapter, setChapter] = useState<Chapter | null>(initialChapter || null);
   
   // 只有当缓存里【既没有书也没有章节】时，才显示 loading
   // 如果有缓存，loading 初始值就是 false，直接渲染正文
   const [loading, setLoading] = useState(() => {
-     return !bookCache.has(bookId) || !chapterCache.has(chapterIdParam);
+     return !(initialBook && initialChapter);
   });
   const [isNavigating, setIsNavigating] = useState(false);
   
@@ -144,6 +146,38 @@ function ReaderContent() {
       setPageWidth(1000);
     }
   }, []);
+
+  useEffect(() => {
+    if (hasInitialBook && initialBook) {
+      bookCache.set(bookId, initialBook);
+      setBook(initialBook);
+    } else if (!book && bookCache.has(bookId)) {
+      setBook(bookCache.get(bookId) || null);
+    }
+
+    if (hasInitialChapter && initialChapter) {
+      chapterCache.set(chapterIdParam, initialChapter);
+      setChapter(initialChapter);
+    } else if (!chapter && chapterCache.has(chapterIdParam)) {
+      setChapter(chapterCache.get(chapterIdParam) || null);
+    }
+
+    if (
+      (hasInitialBook && hasInitialChapter) ||
+      (bookCache.has(bookId) && chapterCache.has(chapterIdParam))
+    ) {
+      setLoading(false);
+    }
+  }, [
+    book,
+    bookId,
+    chapter,
+    chapterIdParam,
+    hasInitialBook,
+    hasInitialChapter,
+    initialBook,
+    initialChapter,
+  ]);
 
   // --- 新增：检查是否需要显示新手引导 (仅移动端 & 第一次) ---
   useEffect(() => {
@@ -293,8 +327,18 @@ function ReaderContent() {
       let targetId = chapterIdParam;
 
 if (targetId) {
+        const hasServerData = hasInitialBook && hasInitialChapter && !!initialBook && !!initialChapter;
+
+        if (hasServerData) {
+          setBook(initialBook);
+          setChapter(initialChapter);
+          bookCache.set(bookId, initialBook);
+          chapterCache.set(targetId, initialChapter);
+          setLoading(false);
+          window.scrollTo(0, 0);
+        }
         // 1. 优先检查缓存
-        if (chapterCache.has(targetId) && bookCache.has(bookId)) {
+        if (!hasServerData && chapterCache.has(targetId) && bookCache.has(bookId)) {
            // ⚡️ 如果书和章节都有缓存，什么都不用做！
            // 因为我们在 useState 初始化时已经拿到了
            setLoading(false);
@@ -303,7 +347,7 @@ if (targetId) {
            setBook(bookCache.get(bookId));
            window.scrollTo(0, 0);
         } 
-        else {
+        else if (!hasServerData) {
           // 2. 缓存缺失，需要请求
           // 只有在真的没数据时，才转圈圈。如果只是缺其中一个，尽量保持界面显示
           if (!chapter || !book) setLoading(true);
@@ -396,7 +440,7 @@ if (targetId) {
     loadData();
 
     return () => { isActive = false; };
-  }, [bookId, chapterIdParam]); // 依赖项不变 
+  }, [bookId, chapterIdParam, hasInitialBook, hasInitialChapter, initialBook, initialChapter]); // 依赖项不变 
 
   // ============================================================
   // ▼▼▼ 🔥 [新增 2] 静默预加载下一章 (Prefetching) ▼▼▼
@@ -1215,7 +1259,7 @@ if (loading) return (
   );
 }
 
-export default function ReaderPage() {
+export default function ReaderPage({ initialBook = null, initialChapter = null }: { initialBook?: Book | null; initialChapter?: Chapter | null }) {
   // 1. 获取当前 URL 参数
   const params = useParams();
   
@@ -1227,7 +1271,7 @@ export default function ReaderPage() {
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center">加载中...</div>}>
       {/* 🔥 核心修改：加上 key 属性 */}
       {/* 这样每次切章节，组件都会“重生”，直接从缓存读取新数据，彻底根除闪烁！ */}
-      <ReaderContent key={componentKey} />
+      <ReaderContent key={componentKey} initialBook={initialBook} initialChapter={initialChapter} />
     </Suspense>
   );
 }
