@@ -71,7 +71,7 @@ export default function Footer() {
             </p>
             {/* 免责声明 */}
             <p className="text-[10px] text-gray-400 md:text-gray-500 mt-1 max-w-md md:scale-90 md:origin-left text-center md:text-left">
-              本站所有小说为转载作品，所有章节均由网友上传，转载至本站只是为了宣传本书让更多读者欣赏。
+              九天小说站 - 专注极速阅读体验
             </p>
           </div>
           
