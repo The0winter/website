@@ -9,8 +9,6 @@ type Book = {
 // 辅助函数
 async function getActiveBooks(): Promise<Book[]> {
   try {
-    // ⚠️ 注意：这里的 API 地址通常可以用内网地址或者裸域名，不用非得加 www，只要能通就行
-    // 加上 cache: 'no-store' 或者 revalidate 防止缓存太久导致新书不出来
     const res = await fetch('https://jiutianxiaoshuo.com/api/books/sitemap-pool', {
       next: { revalidate: 3600 } 
     });
@@ -19,7 +17,21 @@ async function getActiveBooks(): Promise<Book[]> {
       console.error('Sitemap API Error:', res.statusText);
       return []; 
     }
-    return await res.json();
+    
+    const rawBooks: Book[] = await res.json();
+
+    // 🛡️ 防线 1：API 数据去重
+    // 使用 Map，以 _id 为键。如果 API 返回了两个相同的 ID，后面的会覆盖前面的，保证唯一。
+    const uniqueBooksMap = new Map<string, Book>();
+    rawBooks.forEach(book => {
+      if (book._id) { // 确保 ID 存在
+        uniqueBooksMap.set(book._id, book);
+      }
+    });
+
+    // 转回数组
+    return Array.from(uniqueBooksMap.values());
+
   } catch (error) {
     console.error('Sitemap Fetch Failed:', error);
     return [];
@@ -27,16 +39,21 @@ async function getActiveBooks(): Promise<Book[]> {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // ✅ 核心修改：这里必须和你在百度后台添加的域名一模一样！
   const baseUrl = 'https://www.jiutianxiaoshuo.com';
 
   const books = await getActiveBooks();
 
-  const bookUrls = books.map((book) => ({
+  // 🛡️ 防线 2：Sitemap 大小限制保护
+  // Google 和百度规定单个 sitemap.xml 不能超过 50,000 条 URL。
+  // 如果你的书超过了 49,998 本（预留 2 条给静态页），为了防止报错，我们只取前 49000 本。
+  // (以后书多了你需要做 Sitemap 分页，但现在先这样保护)
+  const safeBooks = books.slice(0, 49000);
+
+  const bookUrls = safeBooks.map((book) => ({
     url: `${baseUrl}/book/${book._id}`,
     lastModified: new Date(book.updatedAt),
     changeFrequency: 'daily' as const,
-    priority: 0.8, // 提高一点权重，书籍详情页是核心流量入口
+    priority: 0.8,
   }));
 
   const staticRoutes = [
@@ -46,7 +63,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'always' as const,
       priority: 1,
     },
-    // 建议加上排行榜或书库页，这些页面权重也很高
     {
       url: `${baseUrl}/rank`,
       lastModified: new Date(),

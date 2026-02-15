@@ -36,6 +36,9 @@ const formatViews = (num: number) => {
   return Math.round(num).toString();
 };
 
+const CACHE_KEY = 'ranking_books_data';
+const CACHE_expire_TIME = 30 * 60 * 1000; // 缓存有效期：30分钟 (毫秒)
+
 export default function RankingPage() {
   const [allBooks, setAllBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,18 +47,51 @@ export default function RankingPage() {
   const [activeRank, setActiveRank] = useState('month'); 
   const [activeCategory, setActiveCategory] = useState('all');
 
-  useEffect(() => {
+useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
+
+      // --- 步骤 A: 尝试读取缓存 ---
       try {
-        setLoading(true);
+        const cachedString = localStorage.getItem(CACHE_KEY);
+        if (cachedString) {
+          const cachedData = JSON.parse(cachedString);
+          const now = Date.now();
+
+          // 检查是否过期
+          if (now - cachedData.timestamp < CACHE_expire_TIME) {
+            console.log('✨ 命中缓存，使用本地数据');
+            setAllBooks(cachedData.data);
+            setLoading(false);
+            return; // 命中缓存后直接结束，不再请求 API
+          } else {
+            console.log('⚠️ 缓存已过期，准备重新请求');
+            // 可选：过期后顺手清理一下
+            localStorage.removeItem(CACHE_KEY); 
+          }
+        }
+      } catch (e) {
+        console.error('读取缓存失败', e);
+      }
+
+      // --- 步骤 B: 缓存未命中或已过期，发起网络请求 ---
+      try {
         const data = await booksApi.getAll();
         setAllBooks(data);
+
+        // --- 步骤 C: 写入新缓存 ---
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          data: data,
+          timestamp: Date.now() // 记录写入时间
+        }));
+        
       } catch (error) {
         console.error('Fetch error:', error);
       } finally {
         setLoading(false);
       }
     };
+
     fetchData();
   }, []);
 

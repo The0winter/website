@@ -17,6 +17,16 @@ function buildBooksUrl(params?: Record<string, string>): string {
   return query.toString() ? `${API_BASE_URL}/books?${query.toString()}` : `${API_BASE_URL}/books`;
 }
 
+function normalizeBookForHome(book: Book): Book {
+  const source = book as Book & { cover_image?: string; coverImage?: string };
+  const normalizedCover = source.cover_image || source.coverImage || '';
+  return {
+    ...source,
+    cover_image: normalizedCover,
+    coverImage: normalizedCover,
+  } as Book;
+}
+
 async function fetchBooks(params?: Record<string, string>): Promise<Book[]> {
   try {
     const res = await fetch(buildBooksUrl(params), {
@@ -24,7 +34,8 @@ async function fetchBooks(params?: Record<string, string>): Promise<Book[]> {
     });
     if (!res.ok) return [];
     const data = (await res.json()) as Book[];
-    return Array.isArray(data) ? data : [];
+    if (!Array.isArray(data)) return [];
+    return data.map(normalizeBookForHome);
   } catch (error) {
     console.error('Home SSR fetch books failed:', error);
     return [];
