@@ -73,7 +73,7 @@ const RankingList = ({
 
                         <div className="relative w-12 h-16 flex-shrink-0 rounded shadow-sm overflow-hidden border border-gray-100">
                            {book.cover_image ? (
-                             <img src={book.cover_image} alt={book.title} className="w-full h-full object-cover" />
+                             <img src={book.cover_image} alt={book.title || '小说封面'} className="w-full h-full object-cover" />
                            ) : (
                              <div className="w-full h-full bg-gray-50 flex items-center justify-center">
                                <BookOpen className="w-4 h-4 text-gray-300" />
@@ -157,7 +157,8 @@ const RankingList = ({
                                     
                                     <div className="flex gap-3">
                                         <div className="w-20 h-28 flex-shrink-0 rounded bg-gray-200 overflow-hidden shadow-md group-hover:shadow-lg transition-all border border-black/5">
-                                            {book.cover_image && <img src={book.cover_image} className="w-full h-full object-cover" />}
+                                            {book.cover_image && <img src={book.cover_image} 
+                                            alt={book.title ? `${book.title} 封面` : '推荐书籍封面'}className="w-full h-full object-cover" />}
                                         </div>
                                         
                                         <div className="flex-1 min-w-0 flex flex-col justify-center">

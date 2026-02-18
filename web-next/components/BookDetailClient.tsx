@@ -345,7 +345,7 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
               {/* 左侧封面 */}
               <div className="flex-shrink-0">
                 {book.cover_image ? (
-                  <img src={book.cover_image} alt={book.title} className="w-24 h-32 md:w-48 md:h-64 object-cover rounded shadow-md" />
+                  <img src={book.cover_image} alt={book.title || '小说封面'} className="w-24 h-32 md:w-48 md:h-64 object-cover rounded shadow-md" />
                 ) : (
                   <div className="w-24 h-32 md:w-48 md:h-64 bg-gradient-to-br from-blue-500 to-blue-700 rounded shadow-md flex items-center justify-center">
                     <BookOpen className="h-8 w-8 md:h-16 md:w-16 text-white" />

@@ -120,7 +120,7 @@ function SearchContent() {
                 {book.cover_image ? (
                   <img 
                     src={book.cover_image} 
-                    alt={book.title} 
+                    alt={book.title || '小说封面'} 
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                 ) : (
