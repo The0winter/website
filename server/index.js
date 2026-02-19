@@ -422,7 +422,6 @@ app.post('/api/admin/upload-book', async (req, res) => {
             if (chaptersToInsert.length > 0) {
                 // 👇 修改开始：接收返回值
                 const insertedDocs = await Chapter.insertMany(chaptersToInsert);
-                
                 // 🔥 新增：后台静默推送（不影响主流程）
                 try {
                     const newUrls = insertedDocs.map(doc => 
@@ -434,14 +433,13 @@ app.post('/api/admin/upload-book', async (req, res) => {
                 }
             }
 
-res.json({ success: true, message: `入库成功，新增 ${chaptersToInsert.length} 章` });
-// ... 原本的代码 ...
-
-        res.json({ success: true, message: `入库成功，新增 ${chaptersToInsert.length} 章` });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
+            // ✅ 修复：只留这一个 res.json，并且前面加上 return 结束函数
+            return res.json({ success: true, message: `入库成功，新增 ${chaptersToInsert.length} 章` });
+            
+        } catch (error) {
+            return res.status(500).json({ error: error.message });
+        }
+    });
 
 // --- Auth API ---
 app.post('/api/auth/signup', async (req, res) => {
