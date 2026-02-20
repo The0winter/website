@@ -74,6 +74,30 @@ interface BookDetailClientProps {
   };
 }
 
+// --- 智能处理章节标题 ---
+const formatChapterTitle = (title: string, chapterNumber: number) => {
+  if (!title) return `第${chapterNumber}章`;
+
+  // 1. 去掉开头的数字和标点符号 (例如 "7.第7章" -> "第7章", "12、第12章" -> "第12章")
+  let cleanTitle = title.trim().replace(/^\d+[\.、\s]+/, '');
+
+  // 2. 识别是否为感言、请假条等非正文 (你可以根据需要增删这里的关键词)
+  const isExtraContent = /(感言|请假|通知|单章|说明|番外|新书|设定|总结|推书)/.test(cleanTitle);
+
+  // 3. 如果清洗后的标题本身就已经包含“第x章”或者以“第”开头，直接原样返回（最准确，不依赖外部排序）
+  if (cleanTitle.startsWith('第') || /第.+章/.test(cleanTitle)) {
+      return cleanTitle;
+  }
+
+  // 4. 如果是感言等非正文，直接返回，绝对不要强制加“第X章”
+  if (isExtraContent) {
+      return cleanTitle;
+  }
+
+  // 5. 兜底逻辑：既没有“第X章”也不是感言的正文，才强制加上章节号
+  return `第${chapterNumber}章 ${cleanTitle}`;
+};
+
 export default function BookDetailClient({ initialBookData }: BookDetailClientProps) {
   const { user } = useAuth(); 
   const router = useRouter();
@@ -608,7 +632,7 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
                             className={`group items-center p-2 bg-gray-50 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200 transition-all text-xs md:text-sm ${index >= 8 ? 'hidden md:flex' : 'flex'}`}
                         >
                             <span className="text-gray-700 truncate group-hover:text-blue-600 w-full">
-                                {chapter.title.trim().startsWith('第') ? chapter.title : `第${chapter.chapter_number}章 ${chapter.title}`}
+                                {formatChapterTitle(chapter.title, chapter.chapter_number)}
                             </span>
                         </Link>
                     ))}
@@ -708,7 +732,7 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
                                             className="group flex items-center p-3 bg-gray-50 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200 transition-all text-sm"
                                         >
                                             <span className="text-gray-700 truncate group-hover:text-blue-600 w-full font-medium">
-                                                {chapter.title.trim().startsWith('第') ? chapter.title : `第${chapter.chapter_number}章 ${chapter.title}`}
+                                                {formatChapterTitle(chapter.title, chapter.chapter_number)}
                                             </span>
                                         </Link>
                                     ))}
