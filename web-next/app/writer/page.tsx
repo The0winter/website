@@ -1215,7 +1215,7 @@ export default function WriterDashboard() {
                     image={cropperImgSrc}
                     crop={crop}
                     zoom={zoom}
-                    aspect={3 / 4} // 👈 锁定 3:4 比例 (适合小说封面)
+                    aspect={9 / 16} // 👈 改为 9:16 瘦长比例
                     onCropChange={setCrop}
                     onCropComplete={onCropComplete}
                     onZoomChange={setZoom}
