@@ -350,39 +350,55 @@ app.post('/api/admin/impersonate/:userId', authMiddleware, adminMiddleware, asyn
     }
 });
 
-// ================= 临时/运维：清理带数字标号的错误章节 =================
+// ================= 临时/运维：清理带数字标号的错误章节 (精简统计版) =================
 app.delete('/api/admin/clean-dirty-chapters', async (req, res) => {
     try {
-        // 1. 安全鉴权：校验 x-admin-secret
         const clientSecret = req.headers['x-admin-secret'];
         const ADMIN_SECRET = process.env.ADMIN_SECRET || 'temp_admin_secret_123';
         if (clientSecret !== ADMIN_SECRET) {
             return res.status(403).json({ error: '🚫 密码错误，无权执行清理' });
         }
 
-        // 2. 核心查询：用正则找出所有标题类似于 "1.第1章" 的脏数据
+        // 1. 查出所有脏数据，并带上对应的书籍信息 (为了拿到书名)
         const dirtyChapters = await Chapter.find({
             title: { $regex: /[0-9]+\.第/ }
-        });
+        }).populate('bookId', 'title');
 
         if (dirtyChapters.length === 0) {
             return res.json({ success: true, message: '🎉 数据库很干净，没有发现这种格式的脏数据。' });
         }
 
-        // 3. 提取需要删除的 ID 和标题
-        const idsToDelete = dirtyChapters.map(doc => doc._id);
-        const titlesToDelete = dirtyChapters.map(doc => doc.title);
+        // 2. 统计每本书有多少个重复章节
+        const summaryMap = {};
+        const idsToDelete = [];
+
+        dirtyChapters.forEach(doc => {
+            idsToDelete.push(doc._id);
+            // 获取书名，如果找不到关联的书(比如书被删了)，就显示未知
+            const bookTitle = doc.bookId ? doc.bookId.title : '未知书籍(ID:' + doc.bookId + ')';
+            
+            if (!summaryMap[bookTitle]) {
+                summaryMap[bookTitle] = 0;
+            }
+            summaryMap[bookTitle]++;
+        });
+
+        // 3. 转成方便返回的数组格式
+        const summary = Object.keys(summaryMap).map(title => ({
+            title,
+            count: summaryMap[title]
+        }));
 
         // 4. 执行批量删除
         const result = await Chapter.deleteMany({
             _id: { $in: idsToDelete }
         });
 
-        // 5. 返回详细结果给触发脚本
+        // 5. 返回统计结果
         res.json({
             success: true,
             message: `清理彻底完成！共删除了 ${result.deletedCount} 条冗余记录。`,
-            deletedTitles: titlesToDelete
+            summary: summary
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
