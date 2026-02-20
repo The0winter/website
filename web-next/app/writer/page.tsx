@@ -71,6 +71,8 @@ export default function WriterDashboard() {
   const [adminBooksLoading, setAdminBooksLoading] = useState(false);
   const [adminBookSearchLoading, setAdminBookSearchLoading] = useState(false);
   const [bookManagerBook, setBookManagerBook] = useState<Book | null>(null);
+  const [chapterSortOrder, setChapterSortOrder] = useState<'desc' | 'asc'>('desc'); 
+  const [chapterSearchKeyword, setChapterSearchKeyword] = useState('');
 
   // 表单与选中项
   const [currentBookId, setCurrentBookId] = useState<string>('');
@@ -180,16 +182,14 @@ export default function WriterDashboard() {
       const books = await booksApi.getAll({ orderBy: 'daily_views', order: 'desc' });
       const hotBookIds = new Set(adminHotBooks.map((book) => book.id));
       const filtered = books.filter((book) => {
-        if (hotBookIds.has(book.id)) return false;
-        const authorName =
-          typeof book.author === 'string'
-            ? book.author
-            : (book.author_id && typeof book.author_id === 'object' && 'username' in book.author_id
-                ? (book.author_id as any).username
+        const authorName = typeof book.author === 'string' 
+            ? book.author 
+            : (book.author_id && typeof book.author_id === 'object' && 'username' in book.author_id 
+                ? (book.author_id as any).username 
                 : '');
         const target = `${book.title || ''} ${authorName || ''}`.toLowerCase();
         return target.includes(keyword);
-      });
+        });
       setAdminBookSearchResults(filtered);
     } catch (error) {
       console.error('Failed to search books:', error);
@@ -265,7 +265,7 @@ export default function WriterDashboard() {
 
   const onCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => setCroppedAreaPixels(croppedAreaPixels), []);
 
-  const handleSaveCrop = async () => {
+const handleSaveCrop = async () => {
     if (!cropperImgSrc || !croppedAreaPixels) return;
     try {
       setUploading(true);
@@ -279,16 +279,32 @@ export default function WriterDashboard() {
           // 如果之前已经传过预览图了，现在又裁了一张新的，就把之前那张预览图删掉
           if (newBookCoverPreview) await deleteImageFromCloudinary(newBookCoverPreview);
           setNewBookCoverPreview(url);
+          setToast({ msg: '裁剪并上传成功', type: 'success' });
         } else if (isCroppingFor === 'edit') {
           // 如果是在编辑书籍，覆盖前先把老封面删掉
           if (formBookCover) await deleteImageFromCloudinary(formBookCover);
           setFormBookCover(url);
+
+          // 👇 新增核心逻辑：立刻把新封面 URL 保存到数据库
+          if (currentBookId) {
+              await booksApi.update(currentBookId, { cover_image: url });
+              
+              // 同步更新本地状态，防止后面点“保存修改”时被旧数据覆盖
+              setBookManagerBook((prev) => prev ? { ...prev, cover_image: url } : prev);
+              
+              // 自动刷新外部列表数据，让外面的封面也立刻生效
+              fetchMyData();
+              if ((user as any)?.role === 'admin') {
+                  fetchAdminHotBooks();
+                  if (adminBookSearch.trim()) fetchAdminBookSearchResults(adminBookSearch);
+              }
+          }
+          setToast({ msg: '封面已更新并自动保存', type: 'success' });
         }
-        setToast({ msg: '裁剪并上传成功', type: 'success' });
       }
       setCropperImgSrc(null); setIsCroppingFor(null);
     } catch (e) { 
-      setToast({ msg: '裁剪失败', type: 'error' }); 
+      setToast({ msg: '裁剪失败', type: 'error' });
     } finally { 
       setUploading(false); 
     }
@@ -440,15 +456,18 @@ export default function WriterDashboard() {
     return '未知作者';
   };
 
-  const openBookManager = (book: Book) => {
-    setCurrentBookId(book.id);
-    setBookManagerBook(book);
-    setFormBookTitle(book.title);
-    setFormBookDescription(book.description || '');
-    setFormBookCover(book.cover_image || '');
-    setShowBookManager(true);
-  };
-
+const openBookManager = (book: Book) => {
+  setActiveChapters([]); // 👇 第一时间清空旧数据，杜绝幽灵章节
+  setChapterSearchKeyword(''); // 👇 重置搜索词
+  setChapterSortOrder('desc'); // 👇 默认恢复倒序
+  
+  setCurrentBookId(book.id);
+  setBookManagerBook(book);
+  setFormBookTitle(book.title);
+  setFormBookDescription(book.description || '');
+  setFormBookCover(book.cover_image || '');
+  setShowBookManager(true);
+};
 
   // Effect
   useEffect(() => {
@@ -883,6 +902,20 @@ export default function WriterDashboard() {
                                                     setUploading(true); // 开启 loading
                                                     await deleteImageFromCloudinary(formBookCover); // 呼叫后端删除图片
                                                     setFormBookCover(''); // 清空前端状态
+
+                                                    // 👇 新增核心逻辑：云端图片删除后，立刻把数据库里的封面也清空
+                                                    if (currentBookId) {
+                                                        await booksApi.update(currentBookId, { cover_image: '' });
+                                                        setBookManagerBook((prev) => prev ? { ...prev, cover_image: '' } : prev);
+                                                        
+                                                        // 同步刷新外部列表
+                                                        fetchMyData();
+                                                        if ((user as any)?.role === 'admin') {
+                                                            fetchAdminHotBooks();
+                                                            if (adminBookSearch.trim()) fetchAdminBookSearchResults(adminBookSearch);
+                                                        }
+                                                    }
+
                                                     setUploading(false); // 关闭 loading
                                                     setToast({ msg: '封面已移除', type: 'success' });
                                                 }
@@ -949,44 +982,73 @@ export default function WriterDashboard() {
                     </div>
                  </details>
 
-                 {/* 章节列表标题 */}
-                 <div className="flex items-center justify-between px-1">
-                    <h4 className="font-bold text-gray-900 text-lg">章节列表 ({activeChapters.length})</h4>
+                 {/* 章节列表标题与操作区 */}
+                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between px-1 mb-4 gap-3">
+                    <h4 className="font-bold text-gray-900 text-lg shrink-0">章节列表 ({activeChapters.length})</h4>
+                    <div className="flex items-center gap-2 w-full md:w-auto">
+                        {/* 章节搜索框 */}
+                        <div className="relative flex-1 md:w-48">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="搜索章节..."
+                                value={chapterSearchKeyword}
+                                onChange={(e) => setChapterSearchKeyword(e.target.value)}
+                                className="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                            />
+                        </div>
+                        {/* 排序切换按钮 */}
+                        <button
+                            onClick={() => setChapterSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+                            className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 hover:text-gray-900 transition-colors flex items-center justify-center shrink-0 text-sm font-bold cursor-pointer"
+                        >
+                            {chapterSortOrder === 'desc' ? '倒序 ↓' : '正序 ↑'}
+                        </button>
+                    </div>
                  </div>
 
-                 {/* 🔴 问题3修复：这里变成了 grid-cols-2！两列布局！ */}
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     {activeChapters.length === 0 ? (
-                         <div className="col-span-full text-center text-gray-400 py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                             暂无章节，快去创作吧
-                         </div>
-                     ) : (
-                        activeChapters.map((chapter) => (
-                            <div key={chapter.id} className="group flex items-center justify-between p-4 bg-white hover:bg-blue-50 rounded-xl border border-gray-100 hover:border-blue-200 transition-all shadow-sm hover:shadow-md cursor-default">
-                               {/* 找到 activeChapters.map 里面的这个 div */}
-                                <div className="flex-1 mr-4 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        {/* ❌ 之前这里有个 span 显示 #x，现在彻底删掉了 */}
-                                        
-                                        {/* 只保留标题 */}
-                                        <p className="font-bold text-gray-900 text-sm md:text-base truncate group-hover:text-blue-700 transition-colors">
-                                            {chapter.title}
-                                        </p>
+                 {/* 章节渲染区 (加入了动态过滤和排序逻辑) */}
+                 {(() => {
+                    // 1. 过滤 & 排序
+                    const displayChapters = activeChapters
+                        .filter(c => c.title.toLowerCase().includes(chapterSearchKeyword.toLowerCase()))
+                        .sort((a, b) => {
+                            const numA = a.chapter_number || 0;
+                            const numB = b.chapter_number || 0;
+                            return chapterSortOrder === 'desc' ? numB - numA : numA - numB;
+                        });
+
+                    return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {displayChapters.length === 0 ? (
+                                <div className="col-span-full text-center text-gray-400 py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                                    {activeChapters.length === 0 ? '加载中或暂无章节...' : '未搜索到匹配的章节'}
+                                </div>
+                            ) : (
+                                displayChapters.map((chapter) => (
+                                    <div key={chapter.id} className="group flex items-center justify-between p-4 bg-white hover:bg-blue-50 rounded-xl border border-gray-100 hover:border-blue-200 transition-all shadow-sm hover:shadow-md cursor-default">
+                                        <div className="flex-1 mr-4 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-bold text-gray-900 text-sm md:text-base truncate group-hover:text-blue-700 transition-colors">
+                                                    {chapter.title}
+                                                </p>
+                                            </div>
+                                            <p className="text-xs text-gray-400 mt-1 pl-1">字数: {chapter.word_count || 0}</p>
+                                        </div>
+                                        <div className="flex gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                            <button onClick={() => openChapterEditor('edit', chapter)} className="p-2 bg-white border border-gray-200 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all hover:scale-105 shadow-sm cursor-pointer">
+                                                <Edit3 className="h-4 w-4" />
+                                            </button>
+                                            <button onClick={() => handleDeleteChapter(chapter.id)} className="p-2 bg-white border border-gray-200 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all hover:scale-105 shadow-sm cursor-pointer">
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
                                     </div>
-                                    <p className="text-xs text-gray-400 mt-1 pl-1">字数: {chapter.word_count || 0}</p>
-                                </div>
-                                <div className="flex gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                    <button onClick={() => openChapterEditor('edit', chapter)} className="p-2 bg-white border border-gray-200 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all hover:scale-105 shadow-sm cursor-pointer">
-                                        <Edit3 className="h-4 w-4" />
-                                    </button>
-                                    <button onClick={() => handleDeleteChapter(chapter.id)} className="p-2 bg-white border border-gray-200 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all hover:scale-105 shadow-sm cursor-pointer">
-                                        <Trash2 className="h-4 w-4" />
-                                    </button>
-                                </div>
-                            </div>
-                        ))
-                     )}
-                 </div>
+                                ))
+                            )}
+                        </div>
+                    );
+                 })()}
               </div>
 
               {/* 底部危险区 */}
