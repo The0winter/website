@@ -46,8 +46,8 @@ export default function WriterDashboard() {
   
   // ================= State 定义区域 =================
   
-// 核心：视图控制 'works' | 'admin'
-  const [currentView, setCurrentView] = useState<'works' | 'admin'>('works');
+// 核心：视图控制 'works' | 'admin' | 'adminBooks'
+  const [currentView, setCurrentView] = useState<'works' | 'admin' | 'adminBooks'>('works');
 
   // 作品相关
   const [myBooks, setMyBooks] = useState<Book[]>([]);
@@ -65,6 +65,12 @@ export default function WriterDashboard() {
   const [userList, setUserList] = useState<any[]>([]); 
   const [adminSearch, setAdminSearch] = useState(''); // 搜索词
   const [adminLoading, setAdminLoading] = useState(false);
+  const [adminHotBooks, setAdminHotBooks] = useState<Book[]>([]);
+  const [adminBookSearch, setAdminBookSearch] = useState('');
+  const [adminBookSearchResults, setAdminBookSearchResults] = useState<Book[]>([]);
+  const [adminBooksLoading, setAdminBooksLoading] = useState(false);
+  const [adminBookSearchLoading, setAdminBookSearchLoading] = useState(false);
+  const [bookManagerBook, setBookManagerBook] = useState<Book | null>(null);
 
   // 表单与选中项
   const [currentBookId, setCurrentBookId] = useState<string>('');
@@ -130,6 +136,52 @@ export default function WriterDashboard() {
     }
   }, [user]);
 
+  const fetchAdminHotBooks = useCallback(async () => {
+    if (!user || (user as any).role !== 'admin') return;
+    setAdminBooksLoading(true);
+    try {
+      const books = await booksApi.getAll({ orderBy: 'daily_views', order: 'desc', limit: 10 });
+      setAdminHotBooks(books);
+    } catch (error) {
+      console.error('Failed to load hot books:', error);
+      setToast({ msg: '获取热门书籍失败', type: 'error' });
+    } finally {
+      setAdminBooksLoading(false);
+    }
+  }, [user]);
+
+  const fetchAdminBookSearchResults = useCallback(async (rawKeyword: string) => {
+    if (!user || (user as any).role !== 'admin') return;
+    const keyword = rawKeyword.trim().toLowerCase();
+    if (!keyword) {
+      setAdminBookSearchResults([]);
+      return;
+    }
+
+    setAdminBookSearchLoading(true);
+    try {
+      const books = await booksApi.getAll({ orderBy: 'daily_views', order: 'desc' });
+      const hotBookIds = new Set(adminHotBooks.map((book) => book.id));
+      const filtered = books.filter((book) => {
+        if (hotBookIds.has(book.id)) return false;
+        const authorName =
+          typeof book.author === 'string'
+            ? book.author
+            : (book.author_id && typeof book.author_id === 'object' && 'username' in book.author_id
+                ? (book.author_id as any).username
+                : '');
+        const target = `${book.title || ''} ${authorName || ''}`.toLowerCase();
+        return target.includes(keyword);
+      });
+      setAdminBookSearchResults(filtered);
+    } catch (error) {
+      console.error('Failed to search books:', error);
+      setToast({ msg: '搜索书籍失败', type: 'error' });
+    } finally {
+      setAdminBookSearchLoading(false);
+    }
+  }, [user, adminHotBooks]);
+
   // 监听搜索词变化 (防抖)
   useEffect(() => {
       if (currentView === 'admin') {
@@ -139,6 +191,25 @@ export default function WriterDashboard() {
           return () => clearTimeout(timer);
       }
   }, [adminSearch, currentView, fetchUserList]);
+
+  useEffect(() => {
+    if (currentView === 'adminBooks' && (user as any)?.role === 'admin') {
+      fetchAdminHotBooks();
+    }
+  }, [currentView, user, fetchAdminHotBooks]);
+
+  useEffect(() => {
+    if (currentView !== 'adminBooks' || (user as any)?.role !== 'admin') return;
+    const keyword = adminBookSearch.trim();
+    if (!keyword) {
+      setAdminBookSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      fetchAdminBookSearchResults(keyword);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [adminBookSearch, currentView, user, fetchAdminBookSearchResults]);
 
   const uploadImageToCloudinary = async (file: File): Promise<string | null> => {
     try {
@@ -212,7 +283,15 @@ export default function WriterDashboard() {
     } catch (e: any) { setToast({ msg: `切换失败: ${e.message}`, type: 'error' }); }
   };
 
-  const activeBook = myBooks.find(b => b.id === currentBookId);
+  const findBookById = useCallback((bookId: string) => {
+    if (!bookId) return undefined;
+    if (bookManagerBook?.id === bookId) return bookManagerBook;
+    return myBooks.find((b) => b.id === bookId)
+      || adminHotBooks.find((b) => b.id === bookId)
+      || adminBookSearchResults.find((b) => b.id === bookId);
+  }, [bookManagerBook, myBooks, adminHotBooks, adminBookSearchResults]);
+
+  const activeBook = findBookById(currentBookId);
 
   // 封号逻辑
   const handleBanUser = async (targetUserId: string, currentStatus: boolean, username: string) => {
@@ -284,8 +363,62 @@ export default function WriterDashboard() {
           setToast({msg:'创建成功', type:'success'}); fetchMyData();
       } catch(e) { setToast({msg:'创建失败', type:'error'}); }
   };
-  const handleUpdateBook = async () => { if(!currentBookId) return; await booksApi.update(currentBookId, { title: formBookTitle, description: formBookDescription, cover_image: formBookCover }); setToast({msg:'保存成功', type:'success'}); fetchMyData(); };
-  const handleDeleteBook = async () => { const n = prompt('输入书名确认删除:'); const b = myBooks.find(k=>k.id===currentBookId); if(b && n===b.title) { await booksApi.delete(currentBookId); setShowBookManager(false); fetchMyData(); setToast({msg:'删除成功', type:'success'}); }};
+  const handleUpdateBook = async () => {
+    if (!currentBookId) return;
+    await booksApi.update(currentBookId, {
+      title: formBookTitle,
+      description: formBookDescription,
+      cover_image: formBookCover
+    });
+    setBookManagerBook((prev) => prev ? {
+      ...prev,
+      title: formBookTitle,
+      description: formBookDescription,
+      cover_image: formBookCover
+    } : prev);
+    setToast({ msg: '保存成功', type: 'success' });
+    fetchMyData();
+    if ((user as any)?.role === 'admin') {
+      fetchAdminHotBooks();
+      if (adminBookSearch.trim()) fetchAdminBookSearchResults(adminBookSearch);
+    }
+  };
+
+  const handleDeleteBook = async () => {
+    const book = activeBook;
+    if (!book) return;
+    const n = prompt('输入书名确认删除:');
+    if (n !== book.title) return;
+
+    await booksApi.delete(currentBookId);
+    setShowBookManager(false);
+    setBookManagerBook(null);
+    setAdminHotBooks((prev) => prev.filter((b) => b.id !== currentBookId));
+    setAdminBookSearchResults((prev) => prev.filter((b) => b.id !== currentBookId));
+    fetchMyData();
+    if ((user as any)?.role === 'admin') {
+      fetchAdminHotBooks();
+      if (adminBookSearch.trim()) fetchAdminBookSearchResults(adminBookSearch);
+    }
+    setToast({ msg: '删除成功', type: 'success' });
+  };
+
+  const getBookAuthorName = (book: Book) => {
+    if (typeof book.author === 'string' && book.author.trim()) return book.author;
+    if (book.author_id && typeof book.author_id === 'object' && 'username' in book.author_id) {
+      return (book.author_id as any).username || '未知作者';
+    }
+    return '未知作者';
+  };
+
+  const openBookManager = (book: Book) => {
+    setCurrentBookId(book.id);
+    setBookManagerBook(book);
+    setFormBookTitle(book.title);
+    setFormBookDescription(book.description || '');
+    setFormBookCover(book.cover_image || '');
+    setShowBookManager(true);
+  };
 
 
   // Effect
@@ -297,11 +430,15 @@ export default function WriterDashboard() {
 
   useEffect(() => {
     if (showBookManager && currentBookId) {
-        const book = myBooks.find(b => b.id === currentBookId);
+        const book = findBookById(currentBookId);
         if (book) { setFormBookCover(book.cover_image || ''); setFormBookTitle(book.title); setFormBookDescription(book.description || ''); }
         chaptersApi.getByBookId(currentBookId).then(setActiveChapters).catch(console.error);
     }
-  }, [showBookManager, currentBookId, myBooks]);
+  }, [showBookManager, currentBookId, findBookById]);
+
+  useEffect(() => {
+    if (!showBookManager) setBookManagerBook(null);
+  }, [showBookManager]);
 
   useEffect(() => { if(toast) { const t = setTimeout(()=>setToast(null),3000); return ()=>clearTimeout(t); } }, [toast]);
 
@@ -343,6 +480,14 @@ export default function WriterDashboard() {
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition mt-2 ${currentView === 'admin' ? 'bg-purple-50 text-purple-600' : 'text-gray-600 hover:bg-purple-50 hover:text-purple-600'}`}
             >
                 <LayoutDashboard className="h-5 w-5" /> 超级控制台
+            </button>
+          )}
+          {(user as any).role === 'admin' && (
+            <button
+                onClick={() => setCurrentView('adminBooks')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition mt-2 ${currentView === 'adminBooks' ? 'bg-amber-50 text-amber-700' : 'text-gray-600 hover:bg-amber-50 hover:text-amber-700'}`}
+            >
+                <BarChart3 className="h-5 w-5" /> 书籍总编辑
             </button>
           )}
         </nav>
@@ -396,7 +541,7 @@ export default function WriterDashboard() {
                                         >
                                             <Upload className="h-3 w-3 md:h-4 md:w-4" /> <span>快速发布</span>
                                         </button>
-                                        <button onClick={() => { setCurrentBookId(book.id); setFormBookTitle(book.title); setFormBookDescription(book.description || ''); setFormBookCover(book.cover_image || ''); setShowBookManager(true); }} className="w-32 flex items-center justify-center gap-1 px-3 py-2 bg-white text-gray-700 text-sm font-bold rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 hover:border-gray-300 hover:shadow-md active:scale-95 transition-all cursor-pointer"
+                                        <button onClick={() => openBookManager(book)} className="w-32 flex items-center justify-center gap-1 px-3 py-2 bg-white text-gray-700 text-sm font-bold rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 hover:border-gray-300 hover:shadow-md active:scale-95 transition-all cursor-pointer"
                                         >
                                             <Settings className="h-3 w-3 md:h-4 md:w-4" /> <span>管理</span>
                                         </button>
@@ -544,6 +689,108 @@ export default function WriterDashboard() {
                     <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 text-xs text-gray-500 flex justify-between">
                          <span>显示基于活跃度排序的前 15 名用户</span>
                          <span>数据每日凌晨更新</span>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {currentView === 'adminBooks' && (user as any).role === 'admin' && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                            <BarChart3 className="h-7 w-7 text-amber-600" /> 书籍总编辑
+                        </h2>
+                        <p className="text-sm text-gray-500 mt-1">
+                            默认展示今日最火 Top 10，可搜索其余书籍并进行完整编辑。
+                        </p>
+                    </div>
+                    <div className="relative w-full md:w-96">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="搜索 Top10 之外的书名或作者..."
+                            value={adminBookSearch}
+                            onChange={(e) => setAdminBookSearch(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition shadow-sm text-gray-900 placeholder-gray-500 bg-gray-50/50"
+                        />
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="p-4 md:p-6 border-b border-gray-100 bg-gray-50/60">
+                        <h3 className="font-bold text-lg text-gray-900">今日最火 Top 10</h3>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                        {adminBooksLoading ? (
+                            <div className="p-12 text-center text-gray-400">加载中...</div>
+                        ) : adminHotBooks.length === 0 ? (
+                            <div className="p-12 text-center text-gray-500">暂无热门书籍</div>
+                        ) : (
+                            adminHotBooks.map((book) => (
+                                <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
+                                    <div className="w-20 h-28 md:w-24 md:h-32 bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
+                                        {book.cover_image ? <img src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
+                                    </div>
+                                    <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
+                                        <div>
+                                            <div className="flex justify-between items-start gap-3">
+                                                <h4 className="text-base md:text-xl font-bold text-gray-900 mb-1 line-clamp-1">{book.title}</h4>
+                                                <span className="text-[11px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">今日热度 {book.daily_views || 0}</span>
+                                            </div>
+                                            <p className="text-xs md:text-sm text-gray-500 mt-1 line-clamp-2">{book.description || '暂无简介'}</p>
+                                            <p className="text-xs text-gray-400 mt-1">作者：{getBookAuthorName(book)}</p>
+                                        </div>
+                                        <div className="flex gap-2 md:gap-3 mt-3">
+                                            <button onClick={() => { setCurrentBookId(book.id); openChapterEditor('new'); }} className="w-32 flex items-center justify-center gap-1 px-3 py-2 bg-white text-blue-600 text-sm font-bold rounded-lg border border-blue-100 shadow-sm hover:bg-blue-50 hover:border-blue-300 hover:shadow-md active:scale-95 transition-all cursor-pointer">
+                                                <Upload className="h-3 w-3 md:h-4 md:w-4" /> <span>快速发布</span>
+                                            </button>
+                                            <button onClick={() => openBookManager(book)} className="w-32 flex items-center justify-center gap-1 px-3 py-2 bg-white text-gray-700 text-sm font-bold rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 hover:border-gray-300 hover:shadow-md active:scale-95 transition-all cursor-pointer">
+                                                <Settings className="h-3 w-3 md:h-4 md:w-4" /> <span>管理</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="p-4 md:p-6 border-b border-gray-100 bg-gray-50/60">
+                        <h3 className="font-bold text-lg text-gray-900">搜索结果（不含 Top 10）</h3>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                        {!adminBookSearch.trim() ? (
+                            <div className="p-10 text-center text-gray-400">输入书名或作者后开始搜索</div>
+                        ) : adminBookSearchLoading ? (
+                            <div className="p-10 text-center text-gray-400">搜索中...</div>
+                        ) : adminBookSearchResults.length === 0 ? (
+                            <div className="p-10 text-center text-gray-500">未找到匹配书籍</div>
+                        ) : (
+                            adminBookSearchResults.map((book) => (
+                                <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
+                                    <div className="w-20 h-28 md:w-24 md:h-32 bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
+                                        {book.cover_image ? <img src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
+                                    </div>
+                                    <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
+                                        <div>
+                                            <h4 className="text-base md:text-xl font-bold text-gray-900 mb-1 line-clamp-1">{book.title}</h4>
+                                            <p className="text-xs md:text-sm text-gray-500 mt-1 line-clamp-2">{book.description || '暂无简介'}</p>
+                                            <p className="text-xs text-gray-400 mt-1">作者：{getBookAuthorName(book)} / 今日热度：{book.daily_views || 0}</p>
+                                        </div>
+                                        <div className="flex gap-2 md:gap-3 mt-3">
+                                            <button onClick={() => { setCurrentBookId(book.id); openChapterEditor('new'); }} className="w-32 flex items-center justify-center gap-1 px-3 py-2 bg-white text-blue-600 text-sm font-bold rounded-lg border border-blue-100 shadow-sm hover:bg-blue-50 hover:border-blue-300 hover:shadow-md active:scale-95 transition-all cursor-pointer">
+                                                <Upload className="h-3 w-3 md:h-4 md:w-4" /> <span>快速发布</span>
+                                            </button>
+                                            <button onClick={() => openBookManager(book)} className="w-32 flex items-center justify-center gap-1 px-3 py-2 bg-white text-gray-700 text-sm font-bold rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 hover:border-gray-300 hover:shadow-md active:scale-95 transition-all cursor-pointer">
+                                                <Settings className="h-3 w-3 md:h-4 md:w-4" /> <span>管理</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </div>
             </div>

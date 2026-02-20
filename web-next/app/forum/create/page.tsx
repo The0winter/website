@@ -147,7 +147,7 @@ function CreatePostContent() {
 
           <textarea
             className="w-full h-[360px] md:h-[420px] resize-none text-base md:text-lg text-[#2d3748] placeholder:text-[#c0c4cc] border-none outline-none bg-transparent leading-8"
-            placeholder={type === 'question' ? '补充问题背景、限制条件、你已尝试过的方法...' : '开始写正文内容...'}
+            placeholder={type === 'question' ? '问题背景或描述...' : '开始写正文内容...'}
             value={content}
             onChange={(e) => setContent(e.target.value)}
             maxLength={CONTENT_MAX + 1000}

@@ -189,7 +189,7 @@ export default function ForumPage() {
     }
 
     // 滑动超过屏幕宽度 20% 触发翻页
-    const threshold = window.innerWidth * 0.2; 
+    const threshold = window.innerWidth * 0.1; 
     if (dragOffset > threshold && activeIndex > 0) {
       setActiveTab(TABS[activeIndex - 1].id);
     } else if (dragOffset < -threshold && activeIndex < TABS.length - 1) {
@@ -487,7 +487,7 @@ return (
       </div>
 
       {/* 移动端: px-0 满屏, mt-1 缩短间隙; PC端(md): 恢复内边距和外边距 */}
-      <div className="max-w-[1040px] mx-auto px-0 md:px-4 mt-1 md:mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px] gap-5 md:gap-6">
+      <div className="max-w-[1040px] mx-auto px-0 md:px-4 mt-0 md:mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px] gap-5 md:gap-6">
         
         {/* ================= 移动端独享：跟手轮播容器 ================= */}
         <div className="md:hidden w-full relative overflow-hidden" style={{ touchAction: 'pan-y' }}>
