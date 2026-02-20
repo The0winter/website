@@ -22,6 +22,11 @@ const storage = new CloudinaryStorage({
 });
 
 // 3. 创建 Multer 实例
-const upload = multer({ storage: storage });
+const upload = multer({ 
+  storage: storage,
+  limits: { 
+    fileSize: 1.5 * 1024 * 1024 // 明确允许最大 1.5MB 的图片上传
+  } 
+});
 
 export default upload;
