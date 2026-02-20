@@ -675,7 +675,7 @@ export default function HomePageClient({
                         href={`/book/${book.id}`}
                         className="group flex flex-col gap-3"
                       >
-                        <<div className="aspect-[9/16] h-auto rounded-lg overflow-hidden bg-gray-100 shadow-sm border border-gray-200 relative">
+                        <div className="aspect-[9/16] h-auto rounded-lg overflow-hidden bg-gray-100 shadow-sm border border-gray-200 relative">
                             {book.cover_image ? (
                               <img 
                                 src={book.cover_image} 
