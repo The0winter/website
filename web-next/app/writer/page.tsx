@@ -525,7 +525,7 @@ export default function WriterDashboard() {
                     ) : (
                         myBooks.map((book) => (
                             <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
-                                <div className="w-20 aspect-[9/16] h-auto md:w-24 md:aspect-[9/16] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
+                                <div className="w-20 aspect-[3/4] h-auto md:w-24 md:aspect-[3/4] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
                                     {book.cover_image ? <img src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
                                 </div>
                                 <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
@@ -729,7 +729,7 @@ export default function WriterDashboard() {
                         ) : (
                             adminHotBooks.map((book) => (
                                 <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
-                                    <div className="w-20 aspect-[9/16] h-auto md:w-24 md:aspect-[9/16] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
+                                    <div className="w-20 aspect-[3/4] h-auto md:w-24 md:aspect-[3/4] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
                                         {book.cover_image ? <img src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
                                     </div>
                                     <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
@@ -768,7 +768,7 @@ export default function WriterDashboard() {
                     ) : (
                             adminBookSearchResults.map((book) => (
                                 <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
-                                    <div className="w-20 aspect-[9/16] h-auto md:w-24 md:aspect-[9/16] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
+                                    <div className="w-20 aspect-[3/4] h-auto md:w-24 md:aspect-[3/4] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
                                         {book.cover_image ? <img src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
                                     </div>
                                     <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
