@@ -19,7 +19,14 @@ function buildBooksUrl(params?: Record<string, string>): string {
 
 function normalizeBookForHome(book: Book): Book {
   const source = book as Book & { cover_image?: string; coverImage?: string };
-  const normalizedCover = source.cover_image || source.coverImage || '';
+  let normalizedCover = source.cover_image || source.coverImage || '';
+
+  // 核心修复：如果封面存在，且不是以 http 或 data:base64 开头，说明是相对路径
+  if (normalizedCover && !normalizedCover.startsWith('http') && !normalizedCover.startsWith('data:')) {
+    // 拼上文件顶部定义的 API_HOST 
+    normalizedCover = `${API_HOST}${normalizedCover.startsWith('/') ? '' : '/'}${normalizedCover}`;
+  }
+
   return {
     ...source,
     cover_image: normalizedCover,
