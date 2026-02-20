@@ -757,7 +757,7 @@ const openBookManager = (book: Book) => {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                         <input
                             type="text"
-                            placeholder="搜索 Top10 之外的书名或作者..."
+                            placeholder="搜索书名或作者..."
                             value={adminBookSearch}
                             onChange={(e) => setAdminBookSearch(e.target.value)}
                             className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition shadow-sm text-gray-900 placeholder-gray-500 bg-gray-50/50"

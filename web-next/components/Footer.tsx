@@ -2,8 +2,16 @@
 
 import Link from 'next/link';
 import { Mail, ExternalLink } from 'lucide-react';
+import { usePathname } from 'next/navigation'; // 1. 引入路径获取钩子
 
 export default function Footer() {
+  const pathname = usePathname(); // 2. 获取当前路由路径
+
+  // 3. 如果当前路径是 /writer（创作中心），则直接不渲染 Footer
+  if (pathname?.startsWith('/writer')) {
+    return null;
+  }
+
   const friendLinks: { name: string; url: string }[] = [];
 
   return (
@@ -16,7 +24,7 @@ export default function Footer() {
           {/* 1. 网站简介 */}
           <div className="space-y-4">
             <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-              九天小说站站
+              九天小说站
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed max-w-xs">
               致力打造最舒适的阅读体验。
