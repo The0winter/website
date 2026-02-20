@@ -832,7 +832,7 @@ export default function WriterDashboard() {
                             
                         {/* 左侧：封面修改区 (已添加删除功能) */}
                         <div className="flex flex-col items-center gap-3">
-                            <div className="w-36 h-64 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 overflow-hidden relative group shadow-sm hover:border-blue-500 transition-all cursor-pointer">
+                            <div className="w-40 h-56 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 overflow-hidden relative group shadow-sm hover:border-blue-500 transition-all cursor-pointer">  
                                 
                                 {/* 1. 加载中状态 */}
                                 {uploading ? (
@@ -1092,7 +1092,7 @@ export default function WriterDashboard() {
                 {/* 1. 封面上传区 */}
                 <div className="flex justify-center">
                     <label className="relative cursor-pointer group">
-                        <div className="w-24 h-40 md:w-28 md:h-[200px] bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden hover:border-blue-500 transition">
+                        <div className="w-28 h-36 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden hover:border-blue-500 transition">
                             {newBookCoverPreview ? (
                                 <img src={newBookCoverPreview} className="w-full h-full object-cover" />
                             ) : (
@@ -1215,7 +1215,7 @@ export default function WriterDashboard() {
                     image={cropperImgSrc}
                     crop={crop}
                     zoom={zoom}
-                    aspect={9 / 16} // 👈 改为 9:16 瘦长比例
+                    aspect={3 / 4} // 👈 锁定 3:4 比例 (适合小说封面)
                     onCropChange={setCrop}
                     onCropComplete={onCropComplete}
                     onZoomChange={setZoom}

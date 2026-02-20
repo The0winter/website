@@ -73,7 +73,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                           {index + 1}
                         </div>
 
-                        <div className="relative w-12 aspect-[9/16] h-auto flex-shrink-0 rounded shadow-sm overflow-hidden border border-gray-100">
+                        <div className="relative w-12 h-16 flex-shrink-0 rounded shadow-sm overflow-hidden border border-gray-100">
                            {book.cover_image ? (
                              <img src={book.cover_image} alt={book.title || '小说封面'} className="w-full h-full object-cover" />
                            ) : (
@@ -118,7 +118,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                 >
                     <div className="absolute top-0 right-4 text-[120px] font-black opacity-[0.04] pointer-events-none select-none">1</div>
                     
-                    <div className="relative w-28 aspect-[9/16] h-auto flex-shrink-0 shadow-xl rounded-md overflow-hidden transform group-hover:-translate-y-1 transition-transform duration-300 border border-black/5">
+                    <div className="relative w-28 h-38 flex-shrink-0 shadow-xl rounded-md overflow-hidden transform group-hover:-translate-y-1 transition-transform duration-300 border border-black/5">
                         {first.cover_image ? (
                             <img src={first.cover_image} alt={first.title} className="w-full h-full object-cover" />
                         ) : (
@@ -158,7 +158,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                                     </div>
                                     
                                     <div className="flex gap-3">
-                                        <div className="w-20 aspect-[9/16] h-auto flex-shrink-0 rounded bg-gray-200 overflow-hidden shadow-md group-hover:shadow-lg transition-all border border-black/5">
+                                        <div className="w-20 h-28 flex-shrink-0 rounded bg-gray-200 overflow-hidden shadow-md group-hover:shadow-lg transition-all border border-black/5">
                                             {book.cover_image && <img src={book.cover_image} 
                                             alt={book.title ? `${book.title} 封面` : '推荐书籍封面'}className="w-full h-full object-cover" />}
                                         </div>
@@ -402,7 +402,7 @@ export default function HomePageClient({
                                       
                                       <div className="relative h-full flex items-center p-5 md:p-10 gap-10 max-w-6xl mx-auto">
                                           {book.cover_image && (
-                                              <img src={book.cover_image} alt={book.title || '小说封面'} className="w-48 aspect-[9/16] h-auto object-cover rounded-lg shadow-2xl border-2 border-white/10 flex-shrink-0 hidden md:block transform hover:scale-105 transition-transform duration-500" />
+                                              <img src={book.cover_image} alt={book.title || '小说封面'} className="w-48 h-72 object-cover rounded-lg shadow-2xl border-2 border-white/10 flex-shrink-0 hidden md:block transform hover:scale-105 transition-transform duration-500" />
                                           )}
                                           <div className="flex-1 text-white flex flex-col justify-center">
                                             <span className="inline-block bg-red-600 text-white text-[10px] md:text-xs font-bold px-2 py-0.5 md:px-3 md:py-1 rounded-full mb-3 tracking-wide shadow-lg shadow-red-900/50 w-fit">
@@ -675,7 +675,7 @@ export default function HomePageClient({
                         href={`/book/${book.id}`}
                         className="group flex flex-col gap-3"
                       >
-                        <div className="aspect-[9/16] h-auto rounded-lg overflow-hidden bg-gray-100 shadow-sm border border-gray-200 relative">
+                        <div className="aspect-[3/4] rounded-lg overflow-hidden bg-gray-100 shadow-sm border border-gray-200 relative">
                             {book.cover_image ? (
                               <img 
                                 src={book.cover_image} 

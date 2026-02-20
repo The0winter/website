@@ -78,33 +78,24 @@ interface BookDetailClientProps {
 const formatChapterTitle = (title: string, chapterNumber: number) => {
   if (!title) return `第${chapterNumber}章`;
 
-  const cleanTitle = title.trim();
+  // 1. 去掉开头的数字和标点符号 (例如 "7.第7章" -> "第7章", "12、第12章" -> "第12章")
+  let cleanTitle = title.trim().replace(/^\d+[\.、\s]+/, '');
 
-  // 1. 如果原始标题自带“第X章”（比如 "7.第7章 感言" 或 "第50章 感言"）
-  // 我们只负责把前面多余的杂乱数字（如 "7."）去掉，保留它原本的章节号
-  if (/第.+章/.test(cleanTitle)) {
-      return cleanTitle.replace(/^\d+[\.、\s]+/, '').trim();
+  // 2. 识别是否为感言、请假条等非正文 (你可以根据需要增删这里的关键词)
+  const isExtraContent = /(感言|同人|请假|通知|单章|说明|番外|新书|设定|总结|推书)/.test(cleanTitle);
+
+  // 3. 如果清洗后的标题本身就已经包含“第x章”或者以“第”开头，直接原样返回（最准确，不依赖外部排序）
+  if (cleanTitle.startsWith('第') || /第.+章/.test(cleanTitle)) {
+      return cleanTitle;
   }
 
-  // 2. 提取去掉开头数字后的纯净标题 (比如 "50. 感言" 变成 "感言")
-  const coreTitle = cleanTitle.replace(/^\d+[\.、\s]+/, '').trim();
-
-  // 3. 识别是否为非正文内容
-  const isExtraContent = /(感言|同人|请假|通知|单章|说明|番外|新书|设定|总结|推书)/.test(coreTitle);
-
+  // 4. 如果是感言等非正文，直接返回，绝对不要强制加“第X章”
   if (isExtraContent) {
-      // 核心逻辑：如果原始标题开头带有数字（比如 "50. 上架感言"）
-      // 说明原站把它当成了正规序列，那我们尊重它，帮它补上“第X章”
-      if (/^\d+/.test(cleanTitle)) {
-          return `第${chapterNumber}章 ${coreTitle}`;
-      }
-      // 如果原始标题就是纯粹的文字（比如 "上架感言"），那它就是个通告，直接原样返回
-      return coreTitle;
+      return cleanTitle;
   }
 
-  // 4. 普通正文兜底
-  // 比如纯粹的名字叫 "代号"，前面也没数字，那我们就强制加上 "第7章 代号"
-  return `第${chapterNumber}章 ${coreTitle}`;
+  // 5. 兜底逻辑：既没有“第X章”也不是感言的正文，才强制加上章节号
+  return `第${chapterNumber}章 ${cleanTitle}`;
 };
 
 export default function BookDetailClient({ initialBookData }: BookDetailClientProps) {
@@ -379,16 +370,14 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
             <div className="flex flex-row gap-4 md:gap-8">
               {/* 左侧封面 */}
               <div className="flex-shrink-0">
-              {book.cover_image ? (
-                // 注意这里：把 md:w-48 改成了 md:w-40，把高度替换为了 aspect-[9/16] h-auto
-                <img src={book.cover_image} alt={book.title || '小说封面'} className="w-24 md:w-40 aspect-[9/16] h-auto object-cover rounded shadow-md" />
-              ) : (
-                // 占位图也做同样的修改，保持没有封面时大小也一致
-                <div className="w-24 md:w-40 aspect-[9/16] h-auto bg-gradient-to-br from-blue-500 to-blue-700 rounded shadow-md flex items-center justify-center">
-                  <BookOpen className="h-8 w-8 md:h-16 md:w-16 text-white" />
-                </div>
-              )}
-            </div>
+                {book.cover_image ? (
+                  <img src={book.cover_image} alt={book.title || '小说封面'} className="w-24 h-32 md:w-48 md:h-64 object-cover rounded shadow-md" />
+                ) : (
+                  <div className="w-24 h-32 md:w-48 md:h-64 bg-gradient-to-br from-blue-500 to-blue-700 rounded shadow-md flex items-center justify-center">
+                    <BookOpen className="h-8 w-8 md:h-16 md:w-16 text-white" />
+                  </div>
+                )}
+              </div>
 
               {/* 右侧信息 */}
               <div className="flex-1 flex flex-col justify-between md:justify-start">
