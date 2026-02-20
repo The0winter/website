@@ -101,6 +101,23 @@ export default function WriterDashboard() {
 
   // ================= 逻辑函数 =================
 
+    // 专门用于删除云端图片的函数
+  const deleteImageFromCloudinary = async (imageUrl: string) => {
+    if (!imageUrl || !imageUrl.includes('cloudinary')) return;
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/upload/cover`, {
+        method: 'DELETE',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}` 
+        },
+        body: JSON.stringify({ url: imageUrl }),
+      });
+    } catch (e) {
+      console.error('删除云端旧图片失败', e);
+    }
+  };
+
   const fetchMyData = useCallback(async () => {
     if (!user) return;
     try {
@@ -256,13 +273,25 @@ export default function WriterDashboard() {
       if (!croppedBlob) throw new Error('Canvas create failed');
       const file = new File([croppedBlob], "cover.jpg", { type: "image/jpeg" });
       const url = await uploadImageToCloudinary(file);
+      
       if (url) {
-        if (isCroppingFor === 'new') setNewBookCoverPreview(url);
-        else if (isCroppingFor === 'edit') setFormBookCover(url);
-        setToast({ msg: '裁剪成功', type: 'success' });
+        if (isCroppingFor === 'new') {
+          // 如果之前已经传过预览图了，现在又裁了一张新的，就把之前那张预览图删掉
+          if (newBookCoverPreview) await deleteImageFromCloudinary(newBookCoverPreview);
+          setNewBookCoverPreview(url);
+        } else if (isCroppingFor === 'edit') {
+          // 如果是在编辑书籍，覆盖前先把老封面删掉
+          if (formBookCover) await deleteImageFromCloudinary(formBookCover);
+          setFormBookCover(url);
+        }
+        setToast({ msg: '裁剪并上传成功', type: 'success' });
       }
       setCropperImgSrc(null); setIsCroppingFor(null);
-    } catch (e) { setToast({ msg: '裁剪失败', type: 'error' }); } finally { setUploading(false); }
+    } catch (e) { 
+      setToast({ msg: '裁剪失败', type: 'error' }); 
+    } finally { 
+      setUploading(false); 
+    }
   };
 
   // 影子登录
@@ -847,11 +876,15 @@ export default function WriterDashboard() {
                                         {/* ✅ 新增：删除封面按钮 (右上角红色垃圾桶) */}
                                         <button
                                             type="button"
-                                            onClick={(e) => {
+                                            onClick={async (e) => {
                                                 e.stopPropagation(); // 防止触发上传
                                                 e.preventDefault();
-                                                if (confirm('确定要移除这张封面吗？(记得点右下角保存)')) {
-                                                    setFormBookCover(''); // 清空状态
+                                                if (confirm('确定要移除这张封面吗？(图片将从云端永久删除)')) {
+                                                    setUploading(true); // 开启 loading
+                                                    await deleteImageFromCloudinary(formBookCover); // 呼叫后端删除图片
+                                                    setFormBookCover(''); // 清空前端状态
+                                                    setUploading(false); // 关闭 loading
+                                                    setToast({ msg: '封面已移除', type: 'success' });
                                                 }
                                             }}
                                             className="absolute top-2 right-2 z-20 p-2 bg-red-600/90 text-white rounded-full hover:bg-red-700 shadow-sm opacity-0 group-hover:opacity-100 transition-all hover:scale-110"

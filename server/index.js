@@ -10,6 +10,7 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import jwt from 'jsonwebtoken';
 import mongoSanitize from 'express-mongo-sanitize';
+import { v2 as cloudinary } from 'cloudinary'; // 引入 cloudinary
 
 // 引入模型
 import User from './models/User.js'; 
@@ -1026,6 +1027,42 @@ app.post('/api/upload/cover',
       } catch (error) {
         res.status(500).json({ error: '上传失败: ' + error.message });
       }
+});
+
+// 删除云端图片
+app.delete('/api/upload/cover', authMiddleware, async (req, res) => {
+    try {
+        const { url } = req.body;
+        
+        // 1. 拦截空数据或非 Cloudinary 链接
+        if (!url || !url.includes('cloudinary.com')) {
+            return res.status(400).json({ error: '无效的图片 URL' });
+        }
+
+        // 2. 提取 Cloudinary 的 public_id
+        // 典型的 URL 格式: https://res.cloudinary.com/xxx/image/upload/v1700000000/novel_covers/abc123.jpg
+        const urlParts = url.split('/upload/');
+        if (urlParts.length !== 2) {
+            return res.status(400).json({ error: '解析图片 URL 失败' });
+        }
+        
+        // 去除版本号 (v1700000000/) 
+        const pathWithoutVersion = urlParts[1].replace(/^v\d+\//, '');
+        // 去除文件后缀名 (.jpg / .png)
+        const publicId = pathWithoutVersion.substring(0, pathWithoutVersion.lastIndexOf('.'));
+
+        // 3. 呼叫 Cloudinary 销毁该图片
+        const result = await cloudinary.uploader.destroy(publicId);
+        
+        if (result.result === 'ok' || result.result === 'not found') {
+            res.json({ success: true, message: '图片已从云端彻底删除' });
+        } else {
+            throw new Error(result.result);
+        }
+    } catch (error) {
+        console.error('❌ 删除云端图片失败:', error);
+        res.status(500).json({ error: '删除失败: ' + error.message });
+    }
 });
 
 
