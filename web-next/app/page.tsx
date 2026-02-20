@@ -7,7 +7,7 @@ const API_HOST = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/+$/, '') || 
 const API_BASE_URL = API_HOST.endsWith('/api') ? API_HOST : `${API_HOST}/api`;
 
 export const metadata: Metadata = {
-  title: '九天小说站 - 热门推荐与最新更新',
+  title: '九天小说站 - 热门小说 - 无弹窗 - 免费在线阅读 - 笔趣阁',
   description: '九天小说站首页，提供热门推荐、排行榜与最近更新小说，支持免费在线阅读。',
   keywords: ['九天小说', '小说', '免费小说', '小说推荐', '排行榜', '最近更新'],
 };

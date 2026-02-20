@@ -323,12 +323,14 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
   };
   const displayRating = book.rating ? (book.rating * 2).toFixed(1) : '0.0';
 
-  // 🔥 新增：计算第一章的 ID，用于“开始阅读”按钮
+  // 计算第一章的 ID，用于“开始阅读”按钮
   const firstChapterId = useMemo(() => {
     if (chapters.length === 0) return null;
-    // 确保按章节号从小到大排序，取第一个
-    const sorted = [...chapters].sort((a, b) => a.chapter_number - b.chapter_number);
-    return sorted[0].id;
+    // O(N) 复杂度找到第一章，不需要 O(N log N) 的 sort
+    const firstChapter = chapters.reduce((prev, curr) => 
+      prev.chapter_number < curr.chapter_number ? prev : curr
+    );
+    return firstChapter.id;
   }, [chapters]);
 
   return (
