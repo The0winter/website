@@ -1,6 +1,7 @@
 ﻿import 'dotenv/config'; 
 import express from 'express';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import { submitToIndexNow } from './utils/indexNow.js'
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
@@ -350,6 +351,71 @@ app.post('/api/admin/impersonate/:userId', authMiddleware, adminMiddleware, asyn
     }
 });
 
+const DIRTY_TITLE_REGEX = /(?:^|\s)\d+\s*[.、:：\-]\s*第/u;
+
+const normalizeChapterTitleForDedup = (title = '') =>
+    String(title)
+        .replace(/^\s*\d+\s*[.、:：\-]\s*/u, '')
+        .replace(/\s+/g, '')
+        .trim();
+
+const normalizeContentSampleForDedup = (content = '', maxChars = 600) => {
+    const normalized = String(content)
+        .replace(/\s+/g, '')
+        .replace(/[.,，。!?！？:：;；、"'`~\-—_()[\]{}<>《》【】]/g, '');
+    return normalized.slice(0, maxChars);
+};
+
+const calcPrefixSimilarity = (a = '', b = '') => {
+    if (!a || !b) return 0;
+    const minLen = Math.min(a.length, b.length);
+    let sameCount = 0;
+    while (sameCount < minLen && a[sameCount] === b[sameCount]) {
+        sameCount++;
+    }
+    return sameCount / minLen;
+};
+
+const buildNgramSet = (text, n = 3) => {
+    const set = new Set();
+    if (!text) return set;
+    if (text.length < n) {
+        set.add(text);
+        return set;
+    }
+    for (let i = 0; i <= text.length - n; i++) {
+        set.add(text.slice(i, i + n));
+    }
+    return set;
+};
+
+const calcNgramJaccardSimilarity = (a = '', b = '') => {
+    if (!a || !b) return 0;
+    const setA = buildNgramSet(a);
+    const setB = buildNgramSet(b);
+    if (setA.size === 0 || setB.size === 0) return 0;
+
+    let intersection = 0;
+    for (const token of setA) {
+        if (setB.has(token)) intersection++;
+    }
+    const union = setA.size + setB.size - intersection;
+    if (union <= 0) return 0;
+    return intersection / union;
+};
+
+const calcContentSimilarity = (a = '', b = '') =>
+    Math.max(calcPrefixSimilarity(a, b), calcNgramJaccardSimilarity(a, b));
+
+const buildCleanupConfirmToken = (pairs = [], options = {}) => {
+    const payload = JSON.stringify({
+        ids: pairs.map(p => String(p.deleteId)).sort(),
+        threshold: options.threshold,
+        compareChars: options.compareChars
+    });
+    return crypto.createHash('sha256').update(payload).digest('hex').slice(0, 20);
+};
+
 // ================= 临时/运维：清理错误章节 (带安全预览版) =================
 app.post('/api/admin/clean-dirty-chapters', async (req, res) => {
     try {
@@ -359,48 +425,206 @@ app.post('/api/admin/clean-dirty-chapters', async (req, res) => {
             return res.status(403).json({ error: '🚫 密码错误，无权执行清理' });
         }
 
-        // 接收前端传来的指令：'preview' (预览) 或 'execute' (执行删除)
-        const { action } = req.body; 
+        const {
+            action = 'preview',
+            similarityThreshold = 0.92,
+            contentCompareChars = 600,
+            previewLimit = 80,
+            confirmToken: clientConfirmToken
+        } = req.body || {};
 
-        // 1. 查出所有脏数据
+        const safeThreshold = Math.min(0.99, Math.max(0.8, Number(similarityThreshold) || 0.92));
+        const safeCompareChars = Math.min(2000, Math.max(200, Number(contentCompareChars) || 600));
+        const safePreviewLimit = Math.min(300, Math.max(10, Number(previewLimit) || 80));
+
+        // 1) 先按“脏标题”找候选，但不直接删除
         const dirtyChapters = await Chapter.find({
-            title: { $regex: /[0-9]+\.第/ }
-        }).populate('bookId', 'title');
+            title: { $regex: DIRTY_TITLE_REGEX }
+        })
+            .select('_id bookId title content chapter_number createdAt')
+            .populate('bookId', 'title')
+            .lean();
 
         if (dirtyChapters.length === 0) {
-            return res.json({ success: true, message: '🎉 数据库很干净，没有发现这种格式的脏数据。' });
+            return res.json({
+                success: true,
+                isDryRun: true,
+                message: '🎉 数据库很干净，没有发现脏标题章节。',
+                summary: [],
+                preview: [],
+                skipped: []
+            });
         }
 
-        // 2. 统计数据
-        const summaryMap = {};
-        const idsToDelete = [];
+        const bookIds = [...new Set(
+            dirtyChapters
+                .map(doc => String(doc.bookId?._id || doc.bookId || ''))
+                .filter(Boolean)
+        )];
 
-        dirtyChapters.forEach(doc => {
-            idsToDelete.push(doc._id);
-            const bookTitle = doc.bookId ? doc.bookId.title : '未知书籍(ID:' + doc.bookId + ')';
-            
-            if (!summaryMap[bookTitle]) {
-                summaryMap[bookTitle] = 0;
+        // 2) 拉取同书所有章节做二次校验（正文相似度）
+        const relatedChapters = await Chapter.find({
+            bookId: { $in: bookIds }
+        })
+            .select('_id bookId title content chapter_number createdAt')
+            .lean();
+
+        const chaptersByBook = new Map();
+        for (const chapter of relatedChapters) {
+            const bookKey = String(chapter.bookId);
+            if (!chaptersByBook.has(bookKey)) {
+                chaptersByBook.set(bookKey, []);
             }
-            summaryMap[bookTitle]++;
+            chaptersByBook.get(bookKey).push({
+                ...chapter,
+                idStr: String(chapter._id),
+                normalizedTitle: normalizeChapterTitleForDedup(chapter.title),
+                contentSample: normalizeContentSampleForDedup(chapter.content, safeCompareChars),
+                isDirtyTitle: DIRTY_TITLE_REGEX.test(String(chapter.title || ''))
+            });
+        }
+
+        const previewPairs = [];
+        const skipped = [];
+        const summaryMap = {};
+
+        for (const dirtyDoc of dirtyChapters) {
+            const dirtyId = String(dirtyDoc._id);
+            const bookKey = String(dirtyDoc.bookId?._id || dirtyDoc.bookId || '');
+            const bookTitle = dirtyDoc.bookId?.title || `未知书籍(ID:${bookKey})`;
+            const dirtySample = normalizeContentSampleForDedup(dirtyDoc.content, safeCompareChars);
+            const dirtyNormalizedTitle = normalizeChapterTitleForDedup(dirtyDoc.title);
+            const dirtyCandidates = chaptersByBook.get(bookKey) || [];
+
+            let bestMatch = null;
+
+            for (const candidate of dirtyCandidates) {
+                if (candidate.idStr === dirtyId) continue;
+                if (candidate.isDirtyTitle) continue; // 只与“非脏标题章节”比对，避免误删一整组脏数据
+
+                const sameChapterNumber =
+                    Number.isFinite(dirtyDoc.chapter_number) &&
+                    Number.isFinite(candidate.chapter_number) &&
+                    dirtyDoc.chapter_number === candidate.chapter_number;
+
+                const sameNormalizedTitle =
+                    !!dirtyNormalizedTitle &&
+                    !!candidate.normalizedTitle &&
+                    dirtyNormalizedTitle === candidate.normalizedTitle;
+
+                if (!sameChapterNumber && !sameNormalizedTitle) continue;
+                if (dirtySample.length < 80 || candidate.contentSample.length < 80) continue;
+
+                const similarity = calcContentSimilarity(dirtySample, candidate.contentSample);
+                const lengthRatio = Math.min(dirtySample.length, candidate.contentSample.length) /
+                    Math.max(dirtySample.length, candidate.contentSample.length);
+
+                if (similarity < safeThreshold || lengthRatio < 0.6) continue;
+
+                const score =
+                    similarity +
+                    (sameChapterNumber ? 0.03 : 0) +
+                    (sameNormalizedTitle ? 0.02 : 0) +
+                    Math.min(lengthRatio, 1) * 0.01;
+
+                if (!bestMatch || score > bestMatch.score) {
+                    bestMatch = {
+                        candidate,
+                        similarity,
+                        score,
+                        sameChapterNumber,
+                        sameNormalizedTitle
+                    };
+                }
+            }
+
+            if (!bestMatch) {
+                skipped.push({
+                    id: dirtyId,
+                    bookTitle,
+                    chapterNumber: dirtyDoc.chapter_number,
+                    title: dirtyDoc.title,
+                    reason: '未找到通过正文校验的对应章节，已自动跳过'
+                });
+                continue;
+            }
+
+            const reasonParts = [];
+            if (bestMatch.sameChapterNumber) reasonParts.push('同章号');
+            if (bestMatch.sameNormalizedTitle) reasonParts.push('同规范化标题');
+            reasonParts.push(`正文相似度 ${(bestMatch.similarity * 100).toFixed(2)}%`);
+
+            previewPairs.push({
+                deleteId: dirtyId,
+                deleteTitle: dirtyDoc.title,
+                keepId: bestMatch.candidate.idStr,
+                keepTitle: bestMatch.candidate.title,
+                bookTitle,
+                chapterNumber: dirtyDoc.chapter_number,
+                similarity: Number(bestMatch.similarity.toFixed(4)),
+                reason: reasonParts.join(' + '),
+                deletePreview: String(dirtyDoc.content || '').replace(/\s+/g, ' ').slice(0, 80),
+                keepPreview: String(bestMatch.candidate.content || '').replace(/\s+/g, ' ').slice(0, 80)
+            });
+
+            summaryMap[bookTitle] = (summaryMap[bookTitle] || 0) + 1;
+        }
+
+        const summary = Object.keys(summaryMap)
+            .map(title => ({ title, count: summaryMap[title] }))
+            .sort((a, b) => b.count - a.count);
+
+        const serverConfirmToken = buildCleanupConfirmToken(previewPairs, {
+            threshold: safeThreshold,
+            compareChars: safeCompareChars
         });
 
-        const summary = Object.keys(summaryMap).map(title => ({
-            title,
-            count: summaryMap[title]
-        }));
-
-        // 🛡️ 3. 如果不是明确的 'execute' 指令，就只返回统计结果，绝对不删数据
+        // 3) 默认预览模式：先展示明细，再由你确认
         if (action !== 'execute') {
             return res.json({
                 success: true,
                 isDryRun: true,
-                message: `【预览模式】共发现 ${idsToDelete.length} 条冗余记录。等待您的最终确认。`,
-                summary: summary
+                message: `【预览模式】命中 ${dirtyChapters.length} 条脏标题；其中 ${previewPairs.length} 条通过正文校验可删除，${skipped.length} 条已跳过。`,
+                summary,
+                preview: previewPairs.slice(0, safePreviewLimit),
+                skipped: skipped.slice(0, safePreviewLimit),
+                deletableCount: previewPairs.length,
+                skippedCount: skipped.length,
+                options: {
+                    similarityThreshold: safeThreshold,
+                    contentCompareChars: safeCompareChars
+                },
+                confirmToken: serverConfirmToken
             });
         }
 
-        // 💣 4. 只有收到明确的执行指令，才执行批量删除
+        if (!clientConfirmToken || clientConfirmToken !== serverConfirmToken) {
+            return res.status(409).json({
+                success: false,
+                isDryRun: true,
+                error: '确认令牌不匹配，请先重新预览后再执行删除。',
+                deletableCount: previewPairs.length,
+                skippedCount: skipped.length,
+                summary,
+                preview: previewPairs.slice(0, safePreviewLimit),
+                skipped: skipped.slice(0, safePreviewLimit),
+                confirmToken: serverConfirmToken
+            });
+        }
+
+        const idsToDelete = previewPairs.map(item => item.deleteId);
+
+        if (idsToDelete.length === 0) {
+            return res.json({
+                success: true,
+                isDryRun: false,
+                message: '没有通过正文校验的重复章节，未执行删除。',
+                summary: [],
+                deletedCount: 0,
+                skippedCount: skipped.length
+            });
+        }
+
         const result = await Chapter.deleteMany({
             _id: { $in: idsToDelete }
         });
@@ -408,8 +632,11 @@ app.post('/api/admin/clean-dirty-chapters', async (req, res) => {
         res.json({
             success: true,
             isDryRun: false,
-            message: `【执行模式】清理彻底完成！真实删除了 ${result.deletedCount} 条冗余记录。`,
-            summary: summary
+            message: `【执行模式】清理完成：共删除 ${result.deletedCount} 条重复章节（正文校验通过）。`,
+            summary,
+            requestedDeleteCount: idsToDelete.length,
+            deletedCount: result.deletedCount,
+            skippedCount: skipped.length
         });
     } catch (error) {
         res.status(500).json({ error: error.message });

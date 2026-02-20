@@ -78,24 +78,33 @@ interface BookDetailClientProps {
 const formatChapterTitle = (title: string, chapterNumber: number) => {
   if (!title) return `第${chapterNumber}章`;
 
-  // 1. 去掉开头的数字和标点符号 (例如 "7.第7章" -> "第7章", "12、第12章" -> "第12章")
-  let cleanTitle = title.trim().replace(/^\d+[\.、\s]+/, '');
+  const cleanTitle = title.trim();
 
-  // 2. 识别是否为感言、请假条等非正文 (你可以根据需要增删这里的关键词)
-  const isExtraContent = /(感言|请假|通知|单章|说明|番外|新书|设定|总结|推书)/.test(cleanTitle);
-
-  // 3. 如果清洗后的标题本身就已经包含“第x章”或者以“第”开头，直接原样返回（最准确，不依赖外部排序）
-  if (cleanTitle.startsWith('第') || /第.+章/.test(cleanTitle)) {
-      return cleanTitle;
+  // 1. 如果原始标题自带“第X章”（比如 "7.第7章 感言" 或 "第50章 感言"）
+  // 我们只负责把前面多余的杂乱数字（如 "7."）去掉，保留它原本的章节号
+  if (/第.+章/.test(cleanTitle)) {
+      return cleanTitle.replace(/^\d+[\.、\s]+/, '').trim();
   }
 
-  // 4. 如果是感言等非正文，直接返回，绝对不要强制加“第X章”
+  // 2. 提取去掉开头数字后的纯净标题 (比如 "50. 感言" 变成 "感言")
+  const coreTitle = cleanTitle.replace(/^\d+[\.、\s]+/, '').trim();
+
+  // 3. 识别是否为非正文内容
+  const isExtraContent = /(感言|请假|通知|单章|说明|番外|新书|设定|总结|推书)/.test(coreTitle);
+
   if (isExtraContent) {
-      return cleanTitle;
+      // 核心逻辑：如果原始标题开头带有数字（比如 "50. 上架感言"）
+      // 说明原站把它当成了正规序列，那我们尊重它，帮它补上“第X章”
+      if (/^\d+/.test(cleanTitle)) {
+          return `第${chapterNumber}章 ${coreTitle}`;
+      }
+      // 如果原始标题就是纯粹的文字（比如 "上架感言"），那它就是个通告，直接原样返回
+      return coreTitle;
   }
 
-  // 5. 兜底逻辑：既没有“第X章”也不是感言的正文，才强制加上章节号
-  return `第${chapterNumber}章 ${cleanTitle}`;
+  // 4. 普通正文兜底
+  // 比如纯粹的名字叫 "代号"，前面也没数字，那我们就强制加上 "第7章 代号"
+  return `第${chapterNumber}章 ${coreTitle}`;
 };
 
 export default function BookDetailClient({ initialBookData }: BookDetailClientProps) {
