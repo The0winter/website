@@ -10,7 +10,7 @@ const TARGET_BOOK_TITLES = [
 
 // Configure target books by database ID (optional).
 const TARGET_BOOK_IDS = [
-  // '67f7cbe7bc451c7c65d4bb9a',
+  // '67f74bb9a',
 ];
 
 function normalizeTitle(title) {

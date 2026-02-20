@@ -282,6 +282,89 @@ export default function ForumPage() {
     );
   };
 
+// ====== 提取热榜页内容渲染器（纯文字版） ======
+  const renderHotList = (tabId: string) => {
+    const tabPosts = postsCache[tabId] || [];
+    const isTabLoading = loadingState[tabId];
+
+    return (
+      <div className={`overflow-hidden rounded-none md:rounded-2xl border-y border-x-0 md:border ${currentTheme.border} ${currentTheme.card} w-full min-h-[50vh]`}>
+        {isTabLoading && (
+          <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>加载中...</div>
+        )}
+
+        {!isTabLoading && tabPosts.length === 0 && (
+          <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>暂无热榜内容</div>
+        )}
+
+        {!isTabLoading && tabPosts.map((post, index) => {
+          const realId = post.id;
+          if (!realId) return null;
+
+          const topReply = post.topReply || null;
+          const answerLink = topReply?.id ? `/forum/${topReply.id}?fromQuestion=${realId}` : `/forum/question/${realId}`;
+          
+          // 热度计算：默认拿投票数作为热度，你之后可以根据后端实际算法替换
+          const heat = topReply?.votes ?? post.votes ?? 0;
+          const excerpt = topReply?.content || '这个问题还没有回答，点击查看并参与讨论。';
+          
+          // 排名样式：前三名使用红/橙/黄，其余使用普通颜色
+          const rank = index + 1;
+          const rankColor = 
+            rank === 1 ? 'text-[#ff5a5a]' : 
+            rank === 2 ? 'text-[#ff9607]' : 
+            rank === 3 ? 'text-[#ffc832]' : 
+            currentTheme.textSub;
+
+          return (
+            <article
+              key={realId}
+              className={`flex gap-3 md:gap-4 px-4 md:px-6 py-4 md:py-5 ${index < tabPosts.length - 1 ? `border-b ${currentTheme.border}` : ''} hover:bg-black/[0.02] transition-colors`}
+            >
+              {/* 左侧：排名序号 */}
+              <div className={`w-5 md:w-6 flex-shrink-0 text-center text-lg md:text-xl font-bold mt-0.5 ${rankColor}`}>
+                {rank}
+              </div>
+
+              {/* 右侧：纯文本内容区域（占满剩余宽度） */}
+              <div className="flex-1 min-w-0 flex flex-col justify-between">
+                <Link href={`/forum/question/${realId}`} className="block">
+                  <h2
+                    className={`font-bold leading-snug tracking-tight ${currentTheme.textMain} hover:text-blue-600 transition-colors line-clamp-2`}
+                    style={{ fontSize: `${fontSize + 2}px` }}
+                  >
+                    {post.title}
+                  </h2>
+                </Link>
+
+                <Link href={answerLink} className="block mt-1.5 md:mt-2">
+                  <p
+                    className={`leading-relaxed line-clamp-1 md:line-clamp-2 ${currentTheme.textSub} hover:text-gray-700 transition-colors`}
+                    style={{ fontSize: `${fontSize - 1}px` }}
+                  >
+                    {excerpt}
+                  </p>
+                </Link>
+
+                {/* 底部数据：热度、分享等 */}
+                <div className={`mt-2.5 flex items-center gap-4 text-[13px] ${currentTheme.textSub}`}>
+                  <span className="inline-flex items-center gap-1 font-medium">
+                    {/* 热度火焰小图标 */}
+                    <svg className="w-3.5 h-3.5 text-red-500 fill-current" viewBox="0 0 24 24"><path d="M17.5 12.5c0 2.8-2.2 5.5-5.5 5.5s-5.5-2.7-5.5-5.5c0-2.8 5.5-8.5 5.5-8.5s5.5 5.7 5.5 8.5z" /></svg>
+                    {formatCount(heat)} 热度
+                  </span>
+                  <button className="hover:text-gray-500 transition-colors flex items-center gap-1">
+                    分享
+                  </button>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    );
+  };
+
 return (
     <div className={`min-h-screen ${currentTheme.bg} pb-24 md:pb-12 font-sans transition-colors duration-300`}>
       <div
@@ -417,15 +500,17 @@ return (
           >
             {TABS.map(tab => (
               <div key={tab.id} className="w-full shrink-0">
-                {renderPostList(tab.id)}
+                {/* 替换原有的 {renderPostList(tab.id)} */}
+                {tab.id === 'hot' ? renderHotList(tab.id) : renderPostList(tab.id)}
               </div>
             ))}
           </div>
         </div>
 
-        {/* ================= PC端独享：传统单页直出，不参与任何滑动逻辑 ================= */}
+{/* ================= PC端独享：传统单页直出，不参与任何滑动逻辑 ================= */}
         <div className="hidden md:block w-full">
-          {renderPostList(activeTab)}
+          {/* 替换原有的 {renderPostList(activeTab)} */}
+          {activeTab === 'hot' ? renderHotList(activeTab) : renderPostList(activeTab)}
         </div>
 
         <aside className="hidden md:flex flex-col gap-6">
