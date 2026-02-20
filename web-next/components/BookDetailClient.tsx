@@ -90,7 +90,7 @@ const formatChapterTitle = (title: string, chapterNumber: number) => {
   const coreTitle = cleanTitle.replace(/^\d+[\.、\s]+/, '').trim();
 
   // 3. 识别是否为非正文内容
-  const isExtraContent = /(感言|请假|通知|单章|说明|番外|新书|设定|总结|推书)/.test(coreTitle);
+  const isExtraContent = /(感言|同人|请假|通知|单章|说明|番外|新书|设定|总结|推书)/.test(coreTitle);
 
   if (isExtraContent) {
       // 核心逻辑：如果原始标题开头带有数字（比如 "50. 上架感言"）
