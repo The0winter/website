@@ -717,7 +717,7 @@ export default function WriterDashboard() {
                     </div>
                 </div>
 
-                <div className={`bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden ${adminBookSearch.trim() ? 'order-first' : 'hidden'}`}>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden order-2">
                     <div className="p-4 md:p-6 border-b border-gray-100 bg-gray-50/60">
                         <h3 className="font-bold text-lg text-gray-900">今日最火 Top 10</h3>
                     </div>
@@ -756,18 +756,16 @@ export default function WriterDashboard() {
                     </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="p-4 md:p-6 border-b border-gray-100 bg-gray-50/60">
-                        <h3 className="font-bold text-lg text-gray-900">搜索结果（不含 Top 10）</h3>
-                    </div>
-                    <div className="divide-y divide-gray-100">
-                        {!adminBookSearch.trim() ? (
-                            <div className="p-10 text-center text-gray-400">输入书名或作者后开始搜索</div>
-                        ) : adminBookSearchLoading ? (
-                            <div className="p-10 text-center text-gray-400">搜索中...</div>
-                        ) : adminBookSearchResults.length === 0 ? (
-                            <div className="p-10 text-center text-gray-500">未找到匹配书籍</div>
-                        ) : (
+                <div className={`bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden order-1 ${adminBookSearch.trim() ? 'block' : 'hidden'}`}>
+                <div className="p-4 md:p-6 border-b border-gray-100 bg-gray-50/60">
+                    <h3 className="font-bold text-lg text-gray-900">搜索结果（不含 Top 10）</h3>
+                </div>
+                <div className="divide-y divide-gray-100">
+                    {adminBookSearchLoading ? (
+                        <div className="p-10 text-center text-gray-400">搜索中...</div>
+                    ) : adminBookSearchResults.length === 0 ? (
+                        <div className="p-10 text-center text-gray-500">未找到匹配书籍</div>
+                    ) : (
                             adminBookSearchResults.map((book) => (
                                 <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
                                     <div className="w-20 h-28 md:w-24 md:h-32 bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
