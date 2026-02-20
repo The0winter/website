@@ -525,7 +525,7 @@ export default function WriterDashboard() {
                     ) : (
                         myBooks.map((book) => (
                             <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
-                                <div className="w-20 h-28 md:w-24 md:h-32 bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
+                                <div className="w-20 aspect-[9/16] h-auto md:w-24 md:aspect-[9/16] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
                                     {book.cover_image ? <img src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
                                 </div>
                                 <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
@@ -729,7 +729,7 @@ export default function WriterDashboard() {
                         ) : (
                             adminHotBooks.map((book) => (
                                 <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
-                                    <div className="w-20 h-28 md:w-24 md:h-32 bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
+                                    <div className="w-20 aspect-[9/16] h-auto md:w-24 md:aspect-[9/16] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
                                         {book.cover_image ? <img src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
                                     </div>
                                     <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
@@ -768,7 +768,7 @@ export default function WriterDashboard() {
                     ) : (
                             adminBookSearchResults.map((book) => (
                                 <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
-                                    <div className="w-20 h-28 md:w-24 md:h-32 bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
+                                    <div className="w-20 aspect-[9/16] h-auto md:w-24 md:aspect-[9/16] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
                                         {book.cover_image ? <img src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
                                     </div>
                                     <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
@@ -832,7 +832,7 @@ export default function WriterDashboard() {
                             
                         {/* 左侧：封面修改区 (已添加删除功能) */}
                         <div className="flex flex-col items-center gap-3">
-                            <div className="w-40 h-56 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 overflow-hidden relative group shadow-sm hover:border-blue-500 transition-all cursor-pointer">
+                            <div className="w-36 h-64 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 overflow-hidden relative group shadow-sm hover:border-blue-500 transition-all cursor-pointer">
                                 
                                 {/* 1. 加载中状态 */}
                                 {uploading ? (
@@ -1092,7 +1092,7 @@ export default function WriterDashboard() {
                 {/* 1. 封面上传区 */}
                 <div className="flex justify-center">
                     <label className="relative cursor-pointer group">
-                        <div className="w-28 h-36 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden hover:border-blue-500 transition">
+                        <div className="w-24 h-40 md:w-28 md:h-[200px] bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden hover:border-blue-500 transition">
                             {newBookCoverPreview ? (
                                 <img src={newBookCoverPreview} className="w-full h-full object-cover" />
                             ) : (

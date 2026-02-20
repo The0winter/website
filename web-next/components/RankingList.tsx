@@ -71,7 +71,7 @@ const RankingList = ({
                           {index + 1}
                         </div>
 
-                        <div className="relative w-12 h-16 flex-shrink-0 rounded shadow-sm overflow-hidden border border-gray-100">
+                        <div className="relative w-12 aspect-[9/16] h-auto flex-shrink-0 rounded shadow-sm overflow-hidden border border-gray-100">
                            {book.cover_image ? (
                              <img src={book.cover_image} alt={book.title || '小说封面'} className="w-full h-full object-cover" />
                            ) : (
@@ -117,7 +117,7 @@ const RankingList = ({
                 >
                     <div className="absolute top-0 right-4 text-[120px] font-black opacity-[0.04] pointer-events-none select-none">1</div>
                     
-                    <div className="relative w-28 h-38 flex-shrink-0 shadow-xl rounded-md overflow-hidden transform group-hover:-translate-y-1 transition-transform duration-300 border border-black/5">
+                    <div className="relative w-28 aspect-[9/16] h-auto flex-shrink-0 shadow-xl rounded-md overflow-hidden transform group-hover:-translate-y-1 transition-transform duration-300 border border-black/5">
                         {first.cover_image ? (
                             <img src={first.cover_image} alt={first.title} className="w-full h-full object-cover" />
                         ) : (
@@ -156,7 +156,7 @@ const RankingList = ({
                                     </div>
                                     
                                     <div className="flex gap-3">
-                                        <div className="w-20 h-28 flex-shrink-0 rounded bg-gray-200 overflow-hidden shadow-md group-hover:shadow-lg transition-all border border-black/5">
+                                        <div className="w-20 aspect-[9/16] h-auto flex-shrink-0 rounded bg-gray-200 overflow-hidden shadow-md group-hover:shadow-lg transition-all border border-black/5">
                                             {book.cover_image && <img src={book.cover_image} 
                                             alt={book.title ? `${book.title} 封面` : '推荐书籍封面'}className="w-full h-full object-cover" />}
                                         </div>

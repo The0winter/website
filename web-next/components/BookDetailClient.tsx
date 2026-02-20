@@ -379,14 +379,16 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
             <div className="flex flex-row gap-4 md:gap-8">
               {/* 左侧封面 */}
               <div className="flex-shrink-0">
-                {book.cover_image ? (
-                  <img src={book.cover_image} alt={book.title || '小说封面'} className="w-24 h-32 md:w-48 md:h-64 object-cover rounded shadow-md" />
-                ) : (
-                  <div className="w-24 h-32 md:w-48 md:h-64 bg-gradient-to-br from-blue-500 to-blue-700 rounded shadow-md flex items-center justify-center">
-                    <BookOpen className="h-8 w-8 md:h-16 md:w-16 text-white" />
-                  </div>
-                )}
-              </div>
+              {book.cover_image ? (
+                // 注意这里：把 md:w-48 改成了 md:w-40，把高度替换为了 aspect-[9/16] h-auto
+                <img src={book.cover_image} alt={book.title || '小说封面'} className="w-24 md:w-40 aspect-[9/16] h-auto object-cover rounded shadow-md" />
+              ) : (
+                // 占位图也做同样的修改，保持没有封面时大小也一致
+                <div className="w-24 md:w-40 aspect-[9/16] h-auto bg-gradient-to-br from-blue-500 to-blue-700 rounded shadow-md flex items-center justify-center">
+                  <BookOpen className="h-8 w-8 md:h-16 md:w-16 text-white" />
+                </div>
+              )}
+            </div>
 
               {/* 右侧信息 */}
               <div className="flex-1 flex flex-col justify-between md:justify-start">
