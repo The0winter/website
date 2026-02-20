@@ -350,8 +350,8 @@ app.post('/api/admin/impersonate/:userId', authMiddleware, adminMiddleware, asyn
     }
 });
 
-// ================= 临时/运维：清理带数字标号的错误章节 (精简统计版) =================
-app.delete('/api/admin/clean-dirty-chapters', async (req, res) => {
+// ================= 临时/运维：清理错误章节 (带安全预览版) =================
+app.post('/api/admin/clean-dirty-chapters', async (req, res) => {
     try {
         const clientSecret = req.headers['x-admin-secret'];
         const ADMIN_SECRET = process.env.ADMIN_SECRET || 'temp_admin_secret_123';
@@ -359,7 +359,10 @@ app.delete('/api/admin/clean-dirty-chapters', async (req, res) => {
             return res.status(403).json({ error: '🚫 密码错误，无权执行清理' });
         }
 
-        // 1. 查出所有脏数据，并带上对应的书籍信息 (为了拿到书名)
+        // 接收前端传来的指令：'preview' (预览) 或 'execute' (执行删除)
+        const { action } = req.body; 
+
+        // 1. 查出所有脏数据
         const dirtyChapters = await Chapter.find({
             title: { $regex: /[0-9]+\.第/ }
         }).populate('bookId', 'title');
@@ -368,13 +371,12 @@ app.delete('/api/admin/clean-dirty-chapters', async (req, res) => {
             return res.json({ success: true, message: '🎉 数据库很干净，没有发现这种格式的脏数据。' });
         }
 
-        // 2. 统计每本书有多少个重复章节
+        // 2. 统计数据
         const summaryMap = {};
         const idsToDelete = [];
 
         dirtyChapters.forEach(doc => {
             idsToDelete.push(doc._id);
-            // 获取书名，如果找不到关联的书(比如书被删了)，就显示未知
             const bookTitle = doc.bookId ? doc.bookId.title : '未知书籍(ID:' + doc.bookId + ')';
             
             if (!summaryMap[bookTitle]) {
@@ -383,21 +385,30 @@ app.delete('/api/admin/clean-dirty-chapters', async (req, res) => {
             summaryMap[bookTitle]++;
         });
 
-        // 3. 转成方便返回的数组格式
         const summary = Object.keys(summaryMap).map(title => ({
             title,
             count: summaryMap[title]
         }));
 
-        // 4. 执行批量删除
+        // 🛡️ 3. 如果不是明确的 'execute' 指令，就只返回统计结果，绝对不删数据
+        if (action !== 'execute') {
+            return res.json({
+                success: true,
+                isDryRun: true,
+                message: `【预览模式】共发现 ${idsToDelete.length} 条冗余记录。等待您的最终确认。`,
+                summary: summary
+            });
+        }
+
+        // 💣 4. 只有收到明确的执行指令，才执行批量删除
         const result = await Chapter.deleteMany({
             _id: { $in: idsToDelete }
         });
 
-        // 5. 返回统计结果
         res.json({
             success: true,
-            message: `清理彻底完成！共删除了 ${result.deletedCount} 条冗余记录。`,
+            isDryRun: false,
+            message: `【执行模式】清理彻底完成！真实删除了 ${result.deletedCount} 条冗余记录。`,
             summary: summary
         });
     } catch (error) {
