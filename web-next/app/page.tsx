@@ -70,7 +70,7 @@ export default async function Page() {
 
   return (
     <>
-      [cite_start]{/* 专门给搜索引擎爬虫看的纯 HTML 结构 [cite: 38] */}
+      {/* 专门给搜索引擎爬虫看的纯 HTML 结构 [cite: 38] */}
       <section className="sr-only" aria-label="推荐书籍与最近更新">
         <h2>推荐书籍</h2>
         <ul>
@@ -91,7 +91,7 @@ export default async function Page() {
         </ul>
       </section>
 
-      [cite_start]{/* 客户端水合组件，负责炫酷的 UI 交互 [cite: 39] */}
+      {/* 客户端水合组件，负责炫酷的 UI 交互  */}
       <HomePageClient
         initialBooks={allBooks}
         initialFeaturedBooks={featuredBooks}
