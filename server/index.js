@@ -41,7 +41,17 @@ app.set('trust proxy', 1);
 const JWT_SECRET = process.env.JWT_SECRET || 'temp_emergency_secret_key_123456';
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'temp_admin_secret_123';
 
-// 如果不想用默认值，请确保 .env 文件里配置了这两个变量
+// 👇 1. 新增：恶意乱码 URL 拦截器
+app.use((req, res, next) => {
+    try {
+        decodeURIComponent(req.path);
+        next();
+    } catch (err) {
+        console.warn('⚠️ 拦截到恶意的乱码扫描请求:', req.url);
+        return res.status(400).send('Bad Request');
+    }
+});
+
 
 const ALLOWED_ORIGINS = [
   'http://localhost:3000',
@@ -2099,7 +2109,19 @@ setInterval(async () => {
 
 }, 5 * 60 * 1000); // 5分钟
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+
+
+app.use((err, req, res, next) => {
+    if (err instanceof URIError) {
+        console.warn('⚠️ URL 参数解码失败:', req.url);
+        return res.status(400).json({ error: '无效的 URL 格式' });
+    }
+    
+    console.error('❌ 服务器未捕获的错误:', err.message);
+    res.status(500).json({ error: '服务器内部错误' });
+});
+// 👆 全局错误兜底结束
+
+app.listen(5000, () => {
+    console.log('🚀 Server running on port 5000');
 });

@@ -107,7 +107,7 @@ export default function WriterDashboard() {
   const deleteImageFromCloudinary = async (imageUrl: string) => {
     if (!imageUrl || !imageUrl.includes('cloudinary')) return;
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/upload/cover`, {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/cover`, {
         method: 'DELETE',
         headers: { 
           'Content-Type': 'application/json',
