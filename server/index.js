@@ -76,22 +76,13 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // ================= 2. 限流配置 =================
 
-// ✅ 修复版：加上 .replace 去掉 IPv6 的杂质，防止报错
-const getClientIp = (req) => {
-    const ip = req.headers['cf-connecting-ip'] || req.ip || '127.0.0.1';
-    return String(ip).replace(/:\d+[^:]*$/, ''); 
-};
+// 删除了自定义的 getClientIp 和 keyGenerator，让官方库原生接管 req.ip，它能安全地处理 IPv6 的子网掩蔽防刷机制。
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
   max: 500, 
   message: '请求过于频繁，请稍后再试',
-  keyGenerator: getClientIp, 
-  // validate: { 
-  //     ip: false, 
-  //     trustProxy: false,  // 🔥 新增：防止 IPv6 报错
-  //     xForwardedForHeader: false // 🔥 新增：防止误报
-  // }
+  // keyGenerator: getClientIp, 删掉这行
 });
 app.use('/api/', globalLimiter);
 
@@ -99,12 +90,7 @@ const authLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, 
   max: 20, 
   message: '操作太频繁',
-  keyGenerator: getClientIp,
-  // validate: { 
-  //     ip: false, 
-  //     trustProxy: false, 
-  //     xForwardedForHeader: false 
-  // }
+  // keyGenerator: getClientIp, 删掉这行
 });
 app.use('/api/auth/', authLimiter);
 
@@ -1103,9 +1089,9 @@ const getForumActorKey = (req) => {
     }
   }
 
-  return `ip:${getClientIp(req)}`;
+  // ✅ 修复：直接使用 req.ip 即可，配合 trust proxy，它就是最准确的真实 IP
+  return `ip:${req.ip}`; 
 };
-
 const forumPostCreateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 15,
