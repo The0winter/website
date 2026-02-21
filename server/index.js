@@ -28,6 +28,7 @@ import upload from './utils/upload.js';
 import { createReview, getReviews } from './controllers/reviewController.js';
 
 const app = express();
+app.set('trust proxy', 1);
 
 let userViewBuffer = {}; // 存用户阅读量: { "userId1": 5, "userId2": 1 }
 let bookViewBuffer = {}; // 存书籍阅读量: { "bookId1": 100, "bookId2": 3 }

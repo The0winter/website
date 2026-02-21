@@ -1,5 +1,11 @@
 require('dotenv').config({ path: '../.env' }); // 假设 .env 在上一级，根据实际情况调整
 
+const SECRET_KEY = process.env.SECRET_KEY;
+if (!SECRET_KEY) {
+    console.error('❌ 错误：请在 .env 文件中设置 SECRET_KEY');
+    process.exit(1);
+}
+
 // 优先读取环境变量，读不到才用保底地址
 const API_URL = process.env.API_URL 
   ? `${process.env.API_URL}/books` 

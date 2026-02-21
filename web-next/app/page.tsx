@@ -1,10 +1,15 @@
 import type { Metadata } from 'next';
 import HomePageClient from '@/components/HomePageClient';
 import type { Book } from '@/lib/api';
+import { getApiBaseUrl } from '@/utils/api'; // 引入我们写的智能地址判断工具
 
 const REVALIDATE_SECONDS = 3600;
-const API_HOST = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/+$/, '') || 'http://127.0.0.1:5000';
-const API_BASE_URL = API_HOST.endsWith('/api') ? API_HOST : `${API_HOST}/api`;
+
+// 专门为图片提供公网前缀，确保用户的浏览器能正确加载图片，避免访问到内网 127.0.0.1
+const PUBLIC_IMAGE_HOST = process.env.NEXT_PUBLIC_API_URL
+  ?.trim()
+  .replace(/\/api\/?$/, '')
+  .replace(/\/+$/, '') || 'https://jiutianxiaoshuo.com';
 
 export const metadata: Metadata = {
   title: '九天小说站 - 热门小说 - 无弹窗 - 免费在线阅读 - 笔趣阁',
@@ -14,17 +19,18 @@ export const metadata: Metadata = {
 
 function buildBooksUrl(params?: Record<string, string>): string {
   const query = new URLSearchParams(params ?? {});
-  return query.toString() ? `${API_BASE_URL}/books?${query.toString()}` : `${API_BASE_URL}/books`;
+  const baseUrl = getApiBaseUrl(); // 动态获取 API 路径：服务端 SSR 时走本地 5000 端口，绕开 Cloudflare 防火墙
+  return query.toString() ? `${baseUrl}/books?${query.toString()}` : `${baseUrl}/books`;
 }
 
 function normalizeBookForHome(book: Book): Book {
   const source = book as Book & { cover_image?: string; coverImage?: string };
   let normalizedCover = source.cover_image || source.coverImage || '';
 
-  // 核心修复：如果封面存在，且不是以 http 或 data:base64 开头，说明是相对路径
+  // 核心修复：如果封面存在，且不是以 http 或 data:base64 开头，说明是相对路径 
   if (normalizedCover && !normalizedCover.startsWith('http') && !normalizedCover.startsWith('data:')) {
-    // 拼上文件顶部定义的 API_HOST 
-    normalizedCover = `${API_HOST}${normalizedCover.startsWith('/') ? '' : '/'}${normalizedCover}`;
+    // 拼上公网域名 PUBLIC_IMAGE_HOST，保证传递给前端组件的图片地址绝对可用
+    normalizedCover = `${PUBLIC_IMAGE_HOST}${normalizedCover.startsWith('/') ? '' : '/'}${normalizedCover}`;
   }
 
   return {
@@ -50,6 +56,7 @@ async function fetchBooks(params?: Record<string, string>): Promise<Book[]> {
 }
 
 export default async function Page() {
+  // 并行拉取首页所需的各个板块数据，极大提高 SSR 渲染速度 [cite: 35]
   const [allBooks, featuredBooks, weekRankBooks, dayRankBooks, recentBooks] = await Promise.all([
     fetchBooks(),
     fetchBooks({ orderBy: 'views', order: 'desc', limit: '3' }),
@@ -63,6 +70,7 @@ export default async function Page() {
 
   return (
     <>
+      [cite_start]{/* 专门给搜索引擎爬虫看的纯 HTML 结构 [cite: 38] */}
       <section className="sr-only" aria-label="推荐书籍与最近更新">
         <h2>推荐书籍</h2>
         <ul>
@@ -83,6 +91,7 @@ export default async function Page() {
         </ul>
       </section>
 
+      [cite_start]{/* 客户端水合组件，负责炫酷的 UI 交互 [cite: 39] */}
       <HomePageClient
         initialBooks={allBooks}
         initialFeaturedBooks={featuredBooks}
