@@ -6,7 +6,7 @@ import { submitToIndexNow } from './utils/indexNow.js'
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import cron from 'node-cron';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import helmet from 'helmet';
 import jwt from 'jsonwebtoken';
 import mongoSanitize from 'express-mongo-sanitize';
@@ -1086,7 +1086,8 @@ const stripHtml = (input = '') => String(input)
   .replace(/\s+/g, ' ')
   .trim();
 
-const getForumActorKey = (req) => {
+// 注意这里多加了一个 res 参数
+const getForumActorKey = (req, res) => {
   if (req.user?.id) return `uid:${req.user.id}`;
 
   const authHeader = req.headers['authorization'];
@@ -1100,9 +1101,10 @@ const getForumActorKey = (req) => {
     }
   }
 
-  // ✅ 修复：直接使用 req.ip 即可，配合 trust proxy，它就是最准确的真实 IP
-  return `ip:${req.ip}`; 
+  // ✅ 使用官方推荐的 ipKeyGenerator 替代原始 req.ip，彻底解决 IPv6 报错
+  return ipKeyGenerator(req, res);
 };
+
 const forumPostCreateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 15,
