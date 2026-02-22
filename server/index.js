@@ -1109,21 +1109,21 @@ const forumPostCreateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 15,
   message: '发帖过于频繁，请稍后再试',
-  keyGenerator: getForumActorKey
+  // keyGenerator: getForumActorKey  <-- 加上 // 注释掉
 });
 
 const forumReplyCreateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 40,
   message: '回答提交过于频繁，请稍后再试',
-  keyGenerator: getForumActorKey
+  // keyGenerator: getForumActorKey  <-- 加上 // 注释掉
 });
 
 const forumCommentCreateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 80,
   message: '评论提交过于频繁，请稍后再试',
-  keyGenerator: getForumActorKey
+  // keyGenerator: getForumActorKey  <-- 加上 // 注释掉
 });
 
 // 1. 发布帖子 (修复：返回 id 字段)
