@@ -277,7 +277,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
       // 向下滑动(diff > 0) 且 不在顶部时 -> 隐藏
       if (diff > 0 && currentScrollY > 80) {
         setShowNav(false);
-        setShowSettings(false);
+        //setShowSettings(false);
       }
       
       // 2. 上滑显示逻辑 (电脑端专属)
@@ -774,7 +774,7 @@ if (loading) return (
       >
         <article 
           className={`
-            w-full min-h-screen px-4 md:px-8 
+            w-full min-h-screen px-6 md:px-8 
             pt-4 pb-20  
              lg:mx-auto lg:mt-16 lg:mb-10 lg:rounded-b-sm lg:rounded-t-none lg:pt-8 lg:px-12
             ${isDesktop ? 'shadow-[0_4px_20px_rgba(0,0,0,0.04)]' : ''} 
@@ -1065,16 +1065,20 @@ if (loading) return (
                                 <Moon className="w-5 h-5 text-gray-400"/>
                             </button>
                             {Object.entries(themeMap).filter(([k]) => k !== 'dark').map(([key, val]) => (
-                                <button 
-                                    key={key} 
-                                    disabled={isActuallyDark}
-                                    onClick={() => setThemeColor(key as any)}
-                                    className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all ${themeColor === key && !isActuallyDark ? 'ring-2 ring-blue-500 scale-110' : ''}`}
-                                    style={{ backgroundColor: val.bg, borderColor: 'transparent', opacity: isActuallyDark ? 0.3 : 1 }}
-                                >
-                                    {themeColor === key && !isActuallyDark && <Check className="w-6 h-6 text-green-700" />}
-                                </button>
-                            ))}
+                            <button 
+                                key={key} 
+                                // 1. 移除了 disabled 属性
+                                onClick={() => {
+                                    setThemeColor(key as any); // 改变主题颜色
+                                    if (isActuallyDark) setTheme('light'); // 2. 如果当前是黑夜，强制切回日间
+                                }}
+                                className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all ${themeColor === key && !isActuallyDark ? 'ring-2 ring-blue-500 scale-110' : ''}`}
+                                // 3. 将 opacity 固定为 1，确保黑夜模式下按钮依然清晰可见可点
+                                style={{ backgroundColor: val.bg, borderColor: 'transparent', opacity: 1 }}
+                            >
+                                {themeColor === key && !isActuallyDark && <Check className="w-6 h-6 text-green-700" />}
+                            </button>
+                        ))}
                         </div>
                     </div>
 
@@ -1194,10 +1198,14 @@ if (loading) return (
                     {Object.entries(themeMap).filter(([k]) => k !== 'dark').map(([key, val]) => (
                       <button 
                         key={key} 
-                        disabled={isActuallyDark}
-                        onClick={() => setThemeColor(key as any)}
+                        // 1. 移除了 disabled 属性
+                        onClick={() => {
+                            setThemeColor(key as any);
+                            if (isActuallyDark) setTheme('light'); // 2. 同步退出黑夜模式
+                        }}
                         className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all ${themeColor === key && !isActuallyDark ? 'ring-2 ring-blue-500 scale-110' : ''}`}
-                        style={{ backgroundColor: val.bg, borderColor: 'transparent', opacity: isActuallyDark ? 0.3 : 1 }}
+                        // 3. 将 opacity 固定为 1
+                        style={{ backgroundColor: val.bg, borderColor: 'transparent', opacity: 1 }}
                       >
                         {themeColor === key && !isActuallyDark && <Check className="w-4 h-4 text-green-700" />}
                       </button>
@@ -1221,20 +1229,34 @@ if (loading) return (
                  </div>
               </div>
 
-              {/* 间距 (合并在一行或者紧凑两行) */}
-              <div className="flex items-center gap-2">
-                 <span className="text-xs opacity-50 font-bold w-10">间距</span>
-                 <div className="flex flex-1 gap-2 bg-black/5 rounded-lg p-1">
-                    {[1.4, 1.6, 1.8, 2.0].map((lh) => (
-                      <button 
-                        key={lh}
-                        onClick={() => setLineHeight(lh)}
-                        className={`flex-1 py-1 text-xs rounded transition-all ${lineHeight === lh ? 'bg-white shadow-sm font-bold text-blue-600' : ''}`}
-                      >
-                        {lh}
-                      </button>
-                    ))}
-                 </div>
+              {/* 排版间距：行高与段距 (移动端) */}
+              <div className="flex flex-col gap-3">
+                {/* 行高 */}
+                <div className="flex items-center gap-2">
+                    <span className="text-xs opacity-50 font-bold w-10">行高</span>
+                    <div className="flex flex-1 gap-2 bg-black/5 rounded-lg p-1">
+                      {[1.6, 1.8, 2.0, 2.4].map((lh) => (
+                        <button
+                          key={lh}
+                          onClick={() => setLineHeight(lh)}
+                          className={`flex-1 py-1 text-xs rounded transition-all ${lineHeight === lh ? 'bg-white shadow-sm font-bold text-blue-600' : ''}`}
+                        >
+                          {lh}
+                        </button>
+                      ))}
+                    </div>
+                </div>
+                
+                {/* 段距 */}
+                <div className="flex items-center gap-2">
+                    <span className="text-xs opacity-50 font-bold w-10">段距</span>
+                    <div className="flex flex-1 gap-2 bg-black/5 rounded-lg p-1">
+                      <button onClick={() => setParaSpacing(2)} className={`flex-1 py-1 text-xs rounded transition-all ${paraSpacing === 2 ? 'bg-white shadow-sm font-bold text-blue-600' : ''}`}>紧凑</button>
+                      <button onClick={() => setParaSpacing(4)} className={`flex-1 py-1 text-xs rounded transition-all ${paraSpacing === 4 ? 'bg-white shadow-sm font-bold text-blue-600' : ''}`}>标准</button>
+                      <button onClick={() => setParaSpacing(6)} className={`flex-1 py-1 text-xs rounded transition-all ${paraSpacing === 6 ? 'bg-white shadow-sm font-bold text-blue-600' : ''}`}>中等</button>
+                      <button onClick={() => setParaSpacing(8)} className={`flex-1 py-1 text-xs rounded transition-all ${paraSpacing === 8 ? 'bg-white shadow-sm font-bold text-blue-600' : ''}`}>宽疏</button>
+                    </div>
+                </div>
               </div>
             </div>
           </div>
