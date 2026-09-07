@@ -1,3 +1,4 @@
+import { safeFetch as fetch } from '@/lib/request';
 import { cache } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
@@ -18,7 +19,7 @@ type ReaderData = {
 };
 
 // 专门用于给搜索引擎爬虫生成绝对路径的公网域名
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, '') || 'https://jiutianxiaoshuo.com';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, '') || 'http://127.0.0.1:3000';
 
 const getReaderData = cache(async (bookId: string, chapterId: string): Promise<ReaderData> => {
   const baseUrl = getApiBaseUrl(); // 动态获取：服务端走本地 5000 端口，客户端走公网
@@ -29,19 +30,20 @@ const getReaderData = cache(async (bookId: string, chapterId: string): Promise<R
       fetch(`${baseUrl}/chapters/${chapterId}`, { cache: 'no-store' }),
     ]);
 
-    if (!bookRes.ok || !chapterRes.ok) {
+    if (bookRes.status === 404 || chapterRes.status === 404) {
       return { book: null, chapter: null };
     }
 
+    if (!bookRes.ok || !chapterRes.ok) throw new Error('阅读服务暂不可用');
     const [book, chapter] = await Promise.all([
       bookRes.json() as Promise<Book>,
       chapterRes.json() as Promise<Chapter>,
     ]);
 
+    if (chapter?.bookId !== bookId) return {book:null,chapter:null};
     return { book, chapter };
   } catch (error) {
-    console.error('Reader SSR fetch failed:', error);
-    return { book: null, chapter: null };
+    throw error;
   }
 });
 
@@ -155,11 +157,11 @@ export default async function Page({ params }: Props) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(chapterJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(chapterJsonLd).replace(/</g, String.fromCharCode(92) + 'u003c') }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd).replace(/</g, String.fromCharCode(92) + 'u003c') }}
       />
       <ReaderClient initialBook={book} initialChapter={chapter} />
     </>

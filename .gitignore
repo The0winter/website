@@ -47,3 +47,14 @@ server/.env
 
 # 防止错误截图上传 (虽然你已经有了 *.png，但加个备注更清晰)
 error_screenshot.png
+# Isolated runtime and sensitive recovery material
+.runtime/
+backups/
+.env.*
+!.env.example
+*.tsbuildinfo
+
+web-next/test-results/
+
+web-next/.next-*/
+

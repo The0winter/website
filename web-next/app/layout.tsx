@@ -20,6 +20,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  robots:process.env.SITE_INDEXING==='enabled'?{index:true,follow:true}:{index:false,follow:false},
   // 🔥 修改 1：标题加长，包含核心关键词（小说、免费、玄幻等）
   title: "九天小说站 - 热门小说 - 无弹窗 - 免费在线阅读 - 笔趣阁",
   
@@ -59,7 +60,7 @@ export default function RootLayout({
 
           </ReadingSettingsProvider>
         </AuthProvider>
-        <GoogleAnalytics gaId="G-DWMPP2NRQ1" />
+        {process.env.NEXT_PUBLIC_EXTERNAL_SERVICES === 'enabled' && <GoogleAnalytics gaId="G-DWMPP2NRQ1" />}
       </body>
     </html>
   );

@@ -34,15 +34,10 @@ export default function Login() {
          setLoading(false);
       } else {
          // 登录成功逻辑保持不变
-         if (result && result.token) {
-             localStorage.setItem('token', result.token);
-             if (result.user) {
-                localStorage.setItem('user', JSON.stringify(result.user));
-             }
-         }
+
          router.push('/');
       }
-    } catch (err: any) {
+    } catch (caught: unknown) { const err = caught instanceof Error ? caught : new Error('操作失败');
       console.error(err);
       setError(err.message || '登录异常');
       setLoading(false);

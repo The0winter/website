@@ -41,59 +41,21 @@ const CACHE_expire_TIME = 30 * 60 * 1000; // 缓存有效期：30分钟 (毫秒)
 
 export default function RankingPage() {
   const [allBooks, setAllBooks] = useState<Book[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadedKey,setLoadedKey]=useState('');
 
   // --- 状态管理：默认改为 'month' ---
   const [activeRank, setActiveRank] = useState('month'); 
   const [activeCategory, setActiveCategory] = useState('all');
+  const loading=loadedKey!==activeRank+activeCategory;
 
-useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-
-      // --- 步骤 A: 尝试读取缓存 ---
-      try {
-        const cachedString = localStorage.getItem(CACHE_KEY);
-        if (cachedString) {
-          const cachedData = JSON.parse(cachedString);
-          const now = Date.now();
-
-          // 检查是否过期
-          if (now - cachedData.timestamp < CACHE_expire_TIME) {
-            console.log('✨ 命中缓存，使用本地数据');
-            setAllBooks(cachedData.data);
-            setLoading(false);
-            return; // 命中缓存后直接结束，不再请求 API
-          } else {
-            console.log('⚠️ 缓存已过期，准备重新请求');
-            // 可选：过期后顺手清理一下
-            localStorage.removeItem(CACHE_KEY); 
-          }
-        }
-      } catch (e) {
-        console.error('读取缓存失败', e);
-      }
-
-      // --- 步骤 B: 缓存未命中或已过期，发起网络请求 ---
-      try {
-        const data = await booksApi.getAll();
-        setAllBooks(data);
-
-        // --- 步骤 C: 写入新缓存 ---
-        localStorage.setItem(CACHE_KEY, JSON.stringify({
-          data: data,
-          timestamp: Date.now() // 记录写入时间
-        }));
-        
-      } catch (error) {
-        console.error('Fetch error:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
+const [error,setError]=useState('');
+  useEffect(()=>{
+    let active=true;
+    const sorts:Record<string,string>={month:'monthly_views',week:'weekly_views',day:'daily_views',rec:'composite',total:'views'};
+    const category=CATEGORIES.find(c=>c.slug===activeCategory)?.name;
+    booksApi.getAll({orderBy:sorts[activeRank],limit:100,category:activeCategory==='all'?undefined:category}).then(data=>{if(active){setAllBooks(data);setError('');}}).catch(()=>{if(active)setError('排行榜暂不可用，请稍后重试');}).finally(()=>{if(active)setLoadedKey(activeRank+activeCategory);});
+    return ()=>{active=false;};
+  },[activeRank,activeCategory]);
 
   const displayBooks = useMemo(() => {
     let filtered = allBooks;
@@ -106,8 +68,8 @@ useEffect(() => {
     }
 
     return [...filtered].sort((a, b) => {
-      const getVal = (obj: Book, key: string) => (obj as any)[key] || 0;
-      const getRating = (obj: Book) => (obj as any).rating || 0;
+      const getVal = (obj: Book, key: 'views'|'daily_views'|'weekly_views'|'monthly_views') => obj[key] || 0;
+      const getRating = (obj: Book) => obj.rating || 0;
       
       switch (activeRank) {
         case 'month': return getVal(b, 'monthly_views') - getVal(a, 'monthly_views');
@@ -203,6 +165,7 @@ useEffect(() => {
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[600px]">
+            {error && <p role="alert" className="text-red-600 p-4">{error}</p>}
             {loading ? (
                 <div className="flex flex-col items-center justify-center h-60 gap-3 text-gray-400">
                     <Loader2 className="animate-spin w-8 h-8 text-blue-500" />
@@ -223,8 +186,8 @@ useEffect(() => {
                         const isTop3Book = rank <= 3;
                         
                         const rawScore = activeRank === 'rec' 
-                           ? (( (book as any).weekly_views || 0) * 0.4 + ((book as any).rating || 0) * 100 * 0.6) 
-                           : ((book as any)[activeRank === 'total' ? 'views' : `${activeRank}_views`] || 0);
+                           ? (( book.weekly_views || 0) * 0.4 + (book.rating || 0) * 100 * 0.6) 
+                           : (book[({total:'views',day:'daily_views',week:'weekly_views',month:'monthly_views'} as const)[activeRank as 'total'|'day'|'week'|'month']] || 0);
                         
                         const displayScore = formatViews(rawScore);
 
@@ -274,7 +237,7 @@ useEffect(() => {
                                         <div className="flex flex-shrink-0 items-center gap-1 bg-yellow-50 px-1.5 md:px-2 py-0.5 rounded-full border border-yellow-100">
                                             <Star className="w-3 h-3 md:w-3.5 md:h-3.5 text-yellow-500 fill-yellow-500" />
                                             <span className="text-[10px] md:text-xs font-bold text-yellow-700">
-                                                {(book as any).rating ? (book as any).rating.toFixed(1) : '0.0'}
+                                                {book.rating ? book.rating.toFixed(1) : '0.0'}
                                             </span>
                                         </div>
                                     </div>

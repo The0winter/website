@@ -1,4 +1,6 @@
 'use client';
+import { safeFetch as fetch } from '@/lib/request';
+
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -50,7 +52,7 @@ export default function Library() {
           if (!bookmark || !bookmark.bookId) return Promise.resolve(null);
           let bookId: string;
           if (typeof bookmark.bookId === 'object') {
-                const bookObj = bookmark.bookId as any; 
+                const bookObj = bookmark.bookId; 
                 bookId = bookObj._id || bookObj.id || String(bookObj);
           } else {
                 bookId = String(bookmark.bookId);
@@ -82,7 +84,7 @@ export default function Library() {
     try {
         setBookmarkedBooks(prev => prev.filter(b => b.id !== bookId));
         setDeleteTargetId(null);
-        const res = await fetch(`https://jiutianxiaoshuo.com/api/users/${user.id}/bookmarks/${bookId}`, {
+        const res = await fetch(`/api/users/${user.id}/bookmarks/${bookId}`, {
             method: 'DELETE'
         });
         if (!res.ok) throw new Error('删除失败');

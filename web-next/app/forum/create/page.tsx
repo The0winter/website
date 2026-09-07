@@ -81,7 +81,7 @@ function CreatePostContent() {
 
       setShowSuccess(true);
       setTimeout(() => router.push('/forum'), 1200);
-    } catch (error: any) {
+    } catch (caught: unknown) { const error = caught instanceof Error ? caught : new Error('操作失败');
       alert(`发布失败：${error.message || '请稍后重试'}`);
     } finally {
       setIsSubmitting(false);

@@ -1,4 +1,6 @@
 'use client';
+import { safeFetch as fetch } from '@/lib/request';
+
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -62,7 +64,7 @@ export default function WriterDashboard() {
   const [chapterToDelete, setChapterToDelete] = useState<string | null>(null);
   
   // 👮 管理员页面专用 State
-  const [userList, setUserList] = useState<any[]>([]); 
+  const [userList, setUserList] = useState<Array<{id:string;_id?:string;username:string;email:string;role:string;isBanned:boolean;created_at:string;weekly_score?:number;stats?:{today_views?:number;today_uploads?:number;history?:Array<{views?:number;uploads?:number}>}}>>([]); 
   const [adminSearch, setAdminSearch] = useState(''); // 搜索词
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminHotBooks, setAdminHotBooks] = useState<Book[]>([]);
@@ -93,7 +95,7 @@ export default function WriterDashboard() {
   const [newBookCoverPreview, setNewBookCoverPreview] = useState('');
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<{x:number;y:number;width:number;height:number}|null>(null);
   const [cropperImgSrc, setCropperImgSrc] = useState<string | null>(null);
   const [isCroppingFor, setIsCroppingFor] = useState<'new' | 'edit' | null>(null);
 
@@ -107,7 +109,7 @@ export default function WriterDashboard() {
   const deleteImageFromCloudinary = async (imageUrl: string) => {
     if (!imageUrl || !imageUrl.includes('cloudinary')) return;
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/cover`, {
+      await fetch(`/api/upload/cover`, {
         method: 'DELETE',
         headers: { 
           'Content-Type': 'application/json',
@@ -139,7 +141,7 @@ export default function WriterDashboard() {
     setAdminLoading(true);
     try {
         // ✅ 升级：带上 search 参数
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users?search=${encodeURIComponent(search)}`, {
+        const res = await fetch(`/api/admin/users?search=${encodeURIComponent(search)}`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
         });
         if (res.ok) {
@@ -156,7 +158,7 @@ export default function WriterDashboard() {
   }, [user]);
 
   const fetchAdminHotBooks = useCallback(async () => {
-    if (!user || (user as any).role !== 'admin') return;
+    if (!user || user.role !== 'admin') return;
     setAdminBooksLoading(true);
     try {
       const books = await booksApi.getAll({ orderBy: 'daily_views', order: 'desc', limit: 10 });
@@ -170,7 +172,7 @@ export default function WriterDashboard() {
   }, [user]);
 
   const fetchAdminBookSearchResults = useCallback(async (rawKeyword: string) => {
-    if (!user || (user as any).role !== 'admin') return;
+    if (!user || user.role !== 'admin') return;
     const keyword = rawKeyword.trim().toLowerCase();
     if (!keyword) {
       setAdminBookSearchResults([]);
@@ -185,7 +187,7 @@ export default function WriterDashboard() {
         const authorName = typeof book.author === 'string' 
             ? book.author 
             : (book.author_id && typeof book.author_id === 'object' && 'username' in book.author_id 
-                ? (book.author_id as any).username 
+                ? (book.author_id as {username?:string;_id?:string;id?:string}).username 
                 : '');
         const target = `${book.title || ''} ${authorName || ''}`.toLowerCase();
         return target.includes(keyword);
@@ -210,13 +212,13 @@ export default function WriterDashboard() {
   }, [adminSearch, currentView, fetchUserList]);
 
   useEffect(() => {
-    if (currentView === 'adminBooks' && (user as any)?.role === 'admin') {
+    if (currentView === 'adminBooks' && user?.role === 'admin') {
       fetchAdminHotBooks();
     }
   }, [currentView, user, fetchAdminHotBooks]);
 
   useEffect(() => {
-    if (currentView !== 'adminBooks' || (user as any)?.role !== 'admin') return;
+    if (currentView !== 'adminBooks' || user?.role !== 'admin') return;
     const keyword = adminBookSearch.trim();
     if (!keyword) {
       setAdminBookSearchResults([]);
@@ -233,7 +235,7 @@ export default function WriterDashboard() {
       setUploading(true);
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/upload/cover`, {
+      const res = await fetch(`/api/upload/cover`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}`, 'x-user-id': user!.id },
         body: formData,
@@ -263,7 +265,7 @@ export default function WriterDashboard() {
     }
   };
 
-  const onCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => setCroppedAreaPixels(croppedAreaPixels), []);
+  const onCropComplete = useCallback((croppedArea: {x:number;y:number;width:number;height:number}, croppedAreaPixels: {x:number;y:number;width:number;height:number}) => setCroppedAreaPixels(croppedAreaPixels), []);
 
 const handleSaveCrop = async () => {
     if (!cropperImgSrc || !croppedAreaPixels) return;
@@ -294,7 +296,7 @@ const handleSaveCrop = async () => {
               
               // 自动刷新外部列表数据，让外面的封面也立刻生效
               fetchMyData();
-              if ((user as any)?.role === 'admin') {
+              if (user?.role === 'admin') {
                   fetchAdminHotBooks();
                   if (adminBookSearch.trim()) fetchAdminBookSearchResults(adminBookSearch);
               }
@@ -311,23 +313,6 @@ const handleSaveCrop = async () => {
   };
 
   // 影子登录
-  const handleShadowLogin = async (targetUserId: string, targetName: string) => {
-    if (!user || (user as any).role !== 'admin') return alert('权限不足');
-    if (!confirm(`⚠️ 确认切换身份为 [ ${targetName} ] ?`)) return;
-    try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/impersonate/${targetUserId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-user-id': user!.id , 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('novelhub_user', data.user.id);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        window.location.reload();
-    } catch (e: any) { setToast({ msg: `切换失败: ${e.message}`, type: 'error' }); }
-  };
-
   const findBookById = useCallback((bookId: string) => {
     if (!bookId) return undefined;
     if (bookManagerBook?.id === bookId) return bookManagerBook;
@@ -343,7 +328,7 @@ const handleSaveCrop = async () => {
     const action = currentStatus ? '解封' : '封禁';
     if (!confirm(`⚠️ 确定要 ${action} 用户 [ ${username} ] 吗？`)) return;
     try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users/${targetUserId}/ban`, {
+        const res = await fetch(`/api/admin/users/${targetUserId}/ban`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` },
             body: JSON.stringify({ isBanned: !currentStatus })
@@ -366,7 +351,7 @@ const handleSaveCrop = async () => {
               // ✅ 正确写法：带上 Token
             const token = localStorage.getItem('token'); // 获取登录凭证
 
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/chapters/${chapter.id}`, {
+            const res = await fetch(`/api/chapters/${chapter.id}`, {
             headers: {
                 'Content-Type': 'application/json',
                 // 如果有 token，就带上；没有就是空字符串（游客）
@@ -383,7 +368,7 @@ const handleSaveCrop = async () => {
       if (formChapterTitle.length > LIMITS.TITLE) { setToast({msg:'标题过长', type:'error'}); return false;}
       if (formChapterContent.length > LIMITS.CONTENT) { setToast({msg:'正文过长', type:'error'}); return false;}
       try {
-          const data = { title: formChapterTitle, content: formChapterContent, bookId: currentBookId, chapter_number: 1 };
+          const data = { title: formChapterTitle, content: formChapterContent, bookId: currentBookId, chapter_number: currentChapterId ? (activeChapters.find(c => c.id === currentChapterId)?.chapter_number || 1) : Math.max(0,...activeChapters.map(c=>c.chapter_number))+1 };
           if (currentChapterId) await chaptersApi.update(currentChapterId, data);
           else await chaptersApi.create(data);
           fetchMyData(); 
@@ -403,7 +388,7 @@ const handleSaveCrop = async () => {
           let url = '';
           if(newBookCoverPreview.startsWith('http')) url = newBookCoverPreview;
           else if(newBookCoverFile) { const u = await uploadImageToCloudinary(newBookCoverFile); if(u) url = u; else return; }
-          await booksApi.create({ title: formBookTitle, description: formBookDescription, cover_image: url, category: formBookCategory, author: user.username, author_id: user.id } as any);
+          await booksApi.create({ title: formBookTitle, description: formBookDescription, cover_image: url, category: formBookCategory, author: user.username, author_id: user.id });
           setShowCreateBookModal(false); setFormBookTitle(''); setFormBookDescription(''); setFormBookCategory(ALL_CATEGORIES[0]); setNewBookCoverFile(null); setNewBookCoverPreview('');
           setToast({msg:'创建成功', type:'success'}); fetchMyData();
       } catch(e) { setToast({msg:'创建失败', type:'error'}); }
@@ -423,7 +408,7 @@ const handleSaveCrop = async () => {
     } : prev);
     setToast({ msg: '保存成功', type: 'success' });
     fetchMyData();
-    if ((user as any)?.role === 'admin') {
+    if (user?.role === 'admin') {
       fetchAdminHotBooks();
       if (adminBookSearch.trim()) fetchAdminBookSearchResults(adminBookSearch);
     }
@@ -441,7 +426,7 @@ const handleSaveCrop = async () => {
     setAdminHotBooks((prev) => prev.filter((b) => b.id !== currentBookId));
     setAdminBookSearchResults((prev) => prev.filter((b) => b.id !== currentBookId));
     fetchMyData();
-    if ((user as any)?.role === 'admin') {
+    if (user?.role === 'admin') {
       fetchAdminHotBooks();
       if (adminBookSearch.trim()) fetchAdminBookSearchResults(adminBookSearch);
     }
@@ -451,7 +436,7 @@ const handleSaveCrop = async () => {
   const getBookAuthorName = (book: Book) => {
     if (typeof book.author === 'string' && book.author.trim()) return book.author;
     if (book.author_id && typeof book.author_id === 'object' && 'username' in book.author_id) {
-      return (book.author_id as any).username || '未知作者';
+      return (book.author_id as {username?:string;_id?:string;id?:string}).username || '未知作者';
     }
     return '未知作者';
   };
@@ -522,7 +507,7 @@ const openBookManager = (book: Book) => {
           </button>
           
           {/* 切换到控制台 (仅管理员) */}
-          {(user as any).role === 'admin' && (
+          {user.role === 'admin' && (
             <button 
                 onClick={() => setCurrentView('admin')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition mt-2 ${currentView === 'admin' ? 'bg-purple-50 text-purple-600' : 'text-gray-600 hover:bg-purple-50 hover:text-purple-600'}`}
@@ -530,7 +515,7 @@ const openBookManager = (book: Book) => {
                 <LayoutDashboard className="h-5 w-5" /> 超级控制台
             </button>
           )}
-          {(user as any).role === 'admin' && (
+          {user.role === 'admin' && (
             <button
                 onClick={() => setCurrentView('adminBooks')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition mt-2 ${currentView === 'adminBooks' ? 'bg-amber-50 text-amber-700' : 'text-gray-600 hover:bg-amber-50 hover:text-amber-700'}`}
@@ -541,12 +526,12 @@ const openBookManager = (book: Book) => {
         </nav>
         <div className="p-4 border-t border-gray-100">
            <div className="flex items-center gap-3 px-4 py-2">
-              <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold ${(user as any).role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
-                {((user as any).username || 'U')[0].toUpperCase()}
+              <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold ${user.role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
+                {(user.username || 'U')[0].toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{(user as any).username}</p>
-                <p className="text-xs text-gray-500">{(user as any).role === 'admin' ? '超级管理员' : '创作者'}</p>
+                <p className="text-sm font-medium text-gray-900 truncate">{user.username}</p>
+                <p className="text-xs text-gray-500">{user.role === 'admin' ? '超级管理员' : '创作者'}</p>
               </div>
            </div>
         </div>
@@ -603,7 +588,7 @@ const openBookManager = (book: Book) => {
         )}
 
         {/* 2. ✅ 超级管理员控制台视图 (新页面) */}
-        {currentView === 'admin' && (user as any).role === 'admin' && (
+        {currentView === 'admin' && user.role === 'admin' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                 {/* 顶部：标题与搜索 */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -656,8 +641,8 @@ const openBookManager = (book: Book) => {
 
                                     // 🛡️ 3. 拼接数据：历史数据 + 今日数据 (让管理员能看到当天的实时变化)
                                     // 注意：MiniChart 只需要数字数组
-                                    const viewData = [...history.map((h: any) => h.views || 0), todayViews];
-                                    const uploadData = [...history.map((h: any) => h.uploads || 0), todayUploads];
+                                    const viewData = [...history.map((h: {views?:number;uploads?:number}) => h.views || 0), todayViews];
+                                    const uploadData = [...history.map((h: {views?:number;uploads?:number}) => h.uploads || 0), todayUploads];
                                     
                                     return (
                                         <tr key={u.id || u._id} className={`group hover:bg-gray-50 transition ${u.isBanned ? 'bg-red-50/30' : ''}`}>
@@ -710,14 +695,7 @@ const openBookManager = (book: Book) => {
                                                     {u.id !== user!.id && u.role !== 'admin' && (
                                                         <>
                                                             <button 
-                                                                onClick={() => handleShadowLogin(u.id || u._id, u.username)}
-                                                                className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg border border-transparent hover:border-purple-100 transition"
-                                                                title="影子登录"
-                                                            >
-                                                                <LogIn className="h-4 w-4" />
-                                                            </button>
-                                                            <button 
-                                                                onClick={() => handleBanUser(u.id || u._id, u.isBanned, u.username)}
+                                                                onClick={() => handleBanUser(u.id, u.isBanned, u.username)}
                                                                 className={`p-2 rounded-lg border border-transparent transition ${u.isBanned ? 'text-green-600 hover:bg-green-50 hover:border-green-100' : 'text-red-600 hover:bg-red-50 hover:border-red-100'}`}
                                                                 title={u.isBanned ? "解封" : "封号"}
                                                             >
@@ -742,7 +720,7 @@ const openBookManager = (book: Book) => {
             </div>
         )}
 
-        {currentView === 'adminBooks' && (user as any).role === 'admin' && (
+        {currentView === 'adminBooks' && user.role === 'admin' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 flex flex-col">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
@@ -910,7 +888,7 @@ const openBookManager = (book: Book) => {
                                                         
                                                         // 同步刷新外部列表
                                                         fetchMyData();
-                                                        if ((user as any)?.role === 'admin') {
+                                                        if (user?.role === 'admin') {
                                                             fetchAdminHotBooks();
                                                             if (adminBookSearch.trim()) fetchAdminBookSearchResults(adminBookSearch);
                                                         }

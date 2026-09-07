@@ -2,7 +2,7 @@
 import { v2 as cloudinary } from 'cloudinary';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import multer from 'multer';
-import 'dotenv/config'; // 确保能读取环境变量
+ // 确保能读取环境变量
 
 // 1. 配置 Cloudinary (从环境变量读)
 cloudinary.config({
@@ -23,7 +23,7 @@ const storage = new CloudinaryStorage({
 
 // 3. 创建 Multer 实例
 const upload = multer({ 
-  storage: storage,
+  storage: process.env.EXTERNAL_SERVICES === 'enabled' ? storage : multer.memoryStorage(),
   limits: { 
     fileSize: 1.5 * 1024 * 1024 // 明确允许最大 1.5MB 的图片上传
   } 

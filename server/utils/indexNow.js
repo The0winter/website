@@ -7,7 +7,7 @@ const KEY = '8493abc32948jiutianxiaoshuo'; // 你的 Key
 const KEY_LOCATION = `https://${HOST}/${KEY}.txt`;
 
 export async function submitToIndexNow(urls) {
-  if (!urls || urls.length === 0) return;
+  if (process.env.EXTERNAL_SERVICES !== 'enabled' || !urls || urls.length === 0) return;
 
   const endpoint = 'https://api.indexnow.org/indexnow';
   

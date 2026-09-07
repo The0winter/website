@@ -1,3 +1,4 @@
+export const capturedMail = [];
 import nodemailer from 'nodemailer';
 
 // 配置发送器
@@ -10,6 +11,11 @@ const transporter = nodemailer.createTransport({
 });
 
 const sendVerificationEmail = async (email, code) => {
+  if (process.env.EXTERNAL_SERVICES !== 'enabled') {
+    capturedMail.push({ email, code });
+    if (capturedMail.length > 100) capturedMail.shift();
+    return;
+  }
   await transporter.sendMail({
     from: `"九天小说站" <${process.env.EMAIL_USER}>`,
     to: email,

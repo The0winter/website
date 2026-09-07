@@ -1,4 +1,6 @@
 'use client';
+import { safeFetch as fetch, catalogPages } from '@/lib/request';
+
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
@@ -36,7 +38,7 @@ interface Book {
   title: string;
   description: string;
   cover_image?: string;
-  author_id?: any; 
+  author_id?: string | {_id?:string;id?:string;username?:string} | null; 
   author?: string;
   status?: string;
   category?: string;
@@ -47,6 +49,7 @@ interface Book {
 }
 
 interface Chapter {
+  word_count?: number;
   id: string;
   title: string;
   chapter_number: number;
@@ -79,7 +82,7 @@ const formatChapterTitle = (title: string, chapterNumber: number) => {
   if (!title) return `第${chapterNumber}章`;
 
   // 1. 去掉开头的数字和标点符号 (例如 "7.第7章" -> "第7章", "12、第12章" -> "第12章")
-  let cleanTitle = title.trim().replace(/^\d+[\.、\s]+/, '');
+  const cleanTitle = title.trim().replace(/^\d+[\.、\s]+/, '');
 
   // 2. 识别是否为感言、请假条等非正文 (你可以根据需要增删这里的关键词)
   const isExtraContent = /(感言|同人|请假|通知|单章|说明|番外|新书|设定|总结|推书)/.test(cleanTitle);
@@ -127,19 +130,17 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
 
   // --- 初始化逻辑 ---
   useEffect(() => {
-    if (book.id) {
-        booksApi.incrementViews(book.id).catch(console.error);
-    }
 
-    const userId = (user as any)?.id || (user as any)?._id;
+
+    const userId = user?.id || user?._id;
 
     if (userId && book.id) {
       const checkBookmarkStatus = async () => {
         try {
-          const res = await fetch(`https://jiutianxiaoshuo.com/api/users/${userId}/bookmarks`);
+          const res = await fetch(`/api/users/${userId}/bookmarks`);
           if (res.ok) {
             const bookmarks = await res.json();
-            const exists = bookmarks.some((b: any) => {
+            const exists = bookmarks.some((b: {bookId?:string|{_id?:string;id?:string}}) => {
                 const bId = typeof b.bookId === 'object' ? b.bookId?._id : b.bookId;
                 return bId === book.id;
             });
@@ -154,7 +155,7 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
 
     const fetchReviews = async () => {
       try {
-        const res = await fetch(`https://jiutianxiaoshuo.com/api/books/${book.id}/reviews`);
+        const res = await fetch(`/api/books/${book.id}/reviews`);
         if (res.ok) {
           const data = await res.json();
           setReviews(data);
@@ -167,11 +168,8 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
     const fetchChapters = async () => {
       try {
         setLoadingChapters(true);
-        const res = await fetch(`https://jiutianxiaoshuo.com/api/books/${book.id}/chapters`);
-        if (res.ok) {
-            const data = await res.json();
-            setChapters(data);
-        }
+        const data = await catalogPages<Chapter>(`/api/books/${book.id}/chapters`);
+        setChapters(data);
       } catch (err) {
         console.error("获取章节失败", err);
       } finally {
@@ -181,19 +179,14 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
 
     if (book.id) {
       fetchReviews();
-      if (bookData.chapters && bookData.chapters.length > 0) {
-        setChapters(bookData.chapters);
-        setLoadingChapters(false);
-      } else {
-        fetchChapters();
-      }
+      fetchChapters();
     }
 
   }, [user, book.id, bookData.chapters]);
 
   // --- 逻辑：章节排序与切片 ---
   const sortedChapters = useMemo(() => {
-    let list = [...chapters];
+    const list = [...chapters];
     list.sort((a, b) => a.chapter_number - b.chapter_number);
     return isReversed ? list.reverse() : list;
   }, [chapters, isReversed]);
@@ -239,7 +232,7 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
   // --- 逻辑：计算“我的评论” ---
   const myReview = useMemo(() => {
     if (!user || reviews.length === 0) return null;
-    const userId = (user as any).id || (user as any)._id;
+    const userId = user.id || user._id;
     return reviews.find(r => r.user._id === userId || r.user.id === userId);
   }, [reviews, user]);
 
@@ -258,14 +251,14 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
     }
     if (loading) return; 
 
-    const userId = (user as any).id || (user as any)._id;
+    const userId = user.id || user._id;
     setLoading(true);
     try {
       if (isBookmarked) {
-        const res = await fetch(`https://jiutianxiaoshuo.com/api/users/${userId}/bookmarks/${book.id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/users/${userId}/bookmarks/${book.id}`, { method: 'DELETE' });
         if (res.ok) setIsBookmarked(false);
       } else {
-        const res = await fetch(`https://jiutianxiaoshuo.com/api/users/${userId}/bookmarks`, {
+        const res = await fetch(`/api/users/${userId}/bookmarks`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ bookId: book.id })
@@ -293,16 +286,14 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
     if (!user) return router.push('/login');
     if (submittingReview) return;
 
-    const userId = (user as any).id || (user as any)._id;
+    const userId = user.id || user._id;
     setSubmittingReview(true);
     
     try {
-      const res = await fetch(`https://jiutianxiaoshuo.com/api/books/${book.id}/reviews`, {
+      const res = await fetch(`/api/books/${book.id}/reviews`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': userId 
-        },
+          'Content-Type': 'application/json',},
         body: JSON.stringify({ rating: myRating, content: myContent })
       });
 
@@ -328,7 +319,7 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
   };
 
   // --- 显示辅助 ---
-  const totalWords = chapters.reduce((sum, chapter) => sum + (chapter.content?.length || 0), 0);
+  const totalWords = chapters.reduce((sum, chapter) => sum + (chapter.word_count || 0), 0);
   const wordCount = totalWords > 10000 ? `${(totalWords / 10000).toFixed(2)}万字` : `${totalWords}字`;
   const getCategoryDisplay = (category?: string) => {
     if (!category) return '';
@@ -554,7 +545,7 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
                     <div className="text-gray-500 text-sm text-center py-4">还没有人评价，快来抢沙发！</div>
                 ) : (
                     sortedReviews.map((review) => {
-                        const userId = (user as any)?.id || (user as any)?._id;
+                        const userId = user?.id || user?._id;
                         const isMyReview = userId && (review.user._id === userId || review.user.id === userId);
                         if (isMyReview && showReviewForm) return null;
 

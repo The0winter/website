@@ -1,0 +1,148 @@
+cron.schedule('0 0 * * *', async () => {
+    try {
+        await Book.updateMany({}, { daily_views: 0 });
+        console.log('✅ [Cron] 日榜重置成功');
+    } catch (error) {
+        console.error('❌ [Cron] 日榜重置失败:', error.message);
+    }
+});
+
+// 添加一个新的 Cron 任务 (每天凌晨 00:05 执行)
+// 在 server/index.js 的 Cron 任务部分
+
+cron.schedule('5 0 * * *', async () => {
+    console.log('🔄 [Cron] 开始归档用户活跃数据...');
+    try {
+        const users = await User.find({});
+        
+        for (const user of users) {
+            // 1. 获取今日数据（如果没有则为0）
+            const v = user.stats?.today_views || 0;
+            const u = user.stats?.today_uploads || 0;
+            const w = user.daily_upload_words || 0; // 今日字数
+
+            // 2. 只有当用户今天有活动时，才推入 history (或者为了图表连续性，每天都推也可以)
+            // 这里我们选择：保留最近 7 天的历史记录
+            const newHistoryEntry = {
+                date: new Date(),
+                views: v,
+                uploads: u
+            };
+
+            // 3. 确保 stats 对象存在
+            if (!user.stats) user.stats = { history: [] };
+            if (!user.stats.history) user.stats.history = [];
+
+            // 4. 推入历史并限制长度（防止数组无限增长，只留最近30天）
+            user.stats.history.push(newHistoryEntry);
+            if (user.stats.history.length > 30) {
+                user.stats.history.shift(); // 删掉最旧的一天
+            }
+
+            // 5. 计算活跃分 (侧重检测恶意上传)
+            // 逻辑：阅读一章 1分，上传一次 50分 (上传操作权重更高，容易发现刷子)
+            let totalScore = 0;
+            user.stats.history.forEach(h => {
+                totalScore += (h.views || 0) * 1 + (h.uploads || 0) * 50;
+            });
+
+            // 6. 重置今日数据
+            user.stats.today_views = 0;
+            user.stats.today_uploads = 0;
+            user.daily_upload_words = 0; 
+            
+            user.weekly_score = totalScore;
+
+            await user.save();
+        }
+        console.log(`✅ [Cron] 数据归档完成，处理了 ${users.length} 名用户`);
+    } catch (error) {
+        console.error('❌ [Cron] 失败:', error);
+    }
+});
+
+cron.schedule('0 23 * * 4', async () => {
+    try {
+        await Book.updateMany({}, { weekly_views: 0 });
+        console.log('✅ [Cron] 周榜重置成功');
+    } catch (error) {
+        console.error('❌ [Cron] 周榜重置失败:', error.message);
+    }
+});
+
+cron.schedule('0 0 1 * *', async () => {
+    try {
+        await Book.updateMany({}, { monthly_views: 0 });
+        console.log('✅ [Cron] 月榜重置成功');
+    } catch (error) {
+        console.error('❌ [Cron] 月榜重置失败:', error.message);
+    }
+});
+
+// ================= 🔥 [新增] 5分钟自动刷盘定时器 🔥 =================
+
+// 设置为 5 分钟 (300000 毫秒) 执行一次
+setInterval(async () => {
+    // 1. 检查是否有数据需要处理
+    const userIds = Object.keys(userViewBuffer);
+    const bookIds = Object.keys(bookViewBuffer);
+
+    if (userIds.length === 0 && bookIds.length === 0) return; // 没人看书，啥也不做
+
+    console.log(`💾 [Buffer] 开始批量写入数据库... 用户更新:${userIds.length}人, 书籍更新:${bookIds.length}本`);
+
+    // --- 🔒 锁定数据：把当前 buffer 复制出来，并立即清空全局 buffer ---
+    // 这样做是为了防止在写入数据库的这几秒内，新进来的点击被弄丢或者重复计算
+    const currentUsers = { ...userViewBuffer };
+    const currentBooks = { ...bookViewBuffer };
+    
+    userViewBuffer = {}; // 立即清空，准备接收下一波
+    bookViewBuffer = {}; // 立即清空
+
+    try {
+        // --- 2. 批量更新书籍 (Book) ---
+        if (Object.keys(currentBooks).length > 0) {
+            const bookOps = Object.keys(currentBooks).map(bookId => ({
+                updateOne: {
+                    filter: { _id: bookId },
+                    update: { 
+                        $inc: { 
+                            views: currentBooks[bookId],
+                            daily_views: currentBooks[bookId],
+                            weekly_views: currentBooks[bookId],
+                            monthly_views: currentBooks[bookId]
+                        } 
+                    }
+                }
+            }));
+            await Book.bulkWrite(bookOps);
+        }
+
+        // --- 3. 批量更新用户 (User) ---
+        if (Object.keys(currentUsers).length > 0) {
+            const userOps = Object.keys(currentUsers).map(userId => ({
+                updateOne: {
+                    filter: { _id: userId },
+                    update: { 
+                        $inc: { 
+                            'stats.today_views': currentUsers[userId],
+                            'weekly_score': currentUsers[userId] // 同时也更新活跃分
+                        } 
+                    }
+                }
+            }));
+            await User.bulkWrite(userOps);
+        }
+
+        console.log('✅ [Buffer] 批量写入完成！');
+
+    } catch (err) {
+        console.error('❌ [Buffer] 写入失败，数据可能丢失:', err);
+        // 如果你需要非常严格的数据安全，这里可以把 currentUsers 加回 userViewBuffer
+        // 但对于浏览量统计，偶尔丢一次通常可以接受，为了代码简单暂不处理回滚
+    }
+
+}, 5 * 60 * 1000); // 5分钟
+
+
+

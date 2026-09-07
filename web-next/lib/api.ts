@@ -1,3 +1,5 @@
+import { catalogPages } from './request';
+import { safeFetch as fetch } from '@/lib/request';
 const getBaseUrl = () => {
   if (typeof window !== 'undefined') {
     return window.location.origin;
@@ -75,6 +77,10 @@ export interface Profile {
 }
 
 export interface Book {
+  coverImage?:string;
+  updatedAt?:string;
+  createdAt?:string;
+  numReviews?:number;
   id: string;
   title: string;
   author_id?: string | { _id: string; id: string; username: string; email: string } | null;
@@ -82,7 +88,7 @@ export interface Book {
   description: string;
   cover_image?: string;
   category?: string;
-  status?: 'ongoing' | 'completed';
+  status?: 'ongoing' | 'completed' | '连载' | '完结';
   views?: number;
   weekly_views?: number;
   monthly_views?: number;
@@ -106,35 +112,36 @@ export interface Chapter {
 export interface Bookmark {
   id: string;
   user_id: string;
-  bookId: string;
+  bookId: string | (Book & {_id?:string}) | null;
   updated_at?: string;
   created_at?: string;
 }
 
 export interface AuthUser {
+  _id?:string;
   id: string;
   email: string;
   username: string;
   role: 'reader' | 'admin';
-  token?: string;
+
   avatar?: string;
 }
 
 export interface AuthResponse {
   user: AuthUser;
   profile: Profile;
-  token: string;
+
 }
 
 async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const userId = typeof window !== 'undefined' ? localStorage.getItem('novelhub_user') : null;
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     headers: {
       'Content-Type': 'application/json',
       ...(userId ? { 'x-user-id': userId } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      
       ...options?.headers,
     },
     ...options,
@@ -149,8 +156,11 @@ async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
 }
 
 export const booksApi = {
-  getAll: async (options?: { orderBy?: string; order?: 'asc' | 'desc'; limit?: number }): Promise<Book[]> => {
+  getAll: async (options?: { orderBy?: string; order?: 'asc' | 'desc'; limit?: number; page?: number; q?: string; category?: string }): Promise<Book[]> => {
     const params = new URLSearchParams();
+    if (options?.page) params.append('page',String(options.page));
+    if (options?.q) params.append('q',options.q);
+    if (options?.category) params.append('category',options.category);
     if (options?.orderBy) params.append('orderBy', options.orderBy);
     if (options?.order) params.append('order', options.order);
     if (options?.limit) params.append('limit', options.limit.toString());
@@ -175,7 +185,8 @@ export const booksApi = {
   create: async (book: Omit<Book, 'id' | 'created_at'>): Promise<Book> => {
     return apiCall<Book>('/books', {
       method: 'POST',
-      body: JSON.stringify(book),
+      headers: {'Content-Type':'application/json','Idempotency-Key':crypto.randomUUID()},
+      body: JSON.stringify({title:book.title,description:book.description,cover_image:book.cover_image,category:book.category,status:book.status}),
     });
   },
 
@@ -186,14 +197,14 @@ export const booksApi = {
     });
   },
 
-  incrementViews: async (id: string): Promise<Book> => {
-    return apiCall<Book>(`/books/${id}/views`, { method: 'POST' });
+  incrementViews: async (id: string, chapterId: string): Promise<Book> => {
+    return apiCall<Book>(`/books/${id}/views`, { method: 'POST', body: JSON.stringify({chapterId}) });
   },
 };
 
 export const chaptersApi = {
   getByBookId: async (bookId: string): Promise<Chapter[]> => {
-    return apiCall<Chapter[]>(`/books/${bookId}/chapters`);
+    return catalogPages<Chapter>(`${API_BASE_URL}/books/${bookId}/chapters`);
   },
 
   getById: async (chapterId: string): Promise<Chapter | null> => {
@@ -203,7 +214,7 @@ export const chaptersApi = {
   update: async (id: string, chapter: Partial<Chapter>): Promise<Chapter> => {
     return apiCall<Chapter>(`/chapters/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify(chapter),
+      body: JSON.stringify({title:chapter.title,content:chapter.content,chapter_number:chapter.chapter_number}),
     });
   },
 
@@ -250,6 +261,7 @@ export const usersApi = {
 };
 
 export const authApi = {
+  logout: () => apiCall('/auth/logout', { method: 'POST' }),
   signUp: async (email: string, password: string, username: string, role: 'reader', code: string): Promise<AuthResponse> => {
     return apiCall<AuthResponse>('/auth/signup', {
       method: 'POST',
@@ -264,8 +276,11 @@ export const authApi = {
     });
   },
 
-  getSession: async (userId: string): Promise<{ user: AuthUser | null; profile: Profile | null }> => {
-    return apiCall<{ user: AuthUser | null; profile: Profile | null }>(`/auth/session?userId=${userId}`);
+  getSession: async (_userId?: string): Promise<{ user: AuthUser | null; profile: Profile | null }> => {
+    const response=await fetch(API_BASE_URL+'/auth/session',{cache:'no-store'});
+    if(response.status===401 || response.status===403)return {user:null,profile:null};
+    if(!response.ok)throw new Error('账户服务暂不可用');
+    return response.json();
   },
 
   changePassword: async (userId: string, oldPass: string, newPass: string): Promise<{ success: boolean; error?: string }> => {

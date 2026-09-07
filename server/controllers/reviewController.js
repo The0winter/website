@@ -56,8 +56,9 @@ export const createReview = async (req, res) => {
 export const getReviews = async (req, res) => {
   try {
     const bookId = req.params.id;
+    if (!await Book.exists({_id:bookId,deletedAt:null})) return res.status(404).json({error:'作品不可用'});
     const reviews = await Review.find({ book: bookId })
-      .sort({ createdAt: -1 }) // 最新评论在最前
+      .sort({ createdAt: -1, _id:1 }).limit(100) // 最新评论在最前
       .populate('user', 'username avatar'); // 把评论人的名字头像取出来
     
     res.json(reviews);

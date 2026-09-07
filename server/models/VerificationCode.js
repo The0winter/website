@@ -8,6 +8,10 @@ const verificationCodeSchema = new mongoose.Schema({
     unique: true 
   },
   code: { type: String, required: true },
+  purpose: {type:String,default:'signup'},
+  attempts:{type:Number,default:0},
+  consumed:{type:Boolean,default:false},
+  expiresAt:Date,
   
   // ✅ 新增：记录当前这轮发了多少次
   sendCount: { type: Number, default: 1 },

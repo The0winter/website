@@ -158,7 +158,7 @@ export default function QuestionPage() {
       setShowEditor(false);
       const newAnswers = await forumApi.getReplies(qid);
       setAnswers(newAnswers);
-    } catch (error: any) {
+    } catch (caught: unknown) { const error = caught instanceof Error ? caught : new Error('操作失败');
       if (error.message?.includes('401') || error.message?.includes('403')) {
         alert('请先登录后再回答');
         router.push('/login');

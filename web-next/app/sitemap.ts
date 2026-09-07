@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from '@/utils/api';
+import { safeFetch as fetch } from '@/lib/request';
 import { MetadataRoute } from 'next'
 
 // 定义数据格式
@@ -9,7 +11,7 @@ type Book = {
 // 辅助函数
 async function getActiveBooks(): Promise<Book[]> {
   try {
-    const res = await fetch('https://jiutianxiaoshuo.com/api/books/sitemap-pool', {
+    const res = await fetch(`${getApiBaseUrl()}/books/sitemap-pool`, {
       next: { revalidate: 3600 } 
     });
     
@@ -39,7 +41,7 @@ async function getActiveBooks(): Promise<Book[]> {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = 'https://www.jiutianxiaoshuo.com';
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://127.0.0.1:3000';
 
   const books = await getActiveBooks();
 

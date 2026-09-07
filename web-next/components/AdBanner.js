@@ -5,7 +5,7 @@ const AdBanner = ({ atOptions }) => {
   const containerRef = useRef(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || process.env.NEXT_PUBLIC_EXTERNAL_SERVICES !== 'enabled') return;
 
     const { key, format, height, width, params } = atOptions;
 

@@ -1,15 +1,16 @@
+import { safeFetch as fetch } from '@/lib/request';
 import type { Metadata } from 'next';
 import HomePageClient from '@/components/HomePageClient';
 import type { Book } from '@/lib/api';
 import { getApiBaseUrl } from '@/utils/api'; // 引入我们写的智能地址判断工具
 
-const REVALIDATE_SECONDS = 3600;
+const REVALIDATE_SECONDS = 60;
 
 // 专门为图片提供公网前缀，确保用户的浏览器能正确加载图片，避免访问到内网 127.0.0.1
 const PUBLIC_IMAGE_HOST = process.env.NEXT_PUBLIC_API_URL
   ?.trim()
   .replace(/\/api\/?$/, '')
-  .replace(/\/+$/, '') || 'https://jiutianxiaoshuo.com';
+  .replace(/\/+$/, '') || 'http://127.0.0.1:3000';
 
 export const metadata: Metadata = {
   title: '九天小说站 - 热门小说 - 无弹窗 - 免费在线阅读 - 笔趣阁',
@@ -45,13 +46,12 @@ async function fetchBooks(params?: Record<string, string>): Promise<Book[]> {
     const res = await fetch(buildBooksUrl(params), {
       next: { revalidate: REVALIDATE_SECONDS },
     });
-    if (!res.ok) return [];
+    if (!res.ok) throw new Error('首页服务暂不可用');
     const data = (await res.json()) as Book[];
     if (!Array.isArray(data)) return [];
     return data.map(normalizeBookForHome);
   } catch (error) {
-    console.error('Home SSR fetch books failed:', error);
-    return [];
+    throw error;
   }
 }
 

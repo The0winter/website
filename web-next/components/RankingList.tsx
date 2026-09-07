@@ -1,4 +1,7 @@
 'use client';
+import type { Book } from '@/lib/api';
+import type {LucideIcon} from 'lucide-react';
+
 
 import React from 'react';
 import Link from 'next/link';
@@ -8,8 +11,8 @@ import { ChevronRight, ImageOff, BookOpen, Star } from 'lucide-react';
 // 定义 Props 类型，方便你在使用时有代码提示
 interface RankingListProps {
   title: string;
-  icon: any; // 接收传入的 Icon 组件 (如 Trophy, TrendingUp 等)
-  books: any[]; // 这里为了兼容暂时用 any，你可以换成你的 Book 类型
+  icon: LucideIcon; // 接收传入的 Icon 组件 (如 Trophy, TrendingUp 等)
+  books: Book[]; // 这里为了兼容暂时用 any，你可以换成你的 Book 类型
   rankColor: string; // 例如 'text-yellow-500'
   showRating?: boolean;
   className?: string; // 允许从外部传入额外的样式
@@ -55,7 +58,7 @@ const RankingList = ({
             {books.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-60 text-gray-400 text-sm">暂无数据</div>
             ) : (
-                books.map((book: any, index: number) => (
+                books.map((book: Book, index: number) => (
                     <Link 
                         key={book.id} 
                         href={`/book/${book.id}`}
@@ -167,7 +170,7 @@ const RankingList = ({
                                             </h5>
                                             <div className="flex items-center gap-2 text-xs text-gray-400">
                                                 <span>{book.category}</span>
-                                                <span className="text-red-400">{(book.views/10000).toFixed(1)}w</span>
+                                                <span className="text-red-400">{((book.views || 0)/10000).toFixed(1)}w</span>
                                             </div>
                                         </div>
                                     </div>
@@ -179,7 +182,7 @@ const RankingList = ({
 
                 {/* === NO.4 - NO.10 === */}
                 <div className="px-2 pt-2 flex flex-col gap-1">
-                    {others.map((book: any, i: number) => {
+                    {others.map((book: Book, i: number) => {
                         const rank = i + 4;
                         return (
                         <Link 

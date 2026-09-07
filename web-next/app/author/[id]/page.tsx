@@ -20,7 +20,7 @@ export default function AuthorProfile() {
         const book = books[0];
         // 检查：书存在 && author_id 存在 && author_id 是个对象（说明 populate 成功）
         if (book && book.author_id && typeof book.author_id === 'object') {
-            return (book.author_id as any).username;
+            return (book.author_id as {username?:string;_id?:string;id?:string}).username;
         }
         // 兜底：如果书里存了 author 字符串（如 "Ao"），就用它
         if (book && book.author) {
@@ -59,7 +59,7 @@ useEffect(() => {
                 if (!b.author_id) return false;
                 
                     // ✅ 修复点：优先比对 id (字符串)，如果不行再比对 _id
-                    const authorObj = b.author_id as any;
+                    const authorObj = b.author_id as {username?:string;_id?:string;id?:string};
                     
                     // 如果是对象（Populate 成功），我们优先取它的 .id (也就是 session 里的那个 id)
                     // 如果 .id 不存在，再取 ._id

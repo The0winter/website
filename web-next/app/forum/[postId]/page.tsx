@@ -1,4 +1,5 @@
 'use client';
+import { useAuth } from '@/contexts/AuthContext';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -61,6 +62,7 @@ function formatCount(value: number) {
 }
 
 function PostContent() {
+  const { user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams();
@@ -186,12 +188,12 @@ function PostContent() {
 
         const initialLiked: Record<string, boolean> = {};
         if (finalQuestion?.id) initialLiked[finalQuestion.id] = Boolean(finalQuestion.hasLiked);
-        if (finalAnswer?.id) initialLiked[finalAnswer.id] = Boolean((finalAnswer as any).hasLiked);
+        if (finalAnswer?.id) initialLiked[finalAnswer.id] = Boolean(finalAnswer.hasLiked);
         allReplies.forEach((r) => {
-          initialLiked[r.id] = Boolean((r as any).hasLiked);
+          initialLiked[r.id] = Boolean(r.hasLiked);
         });
         setLikedState((prev) => ({ ...prev, ...initialLiked }));
-      } catch (error: any) {
+      } catch (caught: unknown) { const error = caught instanceof Error ? caught : new Error('操作失败');
         setErrorMsg(error?.message || '加载失败');
       } finally {
         setLoading(false);
@@ -202,8 +204,8 @@ function PostContent() {
   }, [postId, fromQuestionId]);
 
   const requireLogin = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    if (!token) {
+    const loggedIn = !!user;
+    if (!loggedIn) {
       alert('请先登录');
       router.push('/login');
       return false;
@@ -223,7 +225,7 @@ function PostContent() {
       setAnswer((prev) => (prev && prev.id === targetId ? { ...prev, votes: result.votes } : prev));
       setOtherAnswers((prev) => prev.map((item) => (item.id === targetId ? { ...item, votes: result.votes } : item)));
       setQuestion((prev) => (prev && prev.id === targetId ? { ...prev, votes: result.votes } : prev));
-    } catch (error: any) {
+    } catch (caught: unknown) { const error = caught instanceof Error ? caught : new Error('操作失败');
       if (error?.message?.includes('401') || error?.message?.includes('403')) {
         alert('登录状态已过期，请重新登录');
         router.push('/login');
@@ -240,7 +242,7 @@ function PostContent() {
     try {
       const data = await forumApi.getReplyComments(replyId);
       setReplyComments(data);
-    } catch (error: any) {
+    } catch (caught: unknown) { const error = caught instanceof Error ? caught : new Error('操作失败');
       alert(error?.message || '加载评论失败');
     } finally {
       setCommentsLoading(false);
@@ -289,7 +291,7 @@ function PostContent() {
         prev.map((item) => (item.id === activeCommentTarget.id ? { ...item, comments: (item.comments || 0) + 1 } : item))
       );
       setActiveCommentTarget((prev) => (prev ? { ...prev, comments: (prev.comments || 0) + 1 } : prev));
-    } catch (error: any) {
+    } catch (caught: unknown) { const error = caught instanceof Error ? caught : new Error('操作失败');
       if (error?.message?.includes('401') || error?.message?.includes('403')) {
         alert('登录状态已过期，请重新登录');
         router.push('/login');
@@ -311,7 +313,7 @@ function PostContent() {
       setReplyComments((prev) =>
         prev.map((item) => (item.id === commentId ? { ...item, votes: result.votes, hasLiked: result.liked } : item))
       );
-    } catch (error: any) {
+    } catch (caught: unknown) { const error = caught instanceof Error ? caught : new Error('操作失败');
       if (error?.message?.includes('401') || error?.message?.includes('403')) {
         alert('登录状态已过期，请重新登录');
         router.push('/login');
@@ -690,6 +692,7 @@ function PostContent() {
 }
 
 export default function PostDetailPage() {
+
   return (
     <Suspense fallback={<div>加载中...</div>}>
       <PostContent />

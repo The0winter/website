@@ -16,6 +16,7 @@ export default function ProfilePage() {
   const { user, profile, loading, logout, setUser } = useAuth();
 
   // ================= State 定义 =================
+  const [leaving,setLeaving]=useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -58,7 +59,7 @@ export default function ProfilePage() {
         localStorage.setItem('user', JSON.stringify(newUser));
         setToast({ msg: '头像更新成功！', type: 'success' });
 
-    } catch (err: any) {
+    } catch (caught: unknown) { const err = caught instanceof Error ? caught : new Error('操作失败');
         setToast({ msg: err.message || '头像上传失败', type: 'error' });
     } finally {
         setAvatarUploading(false);
@@ -67,6 +68,7 @@ export default function ProfilePage() {
 
   const handleLogout = async () => {
     if (confirm('确定要退出登录吗？')) {
+        setLeaving(true);
         await logout();
         router.push('/'); 
     }
@@ -80,8 +82,8 @@ export default function ProfilePage() {
         setToast({ msg: '请填写所有字段', type: 'error' });
         return;
     }
-    if (newPassword.length < 6) {
-        setToast({ msg: '新密码至少需要6位', type: 'error' });
+    if (newPassword.length < 8 || new TextEncoder().encode(newPassword).length > 72) {
+        setToast({ msg: '新密码至少8位且最多72字节', type: 'error' });
         return;
     }
     if (newPassword !== confirmPassword) {
@@ -97,6 +99,8 @@ export default function ProfilePage() {
     try {
         const res = await authApi.changePassword(user.id, oldPassword, newPassword);
         if (res.success) {
+            setUser(null);
+            router.push('/login');
             setToast({ msg: '密码修改成功！', type: 'success' });
             setShowPasswordModal(false);
             setOldPassword('');
@@ -115,10 +119,10 @@ export default function ProfilePage() {
   // ================= Effect =================
   useEffect(() => {
     if (loading) return; 
-    if (!user) {
+    if (!user && !leaving) {
       router.push('/login'); 
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, leaving]);
 
   useEffect(() => {
     if (toast) {
