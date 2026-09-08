@@ -10,9 +10,14 @@ import {asyncRoute} from '../security.js';
 import {createChapter,lockBook,chargeQuota,validateChapter,fail,jsonDoc,contentHash} from '../services/content.js';
 
 const fields=(body,allowed)=>{if(Object.keys(body).some(k=>!allowed.includes(k)))fail(400,'包含不可修改字段');};
+function bookFields(body){
+  fields(body,['title','description','cover_image','category','status']);
+  for(const [key,max] of [['title',200],['description',5000],['cover_image',2000],['category',80],['status',20]])if(body[key]!==undefined&&(typeof body[key]!=='string'||body[key].length>max))fail(400,'作品字段类型或长度无效');
+  if(body.title!==undefined&&!body.title.trim())fail(400,'标题不能为空');
+}
 export function contentRoutes(app,auth) {
   app.post('/api/books',auth.authenticate,asyncRoute(async(req,res)=>{
-    fields(req.body,['title','description','cover_image','category','status']);
+    bookFields(req.body);
     if(typeof req.body.title!=='string' || !req.body.title.trim() || req.body.title.length>200)fail(400,'标题无效');
     const key=req.headers['idempotency-key'];
     if(typeof key!=='string'||!/^[a-zA-Z0-9_-]{16,128}$/.test(key))fail(400,'创建作品需要幂等键');
@@ -33,7 +38,7 @@ export function contentRoutes(app,auth) {
     res.status(201).json(jsonDoc(book));
   }));
   app.patch('/api/books/:id',auth.authenticate,asyncRoute(async(req,res)=>{
-    fields(req.body,['title','description','cover_image','category','status']);
+    bookFields(req.body);
     let result;
     await mongoose.connection.transaction(async session=>{
       const book=await lockBook(req.params.id,req.user,session);
@@ -76,6 +81,14 @@ export function contentRoutes(app,auth) {
       // Retain the original bytes and ID for a later explicit recovery operation.
       chapter.deletedAt=new Date();await chapter.save({session});
     });res.json({success:true});
+  }));
+  app.post('/api/chapters/:id/restore',auth.authenticate,asyncRoute(async(req,res)=>{
+    let chapter;
+    await mongoose.connection.transaction(async session=>{
+      chapter=await Chapter.findById(req.params.id).session(session);if(!chapter)fail(404,'章节不存在');
+      await lockBook(chapter.bookId,req.user,session);
+      chapter.deletedAt=null;await chapter.save({session});
+    });res.json(jsonDoc(chapter));
   }));
   const own=(req,res,next)=>req.params.userId===req.user.id?next():res.status(403).json({error:'只能访问本人书架'});
   app.get('/api/users/:userId/bookmarks',auth.authenticate,own,asyncRoute(async(req,res)=>{

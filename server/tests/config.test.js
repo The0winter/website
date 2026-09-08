@@ -11,6 +11,15 @@ test('local config rejects old targets and implicit configuration', () => {
   assert.throws(() => readConfig({ ...valid, EXTERNAL_SERVICES: 'enabled' }));
   assert.equal(readConfig(valid).host, '127.0.0.1');
 });
+test('production starts read-only and requires explicit HTTPS origins, secrets and bounded proxy trust',()=>{
+  const production={...valid,APP_ENV:'production',ALLOWED_ORIGINS:'https://candidate.example.test'};
+  assert.equal(readConfig(production).writeMode,'readonly');
+  assert.equal(readConfig({...production,WRITE_MODE:'readwrite',TRUST_PROXY:'loopback'}).trustProxy,'loopback');
+  assert.throws(()=>readConfig({...production,ALLOWED_ORIGINS:'http://candidate.example.test'}));
+  assert.throws(()=>readConfig({...production,JWT_SECRET:'replace-with-a-random-secret-of-at-least-32-characters'}));
+  assert.throws(()=>readConfig({...production,TRUST_PROXY:'true'}));
+  assert.throws(()=>readConfig({...production,WRITE_MODE:'anything'}));
+});
 test('importing app does not connect or schedule work', async () => {
   const { createApp } = await import('../app.js');
   const mongoose = (await import('mongoose')).default;

@@ -1,0 +1,512 @@
+{
+  "destination": "F:\\Website\\Test1\\.runtime\\clean-room-1788855223424",
+  "node": "v22.23.2",
+  "apiUnavailableDuringBuild": true,
+  "manifest": [
+    {
+      "path": "server\\app.js",
+      "sha256": "ffc2179f464a9e96d778f9fa89fd11debcf7e37b2ebe66c80c9d018451404423"
+    },
+    {
+      "path": "server\\baidu_push.js",
+      "sha256": "97bc3ddf29390f2b4a242e79819c505e6cec0861cd3bf6b0ed85be2203987ef0"
+    },
+    {
+      "path": "server\\config.js",
+      "sha256": "83a4c7c5f8f94a57e3f4631ea66fd95cfd3d3fbcf6d3cad3bcdcfbdd3e83fdc9"
+    },
+    {
+      "path": "server\\controllers\\reviewController.js",
+      "sha256": "ed2620359a3584f566f34d99b9ed3f046dfffd5bb3c994def46f5847dfde6e1e"
+    },
+    {
+      "path": "server\\dev.js",
+      "sha256": "ee2db36bd0193eacdca6b9d89a5bc9df76441176f40793672856898422ad0812"
+    },
+    {
+      "path": "server\\index.js",
+      "sha256": "c9b69f857986ce41c24c9ddbbfba2f4c27e014d2b3f42269856aee8913a4a70e"
+    },
+    {
+      "path": "server\\jobs\\index.js",
+      "sha256": "edc6935ba6d31cbd4e9399c46236df55b3f26d7de29556e21ab8ab16dfa46553"
+    },
+    {
+      "path": "server\\jobs\\legacy-disabled.js.txt",
+      "sha256": "9d0073025c9878bc7f762e7d613c4cc942c55075332900f2969760bca19deb55"
+    },
+    {
+      "path": "server\\jobs\\statistics.js",
+      "sha256": "6ac031ef2adcf635a8fb8244964e0ffe46c8fb32a83cee7970f8af0a7ffda914"
+    },
+    {
+      "path": "server\\migrate_passwords.js",
+      "sha256": "2d5b30ea4d41594a8d9661a88fa0e580a7fdb6d3352af7b45737cd3cbad0dc00"
+    },
+    {
+      "path": "server\\migrations\\inspect.js",
+      "sha256": "3a6448c490f1c5d43eb98271c775c5708c51c039b3adf25faf833eb5dd388ce7"
+    },
+    {
+      "path": "server\\models\\AdminLog.js",
+      "sha256": "d5e5e466741b819da7931ecdb9ae71bb4ace5269fff9fadc23345252a4be4177"
+    },
+    {
+      "path": "server\\models\\Book.js",
+      "sha256": "9c479263e4164f6765efa2495d82772ba8f638135093db11b96f5a46b0653db1"
+    },
+    {
+      "path": "server\\models\\Bookmark.js",
+      "sha256": "05794bbb7d9ca59d9b06aa08294ad2811eea6591d649bb52483d6b127cd58426"
+    },
+    {
+      "path": "server\\models\\Chapter.js",
+      "sha256": "0b4efac7957f3d45740a04e4cdeebad5ac431a2e2b7345f481ead664cf50213b"
+    },
+    {
+      "path": "server\\models\\ForumPost.js",
+      "sha256": "aafc0de0e914e19c35f035102f43c1a8204c02d7fbec31f004fc982cec8c8729"
+    },
+    {
+      "path": "server\\models\\ForumReply.js",
+      "sha256": "c95ce4186814a47fba288389a17b425983c6972fcd3966ec98cda0be147f2a39"
+    },
+    {
+      "path": "server\\models\\ForumReplyComment.js",
+      "sha256": "8d64016596eaca1ed7bb136d7b882645e908714b5429923ad1d253ad8be7ef09"
+    },
+    {
+      "path": "server\\models\\Job.js",
+      "sha256": "3468c723986cc6f18c99f7d280ea1af107d71cdefd2254488c4a58b7c11884f5"
+    },
+    {
+      "path": "server\\models\\Media.js",
+      "sha256": "0f8d83a09d902ee8faae7aec4746a28dd1bb31e2a89e406b158c80fc437113f9"
+    },
+    {
+      "path": "server\\models\\Operation.js",
+      "sha256": "e3af4c2784a3c48686c1fc18529743a4da3a22258375d9d57b7872ea58a922e8"
+    },
+    {
+      "path": "server\\models\\Review.js",
+      "sha256": "040a0e4a0d32ea295ef1d4c301ea090070bc9ded8ef4d8e2ada5c263c5a91d00"
+    },
+    {
+      "path": "server\\models\\Session.js",
+      "sha256": "7e7c8e4b126742a2b4170a9de826e35941cbd0b0f0372a1fc9efd507fb075160"
+    },
+    {
+      "path": "server\\models\\User.js",
+      "sha256": "f68d25de9aa8a2f9b49ed33759eede721da542bc18512a5de6b0c239a5e2e0a3"
+    },
+    {
+      "path": "server\\models\\VerificationCode.js",
+      "sha256": "17b9c221469edc0fca2b088337270bccb092714ed5883c23d8ac1b94f6058707"
+    },
+    {
+      "path": "server\\package-lock.json",
+      "sha256": "94bc0b4528f520c5a12afaffa247894e483e39a677cb16bb575e757284b5a6a8"
+    },
+    {
+      "path": "server\\package.json",
+      "sha256": "72a15da9937bbbd4a9fbfa0a765081fcd473ed7ccaf9e1414969eeaea94ffe4c"
+    },
+    {
+      "path": "server\\pushed_history.json",
+      "sha256": "3fe8ee2b07958a0ee2f73bf6bcafd8639f0df024ef4a17c4982ac865b20e9723"
+    },
+    {
+      "path": "server\\routes\\auth.js",
+      "sha256": "698cf4d67ab033c13e7973e2121ea28f00ca1be84efce72566dc0165f3468d9e"
+    },
+    {
+      "path": "server\\routes\\content.js",
+      "sha256": "d2ac0ec951e971ea685391e932389e8468e47dfe66ccd51d3777fc171a585175"
+    },
+    {
+      "path": "server\\routes\\forum-writes.js",
+      "sha256": "eca7560a69b2336577fe7466004796626048b3dc743e4ae147eae3214f532a44"
+    },
+    {
+      "path": "server\\routes\\import.js",
+      "sha256": "cbb279fe0338a788286c9a4c3d24e92276b2a22e0634d88885cab82878c2c571"
+    },
+    {
+      "path": "server\\routes\\media.js",
+      "sha256": "e8070eab55b504abc0eb0e391ca8b15dce66a6f7fbae3c75dd4bdf3b36ffc94b"
+    },
+    {
+      "path": "server\\routes\\reading.js",
+      "sha256": "36485f864253c646efeebbcce4ce009303562b8f544b3396ec535771474cebfc"
+    },
+    {
+      "path": "server\\security.js",
+      "sha256": "e50e2a29159a0fb571fef56cd89f2a5027aab22e9404c6c4fec46b493f3386ed"
+    },
+    {
+      "path": "server\\services\\content.js",
+      "sha256": "335d9188068cf756ee0b7fae73b7169754310de81649dc687160837e0255a285"
+    },
+    {
+      "path": "server\\staging.js",
+      "sha256": "362421771af8862823756740bf4f52fd127043beeb1e6834b28f0168b454ba96"
+    },
+    {
+      "path": "server\\test-seo.js",
+      "sha256": "ce9c7d5e8a38c4a00f31d88ac6a89b1f5fe8ed3ab91a000bce408aae50d92f71"
+    },
+    {
+      "path": "server\\tests\\config.test.js",
+      "sha256": "72db2a9e5c4c90fa5865277dbbc459eedf884ba5c31240c349a12182696176c9"
+    },
+    {
+      "path": "server\\tests\\mail.test.js",
+      "sha256": "88a5dbf348ff33bf0c675e1d6d6c07b3b0e6cd2623bc93e4873b19b1b92a8576"
+    },
+    {
+      "path": "server\\tests\\restore.mjs",
+      "sha256": "89f7eebb54bf352680334f8c8c0673090451b6b7c053d94f48398300a9effb93"
+    },
+    {
+      "path": "server\\tests\\security.test.js",
+      "sha256": "36dc2703680eedbdf744bdec0904d853924a2e1a67ed410be2b5b1e084b3af83"
+    },
+    {
+      "path": "server\\utils\\indexNow.js",
+      "sha256": "b4d58e2ecb3cfa9a059c4101b06a6e9d79b69a3626c72f319cac9ffe6ccd4b44"
+    },
+    {
+      "path": "server\\utils\\sendEmail.js",
+      "sha256": "2a5701f3b79126b12813279e8117ac1e50c7df56498cdef580f8a528a268b7ff"
+    },
+    {
+      "path": "web-next\\.gitignore",
+      "sha256": "207e265ff4901f9ad9f96d8ce08530e04f9fc600815472a66d0a446096d654cd"
+    },
+    {
+      "path": "web-next\\AGENTS.md",
+      "sha256": "63f2c50380ed6303237cce215ce27af1d620d094c215e28d1b1538a3c070e3bb"
+    },
+    {
+      "path": "web-next\\app\\author\\[id]\\page.tsx",
+      "sha256": "43b4bbc87892892ac2dcdffb1b42b4258145b01e8841af1fa4564c212dc93b4b"
+    },
+    {
+      "path": "web-next\\app\\authorsList\\page.tsx",
+      "sha256": "7fc570e67fb0ced4c14a9938bb517674f588077480ef94bc09c5ba542d841e50"
+    },
+    {
+      "path": "web-next\\app\\book\\[id]\\page.tsx",
+      "sha256": "07c35169cf5fe1bc74df3a3dc46776815cdfbb4de5b49b3d1ad32c67b32cf963"
+    },
+    {
+      "path": "web-next\\app\\book\\[id]\\[chapterId]\\page.tsx",
+      "sha256": "2b29387edf500a198877b72d4241edc251e461d428a4141b4ca096f500f20ab3"
+    },
+    {
+      "path": "web-next\\app\\error.tsx",
+      "sha256": "698595613399d4d9ef008953569c36384c63924c0888d5d99684e80830345d48"
+    },
+    {
+      "path": "web-next\\app\\forum\\create\\page.tsx",
+      "sha256": "9f0f403fe9fae09fa42c4db1affce3f6bb35e48f5555c777978d187a62cc305b"
+    },
+    {
+      "path": "web-next\\app\\forum\\page.tsx",
+      "sha256": "7f2c186b80a38b0639a8b9c761f0fc44f5cdb78ac3c10648c94645f46165bf67"
+    },
+    {
+      "path": "web-next\\app\\forum\\question\\[qid]\\page.tsx",
+      "sha256": "ba233c1dc2a58992f5bed2b49cedfaade58c334a2e3961e06a0b4ab9b2ccc64f"
+    },
+    {
+      "path": "web-next\\app\\forum\\[postId]\\page.tsx",
+      "sha256": "71b68651ce6a41fe0e324326870ad8c6fa02bebdfb8fcf754c8705ba5496a8b9"
+    },
+    {
+      "path": "web-next\\app\\globals.css",
+      "sha256": "769edf77bd0d101a2d26e6c5656defba8cd885ff37d92279fa293a2756fe5651"
+    },
+    {
+      "path": "web-next\\app\\icon.png",
+      "sha256": "86a165180596bffe7e1a785399a84362e02c089d74da8758f7de08dbfc9ab8f0"
+    },
+    {
+      "path": "web-next\\app\\layout.tsx",
+      "sha256": "68b6a72132e7a93a18b7f0a1e06a919cc358d4b6fb5d5044f62922bab1ed2e81"
+    },
+    {
+      "path": "web-next\\app\\library\\page.tsx",
+      "sha256": "07f5191e1934fe6b93d019b19e54b58aa6542ddc7ec56f3c51e1cf07f95d92c6"
+    },
+    {
+      "path": "web-next\\app\\login\\page.tsx",
+      "sha256": "8712f32c51907d0797c4a310b61536b7b23f74eae11f1cfbe5a99b8008647478"
+    },
+    {
+      "path": "web-next\\app\\page.tsx",
+      "sha256": "0db575d9ababeec423d377e2b51a9368b848b746abe0ed26a25e4cd00641d18a"
+    },
+    {
+      "path": "web-next\\app\\profile\\page.tsx",
+      "sha256": "284f87260d553a4edbf368e806d4daad2a3f1b073ac4d254ea04cc52ed3987be"
+    },
+    {
+      "path": "web-next\\app\\ranking\\page.tsx",
+      "sha256": "35e4a401502c1cb7fac1847d628c38ab773db7ac5b755ffe06600e73b18d73c9"
+    },
+    {
+      "path": "web-next\\app\\register\\page.tsx",
+      "sha256": "34e2b0b1d7c53d5feb18d65e2e0872b8281231a75df9896b8acc59c2d6a05551"
+    },
+    {
+      "path": "web-next\\app\\robots.ts",
+      "sha256": "ea8f362c6dede56a1f071ee324fcc7f92f35a0f73ff99b7167253fbe50e7941a"
+    },
+    {
+      "path": "web-next\\app\\search\\page.tsx",
+      "sha256": "51d30ec19edf78bee319b7d440d84b4722d0c3017af1c95300cced98e3923c87"
+    },
+    {
+      "path": "web-next\\app\\sitemap.xml\\route.ts",
+      "sha256": "16d437a1487d16303c744009ef25f7eb9497cc0e2a26598dbbb615cfd7ceea6c"
+    },
+    {
+      "path": "web-next\\app\\sitemaps\\static.xml\\route.ts",
+      "sha256": "3b257e1ccbd6ddc4ce15bcccce79e408889c33a9de54005f4166b7c433b6e404"
+    },
+    {
+      "path": "web-next\\app\\sitemaps\\[bookId]\\[page]\\route.ts",
+      "sha256": "50fbbe1bb2a4d3b8a6b6573a6b1e9d0e62446eca46fb850a7c2f89f30c84f954"
+    },
+    {
+      "path": "web-next\\app\\writer\\page.tsx",
+      "sha256": "165ba7af29ef8e4ce2f7e1309f3bcf830761350d4a168305d5e7d80c2d33b5a5"
+    },
+    {
+      "path": "web-next\\CLAUDE.md",
+      "sha256": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49"
+    },
+    {
+      "path": "web-next\\components\\AdBanner.js",
+      "sha256": "a82a201af6a0dc3f5e4b336dbd9cdb02b0033121cbc17aee2ecd002fdce3532d"
+    },
+    {
+      "path": "web-next\\components\\BookDetailClient.tsx",
+      "sha256": "765354e4b42d4df1120e018db4597077d0522a133b27fe541f0f95bb3e573a03"
+    },
+    {
+      "path": "web-next\\components\\Footer.tsx",
+      "sha256": "98c5d7694e6747d4d91204182a3715351698a9642d6cb362abe64c9fd95a562d"
+    },
+    {
+      "path": "web-next\\components\\HomePageClient.tsx",
+      "sha256": "934de4b8a4d1d85877b6b65c3bbd0eff4b9efb7e02e6674f0705d9f0041ca0f3"
+    },
+    {
+      "path": "web-next\\components\\Navbar.tsx",
+      "sha256": "226c79afc0c2ad0f3f71a2379c2ca0333968dd6c9109ee5c80b2df5cf145fa62"
+    },
+    {
+      "path": "web-next\\components\\RankingList.tsx",
+      "sha256": "1d51b1f455d698b338a5f12fa828dcb97be9fed8d01de2421408dcbbe1df7522"
+    },
+    {
+      "path": "web-next\\components\\ReaderClient.tsx",
+      "sha256": "641a6a6e56c7b892e7fd928624497cb7b2997b4b5788f600eb45120958f7945f"
+    },
+    {
+      "path": "web-next\\components\\send-code\\route.ts",
+      "sha256": "2d911965d95915d400c442f5232b3f208e5bc48ec5a19fa042838d4d8e816030"
+    },
+    {
+      "path": "web-next\\contexts\\AuthContext.tsx",
+      "sha256": "e1cc835a83c52f1a020a9dfd920568751a34a412d7220be1cfeba1bcc29f952f"
+    },
+    {
+      "path": "web-next\\contexts\\ReadingSettingsContext.tsx",
+      "sha256": "b13fed82bec486295fca3dee99a03d2e96b3949a359dfd603a21513fd4fa47f4"
+    },
+    {
+      "path": "web-next\\eslint.config.mjs",
+      "sha256": "e367c2fb1fa9dfcfe5561e8e6f2d32e6f864227ef44814ac1e42c38a9fa3a931"
+    },
+    {
+      "path": "web-next\\lib\\api.ts",
+      "sha256": "9095cad23cb48eb16978444af27bc69febbecc7f5877195174c9d88b92a51de7"
+    },
+    {
+      "path": "web-next\\lib\\canvasUtils.ts",
+      "sha256": "123249291b23f17621caf46c665b94439408807e08cb90f858cf5436fb2ec1e0"
+    },
+    {
+      "path": "web-next\\lib\\request.ts",
+      "sha256": "54e151b3660d2b054fd12fe188b81903d751a8f6a7d6bec577df8102e5dfff7d"
+    },
+    {
+      "path": "web-next\\lib\\sitemap.ts",
+      "sha256": "66fc7ce5fb16c75c9e7a422239a35658f61f938183d37e7e495f08d5746b70b6"
+    },
+    {
+      "path": "web-next\\lib\\upload.js",
+      "sha256": "85bac699c8396464e2d56682f926ee9759d4992ad71cbfae814dba6974586d60"
+    },
+    {
+      "path": "web-next\\lib\\useStoredState.ts",
+      "sha256": "a09d63f6716c447cc0c820f1c331c3002ceec04202e885383c37bd5d5667dffa"
+    },
+    {
+      "path": "web-next\\next-env.d.ts",
+      "sha256": "6adf5e41ef699990fbc2612c89053c73d991bc302177897416256b3736c4b11a"
+    },
+    {
+      "path": "web-next\\next.config.ts",
+      "sha256": "3f5ac85589a6d2c9203a5973da19fda2ccfb18d1c9f617b93f947450ddb9fc6d"
+    },
+    {
+      "path": "web-next\\package-lock.json",
+      "sha256": "2ff7d48cde0000e3a8d84d135fc9b639fad35e90526cea11de20810bde321409"
+    },
+    {
+      "path": "web-next\\package.json",
+      "sha256": "2a975f6389d4e8575f430a4022a19ded6af03ef65037bd2d6ea08ec678135354"
+    },
+    {
+      "path": "web-next\\playwright.config.ts",
+      "sha256": "e4e05b9d25cf735384b5b054d8a6c545c3dc73c7b2b43af1363a5464385b1bc8"
+    },
+    {
+      "path": "web-next\\postcss.config.mjs",
+      "sha256": "dfac7ac2d86d326a0e5adb024e7943c181393ed17a5fcb8f0315b24c7da6ddde"
+    },
+    {
+      "path": "web-next\\public\\8493abc32948jiutianxiaoshuo.txt",
+      "sha256": "0510cb133fe859345cfbe4e83323567f8cca9b0cccc48e2dc35d662fa9ed5be8"
+    },
+    {
+      "path": "web-next\\public\\baidu_verify_codeva-DI006xUZPB.html",
+      "sha256": "8a2d40418335ae1f9006dd1b0052a26df5060bacce70c3932ce633a470de09b3"
+    },
+    {
+      "path": "web-next\\public\\BingSiteAuth.xml",
+      "sha256": "65d310579dd158282b4cc7971a47269ac3b74a047488835f4f6232af701e4889"
+    },
+    {
+      "path": "web-next\\public\\file.svg",
+      "sha256": "2b67812c325c199a02536cdbeea0c593a72f707d323b72ee3e08dbab06753bd4"
+    },
+    {
+      "path": "web-next\\public\\globe.svg",
+      "sha256": "b614b9bf183925957661ac851498fe1d8029fd43a62fbfed86f9e2624a57e7cf"
+    },
+    {
+      "path": "web-next\\public\\googleb1e4eb254254eb3a.html",
+      "sha256": "8549123186db51126a3d884a0148a466e1b01d40ba1c53a22c63dff9f39ec804"
+    },
+    {
+      "path": "web-next\\public\\logo.png",
+      "sha256": "29ca70770d1322852ec6b3ad601085ff0024404d5ce8eede46fca04618c23749"
+    },
+    {
+      "path": "web-next\\public\\next.svg",
+      "sha256": "55995dfad6ecb4945a1e856ddca03c5e16aa5bf13fd21b4df6a74ae79357bcfc"
+    },
+    {
+      "path": "web-next\\public\\vercel.svg",
+      "sha256": "f081337b2fee635b455b63275406a3e7f39d6a014e25ad90dab5a67e62a12ac4"
+    },
+    {
+      "path": "web-next\\public\\window.svg",
+      "sha256": "644768c4aaeb4767bce293344eeb0c125fb804a94d801440424072202d85e3a1"
+    },
+    {
+      "path": "web-next\\README.md",
+      "sha256": "60b55ff7df79af72590f9524208e46642bc32bdc175cdad41349681c0e2f958f"
+    },
+    {
+      "path": "web-next\\tests\\account.spec.ts",
+      "sha256": "8ab2070e3018b26c67ac0ab6d4b34ede68c4c19ead24e19b600885cc0a30626a"
+    },
+    {
+      "path": "web-next\\tests\\baseline.spec.ts",
+      "sha256": "e572bd00c447be0232028c8e0349865d0ebb72154e0ea23767cefc88901b744a"
+    },
+    {
+      "path": "web-next\\tests\\pagination.spec.ts",
+      "sha256": "fe3ebe406e9437571898c43c767e288e9b6ad90bd89aba8f8cb66c44c2b25d29"
+    },
+    {
+      "path": "web-next\\tsconfig.json",
+      "sha256": "369727fe7d8b52919007b776ba2210d216f9304509f19296f28d5397cd551c17"
+    },
+    {
+      "path": "web-next\\utils\\api.js",
+      "sha256": "c963ac0faf8e12dd93104e456cff935668e1ceb2854f070e08264cfe804b8595"
+    }
+  ],
+  "steps": [
+    {
+      "name": "server-install",
+      "args": [
+        "--prefix",
+        "server",
+        "ci"
+      ],
+      "code": 0,
+      "ms": 2167
+    },
+    {
+      "name": "web-next-install",
+      "args": [
+        "--prefix",
+        "web-next",
+        "ci"
+      ],
+      "code": 0,
+      "ms": 21705
+    },
+    {
+      "name": "server-test",
+      "args": [
+        "--prefix",
+        "server",
+        "test"
+      ],
+      "code": 0,
+      "ms": 6932
+    },
+    {
+      "name": "typecheck",
+      "args": [
+        "--prefix",
+        "web-next",
+        "run",
+        "typecheck"
+      ],
+      "code": 0,
+      "ms": 3488
+    },
+    {
+      "name": "lint",
+      "args": [
+        "--prefix",
+        "web-next",
+        "run",
+        "lint"
+      ],
+      "code": 0,
+      "ms": 9640
+    },
+    {
+      "name": "build",
+      "args": [
+        "--prefix",
+        "web-next",
+        "run",
+        "build"
+      ],
+      "code": 0,
+      "ms": 8752
+    }
+  ]
+}

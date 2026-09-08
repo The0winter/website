@@ -2,7 +2,8 @@
 import type {LucideIcon} from 'lucide-react';
 
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { safeFetch } from '@/lib/request';
 import Link from 'next/link';
 // 引入图标
 import { 
@@ -17,6 +18,7 @@ type HomePageClientProps = {
   initialFeaturedBooks?: Book[];
   initialWeekRankBooks?: Book[];
   initialDayRankBooks?: Book[];
+  initialRecommendedBooks?: Book[];
 };
 
 // --- 0. 分类配置 (保持不变) ---
@@ -222,6 +224,7 @@ export default function HomePageClient({
   initialFeaturedBooks = [],
   initialWeekRankBooks = [],
   initialDayRankBooks = [],
+  initialRecommendedBooks = [],
 }: HomePageClientProps) {
   const allBooks = initialBooks;
   const featuredBooks = useMemo(() => {
@@ -231,7 +234,27 @@ export default function HomePageClient({
       .slice(0, 3);
   }, [initialBooks, initialFeaturedBooks]);
   const [selectedCategory, setSelectedCategory] = useState('all'); 
-  const loading = false;
+  const [loading, setLoading] = useState(false);
+  const [categoryBooks, setCategoryBooks] = useState(initialBooks);
+  const [categoryPage, setCategoryPage] = useState(1);
+  const [categoryTotal, setCategoryTotal] = useState<number | null>(null);
+  const [categoryError, setCategoryError] = useState('');
+  const categoryRequest = useRef(0);
+  async function loadCategory(slug: string, page = 1) {
+    const sequence = ++categoryRequest.current;
+    setLoading(true); setCategoryError('');
+    try {
+      const query = new URLSearchParams({limit:'20',page:String(page),orderBy:'views'});
+      if (slug !== 'all') query.set('category',categories.find(c=>c.slug===slug)!.name);
+      const response = await safeFetch(`/api/books?${query}`);
+      if (!response.ok) throw new Error('分类暂不可用，请重试');
+      const data: Book[] = await response.json();
+      if (sequence !== categoryRequest.current) return;
+      setCategoryBooks(data); setCategoryTotal(Number(response.headers.get('X-Total-Count')));
+      setCategoryPage(page); setSelectedCategory(slug);
+    } catch (error) { if(sequence === categoryRequest.current) setCategoryError(error instanceof Error ? error.message : '分类暂不可用'); }
+    finally { if(sequence === categoryRequest.current) setLoading(false); }
+  }
   
   const [mobileTab, setMobileTab] = useState<'rec' | 'week' | 'day'>('rec');
 
@@ -332,7 +355,7 @@ export default function HomePageClient({
   }; 
 
   const { recList, weekList, dayList } = useMemo(() => {
-    const rec = [...allBooks].sort((a: Book, b: Book) => {
+    const rec = initialRecommendedBooks.length ? initialRecommendedBooks : [...allBooks].sort((a: Book, b: Book) => {
         const scoreA = ((a.rating || 0) * 100 * 0.6) + ((a.weekly_views || 0) * 0.4);
         const scoreB = ((b.rating || 0) * 100 * 0.6) + ((b.weekly_views || 0) * 0.4);
         return scoreB - scoreA;
@@ -347,15 +370,7 @@ export default function HomePageClient({
       : [...allBooks].sort((a: Book, b: Book) => (b.daily_views || 0) - (a.daily_views || 0)).slice(0, 5);
 
     return { recList: rec, weekList: week, dayList: day };
-  }, [allBooks, initialWeekRankBooks, initialDayRankBooks]);
-
-  const categoryBooks = useMemo(() => {
-      const targetCategory = categories.find(c => c.slug === selectedCategory);
-      return allBooks.filter(book => {
-          if (selectedCategory === 'all') return true;
-          return targetCategory && book.category === targetCategory.name;
-      }).sort((a: Book, b: Book) => (b.views || 0) - (a.views || 0));
-  }, [allBooks, selectedCategory]);
+  }, [allBooks, initialWeekRankBooks, initialDayRankBooks, initialRecommendedBooks]);
 
     return (
       <div className="min-h-screen bg-[#f8f9fa] pb-12">
@@ -654,7 +669,7 @@ export default function HomePageClient({
                     return (
                       <button
                         key={category.slug}
-                        onClick={() => setSelectedCategory(category.slug)}
+                        onClick={() => loadCategory(category.slug)}
                         className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm transition-all cursor-pointer border flex-shrink-0 ${
                             isSelected
                             ? 'bg-gray-900 text-white font-bold border-gray-900 shadow-lg shadow-gray-200'
@@ -669,6 +684,12 @@ export default function HomePageClient({
                 </nav>
 
                 {/* 分类下对应的书籍展示 (Grid 布局) */}
+                {categoryError && <p role="alert">{categoryError}</p>}
+                <div className="flex items-center justify-center gap-4">
+                  <button disabled={loading || categoryPage===1} onClick={()=>loadCategory(selectedCategory,categoryPage-1)}>上一页</button>
+                  <span aria-live="polite">{loading ? '加载中…' : `第 ${categoryPage} 页`}</span>
+                  <button disabled={loading || (categoryTotal===null ? categoryBooks.length<20 : categoryPage*20>=categoryTotal)} onClick={()=>loadCategory(selectedCategory,categoryPage+1)}>下一页</button>
+                </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
                   {categoryBooks.length > 0 ? (
                     categoryBooks.map((book: Book) => (

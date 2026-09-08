@@ -1,0 +1,10 @@
+
+Running 3 tests using 1 worker
+
+(node:22852) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 web-next\tests\account.spec.ts:2:5 › login, refresh, reader and logout use revocable cookie session (3.8s)
+  ok 2 web-next\tests\account.spec.ts:23:5 › registration errors preserve form inputs and stay on registration (847ms)
+  ok 3 web-next\tests\pagination.spec.ts:5:5 › category and author pages reach works beyond the first database page (4.0s)
+
+  3 passed (9.5s)

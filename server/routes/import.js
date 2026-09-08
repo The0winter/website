@@ -27,6 +27,7 @@ export function importRoutes(app) {
     let result;
     await mongoose.connection.transaction(async session=>{
       let book=await Book.findOne({sourceUrl:data.sourceUrl,importManaged:true}).session(session);
+      if(book?.deletedAt)fail(409,'来源对应作品已下架，须显式恢复');
       if(!book) {
         if(await Book.exists({sourceUrl:data.sourceUrl}).session(session))fail(409,'已有来源映射未经核实，需人工处理');
         if(data.dryRun){result={dryRun:true,newBook:true,insert:validated.length};return;}
@@ -35,7 +36,7 @@ export function importRoutes(app) {
       let inserted=0,unchanged=0;
       for(const chapter of validated){
         const existing=await Chapter.findOne({bookId:book._id,chapter_number:chapter.chapter_number}).session(session);
-        if(existing){if(existing.title!==chapter.title||existing.content!==chapter.content)fail(409,`章号 ${chapter.chapter_number} 内容冲突，需显式编辑原章节`);unchanged++;}
+        if(existing){if(existing.deletedAt||existing.title!==chapter.title||existing.content!==chapter.content)fail(409,`章号 ${chapter.chapter_number} 已下架或内容冲突，需显式恢复/编辑原章节`);unchanged++;}
         else {inserted++;if(!data.dryRun)await Chapter.create([{...chapter,bookId:book._id}],{session});}
       }
       result={dryRun:!!data.dryRun,bookId:String(book._id),inserted,unchanged};

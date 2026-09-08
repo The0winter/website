@@ -1,13 +1,7 @@
 import { catalogPages } from './request';
 import { safeFetch as fetch } from '@/lib/request';
-const getBaseUrl = () => {
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
-  }
-  return 'http://127.0.0.1:5000';
-};
-
-export const API_BASE_URL = `${getBaseUrl()}/api`;
+import { getApiBaseUrl } from '@/utils/api';
+export const API_BASE_URL = getApiBaseUrl();
 
 export interface ForumPost {
   id: string;
@@ -70,6 +64,7 @@ export interface ForumComment {
 }
 
 export interface Profile {
+  avatar?: string;
   id: string;
   username: string;
   role: 'reader' | 'admin';
@@ -100,6 +95,8 @@ export interface Book {
 }
 
 export interface Chapter {
+  previousId?: string | null;
+  nextId?: string | null;
   id: string;
   bookId: string;
   title: string;
@@ -172,10 +169,10 @@ export const booksApi = {
     return apiCall<Book | null>(`/books/${id}`);
   },
 
-  getMyBooks: async (authorId?: string): Promise<Book[]> => {
+  getMyBooks: async (authorId?: string, page = 1): Promise<Book[]> => {
     const targetId = authorId || (typeof window !== 'undefined' ? localStorage.getItem('novelhub_user') : null);
     if (!targetId) return [];
-    return apiCall<Book[]>(`/books?author_id=${targetId}`);
+    return apiCall<Book[]>(`/books?author_id=${encodeURIComponent(targetId)}&limit=20&page=${page}&orderBy=updatedAt`);
   },
 
   delete: async (id: string): Promise<void> => {
@@ -352,15 +349,17 @@ export const forumApi = {
     });
   },
 
-  togglePostLike: async (postId: string): Promise<{ liked: boolean; votes: number }> => {
+  togglePostLike: async (postId: string, liked: boolean): Promise<{ liked: boolean; votes: number }> => {
     return apiCall<{ liked: boolean; votes: number }>(`/forum/posts/${postId}/like`, {
       method: 'POST',
+      body: JSON.stringify({liked}),
     });
   },
 
-  toggleReplyLike: async (replyId: string): Promise<{ liked: boolean; votes: number; postId?: string }> => {
+  toggleReplyLike: async (replyId: string, liked: boolean): Promise<{ liked: boolean; votes: number; postId?: string }> => {
     return apiCall<{ liked: boolean; votes: number; postId?: string }>(`/forum/replies/${replyId}/like`, {
       method: 'POST',
+      body: JSON.stringify({liked}),
     });
   },
 
@@ -379,9 +378,10 @@ export const forumApi = {
     });
   },
 
-  toggleCommentLike: async (commentId: string): Promise<{ liked: boolean; votes: number }> => {
+  toggleCommentLike: async (commentId: string, liked: boolean): Promise<{ liked: boolean; votes: number }> => {
     return apiCall<{ liked: boolean; votes: number }>(`/forum/comments/${commentId}/like`, {
       method: 'POST',
+      body: JSON.stringify({liked}),
     });
   },
 };

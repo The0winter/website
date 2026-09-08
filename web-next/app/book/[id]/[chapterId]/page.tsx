@@ -27,7 +27,7 @@ const getReaderData = cache(async (bookId: string, chapterId: string): Promise<R
   try {
     const [bookRes, chapterRes] = await Promise.all([
       fetch(`${baseUrl}/books/${bookId}`, { cache: 'no-store' }),
-      fetch(`${baseUrl}/chapters/${chapterId}`, { cache: 'no-store' }),
+      fetch(`${baseUrl}/chapters/${chapterId}?navigation=1`, { cache: 'no-store' }),
     ]);
 
     if (bookRes.status === 404 || chapterRes.status === 404) {
@@ -164,6 +164,13 @@ export default async function Page({ params }: Props) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd).replace(/</g, String.fromCharCode(92) + 'u003c') }}
       />
       <ReaderClient initialBook={book} initialChapter={chapter} />
+      <noscript>
+        <nav aria-label="无脚本章节导航" style={{display:'flex',justifyContent:'center',gap:'2rem',padding:'2rem'}}>
+          {chapter.previousId && <a href={`/book/${bookId}/${chapter.previousId}`}>上一章</a>}
+          <a href={`/book/${bookId}`}>目录</a>
+          {chapter.nextId && <a href={`/book/${bookId}/${chapter.nextId}`}>下一章</a>}
+        </nav>
+      </noscript>
     </>
   );
 }

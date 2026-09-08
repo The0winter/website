@@ -1,0 +1,155 @@
+
+> server@1.0.0 test
+> node --test tests/*.test.js
+
+TAP version 13
+# Subtest: local config rejects old targets and implicit configuration
+ok 1 - local config rejects old targets and implicit configuration
+  ---
+  duration_ms: 1.6276
+  type: 'test'
+  ...
+# Subtest: importing app does not connect or schedule work
+ok 2 - importing app does not connect or schedule work
+  ---
+  duration_ms: 797.804
+  type: 'test'
+  ...
+# Subtest: SMTP delivery uses loopback receiver, propagates failure and refuses external test targets
+ok 3 - SMTP delivery uses loopback receiver, propagates failure and refuses external test targets
+  ---
+  duration_ms: 42.8828
+  type: 'test'
+  ...
+# 🚫 CORS 拦截: https://attacker.test
+# Request failed { name: 'Error', status: 403 }
+# Subtest: real MongoDB: CSRF, ownership, revocation and signup
+    # Subtest: anonymous write and cross-origin login rejected
+    ok 1 - anonymous write and cross-origin login rejected
+      ---
+      duration_ms: 81.9239
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 403 }
+# Request failed { name: 'Error', status: 403 }
+# Request failed { name: 'Error', status: 403 }
+# Request failed { name: 'Error', status: 403 }
+# Request failed { name: 'Error', status: 403 }
+# Request failed { name: 'Error', status: 400 }
+    # Subtest: other users cannot change books, chapters or shelves; fields cannot elevate
+    ok 2 - other users cannot change books, chapters or shelves; fields cannot elevate
+      ---
+      duration_ms: 331.7139
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 403 }
+# Request failed { name: 'Error', status: 409 }
+    # Subtest: media validates bytes, ownership and active references
+    ok 3 - media validates bytes, ownership and active references
+      ---
+      duration_ms: 265.4759
+      type: 'test'
+      ...
+    # Subtest: login failures accumulate and expired lock resets
+    ok 4 - login failures accumulate and expired lock resets
+      ---
+      duration_ms: 1119.4666
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 409 }
+# Request failed { name: 'Error', status: 429 }
+# Request failed { name: 'Error', status: 400 }
+    # Subtest: concurrent chapter retry, quota rollback, ratings and soft delete
+    ok 5 - concurrent chapter retry, quota rollback, ratings and soft delete
+      ---
+      duration_ms: 488.9264
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 400 }
+    # Subtest: reading GET stays read-only; account dedupe survives visitor changes and concurrent reports
+    ok 6 - reading GET stays read-only; account dedupe survives visitor changes and concurrent reports
+      ---
+      duration_ms: 171.8613
+      type: 'test'
+      ...
+    # Subtest: statistics single worker, natural calendar totals and preserved cumulative count
+    ok 7 - statistics single worker, natural calendar totals and preserved cumulative count
+      ---
+      duration_ms: 115.5843
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 400 }
+# Request failed { name: 'Error', status: 429 }
+# Request failed { name: 'Error', status: 429 }
+# Request failed { name: 'Error', status: 429 }
+# Request failed { name: 'Error', status: 400 }
+    # Subtest: forum concurrent writes preserve counters, hierarchy and current cookie liked state
+    ok 8 - forum concurrent writes preserve counters, hierarchy and current cookie liked state
+      ---
+      duration_ms: 325.3767
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 409 }
+# Request failed { name: 'Error', status: 409 }
+# Request failed { name: 'Error', status: 403 }
+    # Subtest: import dry-run, repeated batches, conflicts and stable ownership never claim an existing title
+    ok 9 - import dry-run, repeated batches, conflicts and stable ownership never claim an existing title
+      ---
+      duration_ms: 170.6866
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 409 }
+    # Subtest: book creation retry preserves ID and rejects conflicting reuse
+    ok 10 - book creation retry preserves ID and rejects conflicting reuse
+      ---
+      duration_ms: 106.3315
+      type: 'test'
+      ...
+    # Subtest: logout and ban revoke previously valid cookies
+    ok 11 - logout and ban revoke previously valid cookies
+      ---
+      duration_ms: 128.7255
+      type: 'test'
+      ...
+    # Subtest: captured mail, hashed single-use code and cookie signup
+    ok 12 - captured mail, hashed single-use code and cookie signup
+      ---
+      duration_ms: 2079.4327
+      type: 'test'
+      ...
+    # Subtest: public profile hides private account fields and HTML is allowlisted
+    ok 13 - public profile hides private account fields and HTML is allowlisted
+      ---
+      duration_ms: 4.8473
+      type: 'test'
+      ...
+# MongoNetworkError: read ECONNRESET
+#     at Connection.onSocketError (F:\\Website\\Test1\\server\\node_modules\\mongodb\\lib\\cmap\\connection.js:110:22)
+#     at Socket.emit (node:events:531:35)
+#     at emitErrorNT (node:internal/streams/destroy:170:8)
+#     at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+#     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+#   errorLabelSet: Set(2) { 'RetryableWriteError', 'ResetPool' },
+#   beforeHandshake: false,
+#   [cause]: Error: read ECONNRESET
+#       at TCP.onStreamRead (node:internal/stream_base_commons:216:20) {
+#     errno: -4077,
+#     code: 'ECONNRESET',
+#     syscall: 'read'
+#   }
+# }
+    1..13
+ok 4 - real MongoDB: CSRF, ownership, revocation and signup
+  ---
+  duration_ms: 8311.8286
+  type: 'test'
+  ...
+1..4
+# tests 17
+# suites 0
+# pass 17
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 9339.542

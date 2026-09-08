@@ -3,7 +3,7 @@ import {useStoredState} from '@/lib/useStoredState';
 import { safeFetch as fetch } from '@/lib/request';
  
 
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useLayoutEffect, useCallback, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { API_BASE_URL } from '@/lib/api';
 import Link from 'next/link';
@@ -119,7 +119,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
 
   const [themeColor, setThemeColor] = useStoredState('reader_themeColor',settingsCache.themeColor,v=>['gray','cream','green','blue'].includes(String(v)));
   const [fontFamily, setFontFamily] = useStoredState('reader_fontFamily',settingsCache.fontFamily,v=>['sans','serif','kai'].includes(String(v)));
-  const [fontSizeNum, setFontSizeNum] = useStoredState('reader_fontSizeNum',settingsCache.fontSizeNum,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000);
+  const [fontSizeNum, setFontSizeNum] = useStoredState('reader_fontSizeNum',isDesktop ? 22 : 20,v=>typeof v==='number'&&Number.isFinite(v)&&v>=12&&v<=72);
   const [lineHeight, setLineHeight] = useStoredState('reader_lineHeight',settingsCache.lineHeight,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000);
   const [paraSpacing, setParaSpacing] = useStoredState('reader_paraSpacing',settingsCache.paraSpacing,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000); 
   const [pageWidth, setPageWidth] = useStoredState('reader_pageWidth',settingsCache.pageWidth,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000);
@@ -462,7 +462,7 @@ if (targetId) {
 // 核心跳转逻辑：预取模式
   const navigationSequence = useRef(0);
   useEffect(()=>()=>{navigationSequence.current++;},[]);
-  const goToChapter = async (targetChapterId: string) => {
+  const goToChapter = useCallback(async (targetChapterId: string) => {
     const sequence=++navigationSequence.current;
     // 防止重复点击
 
@@ -504,7 +504,7 @@ if (targetId) {
       alert('网络请求出错');
       setIsNavigating(false);
     }
-  };
+  }, [router, bookId]);
   const currentChapterIndex = allChapters.findIndex((ch) => ch.id === chapter?.id);
   const prevChapter = currentChapterIndex > 0 ? allChapters[currentChapterIndex - 1] : null;
   const nextChapter = currentChapterIndex < allChapters.length - 1 ? allChapters[currentChapterIndex + 1] : null;
@@ -512,7 +512,7 @@ if (targetId) {
   // ============================================================
   // ▼▼▼ 新增：键盘左右键翻页 (← 上一章 / → 下一章) ▼▼▼
   // ============================================================
-  useEffect(() => {
+  useLayoutEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // 1. 如果用户正在输入框(评论)里打字，按方向键是为了移动光标，不要翻页
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
@@ -531,7 +531,7 @@ if (targetId) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [prevChapter, nextChapter]); // 依赖项：当上一章/下一章变化时，重新绑定
+  }, [prevChapter, nextChapter, goToChapter]);
   
   // ... 下面是 const fontFamilyValue = ...
 
@@ -1246,10 +1246,10 @@ export default function ReaderPage({ initialBook = null, initialChapter = null }
   const componentKey = params?.chapterId ? String(params.chapterId) : 'default';
 
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">加载中...</div>}>
+    <>
       {/* 🔥 核心修改：加上 key 属性 */}
       {/* 这样每次切章节，组件都会“重生”，直接从缓存读取新数据，彻底根除闪烁！ */}
       <ReaderContent key={componentKey} initialBook={initialBook} initialChapter={initialChapter} />
-    </Suspense>
+    </>
   );
 }

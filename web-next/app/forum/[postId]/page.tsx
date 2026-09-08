@@ -219,7 +219,8 @@ function PostContent() {
 
     setLikePending((prev) => ({ ...prev, [targetId]: true }));
     try {
-      const result = targetType === 'post' ? await forumApi.togglePostLike(targetId) : await forumApi.toggleReplyLike(targetId);
+      const desired = !likedState[targetId];
+      const result = targetType === 'post' ? await forumApi.togglePostLike(targetId, desired) : await forumApi.toggleReplyLike(targetId, desired);
 
       setLikedState((prev) => ({ ...prev, [targetId]: result.liked }));
       setAnswer((prev) => (prev && prev.id === targetId ? { ...prev, votes: result.votes } : prev));
@@ -309,7 +310,7 @@ function PostContent() {
 
     setCommentLikePending((prev) => ({ ...prev, [commentId]: true }));
     try {
-      const result = await forumApi.toggleCommentLike(commentId);
+      const result = await forumApi.toggleCommentLike(commentId, !replyComments.find(item=>item.id===commentId)?.hasLiked);
       setReplyComments((prev) =>
         prev.map((item) => (item.id === commentId ? { ...item, votes: result.votes, hasLiked: result.liked } : item))
       );

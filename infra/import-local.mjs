@@ -9,8 +9,11 @@ const secret=process.env.IMPORT_SECRET;if(!secret||secret.length<32)throw new Er
 const raw=await fs.readFile(file),book=JSON.parse(raw);
 if(!book.sourceUrl||!Array.isArray(book.chapters))throw new Error('No stable sourceUrl/chapters; mapping review required');
 const hash=crypto.createHash('sha256').update(raw).digest('hex'),apply=process.argv.includes('--apply');
-const checkpoint='.runtime/import-'+hash+'.json';let start=0;
-if(apply){try{start=JSON.parse(await fs.readFile(checkpoint,'utf8')).offset;}catch(e){if(e.code!=='ENOENT')throw e;}}
+const targetHash=crypto.createHash('sha256').update(endpoint).digest('hex').slice(0,16);
+const checkpoint='.runtime/import-'+targetHash+'-'+hash+'.json';
+// A local offset cannot prove data still exists after restoring/recreating the target DB.
+// Replay bounded idempotent batches so every checkpoint is verified by the target itself.
+const start=0;
 for(let offset=start;offset<book.chapters.length;offset+=20){
   const body={sourceUrl:book.sourceUrl,title:book.title,author:book.author,category:book.category,chapters:book.chapters.slice(offset,offset+20),dryRun:!apply};
   let response;
@@ -21,5 +24,5 @@ for(let offset=start;offset<book.chapters.length;offset+=20){
   }
   if(!response?.ok)throw new Error(`Import stopped at ${offset}: HTTP ${response?.status}`);
   console.log(JSON.stringify({offset,...await response.json()}));
-  if(apply){await fs.mkdir('.runtime',{recursive:true});await fs.writeFile(checkpoint,JSON.stringify({hash,offset:offset+20}));}
+  if(apply){await fs.mkdir('.runtime',{recursive:true});await fs.writeFile(checkpoint+'.tmp',JSON.stringify({hash,endpoint,offset:Math.min(offset+20,book.chapters.length)}));await fs.rename(checkpoint+'.tmp',checkpoint);}
 }

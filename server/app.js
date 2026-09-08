@@ -1,3 +1,4 @@
+import { forumWrites } from './routes/forum-writes.js';
 import { readingRoutes } from './routes/reading.js';
 import { importRoutes } from './routes/import.js';
 import { contentRoutes } from './routes/content.js';
@@ -41,12 +42,11 @@ app.use((req,res,next)=>{
   req.requestId=crypto.randomUUID();res.set('X-Request-Id',req.requestId);
   const start=performance.now();res.once('finish',()=>{if(config.mode==='production'||process.env.LOG_REQUESTS==='enabled')console.log(JSON.stringify({requestId:req.requestId,method:req.method,route:req.route?.path||'unmatched',status:res.statusCode,durationMs:Math.round(performance.now()-start)}));});next();
 });
-app.set('trust proxy', false);
+app.set('trust proxy', config.trustProxy==='loopback'?'loopback':false);
 
 let userViewBuffer = {}; // 存用户阅读量: { "userId1": 5, "userId2": 1 }
 let bookViewBuffer = {}; // 存书籍阅读量: { "bookId1": 100, "bookId2": 3 }
 
-app.set('trust proxy', false);
 
 // ================= 1. 安全与配置 (紧急修复版) =================
 
@@ -92,6 +92,7 @@ app.use((req,res,next) => {
   res.json = value => {
     if(res.statusCode >= 500) value={error:'服务暂不可用，请重试'};
     if (req.path.startsWith('/api/forum')) {
+      res.set('Cache-Control','private, no-store');
       const clean = item => { if (Array.isArray(item)) return item.map(clean); if (item && typeof item === 'object' && !(item instanceof Date)) return Object.fromEntries(Object.entries(item).map(([k,v]) => [k,k === 'content' && typeof v === 'string' ? safeHtml(v) : clean(v)])); return item; };
       value = clean(JSON.parse(JSON.stringify(value)));
     }
@@ -101,9 +102,11 @@ app.use((req,res,next) => {
 });
 
 
-// ⚠️ 全局限制改回 10mb，防止之前的 100kb 限制导致某些大请求报错
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use('/api',(req,res,next)=>config.writeMode==='readonly'&&!['GET','HEAD','OPTIONS'].includes(req.method)?res.status(503).json({error:'当前维护中，暂不接受写入'}):next());
+// Only the dedicated batch importer needs multi-megabyte JSON; ordinary writes stay bounded.
+app.use('/api/admin/upload-book',express.json({limit:'10mb'}));
+app.use(express.json({ limit: '256kb' }));
+app.use(express.urlencoded({ limit: '256kb', extended: false, parameterLimit:100 }));
 app.use(mongoSanitize());
 app.get('/health/live', (req, res) => res.json({status:'live'}));
 app.get('/health/ready', (req, res) => res.status(mongoose.connection.readyState === 1 ? 200 : 503).json({ready:mongoose.connection.readyState === 1}));
@@ -150,20 +153,10 @@ authRoutes(app,auth,config);
 mediaRoutes(app,auth);
 contentRoutes(app,auth);
 importRoutes(app);
-readingRoutes(app);
+readingRoutes(app,auth);
+forumWrites(app,auth);
 
-const getOptionalUserId = (req) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return null;
-
-  try {
-    const verified = jwt.verify(token, JWT_SECRET);
-    return verified?.id ? String(verified.id) : null;
-  } catch {
-    return null;
-  }
-};
+const getOptionalUserId = auth.optionalUserId;
 
 const adminMiddleware = async (req, res, next) => {
     try {
@@ -406,73 +399,12 @@ const forumCommentCreateLimiter = rateLimit({
 });
 
 // 1. 发布帖子 (修复：返回 id 字段)
-app.post('/api/forum/posts', authMiddleware, forumPostCreateLimiter, async (req, res) => {
-  try {
-    const { title, content, type, tags } = req.body;
-
-    const finalType = type === 'article' ? 'article' : 'question';
-    const safeTitle = stripHtml(title);
-    const safeContent = sanitizeForumHtml(content);
-    const plainContent = stripHtml(safeContent);
-
-    if (!safeTitle) {
-      return res.status(400).json({ error: '标题不能为空' });
-    }
-    if (!plainContent) {
-      return res.status(400).json({ error: '内容不能为空' });
-    }
-    if (safeTitle.length > FORUM_LIMITS.titleMax) {
-      return res.status(400).json({ error: `标题不能超过 ${FORUM_LIMITS.titleMax} 字` });
-    }
-    if (plainContent.length > FORUM_LIMITS.postContentMax) {
-      return res.status(400).json({ error: `内容不能超过 ${FORUM_LIMITS.postContentMax} 字` });
-    }
-    if (finalType === 'question' && !/[?？]\s*$/.test(safeTitle)) {
-      return res.status(400).json({ error: '提问标题必须以问号结尾' });
-    }
-
-    const normalizedTags = Array.isArray(tags)
-      ? [...new Set(tags.map(tag => stripHtml(tag).slice(0, FORUM_LIMITS.maxTagLength)).filter(Boolean))]
-          .slice(0, FORUM_LIMITS.maxTags)
-      : [];
-
-    const duplicatePost = await ForumPost.findOne({
-      author: req.user.id,
-      title: safeTitle,
-      type: finalType,
-      createdAt: { $gte: new Date(Date.now() - FORUM_LIMITS.duplicateWindowMs) }
-    }).select('_id');
-
-    if (duplicatePost) {
-      return res.status(429).json({ error: '请勿短时间重复发布相同内容' });
-    }
-
-    const summary = plainContent.substring(0, 100) + (plainContent.length > 100 ? '...' : '');
-
-    const newPost = await ForumPost.create({
-      title: safeTitle,
-      content: safeContent,
-      summary,
-      type: finalType,
-      tags: normalizedTags,
-      author: req.user.id
-    });
-
-    // 🔥 修复点：明确返回 id 字符串，防止前端拿到 undefined
-    res.status(201).json({
-        ...newPost.toObject(),
-        id: newPost._id.toString() 
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // 2. 获取帖子列表 (修复：确保 id 存在)
 app.get('/api/forum/posts', async (req, res) => {
   try {
     const { tab = 'recommend', page = 1 } = req.query;
-    const currentUserId = getOptionalUserId(req);
+    const currentUserId = await getOptionalUserId(req);
     const limit = 20;
     const skip = (page - 1) * limit;
 
@@ -554,7 +486,7 @@ app.get('/api/forum/posts', async (req, res) => {
 // 3. 获取单个帖子详情 (问题页)
 app.get('/api/forum/posts/:id', async (req, res) => {
   try {
-    const currentUserId = getOptionalUserId(req);
+    const currentUserId = await getOptionalUserId(req);
     // 浏览量 +1
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
         return res.status(400).json({ error: '无效的帖子ID' });
@@ -586,7 +518,7 @@ app.get('/api/forum/posts/:id', async (req, res) => {
 // 4. 获取某个帖子的所有回答/评论
 app.get('/api/forum/posts/:id/replies', async (req, res) => {
   try {
-    const currentUserId = getOptionalUserId(req);
+    const currentUserId = await getOptionalUserId(req);
 
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
         // ID 都不合法，肯定没有回复，直接回空数组
@@ -621,139 +553,16 @@ app.get('/api/forum/posts/:id/replies', async (req, res) => {
 });
 
 // 5. 发布回答/评论
-app.post('/api/forum/posts/:id/replies', authMiddleware, forumReplyCreateLimiter, async (req, res) => {
-  try {
-    const { content } = req.body;
-    const postId = req.params.id;
-
-    if (!mongoose.Types.ObjectId.isValid(postId)) {
-      return res.status(400).json({ error: '无效的帖子ID' });
-    }
-
-    const safeContent = sanitizeForumHtml(content);
-    const plainContent = stripHtml(safeContent);
-    if (!plainContent) {
-      return res.status(400).json({ error: '回答内容不能为空' });
-    }
-    if (plainContent.length > FORUM_LIMITS.replyContentMax) {
-      return res.status(400).json({ error: `回答不能超过 ${FORUM_LIMITS.replyContentMax} 字` });
-    }
-
-    const postExists = await ForumPost.exists({ _id: postId });
-    if (!postExists) {
-      return res.status(404).json({ error: '帖子不存在' });
-    }
-
-    const duplicateReply = await ForumReply.findOne({
-      postId,
-      author: req.user.id,
-      content: safeContent,
-      createdAt: { $gte: new Date(Date.now() - FORUM_LIMITS.duplicateWindowMs) }
-    }).select('_id');
-
-    if (duplicateReply) {
-      return res.status(429).json({ error: '请勿短时间重复提交相同回答' });
-    }
-
-    const newReply = await ForumReply.create({
-      postId,
-      author: req.user.id,
-      content: safeContent
-    });
-
-    // 更新主帖的回复数、最后回复时间
-    await ForumPost.findByIdAndUpdate(postId, {
-      $inc: { replyCount: 1 },
-      lastReplyAt: new Date()
-    });
-
-    res.status(201).json(newReply);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // 6. 点赞/取消点赞帖子（toggle）
-app.post('/api/forum/posts/:id/like', authMiddleware, async (req, res) => {
-  try {
-    const postId = req.params.id;
-    if (!mongoose.Types.ObjectId.isValid(postId)) {
-      return res.status(400).json({ error: '无效的帖子ID' });
-    }
-
-    const userObjectId = new mongoose.Types.ObjectId(req.user.id);
-
-    const likedPost = await ForumPost.findOneAndUpdate(
-      { _id: postId, likedBy: { $ne: userObjectId } },
-      { $addToSet: { likedBy: userObjectId }, $inc: { likes: 1 } },
-      { new: true, select: 'likes' }
-    );
-
-    if (likedPost) {
-      return res.json({ liked: true, votes: likedPost.likes });
-    }
-
-    const unlikedPost = await ForumPost.findOneAndUpdate(
-      { _id: postId, likedBy: userObjectId },
-      { $pull: { likedBy: userObjectId }, $inc: { likes: -1 } },
-      { new: true, select: 'likes' }
-    );
-
-    if (unlikedPost) {
-      return res.json({ liked: false, votes: Math.max(0, unlikedPost.likes || 0) });
-    }
-
-    return res.status(404).json({ error: '帖子不存在' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // 7. 点赞/取消点赞回答（toggle）
-app.post('/api/forum/replies/:id/like', authMiddleware, async (req, res) => {
-  try {
-    const replyId = req.params.id;
-    if (!mongoose.Types.ObjectId.isValid(replyId)) {
-      return res.status(400).json({ error: '无效的回答ID' });
-    }
-
-    const userObjectId = new mongoose.Types.ObjectId(req.user.id);
-
-    const likedReply = await ForumReply.findOneAndUpdate(
-      { _id: replyId, likedBy: { $ne: userObjectId } },
-      { $addToSet: { likedBy: userObjectId }, $inc: { likes: 1 } },
-      { new: true, select: 'likes postId' }
-    );
-
-    if (likedReply) {
-      return res.json({ liked: true, votes: likedReply.likes, postId: likedReply.postId });
-    }
-
-    const unlikedReply = await ForumReply.findOneAndUpdate(
-      { _id: replyId, likedBy: userObjectId },
-      { $pull: { likedBy: userObjectId }, $inc: { likes: -1 } },
-      { new: true, select: 'likes postId' }
-    );
-
-    if (unlikedReply) {
-      return res.json({
-        liked: false,
-        votes: Math.max(0, unlikedReply.likes || 0),
-        postId: unlikedReply.postId
-      });
-    }
-
-    return res.status(404).json({ error: '回答不存在' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // 8. 获取回答评论（含一级和二级，二级不再嵌套）
 app.get('/api/forum/replies/:id/comments', async (req, res) => {
   try {
     const replyId = req.params.id;
-    const currentUserId = getOptionalUserId(req);
+    const currentUserId = await getOptionalUserId(req);
 
     if (!mongoose.Types.ObjectId.isValid(replyId)) {
       return res.json([]);
@@ -790,142 +599,8 @@ app.get('/api/forum/replies/:id/comments', async (req, res) => {
 });
 
 // 9. 发表评论（支持二级回复，最多两级）
-app.post('/api/forum/replies/:id/comments', authMiddleware, forumCommentCreateLimiter, async (req, res) => {
-  try {
-    const replyId = req.params.id;
-    const { content, parentCommentId } = req.body;
-
-    if (!mongoose.Types.ObjectId.isValid(replyId)) {
-      return res.status(400).json({ error: '无效的回答ID' });
-    }
-    const safeContent = sanitizeForumHtml(content);
-    const plainContent = stripHtml(safeContent);
-
-    if (!plainContent) {
-      return res.status(400).json({ error: '评论内容不能为空' });
-    }
-    if (plainContent.length > FORUM_LIMITS.commentContentMax) {
-      return res.status(400).json({ error: `评论不能超过 ${FORUM_LIMITS.commentContentMax} 字` });
-    }
-
-    const reply = await ForumReply.findById(replyId).select('_id postId');
-    if (!reply) {
-      return res.status(404).json({ error: '回答不存在' });
-    }
-
-    let parent = null;
-    let finalParentId = null;
-
-    if (parentCommentId) {
-      if (!mongoose.Types.ObjectId.isValid(parentCommentId)) {
-        return res.status(400).json({ error: '无效的父评论ID' });
-      }
-
-      parent = await ForumReplyComment.findOne({
-        _id: parentCommentId,
-        replyId: reply._id
-      }).select('_id parentCommentId');
-
-      if (!parent) {
-        return res.status(404).json({ error: '父评论不存在' });
-      }
-
-      if (parent.parentCommentId) {
-        return res.status(400).json({ error: '仅支持二级评论' });
-      }
-
-      finalParentId = parent._id;
-    }
-
-    const duplicateComment = await ForumReplyComment.findOne({
-      replyId: reply._id,
-      author: req.user.id,
-      content: safeContent,
-      createdAt: { $gte: new Date(Date.now() - FORUM_LIMITS.duplicateWindowMs) }
-    }).select('_id');
-
-    if (duplicateComment) {
-      return res.status(429).json({ error: '请勿短时间重复提交相同评论' });
-    }
-
-    const created = await ForumReplyComment.create({
-      postId: reply.postId,
-      replyId: reply._id,
-      parentCommentId: finalParentId,
-      author: req.user.id,
-      content: safeContent
-    });
-
-    if (finalParentId) {
-      await ForumReplyComment.findByIdAndUpdate(finalParentId, {
-        $inc: { replyCount: 1 }
-      });
-    }
-
-    await ForumReply.findByIdAndUpdate(reply._id, {
-      $inc: { comments: 1 }
-    });
-
-    const populated = await ForumReplyComment.findById(created._id)
-      .populate('author', 'username _id avatar')
-      .lean();
-
-    return res.status(201).json({
-      id: populated._id.toString(),
-      postId: populated.postId?.toString(),
-      replyId: populated.replyId?.toString(),
-      parentCommentId: populated.parentCommentId ? populated.parentCommentId.toString() : null,
-      content: populated.content,
-      votes: populated.likes || 0,
-      hasLiked: false,
-      replyCount: populated.replyCount || 0,
-      time: new Date(populated.createdAt).toLocaleString(),
-      author: {
-        name: populated.author?.username || '匿名',
-        avatar: populated.author?.avatar || '',
-        id: populated.author?._id?.toString() || ''
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // 10. 点赞/取消点赞评论（toggle）
-app.post('/api/forum/comments/:id/like', authMiddleware, async (req, res) => {
-  try {
-    const commentId = req.params.id;
-    if (!mongoose.Types.ObjectId.isValid(commentId)) {
-      return res.status(400).json({ error: '无效的评论ID' });
-    }
-
-    const userObjectId = new mongoose.Types.ObjectId(req.user.id);
-
-    const likedComment = await ForumReplyComment.findOneAndUpdate(
-      { _id: commentId, likedBy: { $ne: userObjectId } },
-      { $addToSet: { likedBy: userObjectId }, $inc: { likes: 1 } },
-      { new: true, select: 'likes' }
-    );
-
-    if (likedComment) {
-      return res.json({ liked: true, votes: likedComment.likes });
-    }
-
-    const unlikedComment = await ForumReplyComment.findOneAndUpdate(
-      { _id: commentId, likedBy: userObjectId },
-      { $pull: { likedBy: userObjectId }, $inc: { likes: -1 } },
-      { new: true, select: 'likes' }
-    );
-
-    if (unlikedComment) {
-      return res.json({ liked: false, votes: Math.max(0, unlikedComment.likes || 0) });
-    }
-
-    return res.status(404).json({ error: '评论不存在' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // ===========================================
 
@@ -962,7 +637,16 @@ app.get('/api/chapters/:id', async (req, res) => {
     const chapter = await Chapter.findOne({_id:req.params.id,deletedAt:null}).lean();
     if (!chapter || !await Book.exists({_id:chapter.bookId,deletedAt:null})) return res.status(404).json({ error: 'Chapter not found' });
 
-    res.json({ ...chapter, id: chapter._id.toString(), bookId: chapter.bookId.toString() });
+    let navigation={};
+    if(req.query.navigation==='1'){
+      const filter={bookId:chapter.bookId,deletedAt:null};
+      const [previous,next]=await Promise.all([
+        Chapter.findOne({...filter,chapter_number:{$lt:chapter.chapter_number}}).sort({chapter_number:-1}).select('_id').maxTimeMS(3000).lean(),
+        Chapter.findOne({...filter,chapter_number:{$gt:chapter.chapter_number}}).sort({chapter_number:1}).select('_id').maxTimeMS(3000).lean(),
+      ]);
+      navigation={previousId:previous?String(previous._id):null,nextId:next?String(next._id):null};
+    }
+    res.json({ ...chapter, ...navigation, id: chapter._id.toString(), bookId: chapter.bookId.toString() });
 
   } catch (error) {
     res.status(500).json({ error: error.message });

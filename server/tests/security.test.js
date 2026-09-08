@@ -15,6 +15,12 @@ import { safeHtml } from '../security.js';
 import { dayKey } from '../services/content.js';
 import sharp from 'sharp';
 import Media from '../models/Media.js';
+import { updateStatistics } from '../jobs/statistics.js';
+import Job from '../models/Job.js';
+import ForumPost from '../models/ForumPost.js';
+import ForumReply from '../models/ForumReply.js';
+import ForumComment from '../models/ForumReplyComment.js';
+import UserDaily from '../models/UserDaily.js';
 
 test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
   const repl = await MongoMemoryReplSet.create({binary:{version:'7.0.40'},replSet:{count:1,storageEngine:'wiredTiger'}});
@@ -103,6 +109,104 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       assert.equal(await Chapter.countDocuments({bookId:book._id}),3);
       assert.equal((await administrator.write(`/api/books/${book._id}/restore`,'POST',{})).status,200);
       assert.equal((await owner.request(`/api/chapters/${chapter._id}`)).status,200);
+    });
+    await t.test('reading GET stays read-only; account dedupe survives visitor changes and concurrent reports',async()=>{
+      const before=(await Book.findById(book._id)).views;
+      for(let i=0;i<3;i++)assert.equal((await guest.request(`/api/chapters/${chapter._id}`)).status,200);
+      assert.equal((await Book.findById(book._id)).views,before);
+      const reports=await Promise.all(Array.from({length:4},()=>owner.write(`/api/books/${book._id}/views`,'POST',{chapterId:String(chapter._id)})));
+      assert.ok(reports.every(r=>r.status===200),JSON.stringify(reports));
+      assert.equal(reports.filter(r=>r.data.counted).length,1);
+      owner.jar.delete('visitor');
+      assert.equal((await owner.write(`/api/books/${book._id}/views`,'POST',{chapterId:String(chapter._id)})).data.counted,false);
+      assert.equal((await other.write(`/api/books/${book._id}/views`,'POST',{chapterId:String(chapter._id)})).data.counted,true);
+      assert.equal((await Book.findById(book._id)).views,before+2);
+      assert.equal((await guest.request('/api/books?author_id=invalid')).status,400);
+    });
+    await t.test('statistics single worker, natural calendar totals and preserved cumulative count',async()=>{
+      const before=await Book.findById(book._id);
+      const now=new Date(),day=dayKey(now);
+      const results=await Promise.all([updateStatistics(now),updateStatistics(now)]);
+      assert.equal(results.filter(r=>r.claimed).length,1);
+      const updated=await Book.findById(book._id);
+      assert.equal(updated.views,before.views);
+      assert.equal(updated.daily_views,2);
+      assert.equal(updated.weekly_views,2);
+      assert.equal(updated.monthly_views,2);
+      assert.equal((await updateStatistics(now)).claimed,false);
+      assert.equal((await Job.findById('statistics')).status,'done');
+      const activity=await UserDaily.findOne({userId:a._id,day});
+      assert.equal(activity.views,1);assert.equal(activity.uploads,2);
+      const accountStats=await User.findById(a._id);assert.equal(accountStats.stats.today_views,1);assert.equal(accountStats.weekly_score,101);
+      const daily=await mongoose.connection.collection('readdailies').findOne({_id:`${book._id}:${day}`});
+      assert.ok(daily.expiresAt > new Date(Date.now()+60*86400000));
+      // A later month must clear period counters without clearing lifetime views.
+      const nextMonth=new Date(day.slice(0,7)+'-01T12:00:00Z');nextMonth.setUTCMonth(nextMonth.getUTCMonth()+2);
+      assert.equal((await updateStatistics(nextMonth)).claimed,true);
+      const cleared=await Book.findById(book._id);
+      assert.equal(cleared.monthly_views,0);assert.equal(cleared.weekly_views,0);assert.equal(cleared.daily_views,0);
+      assert.equal(cleared.views,before.views);
+      assert.deepEqual(cleared.statisticsLegacy,updated.statisticsLegacy);
+      const clearedAccount=await User.findById(a._id);assert.equal(clearedAccount.weekly_score,0);assert.equal(clearedAccount.stats.today_uploads,0);assert.deepEqual(clearedAccount.statisticsLegacy,accountStats.statisticsLegacy);
+    });
+    await t.test('forum concurrent writes preserve counters, hierarchy and current cookie liked state',async()=>{
+      assert.equal((await guest.write('/api/forum/posts','POST',{title:'问题？',content:'测试'})).status,401);
+      assert.equal((await owner.write('/api/forum/posts','POST',{title:'问题？',content:'测试',author:String(b._id)})).status,400);
+      const posts=await Promise.all([1,2].map(()=>owner.write('/api/forum/posts','POST',{title:'并发问题？',content:'<p>测试<script>alert(1)</script></p>'})));
+      assert.deepEqual(posts.map(r=>r.status).sort(),[201,429]);
+      const post=posts.find(r=>r.status===201).data;
+      const replies=await Promise.all([1,2].map(()=>other.write(`/api/forum/posts/${post.id}/replies`,'POST',{content:'并发回答'})));
+      assert.deepEqual(replies.map(r=>r.status).sort(),[201,429]);
+      assert.equal((await ForumPost.findById(post.id)).replyCount,1);
+      const reply=replies.find(r=>r.status===201).data;
+      const comments=await Promise.all([1,2].map(()=>owner.write(`/api/forum/replies/${reply.id}/comments`,'POST',{content:'并发评论'})));
+      assert.deepEqual(comments.map(r=>r.status).sort(),[201,429]);
+      const parent=comments.find(r=>r.status===201).data;
+      const child=await other.write(`/api/forum/replies/${reply.id}/comments`,'POST',{content:'第二层',parentCommentId:parent.id});assert.equal(child.status,201);
+      assert.equal((await owner.write(`/api/forum/replies/${reply.id}/comments`,'POST',{content:'第三层',parentCommentId:child.data.id})).status,400);
+      assert.equal((await ForumReply.findById(reply.id)).comments,2);
+      assert.equal((await ForumComment.findById(parent.id)).replyCount,1);
+      const likes=await Promise.all(Array.from({length:6},()=>owner.write(`/api/forum/posts/${post.id}/like`,'POST',{liked:true})));
+      assert.ok(likes.every(r=>r.status===200&&r.data.votes===1));
+      const detail=await owner.request(`/api/forum/posts/${post.id}`);
+      assert.equal(detail.data.hasLiked,true);assert.match(detail.headers.get('cache-control'),/no-store/);
+      assert.equal((await guest.request(`/api/forum/posts/${post.id}`)).data.hasLiked,false);
+      assert.equal((await other.write(`/api/forum/posts/${post.id}/like`,'POST',{liked:true})).data.votes,2);
+      assert.equal((await owner.write(`/api/forum/posts/${post.id}/like`,'POST',{liked:false})).data.votes,1);
+      const saved=await ForumPost.findById(post.id);assert.equal(saved.likes,saved.likedBy.length);assert.doesNotMatch(saved.content,/script/);
+    });
+    await t.test('import dry-run, repeated batches, conflicts and stable ownership never claim an existing title',async()=>{
+      const previous=process.env.IMPORT_SECRET;process.env.IMPORT_SECRET=crypto.randomBytes(32).toString('hex');
+      const payload={title:'Edited',sourceUrl:'https://source.example.test/controlled',chapters:[{chapter_number:1,title:'Imported',content:'Original imported bytes'}]};
+      const headers={'x-import-secret':process.env.IMPORT_SECRET};
+      try{
+        const count=await Book.countDocuments();
+        assert.equal((await guest.request('/api/admin/upload-book','POST',payload)).status,403);
+        assert.equal((await guest.request('/api/admin/upload-book','POST',{...payload,dryRun:true},headers)).status,200);
+        assert.equal(await Book.countDocuments(),count);
+        const inserted=await guest.request('/api/admin/upload-book','POST',payload,headers);assert.equal(inserted.status,200);
+        const importedId=inserted.data.bookId;assert.notEqual(importedId,String(book._id));
+        const repeated=await guest.request('/api/admin/upload-book','POST',payload,headers);assert.equal(repeated.data.unchanged,1);
+        assert.equal((await Book.findById(book._id)).author_id.toString(),String(a._id));
+        const original=await Chapter.findOne({bookId:importedId});
+        const conflict={...payload,chapters:[{chapter_number:2,title:'Tentative',content:'Must roll back'},{...payload.chapters[0],content:'Changed bytes'}]};
+        assert.equal((await guest.request('/api/admin/upload-book','POST',conflict,headers)).status,409);
+        assert.equal(await Chapter.countDocuments({bookId:importedId}),1);
+        assert.equal((await Chapter.findById(original._id)).content,'Original imported bytes');
+        await Chapter.updateOne({_id:original._id},{$set:{deletedAt:new Date()}});
+        assert.equal((await guest.request('/api/admin/upload-book','POST',payload,headers)).status,409);
+        assert.equal((await other.write(`/api/chapters/${original._id}/restore`,'POST',{})).status,403);
+        assert.equal((await administrator.write(`/api/chapters/${original._id}/restore`,'POST',{})).status,200);
+        assert.equal((await Chapter.findById(original._id)).content,'Original imported bytes');
+      }finally{if(previous===undefined)delete process.env.IMPORT_SECRET;else process.env.IMPORT_SECRET=previous;}
+    });
+    await t.test('book creation retry preserves ID and rejects conflicting reuse',async()=>{
+      const key=crypto.randomUUID(),data={title:'Idempotent work',category:'玄幻'};
+      const csrf=await owner.request('/api/auth/csrf'),headers={origin:'http://127.0.0.1:3000','x-csrf-token':csrf.data.csrfToken,'Idempotency-Key':key};
+      const results=await Promise.all([1,2].map(()=>owner.request('/api/books','POST',data,headers)));
+      assert.ok(results.every(r=>r.status===201));assert.equal(results[0].data.id,results[1].data.id);
+      assert.equal((await owner.request('/api/books','POST',{title:'Changed title'},headers)).status,409);
+      assert.equal(await Book.countDocuments({title:data.title}),1);
     });
     await t.test('logout and ban revoke previously valid cookies',async()=>{
       const oldCookie=owner.jar.get('session');

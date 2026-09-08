@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Book from '../models/Book.js';
 import Chapter from '../models/Chapter.js';
 import User from '../models/User.js';
+import UserDaily from '../models/UserDaily.js';
 
 export function fail(status,message) { throw Object.assign(new Error(message),{status}); }
 export const jsonDoc = doc => ({...doc.toObject(),id:String(doc._id)});
@@ -25,10 +26,12 @@ export async function lockBook(bookId,actor,session,{includeDeleted=false}={}) {
   return book;
 }
 export async function chargeQuota(actor,words,session) {
-  if (actor.role==='admin' || actor.role==='import') return;
+  if (actor.role==='import') return;
+  const today=dayKey();
+  await UserDaily.updateOne({_id:`${actor.id}:${today}`},{$setOnInsert:{userId:actor.id,day:today,expiresAt:new Date(Date.now()+62*86400000)},$inc:{uploads:1}},{session,upsert:true});
+  if (actor.role==='admin') return;
   const user=await User.findById(actor.id).session(session);
   if (!user || user.isBanned) fail(403,'账户不可用');
-  const today=dayKey();
   const used=user.uploadDay===today?user.daily_upload_words:0;
   if (used+words>100000) fail(429,'今日上传额度已用完');
   user.uploadDay=today;user.daily_upload_words=used+words;user.last_upload_date=new Date();
@@ -42,6 +45,7 @@ export async function createChapter(actor,bookId,body) {
     await lockBook(bookId,actor,session);
     const existing=await Chapter.findOne({bookId,chapter_number:data.chapter_number}).session(session);
     if(existing) {
+      if(existing.deletedAt) fail(409,'同一编号的章节已下架，请先恢复原章节');
       if(existing.title!==data.title || existing.content!==data.content) fail(409,'同一编号已存在不同内容');
       result=existing;return;
     }

@@ -1,0 +1,564 @@
+{
+  "startedAt": "2026-09-07T21:23:33.059Z",
+  "finishedAt": "2026-09-07T21:23:37.674Z",
+  "elapsedMs": 4615,
+  "source": "isolated synthetic staging; no business writes or jobs during dump",
+  "mongodb": "7.0.40",
+  "tools": "100.17.0",
+  "archiveBytes": 1988676,
+  "archiveSha256": "15d06140ba829a2f65038352e123e0bccaf27b75365070c73f8f8cd94fa2217f",
+  "inventory": {
+    "books": {
+      "count": 1000,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": [
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "author_id_1_deletedAt_1",
+          "key": [
+            [
+              "author_id",
+              1
+            ],
+            [
+              "deletedAt",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "deletedAt_1_createdAt_-1__id_1",
+          "key": [
+            [
+              "deletedAt",
+              1
+            ],
+            [
+              "createdAt",
+              -1
+            ],
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "deletedAt_1_daily_views_-1__id_1",
+          "key": [
+            [
+              "deletedAt",
+              1
+            ],
+            [
+              "daily_views",
+              -1
+            ],
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "deletedAt_1_monthly_views_-1__id_1",
+          "key": [
+            [
+              "deletedAt",
+              1
+            ],
+            [
+              "monthly_views",
+              -1
+            ],
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "deletedAt_1_rating_-1__id_1",
+          "key": [
+            [
+              "deletedAt",
+              1
+            ],
+            [
+              "rating",
+              -1
+            ],
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "deletedAt_1_updatedAt_-1__id_1",
+          "key": [
+            [
+              "deletedAt",
+              1
+            ],
+            [
+              "updatedAt",
+              -1
+            ],
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "deletedAt_1_views_-1__id_1",
+          "key": [
+            [
+              "deletedAt",
+              1
+            ],
+            [
+              "views",
+              -1
+            ],
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "deletedAt_1_weekly_views_-1__id_1",
+          "key": [
+            [
+              "deletedAt",
+              1
+            ],
+            [
+              "weekly_views",
+              -1
+            ],
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "sourceUrl_1",
+          "key": [
+            [
+              "sourceUrl",
+              1
+            ]
+          ],
+          "unique": true,
+          "partialFilterExpression": {
+            "importManaged": true
+          }
+        }
+      ]
+    },
+    "bookmarks": {
+      "count": 0,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": [
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "user_id_1_bookId_1",
+          "key": [
+            [
+              "user_id",
+              1
+            ],
+            [
+              "bookId",
+              1
+            ]
+          ],
+          "unique": true
+        }
+      ]
+    },
+    "verificationcodes": {
+      "count": 0,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": [
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "createdAt_1",
+          "key": [
+            [
+              "createdAt",
+              1
+            ]
+          ],
+          "expireAfterSeconds": 3600
+        },
+        {
+          "name": "email_1",
+          "key": [
+            [
+              "email",
+              1
+            ]
+          ],
+          "unique": true
+        }
+      ]
+    },
+    "operations": {
+      "count": 0,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": [
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "expiresAt_1",
+          "key": [
+            [
+              "expiresAt",
+              1
+            ]
+          ],
+          "expireAfterSeconds": 0
+        }
+      ]
+    },
+    "chapters": {
+      "count": 100000,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": [
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "bookId_1_chapter_number_1",
+          "key": [
+            [
+              "bookId",
+              1
+            ],
+            [
+              "chapter_number",
+              1
+            ]
+          ],
+          "unique": true
+        }
+      ]
+    },
+    "media": {
+      "count": 0,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": [
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "owner_1",
+          "key": [
+            [
+              "owner",
+              1
+            ]
+          ]
+        }
+      ]
+    },
+    "readdailies": {
+      "count": 0,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": [
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "day_1_bookId_1",
+          "key": [
+            [
+              "day",
+              1
+            ],
+            [
+              "bookId",
+              1
+            ]
+          ]
+        }
+      ]
+    },
+    "forumposts": {
+      "count": 0,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": [
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "type_1_createdAt_-1",
+          "key": [
+            [
+              "type",
+              1
+            ],
+            [
+              "createdAt",
+              -1
+            ]
+          ]
+        },
+        {
+          "name": "views_-1",
+          "key": [
+            [
+              "views",
+              -1
+            ]
+          ]
+        }
+      ]
+    },
+    "users": {
+      "count": 0,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": [
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "created_at_-1",
+          "key": [
+            [
+              "created_at",
+              -1
+            ]
+          ]
+        },
+        {
+          "name": "email_1",
+          "key": [
+            [
+              "email",
+              1
+            ]
+          ],
+          "unique": true
+        },
+        {
+          "name": "username_1",
+          "key": [
+            [
+              "username",
+              1
+            ]
+          ],
+          "unique": true
+        },
+        {
+          "name": "weekly_score_-1",
+          "key": [
+            [
+              "weekly_score",
+              -1
+            ]
+          ]
+        }
+      ]
+    },
+    "sessions": {
+      "count": 0,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": [
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "expiresAt_1",
+          "key": [
+            [
+              "expiresAt",
+              1
+            ]
+          ],
+          "expireAfterSeconds": 0
+        },
+        {
+          "name": "userId_1",
+          "key": [
+            [
+              "userId",
+              1
+            ]
+          ]
+        }
+      ]
+    },
+    "forumreplycomments": {
+      "count": 0,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": [
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "parentCommentId_1_createdAt_1",
+          "key": [
+            [
+              "parentCommentId",
+              1
+            ],
+            [
+              "createdAt",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "replyId_1_createdAt_1",
+          "key": [
+            [
+              "replyId",
+              1
+            ],
+            [
+              "createdAt",
+              1
+            ]
+          ]
+        }
+      ]
+    },
+    "reviews": {
+      "count": 0,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": [
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "book_1_user_1",
+          "key": [
+            [
+              "book",
+              1
+            ],
+            [
+              "user",
+              1
+            ]
+          ],
+          "unique": true
+        }
+      ]
+    },
+    "readreceipts": {
+      "count": 0,
+      "indexes": [
+        {
+          "name": "_id_",
+          "key": [
+            [
+              "_id",
+              1
+            ]
+          ]
+        },
+        {
+          "name": "expiresAt_1",
+          "key": [
+            [
+              "expiresAt",
+              1
+            ]
+          ],
+          "expireAfterSeconds": 0
+        }
+      ]
+    }
+  },
+  "samples": [
+    {
+      "id": "0000000000000000000f4240",
+      "sha256": "5880cbe6dc2ab464f6748e6627dac79fabf9f19b693e9104c4ac12f34731e1dc"
+    },
+    {
+      "id": "0000000000000000000f4241",
+      "sha256": "c982245ea3a124be1f1aa99e11fe397d1a64a22a3809366e1627f31ed0cd67ad"
+    },
+    {
+      "id": "0000000000000000000f4242",
+      "sha256": "c982245ea3a124be1f1aa99e11fe397d1a64a22a3809366e1627f31ed0cd67ad"
+    }
+  ],
+  "result": "passed",
+  "limits": "Same machine copy only; no independent offsite storage or real old data verification"
+}

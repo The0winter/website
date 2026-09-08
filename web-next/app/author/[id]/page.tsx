@@ -7,7 +7,9 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { BookOpen, Award, Flame, Plus, Clock } from 'lucide-react';
 // ✅ 确保引用路径正确
-import { booksApi, Book } from '@/lib/api';
+import { usersApi, Book, Profile } from '@/lib/api';
+import {safeFetch} from '@/lib/request';
+import Link from 'next/link';
 
 export default function AuthorProfile() {
     const params = useParams();
@@ -15,76 +17,26 @@ export default function AuthorProfile() {
     const [books, setBooks] = useState<Book[]>([]);
     const [loading, setLoading] = useState(true);
 
-// 1. 先定义一个安全的 helper 变量算出名字
-    const safeAuthorName = (() => {
-        const book = books[0];
-        // 检查：书存在 && author_id 存在 && author_id 是个对象（说明 populate 成功）
-        if (book && book.author_id && typeof book.author_id === 'object') {
-            return (book.author_id as {username?:string;_id?:string;id?:string}).username;
-        }
-        // 兜底：如果书里存了 author 字符串（如 "Ao"），就用它
-        if (book && book.author) {
-            return book.author;
-        }
-        // 最后默认值
-        return "签约作家";
-    })();
-
-    const author = {
-        id: authorId,
-        username: safeAuthorName, // 👈 赋值算好的字符串
-        role: "Platinum Writer",
-        bio: "This author creates amazing worlds on NovelHub. (Bio is a placeholder until backend API is ready).",
-        // 使用 DiceBear 根据 ID 生成固定头像
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${authorId}` 
-    };
-
-    // 模拟数据统计
-    const stats = {
-        totalBooks: books.length,
-        totalWords: 1500000, // 假数据
-        daysActive: 365      // 假数据
-    };
-
-useEffect(() => {
-    const fetchAuthorBooks = async () => {
-        try {
-            setLoading(true);
-            const allBooks = await booksApi.getAll();
-            
-            // 🔍 调试大法：先看看拿到了什么
-            console.log("All books fetched:", allBooks); 
-
-                const filteredBooks = allBooks.filter(b => {
-                if (!b.author_id) return false;
-                
-                    // ✅ 修复点：优先比对 id (字符串)，如果不行再比对 _id
-                    const authorObj = b.author_id as {username?:string;_id?:string;id?:string};
-                    
-                    // 如果是对象（Populate 成功），我们优先取它的 .id (也就是 session 里的那个 id)
-                    // 如果 .id 不存在，再取 ._id
-                    const bookAuthorId = typeof b.author_id === 'object' 
-                        ? (authorObj.id || authorObj._id) 
-                        : b.author_id;
-
-                    return String(bookAuthorId) === String(authorId);
-                });
-            
-            console.log("Filtered books:", filteredBooks); // 看看筛选剩下了什么
-            setBooks(filteredBooks);
-
-        } catch (error) {
-            console.error('Error fetching author books:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    if (authorId) {
-        fetchAuthorBooks();
-    }
-}, [authorId]);
-
+    const [page, setPage] = useState(1);
+    const [total, setTotal] = useState(0);
+    const [profile, setProfile] = useState<Profile | null>(null);
+    const [error, setError] = useState('');
+    const [asOf, setAsOf] = useState(0);
+    const author = {username:profile?.username || '作者',avatar:profile?.avatar || '/default-avatar.png',role:'作者',bio:'作者公开作品'};
+    const stats = {totalBooks:total,daysActive:profile?.created_at ? Math.max(0,Math.floor((asOf-Date.parse(profile.created_at))/86400000)) : '—'};
+    useEffect(() => {
+        let active=true;
+        Promise.all([
+            safeFetch(`/api/books?author_id=${encodeURIComponent(String(authorId))}&page=${page}&limit=20&orderBy=updatedAt`),
+            usersApi.getProfile(String(authorId)),
+        ]).then(async ([response, user])=>{
+            if(!response.ok)throw new Error('作品加载失败，请重试');
+            const data: Book[]=await response.json();
+            if(active){setBooks(data);setTotal(Number(response.headers.get('X-Total-Count')));setProfile(user);setAsOf(Date.now());setLoading(false);setError('');}
+        }).catch(e=>{if(active){setError(e instanceof Error ? e.message : '加载失败');setLoading(false);}});
+        return ()=>{active=false;};
+    },[authorId,page]);
+    if (error) return <div role="alert">{error}<button onClick={()=>location.reload()}>重试</button></div>;
     if (loading) return <div className="text-center py-12">Loading...</div>;
 
     // 这里的逻辑保持你想要的效果
@@ -126,7 +78,7 @@ useEffect(() => {
                                     <p className="text-xs text-purple-200 uppercase">Works</p>
                                 </div>
                                 <div>
-                                    <p className="text-2xl font-bold">{(stats.totalWords / 1000000).toFixed(1)}M</p>
+                                    <p className="text-2xl font-bold">—</p>
                                     <p className="text-xs text-purple-200 uppercase">Words</p>
                                 </div>
                                 <div>
@@ -160,13 +112,13 @@ useEffect(() => {
                                     <h2 className="text-2xl font-bold mb-2 text-gray-900">{latestBook.title}</h2>
                                     <p className="text-gray-600 mb-6 line-clamp-2">{latestBook.description}</p>
                                     <div className="flex gap-3">
-                                        <button className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full font-medium transition-colors">
+                                        <Link href={`/book/${latestBook.id}`} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full font-medium transition-colors">
                                             Read Now
-                                        </button>
-                                        <button className="border border-gray-300 hover:border-gray-400 text-gray-700 px-6 py-2 rounded-full font-medium flex items-center gap-2 transition-colors">
+                                        </Link>
+                                        <Link href={`/book/${latestBook.id}`} className="border border-gray-300 hover:border-gray-400 text-gray-700 px-6 py-2 rounded-full font-medium flex items-center gap-2 transition-colors">
                                             <Plus className="w-4 h-4" />
                                             Library
-                                        </button>
+                                        </Link>
                                     </div>
                                 </div>
                             </div>
@@ -179,14 +131,14 @@ useEffect(() => {
                     <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
                         <h3 className="text-lg font-bold mb-6 text-gray-900 flex items-center gap-2">
                             <BookOpen className="w-5 h-5" />
-                            All Works ({books.length})
+                            All Works ({total})
                         </h3>
-                        <div className="space-y-6">
+                        <div className="flex gap-4"><button disabled={page===1} onClick={()=>setPage(page-1)}>上一页</button><span>第 {page} 页</span><button disabled={page*20>=total} onClick={()=>setPage(page+1)}>下一页</button></div><div className="space-y-6">
                             {otherBooks.length > 0 ? otherBooks.map((book) => (
                                 <div key={book.id} className="flex gap-4 pb-6 border-b border-gray-100 last:border-0 last:pb-0">
                                     <div className="text-sm font-medium text-gray-400 min-w-[60px] pt-1">
                                         {/* ✅ 修复 year 报错：使用 created_at */}
-                                        {new Date(book.created_at || Date.now()).getFullYear()}
+                                        {book.created_at || book.createdAt ? new Date(book.created_at || book.createdAt!).getFullYear() : '—'}
                                     </div>
                                     <div className="w-16 h-24 shrink-0 bg-gray-200 rounded overflow-hidden">
                                         {book.cover_image ? (
@@ -195,7 +147,7 @@ useEffect(() => {
                                     </div>
                                     <div className="flex-1">
                                         <div className="flex justify-between items-start">
-                                            <h4 className="font-bold text-gray-900 hover:text-blue-600 cursor-pointer">{book.title}</h4>
+                                            <h4 className="font-bold text-gray-900 hover:text-blue-600 cursor-pointer"><Link href={`/book/${book.id}`}>{book.title}</Link></h4>
                                             <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
                                                 {book.status || 'Ongoing'}
                                             </span>
@@ -203,7 +155,7 @@ useEffect(() => {
                                         <p className="text-sm text-gray-500 mt-1 line-clamp-2">{book.description}</p>
                                         <div className="mt-2 text-xs text-gray-400 flex items-center gap-4">
                                             <span>{book.category}</span>
-                                            <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {new Date(book.created_at || Date.now()).toLocaleDateString()}</span>
+                                            <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {book.created_at || book.createdAt ? new Date(book.created_at || book.createdAt!).toLocaleDateString() : '—'}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -226,21 +178,21 @@ useEffect(() => {
                                 <span className="text-2xl">🏆</span>
                                 <div>
                                     <div className="text-sm font-bold text-gray-900">Author Glory</div>
-                                    <div className="text-xs text-gray-500">86 collected</div>
+                                    <div className="text-xs text-gray-500">暂无已核实记录</div>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
                                 <span className="text-2xl">⭐</span>
                                 <div>
                                     <div className="text-sm font-bold text-gray-900">Rising Star</div>
-                                    <div className="text-xs text-gray-500">Top 100 rank</div>
+                                    <div className="text-xs text-gray-500">暂无已核实记录</div>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg border border-purple-100">
                                 <span className="text-2xl">📚</span>
                                 <div>
                                     <div className="text-sm font-bold text-gray-900">Prolific</div>
-                                    <div className="text-xs text-gray-500">1M+ words</div>
+                                    <div className="text-xs text-gray-500">暂无已核实记录</div>
                                 </div>
                             </div>
                         </div>

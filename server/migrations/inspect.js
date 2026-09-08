@@ -2,6 +2,7 @@
 import mongoose from 'mongoose';
 import {readConfig} from '../config.js';
 import '../app.js';
+import '../models/Job.js';
 const config=readConfig();
 if(config.mode==='production')throw new Error('Production migrations require a separately reviewed release procedure');
 await mongoose.connect(config.uri,{autoIndex:false,autoCreate:false,serverSelectionTimeoutMS:5000});

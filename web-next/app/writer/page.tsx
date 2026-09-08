@@ -53,6 +53,7 @@ export default function WriterDashboard() {
 
   // 作品相关
   const [myBooks, setMyBooks] = useState<Book[]>([]);
+  const [worksPage, setWorksPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [activeChapters, setActiveChapters] = useState<Chapter[]>([]);
 
@@ -126,14 +127,14 @@ export default function WriterDashboard() {
     if (!user) return;
     try {
       setLoading(true);
-      const books = await booksApi.getMyBooks(user.id);
+      const books = await booksApi.getMyBooks(user.id, worksPage);
       setMyBooks(books); 
     } catch (error) {
       console.error('Failed to load books:', error);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, worksPage]);
 
   // 👮 加载用户列表 (支持搜索)
   const fetchUserList = useCallback(async (search = '') => {
@@ -181,7 +182,7 @@ export default function WriterDashboard() {
 
     setAdminBookSearchLoading(true);
     try {
-      const books = await booksApi.getAll({ orderBy: 'daily_views', order: 'desc' });
+      const books = await booksApi.getAll({ orderBy: 'daily_views', order: 'desc', q: keyword });
       const hotBookIds = new Set(adminHotBooks.map((book) => book.id));
       const filtered = books.filter((book) => {
         const authorName = typeof book.author === 'string' 
@@ -551,6 +552,7 @@ const openBookManager = (book: Book) => {
                 </div>
 
                 <div className="divide-y divide-gray-100">
+                    <div className="flex items-center justify-center gap-4 p-4"><button disabled={loading || worksPage===1} onClick={()=>setWorksPage(worksPage-1)}>上一页</button><span>第 {worksPage} 页</span><button disabled={loading || myBooks.length<20} onClick={()=>setWorksPage(worksPage+1)}>下一页</button></div>
                     {loading ? ( <div className="p-12 text-center text-gray-400">加载中...</div> ) : myBooks.length === 0 ? (
                         <div className="p-12 text-center text-gray-500 flex flex-col items-center gap-4">
                             <BookOpen className="h-12 w-12 text-gray-200" /> <p>暂无作品</p>

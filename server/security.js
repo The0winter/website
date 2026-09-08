@@ -26,15 +26,24 @@ export function security(app, config) {
     if (!config.origins.includes(req.headers.origin)) return res.status(403).json({error:'请求来源无效'});
     csrf.doubleCsrfProtection(req,res,next);
   });
+  async function resolveSession(req) {
+    const token = req.cookies[cookieName];
+    if (!token) return null;
+    let payload;
+    try { payload = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] }); }
+    catch (e) { if (e instanceof jwt.JsonWebTokenError) return null; throw e; }
+    if (typeof payload !== 'object' || typeof payload.sid !== 'string' || !/^[a-f0-9]{64}$/.test(payload.sid) || !/^[a-f0-9]{24}$/i.test(payload.id)) return null;
+    const session = await Session.findOne({_id:payload.sid,userId:payload.id,expiresAt:{$gt:new Date()}});
+    if (!session) return null;
+    const user = await User.findById(session.userId);
+    if (!user || user.isBanned || (user.authVersion||0)!==(session.authVersion||0)) return null;
+    return {session,user};
+  }
   const authenticate = asyncRoute(async (req,res,next) => {
     try {
-      const token = req.cookies[cookieName];
-      if (!token) return res.status(401).json({error:'请先登录'});
-      const payload = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] });
-      const session = await Session.findOne({_id:payload.sid, userId:payload.id, expiresAt:{$gt:new Date()}});
-      if (!session) return res.status(401).json({error:'登录已失效'});
-      const user = await User.findById(session.userId);
-      if (!user || user.isBanned || (user.authVersion||0)!==(session.authVersion||0)) return res.status(403).json({error:'账户不可用'});
+      const resolved = await resolveSession(req);
+      if (!resolved) return res.status(401).json({error:'登录已失效'});
+      const {session,user} = resolved;
       req.user = {id:String(user._id),role:user.role === 'admin' ? 'admin' : 'reader'};
       req.account = user;
       req.sessionId = session._id;
@@ -51,5 +60,5 @@ export function security(app, config) {
     const token = jwt.sign({id:String(user._id),sid},config.jwtSecret,{expiresIn:seconds,algorithm:'HS256'});
     res.cookie(cookieName,token,{...cookieOptions,maxAge:seconds*1000});
   }
-  return { authenticate, issue, clear: res => res.clearCookie(cookieName,cookieOptions) };
+  return { authenticate, issue, optionalUserId: async req => { const resolved = await resolveSession(req); return resolved ? String(resolved.user._id) : null; }, clear: res => res.clearCookie(cookieName,cookieOptions) };
 }
