@@ -1,0 +1,10 @@
+
+Running 3 tests using 1 worker
+
+(node:39528) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 web-next\tests\reading.spec.ts:4:5 › reader has usable server-rendered text and navigation with JavaScript disabled (841ms)
+  ok 2 web-next\tests\reading.spec.ts:20:5 › sitemap index and chapter file use public legacy paths and missing paths return 404 (170ms)
+  ok 3 web-next\tests\reading.spec.ts:28:5 › one hundred chapter changes and browser back keep URL and visible content aligned (19.1s)
+
+  3 passed (21.2s)

@@ -1,4 +1,5 @@
 'use client';
+import {useForumView} from '@/lib/useForumView';
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -74,7 +75,9 @@ export default function QuestionPage() {
   const qid = params?.qid as string;
 
   const [question, setQuestion] = useState<ForumPost | null>(null);
+  useForumView(question?.id);
   const [answers, setAnswers] = useState<ForumReply[]>([]);
+  const [answerPage,setAnswerPage]=useState(1);
   const [loading, setLoading] = useState(true);
   const [showEditor, setShowEditor] = useState(false);
   const [replyContent, setReplyContent] = useState('');
@@ -123,22 +126,24 @@ export default function QuestionPage() {
 
   useEffect(() => {
     if (!qid) return;
-
+    let active = true;
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [qData, rData] = await Promise.all([forumApi.getById(qid), forumApi.getReplies(qid)]);
+        const [qData, rData] = await Promise.all([forumApi.getById(qid), forumApi.getReplies(qid,answerPage)]);
+        if (!active) return;
         setQuestion(qData);
         setAnswers(rData);
       } catch (error) {
         console.error('Load question failed:', error);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     fetchData();
-  }, [qid]);
+    return () => { active = false; };
+  }, [qid,answerPage]);
 
   const handleSubmitReply = async () => {
     if (!replyContent.trim()) {
@@ -156,9 +161,11 @@ export default function QuestionPage() {
       await forumApi.addReply(qid, { content: replyContent.replace(/\n/g, '<br/>') });
       setReplyContent('');
       setShowEditor(false);
-      const newAnswers = await forumApi.getReplies(qid);
+      setAnswerPage(1);
+      const [newAnswers, updatedQuestion] = await Promise.all([forumApi.getReplies(qid), forumApi.getById(qid)]);
       setAnswers(newAnswers);
-    } catch (error: any) {
+      setQuestion(updatedQuestion);
+    } catch (caught: unknown) { const error = caught instanceof Error ? caught : new Error('操作失败');
       if (error.message?.includes('401') || error.message?.includes('403')) {
         alert('请先登录后再回答');
         router.push('/login');
@@ -328,12 +335,13 @@ export default function QuestionPage() {
             </section>
 
             <div className="flex justify-between items-center px-1 pb-3">
-              <span className={`font-bold text-base ${theme.textMain}`}>{answers.length} 个回答</span>
+              <span className={`font-bold text-base ${theme.textMain}`}>{question?.comments||0} 个回答</span>
               <span className={`flex items-center gap-1 text-sm cursor-pointer ${theme.textSub}`}>
                 默认排序 <ChevronDown className="w-4 h-4" />
               </span>
             </div>
 
+            <nav aria-label="回答分页" className="flex gap-4 justify-center my-4"><button disabled={answerPage===1} onClick={()=>setAnswerPage(answerPage-1)}>上一页</button><span>第 {answerPage} 页</span><button disabled={answers.length<20} onClick={()=>setAnswerPage(answerPage+1)}>下一页</button></nav>
             <div className="flex flex-col gap-3 md:gap-4">
               {answers.map((answer) => (
                 <Link

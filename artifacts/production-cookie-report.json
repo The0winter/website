@@ -1,0 +1,15 @@
+{
+  "result": "passed",
+  "origin": "https://127.0.0.1:8443",
+  "mode": "production with synthetic replica",
+  "cleanBuild": "F:\\Website\\Test1\\.runtime\\clean-room-1788954799089",
+  "proxy": "nginx HTTPS to Next production and API",
+  "checks": [
+    "secure HttpOnly __Host-session at /",
+    "SameSite=Lax",
+    "browser refresh remains authenticated",
+    "logout revokes replayed old cookie"
+  ],
+  "externalServices": "disabled",
+  "limitations": "Loopback self-signed certificate accepted only by isolated browser context; no public DNS, trusted certificate or Linux service test"
+}

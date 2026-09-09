@@ -23,4 +23,5 @@ const forumReplySchema = new mongoose.Schema({
   isAccepted: { type: Boolean, default: false }
 }, { timestamps: true });
 
+forumReplySchema.index({postId:1,likes:-1,createdAt:-1,_id:1});
 export default mongoose.model('ForumReply', forumReplySchema);

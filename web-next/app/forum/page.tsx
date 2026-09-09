@@ -1,4 +1,5 @@
 'use client';
+import {useStoredState} from '@/lib/useStoredState';
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -89,8 +90,10 @@ export default function ForumPage() {
   const initializedRef = useRef(false);
 
   // ====== 基础设置状态 ======
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
-  const [fontSize, setFontSize] = useState(16);
+  const [preferences,setPreferences]=useStoredState(READER_SETTINGS_KEY,{themeMode:'light' as ThemeMode,fontSize:16},value=>!!value&&typeof value==='object'&&'themeMode' in value&&['light','dark'].includes(String(value.themeMode))&&'fontSize' in value&&typeof value.fontSize==='number'&&value.fontSize>=14&&value.fontSize<=24);
+  const {themeMode,fontSize}=preferences;
+  const setThemeMode=(value:ThemeMode)=>setPreferences(old=>({...old,themeMode:value}));
+  const setFontSize=(value:number|((previous:number)=>number))=>setPreferences(old=>({...old,fontSize:typeof value==='function'?value(old.fontSize):value}));
   const [showSettings, setShowSettings] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const currentTheme = THEMES[themeMode];
@@ -128,24 +131,6 @@ export default function ForumPage() {
     document.addEventListener('mousedown', onClickOutside);
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, []);
-
-  // 3. 读取缓存配置
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(READER_SETTINGS_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (parsed?.themeMode === 'light' || parsed?.themeMode === 'dark') setThemeMode(parsed.themeMode);
-      if (typeof parsed?.fontSize === 'number' && parsed.fontSize >= 14 && parsed.fontSize <= 24) setFontSize(parsed.fontSize);
-    } catch { /* ignore */ }
-  }, []);
-
-  // 4. 写入缓存配置
-  useEffect(() => {
-    try {
-      localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify({ themeMode, fontSize }));
-    } catch { /* ignore */ }
-  }, [themeMode, fontSize]);
 
   // ====== 移动端滑动事件处理 ======
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -499,7 +484,7 @@ return (
             onTouchEnd={handleTouchEnd}
           >
             {TABS.map(tab => (
-              <div key={tab.id} className="w-full shrink-0">
+              <div key={tab.id} className="w-full shrink-0" inert={tab.id!==activeTab} aria-hidden={tab.id!==activeTab}>
                 {/* 替换原有的 {renderPostList(tab.id)} */}
                 {tab.id === 'hot' ? renderHotList(tab.id) : renderPostList(tab.id)}
               </div>

@@ -1,20 +1,7 @@
-// import type { NextConfig } from "next";
-
-// const nextConfig: NextConfig = {
-//   /* config options here */
-// };
-
-// export default nextConfig;
-
-import type { NextConfig } from "next";
-
-// 这里的关键改动：删掉了 nextConfig 后面的 ": NextConfig"
-const nextConfig = {
-  typescript: {
-    // 忽略 TS 报错
-    ignoreBuildErrors: true,
-  },
-  transpilePackages: ['react-window'],
+import type { NextConfig } from 'next';
+const target = (process.env.INTERNAL_API_URL || 'http://127.0.0.1:5000/api').replace(/\/+$/, '');
+const config: NextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || '.next-candidate',
+  async rewrites() { return [{ source: '/api/:path*', destination: target + '/:path*' }]; },
 };
-
-export default nextConfig;
+export default config;

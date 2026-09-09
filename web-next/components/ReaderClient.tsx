@@ -1,6 +1,9 @@
-'use client'; 
+'use client';
+import {useStoredState} from '@/lib/useStoredState';
+import { safeFetch as fetch } from '@/lib/request';
+ 
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useLayoutEffect, useCallback, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { API_BASE_URL } from '@/lib/api';
 import Link from 'next/link';
@@ -20,9 +23,13 @@ let bgCleanupTimer: NodeJS.Timeout | null = null;
 let globalIsDesktop = typeof window !== 'undefined' ? window.innerWidth >= 1024 : false;
 
 // 🔥 [新增 1] 全局章节缓存池
-const chapterCache = new Map<string, any>();
+class BoundedMap<K,V> extends Map<K,V> {
+  constructor(private maximum:number){super();}
+  set(key:K,value:V){super.delete(key);super.set(key,value);while(this.size>this.maximum){const oldest=this.keys().next();if(!oldest.done)super.delete(oldest.value);}return this;}
+}
+const chapterCache = new BoundedMap<string, Chapter>(20);
 // 🔥 [新增] 全局书籍缓存池 (防止切换章节时书名/封面闪烁)
-const bookCache = new Map<string, any>();
+const bookCache = new BoundedMap<string, Book>(3);
 const settingsCache = {
   themeColor: 'cream' as 'gray' | 'cream' | 'green' | 'blue',
   fontFamily: 'sans' as 'sans' | 'serif' | 'kai',
@@ -105,27 +112,17 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const [catalogReversed, setCatalogReversed] = useState(false);
 
   // 导航栏显示状态 (移动端专用)
-  const [showNav, setShowNav] = useState(false);
+  const [mobileNav,setShowNav]=useState(false);
+  const showNav=isDesktop||mobileNav;
   const [lastScrollY, setLastScrollY] = useState(0);
   const { theme, setTheme } = useReadingSettings();
 
-  // --- 修复：桌面端逻辑 (进场/切章节时自动显示导航栏) ---
-  useEffect(() => {
-    if (isDesktop) {
-      // 电脑端：只要是进页面或切章节，强制显示导航栏
-      setShowNav(true);
-    } else {
-      // 移动端：切章节时确保菜单收起 (保持沉浸体验)
-      setShowNav(false);
-    }
-  }, [isDesktop, chapterIdParam]); // 依赖项：设备变了 或 章节变了 都触发
-
-  const [themeColor, setThemeColor] = useState(settingsCache.themeColor);
-  const [fontFamily, setFontFamily] = useState(settingsCache.fontFamily);
-  const [fontSizeNum, setFontSizeNum] = useState(settingsCache.fontSizeNum);
-  const [lineHeight, setLineHeight] = useState(settingsCache.lineHeight);
-  const [paraSpacing, setParaSpacing] = useState(settingsCache.paraSpacing); 
-  const [pageWidth, setPageWidth] = useState(settingsCache.pageWidth);
+  const [themeColor, setThemeColor] = useStoredState('reader_themeColor',settingsCache.themeColor,v=>['gray','cream','green','blue'].includes(String(v)));
+  const [fontFamily, setFontFamily] = useStoredState('reader_fontFamily',settingsCache.fontFamily,v=>['sans','serif','kai'].includes(String(v)));
+  const [fontSizeNum, setFontSizeNum] = useStoredState('reader_fontSizeNum',isDesktop ? 22 : 20,v=>typeof v==='number'&&Number.isFinite(v)&&v>=12&&v<=72);
+  const [lineHeight, setLineHeight] = useStoredState('reader_lineHeight',settingsCache.lineHeight,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000);
+  const [paraSpacing, setParaSpacing] = useStoredState('reader_paraSpacing',settingsCache.paraSpacing,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000); 
+  const [pageWidth, setPageWidth] = useStoredState('reader_pageWidth',settingsCache.pageWidth,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000);
 
   // 🔥 新增：当这些设置改变时，自动同步回全局缓存
   // 这样下一章加载时，就能记住你刚才的设置了
@@ -136,58 +133,9 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   useEffect(() => { settingsCache.paraSpacing = paraSpacing; }, [paraSpacing]);
   useEffect(() => { settingsCache.pageWidth = pageWidth; }, [pageWidth]);
 
-  const [showHint, setShowHint] = useState(false); // 新手引导提示
-
-  // 网页端默认参数调整：加载时如果是大屏，调整默认字号 (改小了) 和行距
-  useEffect(() => {
-    if (window.innerWidth >= 1024) {
-      setFontSizeNum(22); 
-      setLineHeight(1.8); 
-      setPageWidth(1000);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (hasInitialBook && initialBook) {
-      bookCache.set(bookId, initialBook);
-      setBook(initialBook);
-    } else if (!book && bookCache.has(bookId)) {
-      setBook(bookCache.get(bookId) || null);
-    }
-
-    if (hasInitialChapter && initialChapter) {
-      chapterCache.set(chapterIdParam, initialChapter);
-      setChapter(initialChapter);
-    } else if (!chapter && chapterCache.has(chapterIdParam)) {
-      setChapter(chapterCache.get(chapterIdParam) || null);
-    }
-
-    if (
-      (hasInitialBook && hasInitialChapter) ||
-      (bookCache.has(bookId) && chapterCache.has(chapterIdParam))
-    ) {
-      setLoading(false);
-    }
-  }, [
-    book,
-    bookId,
-    chapter,
-    chapterIdParam,
-    hasInitialBook,
-    hasInitialChapter,
-    initialBook,
-    initialChapter,
-  ]);
-
-  // --- 新增：检查是否需要显示新手引导 (仅移动端 & 第一次) ---
-  useEffect(() => {
-    // 只有在客户端才执行
-    const hasSeen = localStorage.getItem('has-seen-reading-hint');
-    // 如果没看过，且当前是手机宽度 (<1024)，则显示提示
-    if (!hasSeen && window.innerWidth < 1024) {
-      setShowHint(true);
-    }
-  }, []);
+  const [hintSeen,setHintSeen]=useStoredState('has-seen-reading-hint',false);
+  const showHint=!isDesktop&&!hintSeen;
+  const setShowHint=(visible:boolean)=>setHintSeen(!visible); // 新手引导提示
 
   // --- 新增：监听安卓/小米的侧滑返回，实现“侧滑关闭目录” ---
   useEffect(() => {
@@ -253,9 +201,13 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   };
 
   useEffect(() => {
-    if (bookId) booksApi.incrementViews(bookId).catch(e => console.error(e));
+    if (!bookId || !chapterIdParam) return;
+    let timer:ReturnType<typeof setTimeout> | undefined;
+    const schedule=()=>{if(timer)clearTimeout(timer);if(document.visibilityState==='visible')timer=setTimeout(()=>{booksApi.incrementViews(bookId,chapterIdParam).catch(()=>{});},10000);};
+    schedule();document.addEventListener('visibilitychange',schedule);
+    return ()=>{if(timer)clearTimeout(timer);document.removeEventListener('visibilitychange',schedule);};
   }, [bookId, chapterIdParam]);
-  useEffect(() => { if (bookId && user) checkBookmark(); }, [bookId, user]);
+  useEffect(() => { if (!bookId || !user) return; let active=true; bookmarksApi.check(user.id,bookId).then(value=>{if(active)setIsBookmarked(value);}).catch(()=>{});return ()=>{active=false;}; }, [bookId, user]);
   useEffect(() => {
     if (showCatalog) {
       setTimeout(() => {
@@ -324,7 +276,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       };
-      let targetId = chapterIdParam;
+      const targetId = chapterIdParam;
 
 if (targetId) {
         const hasServerData = hasInitialBook && hasInitialChapter && !!initialBook && !!initialChapter;
@@ -343,8 +295,8 @@ if (targetId) {
            // 因为我们在 useState 初始化时已经拿到了
            setLoading(false);
            // 但为了保险（防止初始化后数据变了），还是默默更新一下 state
-           setChapter(chapterCache.get(targetId));
-           setBook(bookCache.get(bookId));
+           setChapter(chapterCache.get(targetId) || null);
+           setBook(bookCache.get(bookId) || null);
            window.scrollTo(0, 0);
         } 
         else if (!hasServerData) {
@@ -416,9 +368,9 @@ if (targetId) {
                  const firstId = chaptersRes[0].id;
                  // 🔥 [修改点 C] 即使是第一章，也尝试读缓存
                  if (chapterCache.has(firstId)) {
-                    setChapter(chapterCache.get(firstId));
+                    setChapter(chapterCache.get(firstId) || null);
                  } else {
-                    const chRes = await fetch(`https://jiutianxiaoshuo.com/api/chapters/${firstId}`, { headers: authHeaders });
+                    const chRes = await fetch(`/api/chapters/${firstId}`, { headers: authHeaders });
                     if (chRes.ok) {
                       const chData = await chRes.json();
                       setChapter(chData);
@@ -446,6 +398,7 @@ if (targetId) {
   // ▼▼▼ 🔥 [新增 2] 静默预加载下一章 (Prefetching) ▼▼▼
   // ============================================================
   useEffect(() => {
+    const controller=new AbortController();
     // 只有当：1.当前章节已加载 2.目录已加载 时，才执行预加载
     if (chapter && allChapters.length > 0) {
       const currentIndex = allChapters.findIndex((ch) => ch.id === chapter.id);
@@ -460,14 +413,16 @@ if (targetId) {
 
           const token = localStorage.getItem('token');
           
-          fetch(`https://jiutianxiaoshuo.com/api/chapters/${nextChapter.id}`, {
+          fetch(`/api/chapters/${nextChapter.id}`, {
+              signal:controller.signal,
               headers: {
                   'Content-Type': 'application/json',
                   ...(token ? { 'Authorization': `Bearer ${token}` } : {})
               }
           })
-            .then(res => res.json())
+            .then(res => {if(!res.ok)throw new Error('下一章预读暂不可用');return res.json();})
             .then(data => {
+              if(controller.signal.aborted||String(data.id||data._id)!==nextChapter.id||String(data.bookId)!==bookId||typeof data.content!=='string')return;
               // 下载成功，存入缓存 (注意：不要 setChapter，只存不显)
               chapterCache.set(nextChapter.id, data);
               console.log(`[预加载] 完成！下一章已就绪。`);
@@ -482,11 +437,12 @@ if (targetId) {
                   }
               }
             })
-            .catch(err => console.error("[预加载] 失败 (不影响当前阅读)", err));
+            .catch(err => {if(err.name!=='AbortError')console.error("[预加载] 失败 (不影响当前阅读)", err);});
         }
       }
     }
-  }, [chapter, allChapters]); // 当当前章节变化时，触发下一次预加载
+    return()=>controller.abort();
+  }, [chapter, allChapters,bookId]); // 当当前章节变化时，触发下一次预加载
 
   const checkBookmark = async () => {
     try {
@@ -508,9 +464,12 @@ if (targetId) {
     } catch (error) {}
   };
 // 核心跳转逻辑：预取模式
-  const goToChapter = async (targetChapterId: string) => {
+  const navigationSequence = useRef(0);
+  useEffect(()=>()=>{navigationSequence.current++;},[]);
+  const goToChapter = useCallback(async (targetChapterId: string) => {
+    const sequence=++navigationSequence.current;
     // 防止重复点击
-    if (isNavigating) return;
+
 
     // A. 缓存里已经有了？直接飞过去！(秒开)
     if (chapterCache.has(targetChapterId)) {
@@ -524,7 +483,7 @@ if (targetId) {
     try {
       const token = localStorage.getItem('token');
       // 手动发起 fetch
-      const res = await fetch(`https://jiutianxiaoshuo.com/api/chapters/${targetChapterId}`, {
+      const res = await fetch(`/api/chapters/${targetChapterId}`, {
          headers: {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -533,6 +492,7 @@ if (targetId) {
 
       if (res.ok) {
         const data = await res.json();
+        if(sequence!==navigationSequence.current || data.bookId!==bookId)return;
         // 🔥 关键：手动写入缓存！
         // 这样等路由跳转过去时，新页面初始化就能直接读到数据，实现“无缝衔接”
         chapterCache.set(targetChapterId, data);
@@ -548,7 +508,7 @@ if (targetId) {
       alert('网络请求出错');
       setIsNavigating(false);
     }
-  };
+  }, [router, bookId]);
   const currentChapterIndex = allChapters.findIndex((ch) => ch.id === chapter?.id);
   const prevChapter = currentChapterIndex > 0 ? allChapters[currentChapterIndex - 1] : null;
   const nextChapter = currentChapterIndex < allChapters.length - 1 ? allChapters[currentChapterIndex + 1] : null;
@@ -556,7 +516,7 @@ if (targetId) {
   // ============================================================
   // ▼▼▼ 新增：键盘左右键翻页 (← 上一章 / → 下一章) ▼▼▼
   // ============================================================
-  useEffect(() => {
+  useLayoutEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // 1. 如果用户正在输入框(评论)里打字，按方向键是为了移动光标，不要翻页
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
@@ -575,7 +535,7 @@ if (targetId) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [prevChapter, nextChapter]); // 依赖项：当上一章/下一章变化时，重新绑定
+  }, [prevChapter, nextChapter, goToChapter]);
   
   // ... 下面是 const fontFamilyValue = ...
 
@@ -604,6 +564,8 @@ if (loading) return (
   return (
     <div 
       className="min-h-screen w-full transition-colors duration-300 flex flex-col items-center"
+      data-reader-cache-chapters={chapterCache.size}
+      data-reader-cache-books={bookCache.size}
       style={{ 
         backgroundColor: isDesktop ? activeTheme.desk : activeTheme.bg 
       }}
@@ -646,9 +608,9 @@ if (loading) return (
                 {user && <div className="text-xs opacity-60">个人中心</div>}
               </div>
               <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex items-center justify-center shrink-0">
-                 {(user as any)?.avatar ? (
+                 {user?.avatar ? (
                     <img 
-                      src={(user as any).avatar} 
+                      src={user.avatar} 
                       alt="avatar" 
                       className="w-full h-full object-cover"
                       onError={(e) => {
@@ -698,8 +660,8 @@ if (loading) return (
 
         {/* 右侧：用户头像 */}
         <Link href={user ? '/profile' : '/login'} className="rounded-full overflow-hidden border border-black/10 relative z-10">
-            {(user as any)?.avatar ? (
-                <img src={(user as any).avatar} alt="avatar" className="w-8 h-8 object-cover" />
+            {user?.avatar ? (
+                <img src={user.avatar} alt="avatar" className="w-8 h-8 object-cover" />
             ) : (
                 <div className="w-8 h-8 bg-black/10 flex items-center justify-center">
                     <User className="w-5 h-5 opacity-50" />
@@ -1069,7 +1031,7 @@ if (loading) return (
                                 key={key} 
                                 // 1. 移除了 disabled 属性
                                 onClick={() => {
-                                    setThemeColor(key as any); // 改变主题颜色
+                                    setThemeColor(key as 'gray' | 'cream' | 'green' | 'blue'); // 改变主题颜色
                                     if (isActuallyDark) setTheme('light'); // 2. 如果当前是黑夜，强制切回日间
                                 }}
                                 className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all ${themeColor === key && !isActuallyDark ? 'ring-2 ring-blue-500 scale-110' : ''}`}
@@ -1089,7 +1051,7 @@ if (loading) return (
                             {['sans', 'serif', 'kai'].map(f => (
                             <button
                                 key={f}
-                                onClick={() => setFontFamily(f as any)}
+                                onClick={() => setFontFamily(f as 'sans' | 'serif' | 'kai')}
                                 className={`px-6 py-2 rounded-lg border transition-all ${fontFamily === f ? 'bg-blue-600 text-white border-blue-600' : 'hover:bg-black/5 border-gray-200'}`}
                             >
                                 {f === 'sans' ? '黑体' : f === 'serif' ? '宋体' : '楷体'}
@@ -1200,7 +1162,7 @@ if (loading) return (
                         key={key} 
                         // 1. 移除了 disabled 属性
                         onClick={() => {
-                            setThemeColor(key as any);
+                            setThemeColor(key as 'gray' | 'cream' | 'green' | 'blue');
                             if (isActuallyDark) setTheme('light'); // 2. 同步退出黑夜模式
                         }}
                         className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all ${themeColor === key && !isActuallyDark ? 'ring-2 ring-blue-500 scale-110' : ''}`}
@@ -1220,7 +1182,7 @@ if (loading) return (
                     {['sans', 'serif', 'kai'].map(f => (
                       <button
                         key={f}
-                        onClick={() => setFontFamily(f as any)}
+                        onClick={() => setFontFamily(f as 'sans' | 'serif' | 'kai')}
                         className={`flex-1 py-1.5 text-xs rounded border transition-all ${fontFamily === f ? 'bg-blue-50 text-blue-600 border-blue-500' : 'bg-black/5 border-transparent'}`}
                       >
                         {f === 'sans' ? '黑体' : f === 'serif' ? '宋体' : '楷体'}
@@ -1290,10 +1252,10 @@ export default function ReaderPage({ initialBook = null, initialChapter = null }
   const componentKey = params?.chapterId ? String(params.chapterId) : 'default';
 
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">加载中...</div>}>
+    <>
       {/* 🔥 核心修改：加上 key 属性 */}
       {/* 这样每次切章节，组件都会“重生”，直接从缓存读取新数据，彻底根除闪烁！ */}
       <ReaderContent key={componentKey} initialBook={initialBook} initialChapter={initialChapter} />
-    </Suspense>
+    </>
   );
 }

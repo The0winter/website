@@ -20,6 +20,11 @@ const UserSchema = new mongoose.Schema({
     default: 'reader',
   },
 
+  uploadDay: String,
+  authVersion:{type:Number,default:0},
+  contentVersion:{type:Number,default:0},
+  statisticsVersion:Number,
+  statisticsLegacy:mongoose.Schema.Types.Mixed,
   avatar: { type: String, default: '' },
   
   loginAttempts: { 

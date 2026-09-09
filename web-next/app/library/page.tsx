@@ -1,4 +1,6 @@
 'use client';
+import { safeFetch as fetch } from '@/lib/request';
+
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -31,45 +33,28 @@ export default function Library() {
     if (!user) router.push('/login');
   }, [user, authLoading, router]);
 
-  // --- 加载书架数据 ---
-  useEffect(() => {
-    if (user) {
-      fetchBookmarkedBooks();
-    } else if (!authLoading) {
-      setLoading(false);
+  const [libraryPage,setLibraryPage]=useState(1);
+  const [total,setTotal]=useState(0);
+  const [refresh,setRefresh]=useState(0);
+  const [error,setError]=useState('');
+  const fetchBookmarkedBooks=()=>setRefresh(value=>value+1);
+  useEffect(()=>{
+    let active=true;
+    if(!user)return;
+    async function load(){
+      try{
+        const response=await fetch(`/api/users/${user!.id}/bookmarks?page=${libraryPage}&limit=20`);
+        if(!response.ok)throw new Error('书架暂不可用，请重试');
+        const rows:Array<{bookId:(Book & {_id:string})|null;unavailableBookId:string}>=await response.json();
+        if(active){
+          setBookmarkedBooks(rows.map(row=>row.bookId ? {...row.bookId,id:row.bookId._id} : {id:row.unavailableBookId,title:'作品暂不可用',description:'原书架记录已保留，可稍后重试或移出书架。'}));
+          setTotal(Number(response.headers.get('X-Total-Count')));setError('');
+        }
+      }catch(e){if(active)setError(e instanceof Error?e.message:'书架加载失败');}
+      finally{if(active)setLoading(false);}
     }
-  }, [user, authLoading]);
-
-  const fetchBookmarkedBooks = async () => {
-    try {
-      setLoading(true);
-      const bookmarks = await bookmarksApi.getByUserId(user!.id);
-      
-      if (bookmarks && bookmarks.length > 0) {
-        const bookPromises = bookmarks.map((bookmark) => {
-          if (!bookmark || !bookmark.bookId) return Promise.resolve(null);
-          let bookId: string;
-          if (typeof bookmark.bookId === 'object') {
-                const bookObj = bookmark.bookId as any; 
-                bookId = bookObj._id || bookObj.id || String(bookObj);
-          } else {
-                bookId = String(bookmark.bookId);
-          }
-          if (!bookId || bookId === 'null') return Promise.resolve(null);
-          return booksApi.getById(bookId);
-        });
-        const books = (await Promise.all(bookPromises)).filter((book): book is Book => book !== null);
-        setBookmarkedBooks(books);
-      } else {
-        setBookmarkedBooks([]); 
-      }
-    } catch (error) {
-      console.error('Error fetching bookmarked books:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+    load();return()=>{active=false;};
+  },[user,libraryPage,refresh]);
   const openDeleteModal = (e: React.MouseEvent, bookId: string) => {
     e.preventDefault(); 
     e.stopPropagation();
@@ -82,10 +67,11 @@ export default function Library() {
     try {
         setBookmarkedBooks(prev => prev.filter(b => b.id !== bookId));
         setDeleteTargetId(null);
-        const res = await fetch(`https://jiutianxiaoshuo.com/api/users/${user.id}/bookmarks/${bookId}`, {
+        const res = await fetch(`/api/users/${user.id}/bookmarks/${bookId}`, {
             method: 'DELETE'
         });
         if (!res.ok) throw new Error('删除失败');
+        fetchBookmarkedBooks();
     } catch (error) {
         console.error('移除失败:', error);
         alert('移除失败，请刷新页面重试');
@@ -110,10 +96,12 @@ export default function Library() {
           <Bookmark className="h-8 w-8 text-blue-600" />
           <h1 className="text-3xl font-bold text-gray-900">我的书架</h1>
           <span className="text-sm text-gray-500 bg-gray-200 px-2 py-1 rounded-full">
-            {bookmarkedBooks.length}
+            {total}
           </span>
         </div>
 
+        {error && <p role="alert">{error}<button onClick={fetchBookmarkedBooks}>重试</button></p>}
+        <nav aria-label="书架分页" className="flex gap-4 justify-center mb-6"><button disabled={libraryPage===1} onClick={()=>setLibraryPage(libraryPage-1)}>上一页</button><span>第 {libraryPage} 页</span><button disabled={libraryPage*20>=total} onClick={()=>setLibraryPage(libraryPage+1)}>下一页</button></nav>
         {bookmarkedBooks.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-lg shadow-md">
             <Bookmark className="h-16 w-16 text-gray-300 mx-auto mb-4" />

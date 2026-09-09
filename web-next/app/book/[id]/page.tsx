@@ -1,3 +1,4 @@
+import { safeFetch as fetch } from '@/lib/request';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import BookDetailClient from '@/components/BookDetailClient';
@@ -8,13 +9,13 @@ type Props = {
   params: Promise<{ id: string }>;
 };
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, '') || 'https://jiutianxiaoshuo.com';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, '') || 'http://127.0.0.1:3000';
 
 // 新增：专门为图片提供公网前缀，确保用户的浏览器和搜索引擎爬虫能正确加载封面图
 const PUBLIC_IMAGE_HOST = process.env.NEXT_PUBLIC_API_URL
   ?.trim()
   .replace(/\/api\/?$/, '')
-  .replace(/\/+$/, '') || 'https://jiutianxiaoshuo.com';
+  .replace(/\/+$/, '') || 'http://127.0.0.1:3000';
 
 // 新增辅助函数：处理封面图片地址，将其转化为完整的公网 URL
 function normalizeCoverImage(coverImage?: string): string {
@@ -31,21 +32,21 @@ async function getBook(id: string): Promise<Book | null> {
     const res = await fetch(`${baseUrl}/books/${id}`, { 
       next: { revalidate: 60 } 
     });
-    if (!res.ok) return null;
+    if (res.status===404) return null;
+    if (!res.ok) throw new Error('作品服务暂不可用');
     
     const book: Book = await res.json();
     
     // 规范化封面地址，防止传给前端和 SEO 的图片路径是相对路径
     book.cover_image = normalizeCoverImage(book.cover_image);
     // 兼容部分字段拼写差异
-    if ((book as any).coverImage) {
-      (book as any).coverImage = normalizeCoverImage((book as any).coverImage);
+    if (book.coverImage) {
+      book.coverImage = normalizeCoverImage(book.coverImage);
     }
     
     return book;
   } catch (error) {
-    console.error('Fetch Book Error:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -58,8 +59,7 @@ async function getChapters(id: string): Promise<Chapter[]> {
     if (!res.ok) return [];
     return await res.json();
   } catch (error) {
-    console.error('Fetch Chapters Error:', error);
-    return [];
+    throw error;
   }
 }
 
@@ -141,7 +141,7 @@ export default async function BookDetailPage({ params }: Props) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, String.fromCharCode(92) + 'u003c') }}
       />
       <BookDetailClient initialBookData={{ book, chapters }} />
     </>

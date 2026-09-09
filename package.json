@@ -4,12 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "server": "nodemon server/index.js",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "dev": "npm --prefix web-next run dev",
+    "build": "npm --prefix web-next run build",
+    "start": "npm --prefix web-next start",
+    "server": "npm --prefix server start",
+    "lint": "npm --prefix web-next run lint",
+    "typecheck": "npm --prefix web-next run typecheck",
+    "test": "npm --prefix server test",
+    "dev:isolated": "node server/dev.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

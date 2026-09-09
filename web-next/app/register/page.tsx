@@ -1,4 +1,6 @@
-'use client'; 
+'use client';
+import { safeFetch as fetch } from '@/lib/request';
+ 
 
 import { useState, useEffect } from 'react'; 
 import { useRouter } from 'next/navigation'; 
@@ -55,7 +57,7 @@ export default function Register() {
       // 3秒后自动关闭提示，体验更好
       setTimeout(() => setSuccess(''), 3000);
 
-    } catch (err: any) {
+    } catch (caught: unknown) { const err = caught instanceof Error ? caught : new Error('操作失败');
       setError(err.message);
     }
   };
@@ -74,11 +76,11 @@ export default function Register() {
       setError('');
       setLoading(true);
 
-      await register(username, email, password, code);
-      await signIn(email, password);
+      const result = await register(username, email, password, code);
+      if (result.error) throw result.error;
 
       router.push('/'); 
-    } catch (err: any) { 
+    } catch (caught: unknown) { const err = caught instanceof Error ? caught : new Error('操作失败'); 
       setError(err.message || '注册失败');
     } finally {
       setLoading(false);

@@ -1,0 +1,34 @@
+import {test,expect} from '@playwright/test';
+test('login, refresh, reader and logout use revocable cookie session',async({page,context})=>{
+  await page.route('**/*',route=>['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname)?route.continue():route.abort());
+  await page.goto('http://127.0.0.1:3000/login');
+  await page.getByPlaceholder('请输入用户名').fill('隔离作者');
+  await page.getByPlaceholder('请输入密码').fill('Local-test-12345');
+  await page.getByRole('button',{name:'立即登录'}).click();
+  await expect(page).toHaveURL('http://127.0.0.1:3000/');
+  await page.reload();
+  expect(await page.evaluate(()=>localStorage.getItem('token'))).toBeNull();
+  const cookies=await context.cookies();
+  expect(cookies.find(c=>c.name==='session')?.httpOnly).toBe(true);
+  const session=await page.request.get('http://127.0.0.1:3000/api/auth/session');
+  expect(session.status()).toBe(200);
+  await page.goto('http://127.0.0.1:3000/book/000000000000000000000101/000000000000000000000101');
+  await expect(page.getByText('这是用于验证排版与翻页的合成正文。').first()).toBeVisible();
+  await page.goto('http://127.0.0.1:3000/profile');
+  page.on('dialog',dialog=>dialog.accept());
+  await page.getByRole('button',{name:'退出',exact:true}).click();
+  await expect(page).toHaveURL('http://127.0.0.1:3000/');
+  expect((await page.request.get('http://127.0.0.1:3000/api/auth/session')).status()).toBe(401);
+});
+test('registration errors preserve form inputs and stay on registration',async({page})=>{
+  await page.goto('http://127.0.0.1:3000/register');
+  await page.getByPlaceholder('用户名',{exact:true}).fill('new-user');
+  await page.getByPlaceholder('邮箱地址',{exact:true}).fill('new-user@example.test');
+  await page.getByPlaceholder('邮箱验证码',{exact:true}).fill('123456');
+  await page.getByPlaceholder('密码',{exact:true}).fill('Local-test-12345');
+  await page.getByPlaceholder('确认密码',{exact:true}).fill('Local-test-12345');
+  await page.getByRole('button',{name:'注册',exact:true}).click();
+  await expect(page.getByText('验证码错误或已过期')).toBeVisible();
+  await expect(page).toHaveURL(/\/register$/);
+  await expect(page.getByPlaceholder('用户名',{exact:true})).toHaveValue('new-user');
+});

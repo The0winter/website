@@ -91,15 +91,21 @@ console.log('📂 启动【书籍批量更新模式 - 隐身增强版】...');
                 await sleep(10000); // 给你 10 秒时间点验证码
             }
 
-            // 2. 获取网站最新目录
-            const isExpanded = await page.evaluate(() => {
-                const btn = Array.from(document.querySelectorAll('a')).find(a => a.innerText.includes('完整目录') || a.innerText.includes('点击查看'));
-                if (btn) { btn.click(); return true; }
-                return false;
-            });
-            if (isExpanded) await sleep(3000); // 展开目录需要时间
+            // 2. 获取网站最新目录 (首次尝试展开)
+            const expandCatalog = async () => {
+                const isExpanded = await page.evaluate(() => {
+                    const btn = Array.from(document.querySelectorAll('a')).find(a => a.innerText.includes('完整目录') || a.innerText.includes('点击查看'));
+                    if (btn) { btn.click(); return true; }
+                    return false;
+                });
+                if (isExpanded) await sleep(3000); // 展开目录需要时间
+            };
+            await expandCatalog();
 
-            // 🔥🔥🔥【新增】重试机制：如果没抓到，刷新再试，最多试3次 🔥🔥🔥
+            // 获取本地已有的章节数，方便后续对比
+            const localChapterCount = bookData.chapters ? bookData.chapters.length : 0;
+
+            // 🔥🔥🔥【修改】重试机制：加入章节数对比，最多试3次 🔥🔥🔥
             let webChapters = [];
             let retryCount = 0;
             const MAX_RETRIES = 3;
@@ -118,51 +124,50 @@ console.log('📂 启动【书籍批量更新模式 - 隐身增强版】...');
                     return unique;
                 });
 
-                if (webChapters.length > 0) {
-                    // 成功抓到了，跳出循环
+                // 🔥 新增判定条件：抓到的章节必须大于5章，且不能少于本地已下载的章节数
+                if (webChapters.length > 5 && webChapters.length >= localChapterCount) {
+                    // 成功抓到了完整目录，跳出循环
                     break;
                 }
 
-                // 没抓到，说明可能是假页面或者加载失败
+                // 没抓到完整的，触发重试机制
                 retryCount++;
-                console.log(`⚠️  未检测到章节，第 ${retryCount}/${MAX_RETRIES} 次重试...`);
+                console.log(`⚠️  读取异常: 网页仅抓到 ${webChapters.length} 章 (本地已有 ${localChapterCount} 章)。第 ${retryCount}/${MAX_RETRIES} 次重试...`);
                 
-                // 刷新页面
-                try {
-                    await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
-                    // 刷新后稍微等一下，甚至可以模拟滚动一下
-                    await sleep(3000); 
-                } catch(e) {
-                    console.log('   刷新超时...');
+                if (retryCount < MAX_RETRIES) {
+                    // 刷新页面
+                    try {
+                        await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
+                        await sleep(3000); 
+                        // 🔥 关键修复：刷新页面后，需要重新点击“完整目录”展开，否则重试也没用
+                        await expandCatalog();
+                    } catch(e) {
+                        console.log('   刷新超时...');
+                    }
                 }
             }
+
             // 【统一强力排序修复】(从 run_offline.js 复制过来的)
             webChapters.sort((a, b) => {
                 const getNum = (str) => {
-                    // 1. 去掉所有空格，防止 "第 500 章" 这种格式导致匹配失败
                     const cleanStr = str.replace(/\s+/g, '');
-                    
-                    // 2. 优先匹配 "第xxx章"
                     const matchChapter = cleanStr.match(/第(\d+)章/);
                     if (matchChapter) return parseInt(matchChapter[1]);
-                    
-                    // 3. 再次尝试匹配开头的纯数字 (比如 "1. 开始")
                     const matchStartNum = cleanStr.match(/^(\d+)/);
                     if (matchStartNum) return parseInt(matchStartNum[1]);
-
-                    // 4. 最后的兜底：在字符串里找任何数字
                     const matchAnyNum = cleanStr.match(/(\d+)/);
                     return matchAnyNum ? parseInt(matchAnyNum[1]) : 999999;
                 };
                 return getNum(a.title) - getNum(b.title);
             });
+
         // 🔥🔥🔥【关键修改】防覆盖/防清空机制 🔥🔥🔥
-        // 逻辑：如果这次从网上抓到的章节数是 0 (说明被反爬了，或者网站结构变了)，
-        // 绝对不能拿这个 0 章去更新本地的几百章，否则书就“空”了。
-        if (webChapters.length === 0) {
-            console.error(`\n❌ 严重警告：《${bookData.title}》 抓取到的章节数为 0！`);
-            console.error('🛡️  触发熔断：跳过本书更新，保护本地数据不被清空。');
-            console.error('   (可能是网站反爬虫，建议稍后再试)');
+        // 逻辑：如果在3次重试后，抓到的章节数依然 <= 5，或者比本地存的章节还要少，绝对不能更新。
+        if (webChapters.length <= 5 || webChapters.length < localChapterCount) {
+            console.error(`\n❌ 严重警告：《${bookData.title}》 抓取异常！`);
+            console.error(`   最终只抓取到 ${webChapters.length} 章，但本地已有 ${localChapterCount} 章。`);
+            console.error('🛡️  触发熔断：跳过本书更新，保护本地数据不被缩水或覆盖。');
+            console.error('   (可能是网站反爬虫或目录未展开，建议稍后再试)');
             
             // 只是跳过这一本书，不退出整个程序，继续检查下一本
             continue; 

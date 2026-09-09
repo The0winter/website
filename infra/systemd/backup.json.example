@@ -1,0 +1,7 @@
+{
+  "directory": "/var/lib/test1-backup",
+  "mongoConfig": "/etc/test1/mongodump.yaml",
+  "mongodump": "/opt/mongodb-database-tools/bin/mongodump",
+  "codeVersion": "replace-with-verified-candidate-commit",
+  "schemaVersion": "r3-v2"
+}

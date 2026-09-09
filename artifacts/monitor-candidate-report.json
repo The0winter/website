@@ -1,0 +1,18 @@
+{
+  "result": "passed",
+  "alerts": [
+    "service-unavailable",
+    "backup-stale"
+  ],
+  "delivery": "local-journal-only",
+  "metricKeys": [
+    "at",
+    "buckets",
+    "rss",
+    "heapUsed",
+    "cpu",
+    "uptimeSeconds",
+    "databaseReady"
+  ],
+  "limitations": "Synthetic persisted outage age; no external notification channel or systemd timer installed"
+}

@@ -1,0 +1,7 @@
+{
+  "apiUrl": "http://127.0.0.1:5000",
+  "secret": "replace-with-the-api-monitor-secret",
+  "stateFile": "/var/lib/test1-monitor/state.json",
+  "backupManifest": "/var/lib/test1-backup/latest.json",
+  "diskPath": "/var/lib/test1-mongodb"
+}

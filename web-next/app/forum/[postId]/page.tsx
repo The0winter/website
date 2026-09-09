@@ -1,4 +1,6 @@
 'use client';
+import { useAuth } from '@/contexts/AuthContext';
+import {useForumView} from '@/lib/useForumView';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -61,6 +63,7 @@ function formatCount(value: number) {
 }
 
 function PostContent() {
+  const { user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams();
@@ -76,8 +79,11 @@ function PostContent() {
   const currentTheme = THEMES[themeMode];
 
   const [question, setQuestion] = useState<ForumPost | null>(null);
+  useForumView(question?.id);
   const [answer, setAnswer] = useState<ForumReply | null>(null);
   const [otherAnswers, setOtherAnswers] = useState<ForumReply[]>([]);
+  const [answerPage,setAnswerPage]=useState(1);
+  const [answerHasMore,setAnswerHasMore]=useState(false);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -87,6 +93,8 @@ function PostContent() {
   const [showCommentsModal, setShowCommentsModal] = useState(false);
   const [activeCommentTarget, setActiveCommentTarget] = useState<ForumReply | null>(null);
   const [replyComments, setReplyComments] = useState<ForumComment[]>([]);
+  const [commentPage,setCommentPage]=useState(1);
+  const [commentHasMore,setCommentHasMore]=useState(false);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [replyToComment, setReplyToComment] = useState<ForumComment | null>(null);
@@ -139,17 +147,17 @@ function PostContent() {
         let allReplies: ForumReply[] = [];
 
         if (fromQuestionId && fromQuestionId !== 'undefined') {
-          const [qData, replies] = await Promise.all([forumApi.getById(fromQuestionId), forumApi.getReplies(fromQuestionId)]);
+          const [qData, replies, selected] = await Promise.all([forumApi.getById(fromQuestionId), forumApi.getReplies(fromQuestionId,answerPage),forumApi.getReply(fromQuestionId,postId)]);
           finalQuestion = qData;
           allReplies = replies;
-          finalAnswer = replies.find((r) => r.id === postId) || null;
+          finalAnswer = selected;
         } else {
           const postData = await forumApi.getById(postId);
           finalQuestion = postData;
 
           if (postData.id) {
             try {
-              allReplies = await forumApi.getReplies(postData.id);
+              allReplies = await forumApi.getReplies(postData.id,answerPage);
             } catch {
               allReplies = [];
             }
@@ -175,6 +183,7 @@ function PostContent() {
         }
 
         if (finalQuestion) setQuestion(finalQuestion);
+        setAnswerHasMore(allReplies.length===20);
         if (finalAnswer) setAnswer(finalAnswer);
 
         if (allReplies.length > 0 && finalAnswer) {
@@ -186,12 +195,12 @@ function PostContent() {
 
         const initialLiked: Record<string, boolean> = {};
         if (finalQuestion?.id) initialLiked[finalQuestion.id] = Boolean(finalQuestion.hasLiked);
-        if (finalAnswer?.id) initialLiked[finalAnswer.id] = Boolean((finalAnswer as any).hasLiked);
+        if (finalAnswer?.id) initialLiked[finalAnswer.id] = Boolean(finalAnswer.hasLiked);
         allReplies.forEach((r) => {
-          initialLiked[r.id] = Boolean((r as any).hasLiked);
+          initialLiked[r.id] = Boolean(r.hasLiked);
         });
         setLikedState((prev) => ({ ...prev, ...initialLiked }));
-      } catch (error: any) {
+      } catch (caught: unknown) { const error = caught instanceof Error ? caught : new Error('操作失败');
         setErrorMsg(error?.message || '加载失败');
       } finally {
         setLoading(false);
@@ -199,11 +208,11 @@ function PostContent() {
     };
 
     fetchData();
-  }, [postId, fromQuestionId]);
+  }, [postId, fromQuestionId, answerPage]);
 
   const requireLogin = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    if (!token) {
+    const loggedIn = !!user;
+    if (!loggedIn) {
       alert('请先登录');
       router.push('/login');
       return false;
@@ -217,13 +226,14 @@ function PostContent() {
 
     setLikePending((prev) => ({ ...prev, [targetId]: true }));
     try {
-      const result = targetType === 'post' ? await forumApi.togglePostLike(targetId) : await forumApi.toggleReplyLike(targetId);
+      const desired = !likedState[targetId];
+      const result = targetType === 'post' ? await forumApi.togglePostLike(targetId, desired) : await forumApi.toggleReplyLike(targetId, desired);
 
       setLikedState((prev) => ({ ...prev, [targetId]: result.liked }));
       setAnswer((prev) => (prev && prev.id === targetId ? { ...prev, votes: result.votes } : prev));
       setOtherAnswers((prev) => prev.map((item) => (item.id === targetId ? { ...item, votes: result.votes } : item)));
       setQuestion((prev) => (prev && prev.id === targetId ? { ...prev, votes: result.votes } : prev));
-    } catch (error: any) {
+    } catch (caught: unknown) { const error = caught instanceof Error ? caught : new Error('操作失败');
       if (error?.message?.includes('401') || error?.message?.includes('403')) {
         alert('登录状态已过期，请重新登录');
         router.push('/login');
@@ -235,12 +245,13 @@ function PostContent() {
     }
   };
 
-  const refreshComments = async (replyId: string) => {
+  const refreshComments = async (replyId: string, page=1) => {
     setCommentsLoading(true);
     try {
-      const data = await forumApi.getReplyComments(replyId);
-      setReplyComments(data);
-    } catch (error: any) {
+      const data = await forumApi.getReplyComments(replyId,page);
+      setReplyComments(previous=>page===1?data:[...previous,...data.filter(row=>!previous.some(existing=>existing.id===row.id))]);
+      setCommentPage(page);setCommentHasMore(data.length===100);
+    } catch (caught: unknown) { const error = caught instanceof Error ? caught : new Error('操作失败');
       alert(error?.message || '加载评论失败');
     } finally {
       setCommentsLoading(false);
@@ -289,7 +300,7 @@ function PostContent() {
         prev.map((item) => (item.id === activeCommentTarget.id ? { ...item, comments: (item.comments || 0) + 1 } : item))
       );
       setActiveCommentTarget((prev) => (prev ? { ...prev, comments: (prev.comments || 0) + 1 } : prev));
-    } catch (error: any) {
+    } catch (caught: unknown) { const error = caught instanceof Error ? caught : new Error('操作失败');
       if (error?.message?.includes('401') || error?.message?.includes('403')) {
         alert('登录状态已过期，请重新登录');
         router.push('/login');
@@ -307,11 +318,11 @@ function PostContent() {
 
     setCommentLikePending((prev) => ({ ...prev, [commentId]: true }));
     try {
-      const result = await forumApi.toggleCommentLike(commentId);
+      const result = await forumApi.toggleCommentLike(commentId, !replyComments.find(item=>item.id===commentId)?.hasLiked);
       setReplyComments((prev) =>
         prev.map((item) => (item.id === commentId ? { ...item, votes: result.votes, hasLiked: result.liked } : item))
       );
-    } catch (error: any) {
+    } catch (caught: unknown) { const error = caught instanceof Error ? caught : new Error('操作失败');
       if (error?.message?.includes('401') || error?.message?.includes('403')) {
         alert('登录状态已过期，请重新登录');
         router.push('/login');
@@ -491,6 +502,7 @@ function PostContent() {
             <div className={`text-xs md:text-sm ${currentTheme.textSub}`}>发布于 {formatDate(answer.time)}</div>
             <div className="flex gap-5 md:gap-6">
               <button
+                aria-label={likedState[answer.id] ? '取消点赞回答' : '点赞回答'}
                 onClick={() => handleLike(answer.id, answer.id === question.id ? 'post' : 'reply')}
                 disabled={!!likePending[answer.id]}
                 className={`flex items-center gap-1.5 transition-colors ${
@@ -501,6 +513,7 @@ function PostContent() {
                 <span className="font-semibold text-sm">{formatCount(answer.votes || 0)}</span>
               </button>
               <button
+                aria-label="打开评论"
                 onClick={() => openCommentsModal(answer)}
                 className={`flex items-center gap-1.5 ${currentTheme.icon} transition-colors`}
               >
@@ -511,6 +524,7 @@ function PostContent() {
           </div>
         </article>
 
+        <nav aria-label="回答分页" className="flex gap-4 justify-center"><button disabled={answerPage===1} onClick={()=>setAnswerPage(answerPage-1)}>上一页</button><span>第 {answerPage} 页</span><button disabled={!answerHasMore} onClick={()=>setAnswerPage(answerPage+1)}>下一页</button></nav>
         {otherAnswers.length > 0 && (
           <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div className="mb-3">
@@ -586,6 +600,7 @@ function PostContent() {
               </div>
 
               <div className="flex-1 overflow-y-auto px-4 md:px-5 py-4 space-y-4">
+                {commentHasMore&&<button disabled={commentsLoading} onClick={()=>refreshComments(activeCommentTarget.id,commentPage+1)}>加载更多评论</button>}
                 {commentsLoading && <div className={`text-center text-sm ${currentTheme.textSub} py-8`}>评论加载中...</div>}
 
                 {!commentsLoading && topLevelComments.length === 0 && (
@@ -690,6 +705,7 @@ function PostContent() {
 }
 
 export default function PostDetailPage() {
+
   return (
     <Suspense fallback={<div>加载中...</div>}>
       <PostContent />

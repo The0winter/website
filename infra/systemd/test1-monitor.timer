@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Test1 every 15 seconds
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=15
+AccuracySec=1
+Unit=test1-monitor.service
+
+[Install]
+WantedBy=timers.target

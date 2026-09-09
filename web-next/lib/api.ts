@@ -1,11 +1,7 @@
-const getBaseUrl = () => {
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
-  }
-  return 'http://127.0.0.1:5000';
-};
-
-export const API_BASE_URL = `${getBaseUrl()}/api`;
+import { catalogPages } from './request';
+import { safeFetch as fetch } from '@/lib/request';
+import { getApiBaseUrl } from '@/utils/api';
+export const API_BASE_URL = getApiBaseUrl();
 
 export interface ForumPost {
   id: string;
@@ -68,6 +64,7 @@ export interface ForumComment {
 }
 
 export interface Profile {
+  avatar?: string;
   id: string;
   username: string;
   role: 'reader' | 'admin';
@@ -75,6 +72,10 @@ export interface Profile {
 }
 
 export interface Book {
+  coverImage?:string;
+  updatedAt?:string;
+  createdAt?:string;
+  numReviews?:number;
   id: string;
   title: string;
   author_id?: string | { _id: string; id: string; username: string; email: string } | null;
@@ -82,7 +83,7 @@ export interface Book {
   description: string;
   cover_image?: string;
   category?: string;
-  status?: 'ongoing' | 'completed';
+  status?: 'ongoing' | 'completed' | '连载' | '完结';
   views?: number;
   weekly_views?: number;
   monthly_views?: number;
@@ -94,6 +95,8 @@ export interface Book {
 }
 
 export interface Chapter {
+  previousId?: string | null;
+  nextId?: string | null;
   id: string;
   bookId: string;
   title: string;
@@ -106,35 +109,36 @@ export interface Chapter {
 export interface Bookmark {
   id: string;
   user_id: string;
-  bookId: string;
+  bookId: string | (Book & {_id?:string}) | null;
   updated_at?: string;
   created_at?: string;
 }
 
 export interface AuthUser {
+  _id?:string;
   id: string;
   email: string;
   username: string;
   role: 'reader' | 'admin';
-  token?: string;
+
   avatar?: string;
 }
 
 export interface AuthResponse {
   user: AuthUser;
   profile: Profile;
-  token: string;
+
 }
 
 async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const userId = typeof window !== 'undefined' ? localStorage.getItem('novelhub_user') : null;
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     headers: {
       'Content-Type': 'application/json',
       ...(userId ? { 'x-user-id': userId } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      
       ...options?.headers,
     },
     ...options,
@@ -149,8 +153,11 @@ async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
 }
 
 export const booksApi = {
-  getAll: async (options?: { orderBy?: string; order?: 'asc' | 'desc'; limit?: number }): Promise<Book[]> => {
+  getAll: async (options?: { orderBy?: string; order?: 'asc' | 'desc'; limit?: number; page?: number; q?: string; category?: string }): Promise<Book[]> => {
     const params = new URLSearchParams();
+    if (options?.page) params.append('page',String(options.page));
+    if (options?.q) params.append('q',options.q);
+    if (options?.category) params.append('category',options.category);
     if (options?.orderBy) params.append('orderBy', options.orderBy);
     if (options?.order) params.append('order', options.order);
     if (options?.limit) params.append('limit', options.limit.toString());
@@ -162,20 +169,21 @@ export const booksApi = {
     return apiCall<Book | null>(`/books/${id}`);
   },
 
-  getMyBooks: async (authorId?: string): Promise<Book[]> => {
+  getMyBooks: async (authorId?: string, page = 1): Promise<Book[]> => {
     const targetId = authorId || (typeof window !== 'undefined' ? localStorage.getItem('novelhub_user') : null);
     if (!targetId) return [];
-    return apiCall<Book[]>(`/books?author_id=${targetId}`);
+    return apiCall<Book[]>(`/books?author_id=${encodeURIComponent(targetId)}&limit=20&page=${page}&orderBy=updatedAt`);
   },
 
   delete: async (id: string): Promise<void> => {
     await apiCall<void>(`/books/${id}`, { method: 'DELETE' });
   },
 
-  create: async (book: Omit<Book, 'id' | 'created_at'>): Promise<Book> => {
+  create: async (book: Omit<Book, 'id' | 'created_at'>, idempotencyKey=crypto.randomUUID()): Promise<Book> => {
     return apiCall<Book>('/books', {
       method: 'POST',
-      body: JSON.stringify(book),
+      headers: {'Content-Type':'application/json','Idempotency-Key':idempotencyKey},
+      body: JSON.stringify({title:book.title,description:book.description,cover_image:book.cover_image,category:book.category,status:book.status}),
     });
   },
 
@@ -186,14 +194,14 @@ export const booksApi = {
     });
   },
 
-  incrementViews: async (id: string): Promise<Book> => {
-    return apiCall<Book>(`/books/${id}/views`, { method: 'POST' });
+  incrementViews: async (id: string, chapterId: string): Promise<Book> => {
+    return apiCall<Book>(`/books/${id}/views`, { method: 'POST', body: JSON.stringify({chapterId}) });
   },
 };
 
 export const chaptersApi = {
   getByBookId: async (bookId: string): Promise<Chapter[]> => {
-    return apiCall<Chapter[]>(`/books/${bookId}/chapters`);
+    return catalogPages<Chapter>(`${API_BASE_URL}/books/${bookId}/chapters`);
   },
 
   getById: async (chapterId: string): Promise<Chapter | null> => {
@@ -203,7 +211,7 @@ export const chaptersApi = {
   update: async (id: string, chapter: Partial<Chapter>): Promise<Chapter> => {
     return apiCall<Chapter>(`/chapters/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify(chapter),
+      body: JSON.stringify({title:chapter.title,content:chapter.content,chapter_number:chapter.chapter_number}),
     });
   },
 
@@ -250,6 +258,7 @@ export const usersApi = {
 };
 
 export const authApi = {
+  logout: () => apiCall('/auth/logout', { method: 'POST' }),
   signUp: async (email: string, password: string, username: string, role: 'reader', code: string): Promise<AuthResponse> => {
     return apiCall<AuthResponse>('/auth/signup', {
       method: 'POST',
@@ -264,8 +273,11 @@ export const authApi = {
     });
   },
 
-  getSession: async (userId: string): Promise<{ user: AuthUser | null; profile: Profile | null }> => {
-    return apiCall<{ user: AuthUser | null; profile: Profile | null }>(`/auth/session?userId=${userId}`);
+  getSession: async (_userId?: string): Promise<{ user: AuthUser | null; profile: Profile | null }> => {
+    const response=await fetch(API_BASE_URL+'/auth/session',{cache:'no-store'});
+    if(response.status===401 || response.status===403)return {user:null,profile:null};
+    if(!response.ok)throw new Error('账户服务暂不可用');
+    return response.json();
   },
 
   changePassword: async (userId: string, oldPass: string, newPass: string): Promise<{ success: boolean; error?: string }> => {
@@ -325,9 +337,12 @@ export const forumApi = {
     });
   },
 
-  getReplies: async (postId: string): Promise<ForumReply[]> => {
+  getReplies: async (postId: string, page=1): Promise<ForumReply[]> => {
     if (!postId || postId === 'undefined' || postId === 'null') return [];
-    return apiCall<ForumReply[]>(`/forum/posts/${postId}/replies`);
+    return apiCall<ForumReply[]>(`/forum/posts/${postId}/replies?page=${page}&limit=20`);
+  },
+  getReply: async(postId:string,replyId:string):Promise<ForumReply|null>=>{
+    const rows=await apiCall<ForumReply[]>(`/forum/posts/${postId}/replies?target=${encodeURIComponent(replyId)}`);return rows[0]||null;
   },
 
   createReply: async (postId: string, content: string): Promise<ForumReply> => {
@@ -337,21 +352,23 @@ export const forumApi = {
     });
   },
 
-  togglePostLike: async (postId: string): Promise<{ liked: boolean; votes: number }> => {
+  togglePostLike: async (postId: string, liked: boolean): Promise<{ liked: boolean; votes: number }> => {
     return apiCall<{ liked: boolean; votes: number }>(`/forum/posts/${postId}/like`, {
       method: 'POST',
+      body: JSON.stringify({liked}),
     });
   },
 
-  toggleReplyLike: async (replyId: string): Promise<{ liked: boolean; votes: number; postId?: string }> => {
+  toggleReplyLike: async (replyId: string, liked: boolean): Promise<{ liked: boolean; votes: number; postId?: string }> => {
     return apiCall<{ liked: boolean; votes: number; postId?: string }>(`/forum/replies/${replyId}/like`, {
       method: 'POST',
+      body: JSON.stringify({liked}),
     });
   },
 
-  getReplyComments: async (replyId: string): Promise<ForumComment[]> => {
+  getReplyComments: async (replyId: string, page=1): Promise<ForumComment[]> => {
     if (!replyId || replyId === 'undefined' || replyId === 'null') return [];
-    return apiCall<ForumComment[]>(`/forum/replies/${replyId}/comments`);
+    return apiCall<ForumComment[]>(`/forum/replies/${replyId}/comments?page=${page}&limit=100`);
   },
 
   createReplyComment: async (
@@ -364,9 +381,10 @@ export const forumApi = {
     });
   },
 
-  toggleCommentLike: async (commentId: string): Promise<{ liked: boolean; votes: number }> => {
+  toggleCommentLike: async (commentId: string, liked: boolean): Promise<{ liked: boolean; votes: number }> => {
     return apiCall<{ liked: boolean; votes: number }>(`/forum/comments/${commentId}/like`, {
       method: 'POST',
+      body: JSON.stringify({liked}),
     });
   },
 };

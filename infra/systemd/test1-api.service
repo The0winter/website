@@ -1,0 +1,32 @@
+[Unit]
+Description=Test1 legacy API
+After=network.target test1-mongo.service
+Wants=test1-mongo.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=test1-api
+Group=test1-api
+WorkingDirectory=/srv/test1/current/server
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/test1/api.env
+ExecStart=/opt/node-v22.23.2-linux-x64/bin/node --max-old-space-size=384 index.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+MemoryHigh=512M
+MemoryMax=768M
+TasksMax=128
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target

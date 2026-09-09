@@ -1,0 +1,29 @@
+[Unit]
+Description=Test1 single statistics worker
+After=network.target test1-mongo.service
+Wants=test1-mongo.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=test1-jobs
+Group=test1-jobs
+WorkingDirectory=/srv/test1/current/server
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/test1/jobs.env
+ExecStart=/opt/node-v22.23.2-linux-x64/bin/node --max-old-space-size=192 jobs/index.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077
+MemoryHigh=256M
+MemoryMax=384M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

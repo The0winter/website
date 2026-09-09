@@ -1,0 +1,9 @@
+
+Running 2 tests using 1 worker
+
+(node:12824) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 tests\workflows.spec.ts:14:5 › writer creates a book, publishes and edits a chapter that readers can open (2.0s)
+  ok 2 tests\workflows.spec.ts:55:5 › forum question, answer and deep link retain the submitted content (3.8s)
+
+  2 passed (6.6s)

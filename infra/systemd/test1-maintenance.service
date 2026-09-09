@@ -1,0 +1,18 @@
+[Unit]
+Description=Test1 safe maintenance fallback
+
+[Service]
+Type=simple
+User=test1-web
+Group=test1-web
+Environment=PORT=5004
+ExecStart=/opt/node-v22.23.2-linux-x64/bin/node /srv/test1/current/infra/maintenance.mjs
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,36 @@
+{"requestId":"aec8f04d-eb6c-4fc2-886b-49f294aab8ec","method":"GET","route":"/api/auth/session","status":401,"durationMs":6}
+{"requestId":"203b07cb-53c3-49ed-a58e-740457e83063","method":"GET","route":"/api/auth/csrf","status":200,"durationMs":2}
+{"requestId":"307c3660-6024-44a7-8c3c-3d470e800656","method":"POST","route":"/api/auth/signin","status":200,"durationMs":83}
+{"requestId":"e8744f98-3f79-4890-ab24-85dcbd285030","method":"GET","route":"/api/books","status":200,"durationMs":17}
+{"requestId":"673c6c98-8478-4b79-a639-c70e6576c206","method":"GET","route":"/api/books","status":200,"durationMs":22}
+{"requestId":"1e2891f4-bcd7-4fce-9d08-548e47340aac","method":"GET","route":"/api/books","status":200,"durationMs":17}
+{"requestId":"b0fa9225-29be-46a5-8816-dc9e6144138b","method":"GET","route":"/api/books","status":200,"durationMs":30}
+{"requestId":"071e3e1e-ed47-4139-9ec7-fe5ced862349","method":"GET","route":"/api/books","status":200,"durationMs":23}
+{"requestId":"e3dc376a-1a70-4963-bb46-3bd5adab0dfc","method":"GET","route":"/api/books","status":200,"durationMs":28}
+{"requestId":"d48ac713-4369-4f26-8ed3-186b135a2eba","method":"GET","route":"/api/auth/session","status":200,"durationMs":8}
+{"requestId":"35597970-af3b-43ad-b113-6c91a6014ce2","method":"GET","route":"/api/auth/session","status":200,"durationMs":7}
+{"requestId":"8bb3f8d9-d635-4770-86ea-081c91d03b9f","method":"GET","route":"/api/auth/session","status":200,"durationMs":4}
+{"requestId":"ea7300b6-32a4-4087-af3c-b83ec5ec384f","method":"GET","route":"/api/auth/csrf","status":200,"durationMs":1}
+{"requestId":"903af0c9-6bff-4e4b-b7c3-0d3ab55d06e1","method":"POST","route":"/api/auth/logout","status":200,"durationMs":10}
+{"requestId":"2834b176-fbf4-4ac5-962a-edaf3d505456","method":"GET","route":"/api/auth/session","status":401,"durationMs":2}
+{"requestId":"e188f4e8-e0d8-4426-ac3c-296855fd7411","method":"GET","route":"/api/books/:id","status":200,"durationMs":3}
+{"requestId":"317ca180-79bf-4c12-8c20-faf27b340b81","method":"GET","route":"/api/books/:id","status":200,"durationMs":2}
+{"requestId":"7db0619e-3163-41b5-b5ea-470fa787239e","method":"GET","route":"/api/books/:id","status":200,"durationMs":3}
+{"requestId":"123bfb5d-b1d9-4343-9dfd-72d50689aef6","method":"GET","route":"/api/chapters/:id","status":200,"durationMs":3}
+PRODUCTION_COOKIE_PASSED
+MongoNetworkError: read ECONNRESET
+    at Connection.onSocketError (F:\Website\Test1\server\node_modules\mongodb\lib\cmap\connection.js:110:22)
+    at Socket.emit (node:events:531:35)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+  errorLabelSet: Set(0) {},
+  beforeHandshake: false,
+  [cause]: Error: read ECONNRESET
+      at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+      at TCP.callbackTrampoline (node:internal/async_hooks:130:17) {
+    errno: -4077,
+    code: 'ECONNRESET',
+    syscall: 'read'
+  }
+}

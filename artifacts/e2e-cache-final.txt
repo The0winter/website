@@ -1,0 +1,8 @@
+
+Running 1 test using 1 worker
+
+(node:34920) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 tests\cache.spec.ts:5:5 › real reader caches evict across 30 chapters and five books (8.6s)
+
+  1 passed (9.5s)

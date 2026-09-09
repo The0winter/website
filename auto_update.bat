@@ -1,4 +1,8 @@
 @echo off
+if not "%EXTERNAL_SERVICES%"=="enabled" (
+  echo External crawler and SEO are disabled. Use the isolated import CLI for local tests.
+  exit /b 1
+)
 :: 设置字符集为 UTF-8
 chcp 65001 >nul
 
@@ -10,6 +14,7 @@ echo [1/3] 正在启动本地更新 (run_update.js)...
 echo 目标：扫描本地书籍 -> 对比网站 -> 抓取新章节
 echo ========================================================
 node run_update.js
+if errorlevel 1 exit /b 1
 
 echo.
 echo.
@@ -17,7 +22,8 @@ echo ========================================================
 echo [2/3] 正在同步到云端 (upload_to_vps.js)...
 echo 目标：读取本地 JSON -> 上传 VPS -> 存入 MongoDB
 echo ========================================================
-node upload_to_vps.js
+node upload_to_vps.js --apply
+if errorlevel 1 exit /b 1
 
 echo.
 echo.
@@ -37,6 +43,8 @@ if exist baidu_push.cjs (
     echo 正在运行 .js 文件...
     node baidu_push.js
 )
+
+if errorlevel 1 exit /b 1
 
 :: 回到项目根目录（养成好习惯）
 cd ..

@@ -1,0 +1,14 @@
+{
+  "node": "v22.23.2",
+  "mongodb": "7.0.40",
+  "nginx": "1.30.4",
+  "platform": "win32",
+  "release": "10.0.26200",
+  "cpus": 24,
+  "cpu": "Intel(R) Core(TM) i7-14650HX",
+  "totalMemory": 16890322944,
+  "books": 1000,
+  "chapters": 100000,
+  "topology": "one-node replica set",
+  "externalServices": "disabled"
+}

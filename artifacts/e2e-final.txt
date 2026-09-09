@@ -1,0 +1,23 @@
+
+Running 16 tests using 1 worker
+
+(node:32692) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  1 tests\account.spec.ts:2:5 › login, refresh, reader and logout use revocable cookie session (1.9s)
+  ok  2 tests\account.spec.ts:23:5 › registration errors preserve form inputs and stay on registration (810ms)
+  ok  3 tests\baseline.spec.ts:4:6 › baseline 1440 (2.3s)
+  ok  4 tests\baseline.spec.ts:4:6 › baseline 390 (1.8s)
+  ok  5 tests\baseline.spec.ts:4:6 › baseline 320 (1.8s)
+  ok  6 tests\cache.spec.ts:5:5 › real reader caches evict across 30 chapters and five books (8.1s)
+  ok  7 tests\pagination.spec.ts:5:5 › category and author pages reach works beyond the first database page (2.7s)
+  ok  8 tests\profile.spec.ts:19:5 › avatar roundtrip and password changes revoke previous browser sessions (5.7s)
+  ok  9 tests\reading.spec.ts:4:5 › reader has usable server-rendered text and navigation with JavaScript disabled (624ms)
+  ok 10 tests\reading.spec.ts:20:5 › sitemap index and chapter file use public legacy paths and missing paths return 404 (830ms)
+  ok 11 tests\reading.spec.ts:28:5 › one hundred chapter changes and browser back keep URL and visible content aligned (15.1s)
+  ok 12 tests\registration-admin.spec.ts:5:5 › captured verification mail completes browser registration and administrator ban/unban (5.4s)
+  ok 13 tests\workflows.spec.ts:14:5 › writer creates a book, publishes and edits a chapter that readers can open (2.7s)
+  ok 14 tests\workflows.spec.ts:55:5 › forum question, answer and deep link retain the submitted content (6.1s)
+  ok 15 tests\workflows.spec.ts:98:5 › saved edit drafts survive refresh while public chapter bytes stay unchanged (2.4s)
+  ok 16 tests\workflows.spec.ts:119:5 › bookmarks and ratings persist through the public detail and personal shelf (3.0s)
+
+  16 passed (1.0m)
