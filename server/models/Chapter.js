@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const chapterSchema = new mongoose.Schema({
   deletedAt:{type:Date,default:null},
+  sourceUrl:{type:String,maxLength:2000},
   // 统一改为 bookId，关联 Book 表
   bookId: { 
     type: mongoose.Schema.Types.ObjectId, 

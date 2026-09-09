@@ -1,0 +1,266 @@
+
+> server@1.0.0 test
+> node --test tests/*.test.js
+
+TAP version 13
+# Subtest: failed or overlapping backups do not replace the last successful manifest
+ok 1 - failed or overlapping backups do not replace the last successful manifest
+  ---
+  duration_ms: 28.5612
+  type: 'test'
+  ...
+# Subtest: local config rejects old targets and implicit configuration
+ok 2 - local config rejects old targets and implicit configuration
+  ---
+  duration_ms: 1.2446
+  type: 'test'
+  ...
+# Subtest: production starts read-only and requires explicit HTTPS origins, secrets and bounded proxy trust
+ok 3 - production starts read-only and requires explicit HTTPS origins, secrets and bounded proxy trust
+  ---
+  duration_ms: 0.6862
+  type: 'test'
+  ...
+# Subtest: importing app does not connect or schedule work
+ok 4 - importing app does not connect or schedule work
+  ---
+  duration_ms: 605.4845
+  type: 'test'
+  ...
+# Subtest: SMTP delivery uses loopback receiver, propagates failure and refuses external test targets
+ok 5 - SMTP delivery uses loopback receiver, propagates failure and refuses external test targets
+  ---
+  duration_ms: 3045.7596
+  type: 'test'
+  ...
+# MongoNetworkError: read ECONNRESET
+#     at Connection.onSocketError (F:\\Website\\Test1\\server\\node_modules\\mongodb\\lib\\cmap\\connection.js:110:22)
+#     at Socket.emit (node:events:531:35)
+#     at emitErrorNT (node:internal/streams/destroy:170:8)
+#     at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+#     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+#   errorLabelSet: Set(0) {},
+#   beforeHandshake: false,
+#   [cause]: Error: read ECONNRESET
+#       at TCP.onStreamRead (node:internal/stream_base_commons:216:20) {
+#     errno: -4077,
+#     code: 'ECONNRESET',
+#     syscall: 'read'
+#   }
+# }
+# Subtest: migration inventory preserves legacy bytes and reports conflicts before index creation
+ok 6 - migration inventory preserves legacy bytes and reports conflicts before index creation
+  ---
+  duration_ms: 2125.7115
+  type: 'test'
+  ...
+# Subtest: metrics expire bounded buckets and reject absent, remote or forged monitor credentials
+ok 7 - metrics expire bounded buckets and reject absent, remote or forged monitor credentials
+  ---
+  duration_ms: 3.0585
+  type: 'test'
+  ...
+# Subtest: monitor enforces outage, error volume, disk and backup thresholds and reports recovery
+ok 8 - monitor enforces outage, error volume, disk and backup thresholds and reports recovery
+  ---
+  duration_ms: 1.0289
+  type: 'test'
+  ...
+# Request failed { name: 'MongoServerError', status: 500 }
+# MongoNetworkError: read ECONNRESET
+#     at Connection.onSocketError (F:\\Website\\Test1\\server\\node_modules\\mongodb\\lib\\cmap\\connection.js:110:22)
+#     at Socket.emit (node:events:531:35)
+#     at emitErrorNT (node:internal/streams/destroy:170:8)
+#     at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+#     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+#   errorLabelSet: Set(0) {},
+#   beforeHandshake: false,
+#   [cause]: Error: read ECONNRESET
+#       at TCP.onStreamRead (node:internal/stream_base_commons:216:20) {
+#     errno: -4077,
+#     code: 'ECONNRESET',
+#     syscall: 'read'
+#   }
+# }
+# MongoNetworkError: read ECONNRESET
+#     at Connection.onSocketError (F:\\Website\\Test1\\server\\node_modules\\mongodb\\lib\\cmap\\connection.js:110:22)
+#     at Socket.emit (node:events:531:35)
+#     at emitErrorNT (node:internal/streams/destroy:170:8)
+#     at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+#     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+#   errorLabelSet: Set(0) {},
+#   beforeHandshake: false,
+#   [cause]: Error: read ECONNRESET
+#       at TCP.onStreamRead (node:internal/stream_base_commons:216:20) {
+#     errno: -4077,
+#     code: 'ECONNRESET',
+#     syscall: 'read'
+#   }
+# }
+# Subtest: isolated storage failure rolls back writes and database restart recovers without repair
+ok 9 - isolated storage failure rolls back writes and database restart recovers without repair
+  ---
+  duration_ms: 5014.2562
+  type: 'test'
+  ...
+# Subtest: standalone API exits on unavailable isolated DB before listening
+ok 10 - standalone API exits on unavailable isolated DB before listening
+  ---
+  duration_ms: 5559.8161
+  type: 'test'
+  ...
+# Origin rejected { status: 403 }
+# Request failed { name: 'Error', status: 403 }
+# Subtest: real MongoDB: CSRF, ownership, revocation and signup
+    # Subtest: anonymous write and cross-origin login rejected
+    ok 1 - anonymous write and cross-origin login rejected
+      ---
+      duration_ms: 51.7479
+      type: 'test'
+      ...
+    # Subtest: every authenticated write entry rejects an anonymous caller with valid CSRF and forged headers
+    ok 2 - every authenticated write entry rejects an anonymous caller with valid CSRF and forged headers
+      ---
+      duration_ms: 326.6691
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 403 }
+# Request failed { name: 'Error', status: 403 }
+# Request failed { name: 'Error', status: 403 }
+# Request failed { name: 'Error', status: 403 }
+# Request failed { name: 'Error', status: 403 }
+# Request failed { name: 'Error', status: 400 }
+    # Subtest: other users cannot change books, chapters or shelves; fields cannot elevate
+    ok 3 - other users cannot change books, chapters or shelves; fields cannot elevate
+      ---
+      duration_ms: 206.2994
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 403 }
+# Request failed { name: 'Error', status: 403 }
+# Request failed { name: 'Error', status: 409 }
+    # Subtest: drafts remain private, publish once, and detect changes to published originals
+    ok 4 - drafts remain private, publish once, and detect changes to published originals
+      ---
+      duration_ms: 304.1177
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 403 }
+# Request failed { name: 'Error', status: 409 }
+    # Subtest: media validates bytes, ownership and active references
+    ok 5 - media validates bytes, ownership and active references
+      ---
+      duration_ms: 215.3576
+      type: 'test'
+      ...
+    # Subtest: login failures accumulate and expired lock resets
+    ok 6 - login failures accumulate and expired lock resets
+      ---
+      duration_ms: 574.6706
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 409 }
+# Request failed { name: 'Error', status: 429 }
+# Request failed { name: 'Error', status: 400 }
+    # Subtest: concurrent chapter retry, quota rollback, ratings and soft delete
+    ok 7 - concurrent chapter retry, quota rollback, ratings and soft delete
+      ---
+      duration_ms: 324.4915
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 400 }
+    # Subtest: reading GET stays read-only; account dedupe survives visitor changes and concurrent reports
+    ok 8 - reading GET stays read-only; account dedupe survives visitor changes and concurrent reports
+      ---
+      duration_ms: 185.1264
+      type: 'test'
+      ...
+    # Subtest: statistics single worker, natural calendar totals and preserved cumulative count
+    ok 9 - statistics single worker, natural calendar totals and preserved cumulative count
+      ---
+      duration_ms: 95.4304
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 400 }
+# Request failed { name: 'Error', status: 429 }
+# Request failed { name: 'Error', status: 429 }
+# Request failed { name: 'Error', status: 429 }
+# Request failed { name: 'Error', status: 400 }
+    # Subtest: forum concurrent writes preserve counters, hierarchy and current cookie liked state
+    ok 10 - forum concurrent writes preserve counters, hierarchy and current cookie liked state
+      ---
+      duration_ms: 394.4576
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 409 }
+# Request failed { name: 'Error', status: 409 }
+# Request failed { name: 'Error', status: 409 }
+# Request failed { name: 'Error', status: 403 }
+    # Subtest: import dry-run, repeated batches, conflicts and stable ownership never claim an existing title
+    ok 11 - import dry-run, repeated batches, conflicts and stable ownership never claim an existing title
+      ---
+      duration_ms: 238.6164
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 409 }
+    # Subtest: book creation retry preserves ID and rejects conflicting reuse
+    ok 12 - book creation retry preserves ID and rejects conflicting reuse
+      ---
+      duration_ms: 69.4024
+      type: 'test'
+      ...
+# Request failed { name: 'Error', status: 400 }
+    # Subtest: bounded shelves, reviews, admin and forum pages preserve totals, private ownership and reply deep links
+    ok 13 - bounded shelves, reviews, admin and forum pages preserve totals, private ownership and reply deep links
+      ---
+      duration_ms: 275.1887
+      type: 'test'
+      ...
+    # Subtest: logout and ban revoke previously valid cookies
+    ok 14 - logout and ban revoke previously valid cookies
+      ---
+      duration_ms: 139.2154
+      type: 'test'
+      ...
+    # Subtest: captured mail, hashed single-use code and cookie signup
+    ok 15 - captured mail, hashed single-use code and cookie signup
+      ---
+      duration_ms: 1023.6339
+      type: 'test'
+      ...
+    # Subtest: public profile hides private account fields and HTML is allowlisted
+    ok 16 - public profile hides private account fields and HTML is allowlisted
+      ---
+      duration_ms: 18.5337
+      type: 'test'
+      ...
+# MongoNetworkError: read ECONNRESET
+#     at Connection.onSocketError (F:\\Website\\Test1\\server\\node_modules\\mongodb\\lib\\cmap\\connection.js:110:22)
+#     at Socket.emit (node:events:531:35)
+#     at emitErrorNT (node:internal/streams/destroy:170:8)
+#     at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+#     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+#   errorLabelSet: Set(2) { 'RetryableWriteError', 'ResetPool' },
+#   beforeHandshake: false,
+#   [cause]: Error: read ECONNRESET
+#       at TCP.onStreamRead (node:internal/stream_base_commons:216:20) {
+#     errno: -4077,
+#     code: 'ECONNRESET',
+#     syscall: 'read'
+#   }
+# }
+    1..16
+ok 11 - real MongoDB: CSRF, ownership, revocation and signup
+  ---
+  duration_ms: 7379.1511
+  type: 'test'
+  ...
+1..11
+# tests 27
+# suites 0
+# pass 27
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 11380.6231

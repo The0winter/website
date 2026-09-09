@@ -56,9 +56,13 @@ export default function WriterDashboard() {
   const [worksPage, setWorksPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [activeChapters, setActiveChapters] = useState<Chapter[]>([]);
+  const [savingChapter,setSavingChapter]=useState(false);
+  const [publishDraftId,setPublishDraftId]=useState<string|null>(null);
 
   // 弹窗控制
   const [showCreateBookModal, setShowCreateBookModal] = useState(false);
+  const [bookCreationKey,setBookCreationKey]=useState(()=>crypto.randomUUID());
+  const [creatingBook,setCreatingBook]=useState(false);
   const [showChapterEditor, setShowChapterEditor] = useState(false);
   const [showBookManager, setShowBookManager] = useState(false);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
@@ -136,18 +140,20 @@ export default function WriterDashboard() {
     }
   }, [user, worksPage]);
 
+  const [adminUserPage,setAdminUserPage]=useState(1);
+  const [adminUserTotal,setAdminUserTotal]=useState(0);
   // 👮 加载用户列表 (支持搜索)
   const fetchUserList = useCallback(async (search = '') => {
     if (!user) return;
     setAdminLoading(true);
     try {
         // ✅ 升级：带上 search 参数
-        const res = await fetch(`/api/admin/users?search=${encodeURIComponent(search)}`, {
+        const res = await fetch(`/api/admin/users?search=${encodeURIComponent(search)}&page=${adminUserPage}`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
         });
         if (res.ok) {
             const data = await res.json();
-            setUserList(data);
+            setUserList(data);setAdminUserTotal(Number(res.headers.get('X-Total-Count')));
         } else {
             setToast({ msg: '获取用户列表失败', type: 'error' });
         }
@@ -156,7 +162,7 @@ export default function WriterDashboard() {
     } finally {
         setAdminLoading(false);
     }
-  }, [user]);
+  }, [user,adminUserPage]);
 
   const fetchAdminHotBooks = useCallback(async () => {
     if (!user || user.role !== 'admin') return;
@@ -345,6 +351,8 @@ const handleSaveCrop = async () => {
 
   // 书籍章节逻辑 (省略重复代码，逻辑与之前一致) ...
   const openChapterEditor = async (type: 'new' | 'edit', chapter?: Chapter) => {
+      setPublishDraftId(null);
+      setToast(null);
       if (type === 'new') { setCurrentChapterId(null); setFormChapterTitle(''); setFormChapterContent(''); setShowChapterEditor(true); }
       else if (chapter) {
           setCurrentChapterId(chapter.id); setFormChapterTitle(chapter.title); setFormChapterContent('加载中...'); setShowChapterEditor(true);
@@ -365,34 +373,60 @@ const handleSaveCrop = async () => {
       }
   };
   const saveChapterCore = async (status: 'ongoing' | 'completed') => {
+      if(savingChapter)return false;
       if (!formChapterTitle.trim()) { setToast({msg:'标题为空', type:'error'}); return false;}
       if (formChapterTitle.length > LIMITS.TITLE) { setToast({msg:'标题过长', type:'error'}); return false;}
       if (formChapterContent.length > LIMITS.CONTENT) { setToast({msg:'正文过长', type:'error'}); return false;}
+      setSavingChapter(true);
       try {
-          const data = { title: formChapterTitle, content: formChapterContent, bookId: currentBookId, chapter_number: currentChapterId ? (activeChapters.find(c => c.id === currentChapterId)?.chapter_number || 1) : Math.max(0,...activeChapters.map(c=>c.chapter_number))+1 };
-          if (currentChapterId) await chaptersApi.update(currentChapterId, data);
-          else await chaptersApi.create(data);
-          fetchMyData(); 
-          if(currentBookId) chaptersApi.getByBookId(currentBookId).then(setActiveChapters);
+          let draftId=publishDraftId;
+          if(!draftId||status==='ongoing'){
+            const response=await fetch(`/api/books/${currentBookId}/draft`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:formChapterTitle,content:formChapterContent,targetChapterId:currentChapterId})});
+            const draft=await response.json();if(!response.ok)throw new Error(draft.error||'草稿保存失败');
+            draftId=draft.id;
+          }
+          if(status==='completed'){
+            setPublishDraftId(draftId);
+            const response=await fetch(`/api/books/${currentBookId}/draft/publish`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({draftId})});
+            const chapter=await response.json();if(!response.ok)throw new Error(chapter.error||'发布失败，可重试');
+            setCurrentChapterId(chapter.id);setPublishDraftId(null);
+            fetchMyData();
+            chaptersApi.getByBookId(currentBookId).then(setActiveChapters).catch(()=>setToast({msg:'发布成功，目录刷新失败，请重新打开管理',type:'error'}));
+          }
           return true;
-      } catch(e) { setToast({msg:'保存失败', type:'error'}); return false; }
+      } catch(e) { setToast({msg:e instanceof Error?e.message:'保存失败', type:'error'}); return false; }
+      finally{setSavingChapter(false);}
   };
-  const handleSaveDraft = async () => { if(await saveChapterCore('ongoing')) setToast({msg:'保存成功', type:'success'}); };
+  const handleSaveDraft = async () => { if(await saveChapterCore('ongoing')) setToast({msg:'草稿已保存，仅本人可见', type:'success'}); };
+  const continueDraft = async () => {
+    try{
+      const response=await fetch(`/api/books/${currentBookId}/draft`);const draft=await response.json();
+      if(!response.ok)throw new Error(draft.error||'草稿读取失败');
+      if(!draft){setToast({msg:'此作品暂无草稿',type:'success'});return;}
+      setCurrentChapterId(draft.targetChapterId||null);setFormChapterTitle(draft.title);setFormChapterContent(draft.content);setPublishDraftId(null);setShowChapterEditor(true);
+    }catch(e){setToast({msg:e instanceof Error?e.message:'草稿读取失败',type:'error'});}
+  };
+  const discardDraft = async () => {
+    if(!confirm('确定放弃此作品的未发布草稿？已发布章节不受影响。'))return;
+    try{const response=await fetch(`/api/books/${currentBookId}/draft`,{method:'DELETE'});if(!response.ok)throw new Error('草稿删除失败');setPublishDraftId(null);setToast({msg:'已放弃草稿',type:'success'});}catch(e){setToast({msg:e instanceof Error?e.message:'草稿删除失败',type:'error'});}
+  };
   const handlePublishTrigger = () => { if(!formChapterTitle.trim()) return; setShowPublishConfirm(true); };
   const handleConfirmPublish = async () => { if(await saveChapterCore('completed')) { setShowPublishConfirm(false); setShowChapterEditor(false); setToast({msg:'发布成功', type:'success'}); }};
   const handleDeleteChapter = (cid: string) => setChapterToDelete(cid);
   const executeDeleteChapter = async () => { if(!chapterToDelete) return; await chaptersApi.delete(chapterToDelete); setActiveChapters(prev => prev.filter(c => c.id !== chapterToDelete)); setChapterToDelete(null); setToast({msg:'删除成功', type:'success'}); };
   const handleCreateBook = async (e: React.FormEvent) => {
       e.preventDefault();
-      if(!formBookTitle.trim() || !user) return;
+      if(!formBookTitle.trim() || !user || creatingBook) return;
+      setCreatingBook(true);
       try {
           let url = '';
-          if(newBookCoverPreview.startsWith('http')) url = newBookCoverPreview;
-          else if(newBookCoverFile) { const u = await uploadImageToCloudinary(newBookCoverFile); if(u) url = u; else return; }
-          await booksApi.create({ title: formBookTitle, description: formBookDescription, cover_image: url, category: formBookCategory, author: user.username, author_id: user.id });
+          if(newBookCoverPreview.startsWith('/api/media/')) url = newBookCoverPreview;
+          else if(newBookCoverFile) { const u = await uploadImageToCloudinary(newBookCoverFile); if(u) {url=u;setNewBookCoverPreview(u);} else return; }
+          await booksApi.create({ title: formBookTitle, description: formBookDescription, cover_image: url, category: formBookCategory, author: user.username, author_id: user.id },bookCreationKey);
           setShowCreateBookModal(false); setFormBookTitle(''); setFormBookDescription(''); setFormBookCategory(ALL_CATEGORIES[0]); setNewBookCoverFile(null); setNewBookCoverPreview('');
           setToast({msg:'创建成功', type:'success'}); fetchMyData();
-      } catch(e) { setToast({msg:'创建失败', type:'error'}); }
+      } catch(e) { setToast({msg:e instanceof Error?e.message:'创建失败', type:'error'}); }
+      finally{setCreatingBook(false);}
   };
   const handleUpdateBook = async () => {
     if (!currentBookId) return;
@@ -546,7 +580,7 @@ const openBookManager = (book: Book) => {
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[80vh] md:min-h-0 animate-in fade-in">
                 <div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 md:bg-white">
                     <h3 className="font-bold text-lg text-gray-900">我的作品</h3>
-                    <button onClick={() => setShowCreateBookModal(true)} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg hover:bg-blue-700 transition shadow-md shadow-blue-500/20 active:scale-95 cursor-pointer">
+                    <button onClick={() => {setBookCreationKey(crypto.randomUUID());setShowCreateBookModal(true);}} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg hover:bg-blue-700 transition shadow-md shadow-blue-500/20 active:scale-95 cursor-pointer">
                         <Plus className="h-4 w-4" /> <span className="hidden md:inline">创建新书</span><span className="md:hidden">新建</span>
                     </button>
                 </div>
@@ -599,9 +633,10 @@ const openBookManager = (book: Book) => {
                             <Shield className="h-7 w-7 text-purple-600" /> 控制台
                         </h2>
                         <p className="text-sm text-gray-500 mt-1">
-                            管理用户状态，查看活跃数据 (Top 15 活跃用户)
+                            管理用户状态，查看活跃数据
                         </p>
                     </div>
+                    <nav aria-label="用户分页" className="flex gap-4"><button disabled={adminLoading||adminUserPage===1} onClick={()=>setAdminUserPage(adminUserPage-1)}>上一页</button><span>第 {adminUserPage} 页</span><button disabled={adminLoading||adminUserPage*15>=adminUserTotal} onClick={()=>setAdminUserPage(adminUserPage+1)}>下一页</button></nav>
                     {/* 搜索框 */}
                     <div className="relative w-full md:w-80">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -609,7 +644,7 @@ const openBookManager = (book: Book) => {
                             type="text" 
                             placeholder="搜索用户名或邮箱..." 
                             value={adminSearch}
-                            onChange={(e) => setAdminSearch(e.target.value)}
+                            onChange={(e) => {setAdminUserPage(1);setAdminSearch(e.target.value);}}
                             className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition shadow-sm text-gray-900 placeholder-gray-500 bg-gray-50/50"
                         />
                     </div>
@@ -965,6 +1000,8 @@ const openBookManager = (book: Book) => {
                  {/* 章节列表标题与操作区 */}
                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between px-1 mb-4 gap-3">
                     <h4 className="font-bold text-gray-900 text-lg shrink-0">章节列表 ({activeChapters.length})</h4>
+                    <button onClick={continueDraft} className="text-sm text-blue-600">继续草稿</button>
+                    <button onClick={discardDraft} className="text-sm text-gray-500">放弃草稿</button>
                     <div className="flex items-center gap-2 w-full md:w-auto">
                         {/* 章节搜索框 */}
                         <div className="relative flex-1 md:w-48">
@@ -1016,10 +1053,10 @@ const openBookManager = (book: Book) => {
                                             <p className="text-xs text-gray-400 mt-1 pl-1">字数: {chapter.word_count || 0}</p>
                                         </div>
                                         <div className="flex gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                            <button onClick={() => openChapterEditor('edit', chapter)} className="p-2 bg-white border border-gray-200 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all hover:scale-105 shadow-sm cursor-pointer">
+                                            <button aria-label={`编辑章节：${chapter.title}`} onClick={() => openChapterEditor('edit', chapter)} className="p-2 bg-white border border-gray-200 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all hover:scale-105 shadow-sm cursor-pointer">
                                                 <Edit3 className="h-4 w-4" />
                                             </button>
-                                            <button onClick={() => handleDeleteChapter(chapter.id)} className="p-2 bg-white border border-gray-200 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all hover:scale-105 shadow-sm cursor-pointer">
+                                            <button aria-label={`删除章节：${chapter.title}`} onClick={() => handleDeleteChapter(chapter.id)} className="p-2 bg-white border border-gray-200 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all hover:scale-105 shadow-sm cursor-pointer">
                                                 <Trash2 className="h-4 w-4" />
                                             </button>
                                         </div>
@@ -1068,12 +1105,14 @@ const openBookManager = (book: Book) => {
                  <div className="flex items-center gap-2 md:gap-3">
                     <button 
                         onClick={handleSaveDraft} 
+                        aria-label="存草稿" disabled={savingChapter}
                         className="flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-5 md:py-2 bg-gray-100 text-gray-700 text-sm md:text-base font-bold rounded-full active:bg-gray-200 hover:bg-gray-200 transition cursor-pointer"
                     >
                         <Save className="h-4 w-4" /> <span className="hidden md:inline">存草稿</span>
                     </button>
                     <button 
                         onClick={handlePublishTrigger} 
+                        disabled={savingChapter}
                         className="flex items-center gap-1 md:gap-2 px-4 py-1.5 md:px-6 md:py-2 bg-blue-600 text-white text-sm md:text-base font-bold rounded-full active:bg-blue-700 hover:bg-blue-700 transition shadow-lg shadow-blue-500/30 cursor-pointer"
                     >
                         <Upload className="h-4 w-4" /> 发布
@@ -1092,7 +1131,7 @@ const openBookManager = (book: Book) => {
                             value={formChapterTitle}
                             // 1. 原生限制输入长度
                             maxLength={LIMITS.TITLE} 
-                            onChange={(e) => setFormChapterTitle(e.target.value)}
+                            onChange={(e) => {setFormChapterTitle(e.target.value);setPublishDraftId(null);}}
                             className="w-full p-2 border-b-2 border-gray-100 focus:border-blue-600 outline-none text-lg md:text-xl font-bold text-gray-900 placeholder-gray-300 bg-transparent transition-colors pr-16" // pr-16 留出空间
                             placeholder="请输入章节标题"
                        />
@@ -1106,7 +1145,7 @@ const openBookManager = (book: Book) => {
                     <div className="bg-white p-4 md:p-6 md:rounded-xl md:shadow-sm md:border md:border-gray-100 flex-1 flex flex-col min-h-[50vh] relative">
                        <textarea 
                           value={formChapterContent}
-                          onChange={(e) => setFormChapterContent(e.target.value)}
+                          onChange={(e) => {setFormChapterContent(e.target.value);setPublishDraftId(null);}}
                           // 注意：这里我不建议加 maxLength={LIMITS.CONTENT} 到 textarea 上，
                           // 因为浏览器处理大文本的 maxLength 会卡顿。最好是用下面的“超量变红”来提示。
                           className="flex-1 w-full resize-none outline-none text-gray-800 font-normal text-base md:text-lg leading-loose placeholder-gray-300 bg-transparent pb-8" // pb-8 留底部空间
@@ -1149,7 +1188,7 @@ const openBookManager = (book: Book) => {
                 <h3 className="text-xl font-bold text-gray-900 mb-2">确认发布？</h3>
                 <div className="flex gap-3">
                     <button onClick={() => setShowPublishConfirm(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl active:bg-gray-200">再想想</button>
-                    <button onClick={handleConfirmPublish} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl active:bg-blue-700">确认发布</button>
+                    <button disabled={savingChapter} onClick={handleConfirmPublish} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl active:bg-blue-700">确认发布</button>
                 </div>
             </div>
         </div>

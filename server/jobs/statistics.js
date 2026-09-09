@@ -5,7 +5,8 @@ import {dayKey} from '../services/content.js';
 import Job from '../models/Job.js';
 import User from '../models/User.js';
 import UserDaily from '../models/UserDaily.js';
-export async function updateStatistics(now=new Date()) {
+export async function updateStatistics(now=new Date(),shouldStop=()=>false) {
+  const checkStop=()=>{if(shouldStop())throw Object.assign(new Error('Statistics paused'),{name:'AbortError'});};
   const id='statistics',slot=Math.floor(+now/60000),owner=crypto.randomUUID(),clock=new Date();
   let lease;
   try {lease=await Job.findOneAndUpdate({_id:id,$and:[{$or:[{slot:{$lt:slot}},{slot:{$exists:false}},{slot,status:{$ne:'done'}}]},{$or:[{leaseUntil:{$lt:clock}},{leaseUntil:{$exists:false}}]}]},{$set:{owner,slot,status:'running',leaseUntil:new Date(+clock+120000),expiresAt:new Date(+clock+30*86400000)}},{new:true,upsert:true});}
@@ -17,6 +18,7 @@ export async function updateStatistics(now=new Date()) {
     const totals=await mongoose.connection.collection('readdailies').aggregate([{$match:{day:{$gte:start,$lte:day}}},{$group:{_id:'$bookId',daily:{$sum:{$cond:[{$eq:['$day',day]},'$views',0]}},weekly:{$sum:{$cond:[{$gte:['$day',week]},'$views',0]}},monthly:{$sum:{$cond:[{$gte:['$day',month]},'$views',0]}}}}]).toArray();
     const byBook=new Map(totals.map(t=>[String(t._id),t]));let count=0;
     for await(const book of Book.find({deletedAt:null}).select('_id').cursor()) {
+      checkStop();
       const t=byBook.get(String(book._id));
       await mongoose.connection.transaction(async session=>{
         // Updating the lease in the same transaction fences a worker whose lease was taken over.
@@ -30,6 +32,7 @@ export async function updateStatistics(now=new Date()) {
     startDate.setUTCDate(startDate.getUTCDate()+23);const scoreStart=startDate.toISOString().slice(0,10);
     let users=0;
     for await(const user of User.find({}).select('_id').cursor()){
+      checkStop();
       const rows=await UserDaily.find({userId:user._id,day:{$gte:historyStart,$lte:day}}).sort({day:1}).limit(30).lean();
       const today=rows.find(row=>row.day===day),score=rows.filter(row=>row.day>=scoreStart).reduce((sum,row)=>sum+(row.views||0)+(row.uploads||0)*50,0);
       await mongoose.connection.transaction(async session=>{
@@ -39,5 +42,5 @@ export async function updateStatistics(now=new Date()) {
       });users++;
     }
     await Job.updateOne({_id:id,owner},{$set:{status:'done',finishedAt:new Date(),leaseUntil:new Date(0)}});return {claimed:true,count,users};
-  } catch(e){await Job.updateOne({_id:id,owner},{$set:{status:'failed',lastError:e.name,leaseUntil:new Date(0)}});throw e;}
+  } catch(e){await Job.updateOne({_id:id,owner},{$set:{status:e.name==='AbortError'?'paused':'failed',lastError:e.name,leaseUntil:new Date(0)}});throw e;}
 }

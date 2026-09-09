@@ -179,10 +179,10 @@ export const booksApi = {
     await apiCall<void>(`/books/${id}`, { method: 'DELETE' });
   },
 
-  create: async (book: Omit<Book, 'id' | 'created_at'>): Promise<Book> => {
+  create: async (book: Omit<Book, 'id' | 'created_at'>, idempotencyKey=crypto.randomUUID()): Promise<Book> => {
     return apiCall<Book>('/books', {
       method: 'POST',
-      headers: {'Content-Type':'application/json','Idempotency-Key':crypto.randomUUID()},
+      headers: {'Content-Type':'application/json','Idempotency-Key':idempotencyKey},
       body: JSON.stringify({title:book.title,description:book.description,cover_image:book.cover_image,category:book.category,status:book.status}),
     });
   },
@@ -337,9 +337,12 @@ export const forumApi = {
     });
   },
 
-  getReplies: async (postId: string): Promise<ForumReply[]> => {
+  getReplies: async (postId: string, page=1): Promise<ForumReply[]> => {
     if (!postId || postId === 'undefined' || postId === 'null') return [];
-    return apiCall<ForumReply[]>(`/forum/posts/${postId}/replies`);
+    return apiCall<ForumReply[]>(`/forum/posts/${postId}/replies?page=${page}&limit=20`);
+  },
+  getReply: async(postId:string,replyId:string):Promise<ForumReply|null>=>{
+    const rows=await apiCall<ForumReply[]>(`/forum/posts/${postId}/replies?target=${encodeURIComponent(replyId)}`);return rows[0]||null;
   },
 
   createReply: async (postId: string, content: string): Promise<ForumReply> => {
@@ -363,9 +366,9 @@ export const forumApi = {
     });
   },
 
-  getReplyComments: async (replyId: string): Promise<ForumComment[]> => {
+  getReplyComments: async (replyId: string, page=1): Promise<ForumComment[]> => {
     if (!replyId || replyId === 'undefined' || replyId === 'null') return [];
-    return apiCall<ForumComment[]>(`/forum/replies/${replyId}/comments`);
+    return apiCall<ForumComment[]>(`/forum/replies/${replyId}/comments?page=${page}&limit=100`);
   },
 
   createReplyComment: async (

@@ -1,11 +1,11 @@
 {
-  "destination": "F:\\Website\\Test1\\.runtime\\clean-room-1788855223424",
+  "destination": "F:\\Website\\Test1\\.runtime\\clean-room-1788955176483",
   "node": "v22.23.2",
   "apiUnavailableDuringBuild": true,
   "manifest": [
     {
       "path": "server\\app.js",
-      "sha256": "ffc2179f464a9e96d778f9fa89fd11debcf7e37b2ebe66c80c9d018451404423"
+      "sha256": "462e61395e79ac371139e26c97ea22d016042ae6f51fa802840c6f6c37458ad8"
     },
     {
       "path": "server\\baidu_push.js",
@@ -13,15 +13,15 @@
     },
     {
       "path": "server\\config.js",
-      "sha256": "83a4c7c5f8f94a57e3f4631ea66fd95cfd3d3fbcf6d3cad3bcdcfbdd3e83fdc9"
+      "sha256": "b354d90057709ec06a02970681f3c9a9d572f3e8479c32d253d01bd4677d8411"
     },
     {
       "path": "server\\controllers\\reviewController.js",
-      "sha256": "ed2620359a3584f566f34d99b9ed3f046dfffd5bb3c994def46f5847dfde6e1e"
+      "sha256": "6c09b71be9477342504200049cb0f54e4cb1d04d30b1f2253c98f15425fddf08"
     },
     {
       "path": "server\\dev.js",
-      "sha256": "ee2db36bd0193eacdca6b9d89a5bc9df76441176f40793672856898422ad0812"
+      "sha256": "1d68029b5fd40d10dd140ec8e6e7f969190a1e688a9e318103dd16f71574efeb"
     },
     {
       "path": "server\\index.js",
@@ -29,7 +29,7 @@
     },
     {
       "path": "server\\jobs\\index.js",
-      "sha256": "edc6935ba6d31cbd4e9399c46236df55b3f26d7de29556e21ab8ab16dfa46553"
+      "sha256": "e6e3a6061f45582ca33e11de169d573f0b964eb51f4a0f8ece5795ca9decfd2d"
     },
     {
       "path": "server\\jobs\\legacy-disabled.js.txt",
@@ -37,7 +37,7 @@
     },
     {
       "path": "server\\jobs\\statistics.js",
-      "sha256": "6ac031ef2adcf635a8fb8244964e0ffe46c8fb32a83cee7970f8af0a7ffda914"
+      "sha256": "3c74adef74f87a9c7cecf8722fe3be1cd9a9d02c3545ee1d39c0c37a1c678f5f"
     },
     {
       "path": "server\\migrate_passwords.js",
@@ -45,7 +45,11 @@
     },
     {
       "path": "server\\migrations\\inspect.js",
-      "sha256": "3a6448c490f1c5d43eb98271c775c5708c51c039b3adf25faf833eb5dd388ce7"
+      "sha256": "116d6fedc6e2b32c4659033111ee336f65d96d7240b019bff6220c6ccb57248f"
+    },
+    {
+      "path": "server\\migrations\\inventory.js",
+      "sha256": "307b3822331495d2c42d570a8e98a645234464c7f81d6c28eb0721d942163062"
     },
     {
       "path": "server\\models\\AdminLog.js",
@@ -61,7 +65,11 @@
     },
     {
       "path": "server\\models\\Chapter.js",
-      "sha256": "0b4efac7957f3d45740a04e4cdeebad5ac431a2e2b7345f481ead664cf50213b"
+      "sha256": "135624fda759c8c58818ad9a7bd8590341eee991fe4e02120e939af362eb5dfb"
+    },
+    {
+      "path": "server\\models\\ChapterDraft.js",
+      "sha256": "8ee04f1a46d6a6be3dbd8b47a1ec5ddec17459532ca5125fb65326e7445748f7"
     },
     {
       "path": "server\\models\\ForumPost.js",
@@ -69,7 +77,7 @@
     },
     {
       "path": "server\\models\\ForumReply.js",
-      "sha256": "c95ce4186814a47fba288389a17b425983c6972fcd3966ec98cda0be147f2a39"
+      "sha256": "adf9b67c9d433a9bb15b7b2f839303043551b31e24697ecd30162cf6b739bbd7"
     },
     {
       "path": "server\\models\\ForumReplyComment.js",
@@ -97,7 +105,11 @@
     },
     {
       "path": "server\\models\\User.js",
-      "sha256": "f68d25de9aa8a2f9b49ed33759eede721da542bc18512a5de6b0c239a5e2e0a3"
+      "sha256": "dccfd978e93e8866e105d21b738187011c33cfd3b76958556479ff575d8ab5b2"
+    },
+    {
+      "path": "server\\models\\UserDaily.js",
+      "sha256": "339400d0fdd74a54f3637c46ced1624cf2ec881e5ce45ba86d9bc58c5b7367b3"
     },
     {
       "path": "server\\models\\VerificationCode.js",
@@ -121,7 +133,15 @@
     },
     {
       "path": "server\\routes\\content.js",
-      "sha256": "d2ac0ec951e971ea685391e932389e8468e47dfe66ccd51d3777fc171a585175"
+      "sha256": "9cd08a4c1493fd5e272b36e33e5459b322916d866b0d4bd88824ebe0b25b2df2"
+    },
+    {
+      "path": "server\\routes\\drafts.js",
+      "sha256": "a0efa53d40f795e7ce8a2ab6abdfc76e57ff1d3c4aa311a6572aac91cbb1e362"
+    },
+    {
+      "path": "server\\routes\\forum-views.js",
+      "sha256": "915bc33e8ca77a7ac3b05e39368293aaaf4357ba2e061c9afed60758d3dc0dcc"
     },
     {
       "path": "server\\routes\\forum-writes.js",
@@ -129,7 +149,7 @@
     },
     {
       "path": "server\\routes\\import.js",
-      "sha256": "cbb279fe0338a788286c9a4c3d24e92276b2a22e0634d88885cab82878c2c571"
+      "sha256": "3b848736b960177f4d184f88d94707b181675d87ec2dfa9285b0636f26a03d99"
     },
     {
       "path": "server\\routes\\media.js",
@@ -137,7 +157,7 @@
     },
     {
       "path": "server\\routes\\reading.js",
-      "sha256": "36485f864253c646efeebbcce4ce009303562b8f544b3396ec535771474cebfc"
+      "sha256": "3d4fab7b9d2dbde3cc8bd27773734d4028d386756dd17793053753fff51a9ffa"
     },
     {
       "path": "server\\security.js",
@@ -145,31 +165,79 @@
     },
     {
       "path": "server\\services\\content.js",
-      "sha256": "335d9188068cf756ee0b7fae73b7169754310de81649dc687160837e0255a285"
+      "sha256": "fd9bca750b5f11264bdd175ff0b92dcebec2b64d24fa828c0bc18ef7d2ca6bce"
+    },
+    {
+      "path": "server\\services\\observability.js",
+      "sha256": "3bd449f460a66d33792feea4fe4e7acc31578d2bde4fbc0ccf32c3b335e238ec"
+    },
+    {
+      "path": "server\\services\\pagination.js",
+      "sha256": "a997b5bdecdc9e78bd7699df5e6976852989ad04a1e8eaee3bc4df395a93fcc7"
     },
     {
       "path": "server\\staging.js",
-      "sha256": "362421771af8862823756740bf4f52fd127043beeb1e6834b28f0168b454ba96"
+      "sha256": "3416d1c9977f5cf2ca5983af417feed4c4ff5e35a037fbd936075a04e2dfa406"
     },
     {
       "path": "server\\test-seo.js",
       "sha256": "ce9c7d5e8a38c4a00f31d88ac6a89b1f5fe8ed3ab91a000bce408aae50d92f71"
     },
     {
+      "path": "server\\tests\\backup-candidate.mjs",
+      "sha256": "dbf20b15cd1fe0c691e3eafdf8527767bc6cd951716ef8a81d167c3fff0707af"
+    },
+    {
+      "path": "server\\tests\\backup.test.js",
+      "sha256": "4403ef1c3505634c81a5acb79519fad375390ef499135db529ceb1c7e842b7dd"
+    },
+    {
       "path": "server\\tests\\config.test.js",
-      "sha256": "72db2a9e5c4c90fa5865277dbbc459eedf884ba5c31240c349a12182696176c9"
+      "sha256": "1a2f03bc95fcb824fa7adcd75588edab5d0a1e1f0ae7455494dda63a295a3db5"
     },
     {
       "path": "server\\tests\\mail.test.js",
-      "sha256": "88a5dbf348ff33bf0c675e1d6d6c07b3b0e6cd2623bc93e4873b19b1b92a8576"
+      "sha256": "2504db55d850d29221d75549adee9cba46b0aa51f90d34d256268e62a33d7760"
+    },
+    {
+      "path": "server\\tests\\migrations.test.js",
+      "sha256": "86e2f86b1ccda0256623628392234bd75e221d373525a5288377d79dc1c0ab55"
+    },
+    {
+      "path": "server\\tests\\monitor-candidate.mjs",
+      "sha256": "9cdb00f53f6821c1b7bde279d31785e636526e2a07ac87cf603a107cd36c1c5c"
+    },
+    {
+      "path": "server\\tests\\observability.test.js",
+      "sha256": "a45d2125bbb34fd3a268004afa7fa305123c308c37ce7c5ccc66c452e732bd98"
+    },
+    {
+      "path": "server\\tests\\process-recovery.mjs",
+      "sha256": "b42f188136d8828496ac688286988d372f3a110e9416824e174e1aaa4380ee49"
+    },
+    {
+      "path": "server\\tests\\production-cookie.mjs",
+      "sha256": "eacf75dc1bd671ce57a1fa9c70b88b2decb22e11cc02cd0e1af738659a30d170"
+    },
+    {
+      "path": "server\\tests\\query-plans.mjs",
+      "sha256": "4a301295ddbecda25e919b8a87597f12710b97308519d1830df2efaae6d27ab4"
+    },
+    {
+      "path": "server\\tests\\recover-local-source.mjs",
+      "sha256": "13a47803802ec5f0a22fd13607f9304a00eadf31aeb899cedc077b81be7d9bdc"
     },
     {
       "path": "server\\tests\\restore.mjs",
       "sha256": "89f7eebb54bf352680334f8c8c0673090451b6b7c053d94f48398300a9effb93"
     },
     {
+      "path": "server\\tests\\runtime.test.js",
+      "sha256": "5373477a5c34974757a1a30c873b1397f2b5c457e146571407cfeea4460f93cc"
+    },
+    {
       "path": "server\\tests\\security.test.js",
-      "sha256": "36dc2703680eedbdf744bdec0904d853924a2e1a67ed410be2b5b1e084b3af83"
+      "sha256": "bfc84389b46eaf127ab5701e8c7abd33867523d51f1630cb448a9af8fe019c64"
     },
     {
       "path": "server\\utils\\indexNow.js",
@@ -201,7 +269,7 @@
     },
     {
       "path": "web-next\\app\\book\\[id]\\[chapterId]\\page.tsx",
-      "sha256": "2b29387edf500a198877b72d4241edc251e461d428a4141b4ca096f500f20ab3"
+      "sha256": "f0f300171128beddc2d061cdd6843c4f354f19a128c88ccebbf3a97993df8023"
     },
     {
       "path": "web-next\\app\\error.tsx",
@@ -213,15 +281,15 @@
     },
     {
       "path": "web-next\\app\\forum\\page.tsx",
-      "sha256": "7f2c186b80a38b0639a8b9c761f0fc44f5cdb78ac3c10648c94645f46165bf67"
+      "sha256": "cb198734396fa0e97102ccf25af1756b0393c2b9216a677a06249566fa6810aa"
     },
     {
       "path": "web-next\\app\\forum\\question\\[qid]\\page.tsx",
-      "sha256": "ba233c1dc2a58992f5bed2b49cedfaade58c334a2e3961e06a0b4ab9b2ccc64f"
+      "sha256": "979babd1b29a245834c4bd6018da3bd6e1df6f71b7fc5e41ff309e59a2cfe8e3"
     },
     {
       "path": "web-next\\app\\forum\\[postId]\\page.tsx",
-      "sha256": "71b68651ce6a41fe0e324326870ad8c6fa02bebdfb8fcf754c8705ba5496a8b9"
+      "sha256": "466d4225898c504ef82d3d477e7a14d6af4f849731fce12e7c3a43ca0c785943"
     },
     {
       "path": "web-next\\app\\globals.css",
@@ -237,7 +305,7 @@
     },
     {
       "path": "web-next\\app\\library\\page.tsx",
-      "sha256": "07f5191e1934fe6b93d019b19e54b58aa6542ddc7ec56f3c51e1cf07f95d92c6"
+      "sha256": "38e39bba13b0d73213c6b7d7c0007cccf6a8111c15d76570f20d43286e6a636c"
     },
     {
       "path": "web-next\\app\\login\\page.tsx",
@@ -249,7 +317,7 @@
     },
     {
       "path": "web-next\\app\\profile\\page.tsx",
-      "sha256": "284f87260d553a4edbf368e806d4daad2a3f1b073ac4d254ea04cc52ed3987be"
+      "sha256": "ced1ff9bd3a3f7e551ea69f813490186584d8903b676b41bd6de41de077ee98d"
     },
     {
       "path": "web-next\\app\\ranking\\page.tsx",
@@ -265,7 +333,7 @@
     },
     {
       "path": "web-next\\app\\search\\page.tsx",
-      "sha256": "51d30ec19edf78bee319b7d440d84b4722d0c3017af1c95300cced98e3923c87"
+      "sha256": "7e3c83a00da2784352fc81734089afe807d5f640d0359034bf3de9d0622f747b"
     },
     {
       "path": "web-next\\app\\sitemap.xml\\route.ts",
@@ -277,11 +345,11 @@
     },
     {
       "path": "web-next\\app\\sitemaps\\[bookId]\\[page]\\route.ts",
-      "sha256": "50fbbe1bb2a4d3b8a6b6573a6b1e9d0e62446eca46fb850a7c2f89f30c84f954"
+      "sha256": "c91fb22bf601c27ee5d2581d4323198829f182db2528d133d1140bf63eef3a23"
     },
     {
       "path": "web-next\\app\\writer\\page.tsx",
-      "sha256": "165ba7af29ef8e4ce2f7e1309f3bcf830761350d4a168305d5e7d80c2d33b5a5"
+      "sha256": "5aed4ba128091ac1f41bca57d7c9dd0837e32ddd0709c4eef2b1be93e25e149c"
     },
     {
       "path": "web-next\\CLAUDE.md",
@@ -293,7 +361,7 @@
     },
     {
       "path": "web-next\\components\\BookDetailClient.tsx",
-      "sha256": "765354e4b42d4df1120e018db4597077d0522a133b27fe541f0f95bb3e573a03"
+      "sha256": "e00fcb6905bab424f6c33a0820922b7d8d0d9bfeef0f1a5c9a9dd0dbeedb0c91"
     },
     {
       "path": "web-next\\components\\Footer.tsx",
@@ -313,7 +381,7 @@
     },
     {
       "path": "web-next\\components\\ReaderClient.tsx",
-      "sha256": "641a6a6e56c7b892e7fd928624497cb7b2997b4b5788f600eb45120958f7945f"
+      "sha256": "2644835b64ea87c5f555ec4661d76cfccdee9c24539cf9f9243b6b92c7a406bb"
     },
     {
       "path": "web-next\\components\\send-code\\route.ts",
@@ -333,7 +401,7 @@
     },
     {
       "path": "web-next\\lib\\api.ts",
-      "sha256": "9095cad23cb48eb16978444af27bc69febbecc7f5877195174c9d88b92a51de7"
+      "sha256": "3c9d6f686c873e5ddf5be23873656436bae2198da1ec767bfaf3eb7f23eee694"
     },
     {
       "path": "web-next\\lib\\canvasUtils.ts",
@@ -352,12 +420,16 @@
       "sha256": "85bac699c8396464e2d56682f926ee9759d4992ad71cbfae814dba6974586d60"
     },
     {
+      "path": "web-next\\lib\\useForumView.ts",
+      "sha256": "0906e6dbb006d466d2a3c4830729fd8a2b4f9890ebee3a10feec698ac9568c6a"
+    },
+    {
       "path": "web-next\\lib\\useStoredState.ts",
       "sha256": "a09d63f6716c447cc0c820f1c331c3002ceec04202e885383c37bd5d5667dffa"
     },
     {
       "path": "web-next\\next-env.d.ts",
-      "sha256": "6adf5e41ef699990fbc2612c89053c73d991bc302177897416256b3736c4b11a"
+      "sha256": "25204fbfb4d6e786ee6ee17ed343e2e17594e45f517b62477059ce6494253a82"
     },
     {
       "path": "web-next\\next.config.ts",
@@ -373,7 +445,7 @@
     },
     {
       "path": "web-next\\playwright.config.ts",
-      "sha256": "e4e05b9d25cf735384b5b054d8a6c545c3dc73c7b2b43af1363a5464385b1bc8"
+      "sha256": "227fdd86f9b07a0f2d30e7edeca55de52d1f989a3735e24b8e52c2b2cac1461e"
     },
     {
       "path": "web-next\\postcss.config.mjs",
@@ -432,8 +504,28 @@
       "sha256": "e572bd00c447be0232028c8e0349865d0ebb72154e0ea23767cefc88901b744a"
     },
     {
+      "path": "web-next\\tests\\cache.spec.ts",
+      "sha256": "dd533b40f8ea71f804f467b40c424d45c3f02de660cedf8479902836bf3727c1"
+    },
+    {
       "path": "web-next\\tests\\pagination.spec.ts",
       "sha256": "fe3ebe406e9437571898c43c767e288e9b6ad90bd89aba8f8cb66c44c2b25d29"
+    },
+    {
+      "path": "web-next\\tests\\profile.spec.ts",
+      "sha256": "abb985c00eb494680014f34600687620445b5558900ac925b5b6e81587d0f149"
+    },
+    {
+      "path": "web-next\\tests\\reading.spec.ts",
+      "sha256": "ff153e85f2d2e8ea4111c916be7643904b948b9ac95a9d2cf1e46063c3d96f46"
+    },
+    {
+      "path": "web-next\\tests\\registration-admin.spec.ts",
+      "sha256": "9d6a02c204691ca5065020e4a40bb30ec36df19812e1ec707870271e36177ea0"
+    },
+    {
+      "path": "web-next\\tests\\workflows.spec.ts",
+      "sha256": "c35e282e54036071d1affb26be6946045f7c8992da51b0aa85afb5e3f57cbb86"
     },
     {
       "path": "web-next\\tsconfig.json",
@@ -442,6 +534,114 @@
     {
       "path": "web-next\\utils\\api.js",
       "sha256": "c963ac0faf8e12dd93104e456cff935668e1ceb2854f070e08264cfe804b8595"
+    },
+    {
+      "path": "infra\\backup.mjs",
+      "sha256": "f26f4eabedca458dfedc8992a79831799963ce89464e748adf8aa691d8b002e1"
+    },
+    {
+      "path": "infra\\clean-room.mjs",
+      "sha256": "52f04d2433a98db1bf5ad062dff9f6b60e9e640035b525e928b6a03d0d418256"
+    },
+    {
+      "path": "infra\\import-local.mjs",
+      "sha256": "fc99dfdf83fbe3eb4f83620d28e87449c7903ab7b69f0271a22ac73a6ae69e92"
+    },
+    {
+      "path": "infra\\load.mjs",
+      "sha256": "aa0fcb6dd4285ea08c8035809e5b3dbacdde66a18d520687f88751c86b9aecfe"
+    },
+    {
+      "path": "infra\\maintenance.mjs",
+      "sha256": "ae44c5c4fa494670f53df5f8b5fb8ca454b37353385da14558945ede82d2de43"
+    },
+    {
+      "path": "infra\\mixed-import.mjs",
+      "sha256": "ac6b69d2a3a633b72b833ccbc0b32a3f395ee844b8ed37d9c1f5cd345ecbf144"
+    },
+    {
+      "path": "infra\\monitor-rules.mjs",
+      "sha256": "f4b3afb2fc33de904c4dae88308b72576445d12427e42b421c99c3bbf6531798"
+    },
+    {
+      "path": "infra\\monitor.mjs",
+      "sha256": "c7a58d17408d3a97294b785cc78b8ff8b282128100994f43834ea0e497a58638"
+    },
+    {
+      "path": "infra\\nginx-production.conf",
+      "sha256": "3d063a2dc9b452c5c4face819bbd6f9e8454f6e3b1110df7fd5bed933792103a"
+    },
+    {
+      "path": "infra\\sample-resources.ps1",
+      "sha256": "c2e68f3e14b7e54677b51cb54ae929623388df0f96bc647d2982a630cf9d7a66"
+    },
+    {
+      "path": "infra\\systemd\\api.env.example",
+      "sha256": "b4df630c0b16b310e544ec5ba72ca06952f2cb090028649824da885a1310d6dc"
+    },
+    {
+      "path": "infra\\systemd\\backup.json.example",
+      "sha256": "b554136086750d6928360e8a80766347eaa30677b1758e333812387a23c3bb7f"
+    },
+    {
+      "path": "infra\\systemd\\jobs.env.example",
+      "sha256": "74eff1c9125859e795817d0b3f25411b61278f1aee8dbc7d3febb074c8e07ef2"
+    },
+    {
+      "path": "infra\\systemd\\journald-test1.conf",
+      "sha256": "7d40475fa57ca4a8b2f435a51f0d6c4f0a31fcb57ab4c3d3ef366621b34f59fa"
+    },
+    {
+      "path": "infra\\systemd\\mongod.conf",
+      "sha256": "2ccae0e1210689a9e542b281d26946de145eea8610da6c34d6dc0541c522eac6"
+    },
+    {
+      "path": "infra\\systemd\\monitor.json.example",
+      "sha256": "813759c96ca3c280ac2cc3833c6dbefa7951ab33f29f3e86a3bc9d349377666c"
+    },
+    {
+      "path": "infra\\systemd\\nginx-test1.logrotate",
+      "sha256": "18fa92b82631dadd0cde87d37dbdfe3e92c4f26280105bafab6d05c7af0b359f"
+    },
+    {
+      "path": "infra\\systemd\\test1-api.service",
+      "sha256": "dd8864e0654238c9fa402a911e38b1d38b30adc3184eb44bcc8c4e463bc6390a"
+    },
+    {
+      "path": "infra\\systemd\\test1-backup.service",
+      "sha256": "0a9f885e5b7be55c237b79ae1079b624b71a8c66b18bf7dd219c7ffa8550d294"
+    },
+    {
+      "path": "infra\\systemd\\test1-backup.timer",
+      "sha256": "c2175d1a64e42335d9f63bf264b14c981c7e4cc6699fbf0f4797beac3bd08da4"
+    },
+    {
+      "path": "infra\\systemd\\test1-jobs.service",
+      "sha256": "26f4ecfd181516fb1294424e589732bd31226612b2a5aa01e4c571a296ec8a9d"
+    },
+    {
+      "path": "infra\\systemd\\test1-maintenance.service",
+      "sha256": "af13eb2321677a15d3cb6a38c2412e01835bd6cf66e93d9b2a7b01ec29486df0"
+    },
+    {
+      "path": "infra\\systemd\\test1-mongo.service",
+      "sha256": "72460cddb1b3214ded7f945edf9eea15205f22ff580307ab16dd4ff43c350592"
+    },
+    {
+      "path": "infra\\systemd\\test1-monitor.service",
+      "sha256": "30fa80d815f467f6848a3cc1d54749c688b40677f17f3a4a2bb706e0f9667e70"
+    },
+    {
+      "path": "infra\\systemd\\test1-monitor.timer",
+      "sha256": "5c4e6372c71b7dff16023ee66d3cd42fa193fa68148e29b26fe29dd818cbf05e"
+    },
+    {
+      "path": "infra\\systemd\\test1-web.service",
+      "sha256": "9facee2eef13da038625e5965ea0d0e821eae7818348b4f4531c7a41dc850446"
+    },
+    {
+      "path": "infra\\systemd\\web.env.example",
+      "sha256": "1f7f49d2e2bdb4e3c1dc9eaf791c652d8a3cf2a7a43adba7790c19b2c8eef8de"
     }
   ],
   "steps": [
@@ -453,7 +653,7 @@
         "ci"
       ],
       "code": 0,
-      "ms": 2167
+      "ms": 1907
     },
     {
       "name": "web-next-install",
@@ -463,7 +663,7 @@
         "ci"
       ],
       "code": 0,
-      "ms": 21705
+      "ms": 14725
     },
     {
       "name": "server-test",
@@ -473,7 +673,7 @@
         "test"
       ],
       "code": 0,
-      "ms": 6932
+      "ms": 11940
     },
     {
       "name": "typecheck",
@@ -484,7 +684,7 @@
         "typecheck"
       ],
       "code": 0,
-      "ms": 3488
+      "ms": 3461
     },
     {
       "name": "lint",
@@ -495,7 +695,7 @@
         "lint"
       ],
       "code": 0,
-      "ms": 9640
+      "ms": 7240
     },
     {
       "name": "build",
@@ -506,7 +706,7 @@
         "build"
       ],
       "code": 0,
-      "ms": 8752
+      "ms": 9713
     }
   ]
 }

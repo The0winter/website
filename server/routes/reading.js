@@ -43,7 +43,8 @@ export function readingRoutes(app,auth) {
     if(!await Book.exists({_id:req.params.bookId,deletedAt:null}))fail(404,'作品不可用');
     const limit=integer(req.query.limit,100,200),page=integer(req.query.page,1,100000);
     const filter={bookId:req.params.bookId,deletedAt:null};
-    const chapters=await Chapter.find(filter).select('title chapter_number published_at bookId word_count').sort({chapter_number:req.query.order==='desc'?-1:1,_id:1}).skip((page-1)*limit).limit(limit).maxTimeMS(3000).lean();
+    // (bookId, chapter_number) is unique: no extra _id sort that forces a full catalog sort.
+    const chapters=await Chapter.find(filter).select('title chapter_number published_at bookId word_count').sort({chapter_number:req.query.order==='desc'?-1:1}).skip((page-1)*limit).limit(limit).maxTimeMS(3000).lean();
     res.set('X-Total-Count',String(await Chapter.countDocuments(filter)));res.json(chapters.map(formatted));
   }));
   app.post('/api/books/:id/views',rateLimit({windowMs:60000,limit:30,message:{error:'阅读上报过于频繁'}}),asyncRoute(async(req,res)=>{

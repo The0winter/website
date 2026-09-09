@@ -398,6 +398,7 @@ if (targetId) {
   // ▼▼▼ 🔥 [新增 2] 静默预加载下一章 (Prefetching) ▼▼▼
   // ============================================================
   useEffect(() => {
+    const controller=new AbortController();
     // 只有当：1.当前章节已加载 2.目录已加载 时，才执行预加载
     if (chapter && allChapters.length > 0) {
       const currentIndex = allChapters.findIndex((ch) => ch.id === chapter.id);
@@ -413,13 +414,15 @@ if (targetId) {
           const token = localStorage.getItem('token');
           
           fetch(`/api/chapters/${nextChapter.id}`, {
+              signal:controller.signal,
               headers: {
                   'Content-Type': 'application/json',
                   ...(token ? { 'Authorization': `Bearer ${token}` } : {})
               }
           })
-            .then(res => res.json())
+            .then(res => {if(!res.ok)throw new Error('下一章预读暂不可用');return res.json();})
             .then(data => {
+              if(controller.signal.aborted||String(data.id||data._id)!==nextChapter.id||String(data.bookId)!==bookId||typeof data.content!=='string')return;
               // 下载成功，存入缓存 (注意：不要 setChapter，只存不显)
               chapterCache.set(nextChapter.id, data);
               console.log(`[预加载] 完成！下一章已就绪。`);
@@ -434,11 +437,12 @@ if (targetId) {
                   }
               }
             })
-            .catch(err => console.error("[预加载] 失败 (不影响当前阅读)", err));
+            .catch(err => {if(err.name!=='AbortError')console.error("[预加载] 失败 (不影响当前阅读)", err);});
         }
       }
     }
-  }, [chapter, allChapters]); // 当当前章节变化时，触发下一次预加载
+    return()=>controller.abort();
+  }, [chapter, allChapters,bookId]); // 当当前章节变化时，触发下一次预加载
 
   const checkBookmark = async () => {
     try {
@@ -560,6 +564,8 @@ if (loading) return (
   return (
     <div 
       className="min-h-screen w-full transition-colors duration-300 flex flex-col items-center"
+      data-reader-cache-chapters={chapterCache.size}
+      data-reader-cache-books={bookCache.size}
       style={{ 
         backgroundColor: isDesktop ? activeTheme.desk : activeTheme.bg 
       }}

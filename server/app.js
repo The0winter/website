@@ -1,8 +1,12 @@
 import { forumWrites } from './routes/forum-writes.js';
+import {pagination} from './services/pagination.js';
+import {createRequestMetrics,allowMetrics} from './services/observability.js';
 import { readingRoutes } from './routes/reading.js';
 import { importRoutes } from './routes/import.js';
 import { contentRoutes } from './routes/content.js';
-import { mediaRoutes, validAsset } from './routes/media.js';
+import { draftRoutes } from './routes/drafts.js';
+import { forumViewRoutes } from './routes/forum-views.js';
+import { mediaRoutes } from './routes/media.js';
 import { security, safeHtml, publicUser } from './security.js';
 import { authRoutes } from './routes/auth.js';
 import Session from './models/Session.js';
@@ -10,13 +14,10 @@ import Session from './models/Session.js';
 import express from 'express';
 import mongoose from 'mongoose';
 import crypto from 'crypto';
-import { submitToIndexNow } from './utils/indexNow.js'
 import cors from 'cors';
-import bcrypt from 'bcryptjs';
 
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
-import jwt from 'jsonwebtoken';
 import mongoSanitize from 'express-mongo-sanitize';
 
 
@@ -24,19 +25,18 @@ import mongoSanitize from 'express-mongo-sanitize';
 import User from './models/User.js'; 
 import Book from './models/Book.js';
 import Chapter from './models/Chapter.js';
-import Bookmark from './models/Bookmark.js';
 import ForumPost from './models/ForumPost.js';  
 import ForumReply from './models/ForumReply.js';
 import ForumReplyComment from './models/ForumReplyComment.js';
 
-import VerificationCode from './models/VerificationCode.js';
-import sendVerificationEmail from './utils/sendEmail.js';
 
 
-import { createReview, getReviews } from './controllers/reviewController.js';
+import { getReviews } from './controllers/reviewController.js';
 
 export function createApp(config = readConfig()) {
 const app = express();
+const metrics = createRequestMetrics();
+app.use((req,res,next)=>{ res.once('finish',()=>{if(!req.path.startsWith('/health/'))metrics.record(res.statusCode);});next(); });
 app.param(['id','bookId','userId'],(req,res,next,value)=>/^[a-fA-F0-9]{24}$/.test(value)?next():res.status(400).json({error:'资源ID无效'}));
 app.use((req,res,next)=>{
   req.requestId=crypto.randomUUID();res.set('X-Request-Id',req.requestId);
@@ -44,14 +44,11 @@ app.use((req,res,next)=>{
 });
 app.set('trust proxy', config.trustProxy==='loopback'?'loopback':false);
 
-let userViewBuffer = {}; // 存用户阅读量: { "userId1": 5, "userId2": 1 }
-let bookViewBuffer = {}; // 存书籍阅读量: { "bookId1": 100, "bookId2": 3 }
 
 
 // ================= 1. 安全与配置 (紧急修复版) =================
 
 // 🚨 修复：加回默认值，防止因为缺环境变量导致网站打不开
-const JWT_SECRET = config.jwtSecret;
 
 
 // 👇 1. 新增：恶意乱码 URL 拦截器
@@ -60,7 +57,7 @@ app.use((req, res, next) => {
         decodeURIComponent(req.path);
         next();
     } catch (err) {
-        console.warn('⚠️ 拦截到恶意的乱码扫描请求:', req.url);
+        console.warn('Malformed request URL', {requestId:req.requestId});
         return res.status(400).send('Bad Request');
     }
 });
@@ -75,12 +72,12 @@ const corsOptions = {
     if (isAllowed) {
       return callback(null, true);
     } else {
-      console.log('🚫 CORS 拦截:', origin);
+      console.warn('Origin rejected', {status:403});
       return callback(Object.assign(new Error('Not allowed by CORS'), {status:403}));
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'],
+  allowedHeaders: ['Content-Type', 'x-csrf-token', 'Idempotency-Key'],
   credentials: true
 };
 
@@ -109,6 +106,10 @@ app.use(express.json({ limit: '256kb' }));
 app.use(express.urlencoded({ limit: '256kb', extended: false, parameterLimit:100 }));
 app.use(mongoSanitize());
 app.get('/health/live', (req, res) => res.json({status:'live'}));
+app.get('/health/metrics', (req,res)=>{
+  if(!allowMetrics(req))return res.status(404).end();
+  res.set('Cache-Control','private, no-store').json({...metrics.snapshot(),databaseReady:mongoose.connection.readyState===1});
+});
 app.get('/health/ready', (req, res) => res.status(mongoose.connection.readyState === 1 ? 200 : 503).json({ready:mongoose.connection.readyState === 1}));
 app.use('/api', (req, res, next) => mongoose.connection.readyState === 1 ? next() : res.status(503).json({error:'数据库暂不可用'}));
 
@@ -128,7 +129,7 @@ app.use('/api/', (req,res,next) => {
   if (req.method !== 'GET') return globalLimiter(req,res,next);
   const expected=process.env.INTERNAL_API_SECRET;
   const supplied=req.headers['x-internal-api-secret'];
-  const internal=expected && expected.length>=32 && typeof supplied==='string' && expected.length===supplied.length && ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(supplied));
+  const internal=expected && expected.length>=32 && typeof supplied==='string' && Buffer.byteLength(expected)===Buffer.byteLength(supplied) && ['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(supplied));
   return (internal ? internalReadLimiter : publicReadLimiter)(req,res,next);
 });
 
@@ -144,7 +145,6 @@ app.use('/api/auth/', (req,res,next) => ['GET','HEAD','OPTIONS'].includes(req.me
 
 // ================= 4. 中间件 =================
 
-const generateRandomPassword = () => Math.random().toString(36).slice(-8);
 const normalizeRole = (role) => (role === 'writer' ? 'reader' : role);
 
 const auth = security(app, config);
@@ -152,6 +152,8 @@ const authMiddleware = auth.authenticate;
 authRoutes(app,auth,config);
 mediaRoutes(app,auth);
 contentRoutes(app,auth);
+draftRoutes(app,auth);
+forumViewRoutes(app,auth);
 importRoutes(app);
 readingRoutes(app,auth);
 forumWrites(app,auth);
@@ -166,7 +168,7 @@ const adminMiddleware = async (req, res, next) => {
         }
         next();
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        res.status(e.status || 500).json({ error: e.message });
     }
 };
 
@@ -197,7 +199,8 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
         
         // 1. 检索功能
         if (search) {
-            const regex = new RegExp(search, 'i'); // 模糊匹配，不区分大小写
+            if(typeof search!=='string'||search.length>100)return res.status(400).json({error:'搜索关键词无效'});
+            const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'i');
             query = { 
                 $or: [ 
                     { username: regex }, 
@@ -206,22 +209,26 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
             };
         }
 
+        const {limit,skip}=pagination(req.query,15,50);
         const users = await User.find(query)
             // 2. 选择需要的字段 (包括 stats)
             .select('username email role created_at isBanned stats weekly_score')
             // 3. 排序：按 weekly_score (活跃分) 倒序，分数一样按注册时间
-            .sort({ weekly_score: -1, created_at: -1 }) // 直接按分数排，现在分数是秒级更新的
+            .sort({ weekly_score: -1, created_at: -1, _id:1 })
             // 4. 限制 15 条
-            .limit(15);
+            .skip(skip).limit(limit).maxTimeMS(3000);
+        res.set('X-Total-Count',String(await User.countDocuments(query).maxTimeMS(3000)));
+        res.set('Cache-Control','private, no-store');
 
         res.json(
             users.map((u) => ({
                 ...u.toObject(),
+                id: String(u._id),
                 role: normalizeRole(u.role)
             }))
         );
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        res.status(e.status || 500).json({ error: e.message });
     }
 });
 
@@ -231,94 +238,27 @@ app.patch('/api/admin/users/:userId/ban', authMiddleware, adminMiddleware, async
         const { userId } = req.params;
         const { isBanned } = req.body;
         if (typeof isBanned !== 'boolean') return res.status(400).json({error:'isBanned must be boolean'});
-        await Session.deleteMany({userId}); // 前端传 true 或 false
 
         // 防止封禁自己 (可选，但建议加上)
         if (userId === req.user.id) {
             return res.status(400).json({ error: '不能封禁自己' });
         }
 
-        const user = await User.findByIdAndUpdate(
-            userId, 
-            { $set:{isBanned}, $inc:{authVersion:1} }, 
-            { new: true }
-        );
-
-        if (!user) return res.status(404).json({ error: '用户不存在' });
+        let user;
+        await mongoose.connection.transaction(async session=>{
+          user=await User.findByIdAndUpdate(userId,{$set:{isBanned},$inc:{authVersion:1}},{new:true,session});
+          if(!user)throw Object.assign(new Error('用户不存在'),{status:404});
+          await Session.deleteMany({userId},{session});
+        });
 
         res.json({ success: true, message: isBanned ? '用户已封禁' : '用户已解封', user: publicUser(user) });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        res.status(e.status || 500).json({ error: e.message });
     }
 });
 
 // 影子登录 (Impersonate) - 🚨 紧急修复版：移除日志记录
 app.post('/api/admin/impersonate/:userId', authMiddleware, adminMiddleware, (req,res) => res.status(410).json({error:'影子登录已停用'}));
-
-const DIRTY_TITLE_REGEX = /(?:^|\s)\d+\s*[.、:：\-]\s*第/u;
-
-const normalizeChapterTitleForDedup = (title = '') =>
-    String(title)
-        .replace(/^\s*\d+\s*[.、:：\-]\s*/u, '')
-        .replace(/\s+/g, '')
-        .trim();
-
-const normalizeContentSampleForDedup = (content = '', maxChars = 600) => {
-    const normalized = String(content)
-        .replace(/\s+/g, '')
-        .replace(/[.,，。!?！？:：;；、"'`~\-—_()[\]{}<>《》【】]/g, '');
-    return normalized.slice(0, maxChars);
-};
-
-const calcPrefixSimilarity = (a = '', b = '') => {
-    if (!a || !b) return 0;
-    const minLen = Math.min(a.length, b.length);
-    let sameCount = 0;
-    while (sameCount < minLen && a[sameCount] === b[sameCount]) {
-        sameCount++;
-    }
-    return sameCount / minLen;
-};
-
-const buildNgramSet = (text, n = 3) => {
-    const set = new Set();
-    if (!text) return set;
-    if (text.length < n) {
-        set.add(text);
-        return set;
-    }
-    for (let i = 0; i <= text.length - n; i++) {
-        set.add(text.slice(i, i + n));
-    }
-    return set;
-};
-
-const calcNgramJaccardSimilarity = (a = '', b = '') => {
-    if (!a || !b) return 0;
-    const setA = buildNgramSet(a);
-    const setB = buildNgramSet(b);
-    if (setA.size === 0 || setB.size === 0) return 0;
-
-    let intersection = 0;
-    for (const token of setA) {
-        if (setB.has(token)) intersection++;
-    }
-    const union = setA.size + setB.size - intersection;
-    if (union <= 0) return 0;
-    return intersection / union;
-};
-
-const calcContentSimilarity = (a = '', b = '') =>
-    Math.max(calcPrefixSimilarity(a, b), calcNgramJaccardSimilarity(a, b));
-
-const buildCleanupConfirmToken = (pairs = [], options = {}) => {
-    const payload = JSON.stringify({
-        ids: pairs.map(p => String(p.deleteId)).sort(),
-        threshold: options.threshold,
-        compareChars: options.compareChars
-    });
-    return crypto.createHash('sha256').update(payload).digest('hex').slice(0, 20);
-};
 
 // ================= 临时/运维：清理错误章节 (带安全预览版) =================
 app.post('/api/admin/clean-dirty-chapters',authMiddleware,adminMiddleware,(req,res)=>res.status(410).json({error:'旧破坏性清理已停用，请先运行迁移盘点'}));
@@ -329,7 +269,7 @@ app.get('/api/users/:userId/profile', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(publicUser(user));
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 
@@ -340,73 +280,12 @@ app.get('/api/books/:id/reviews', getReviews);
 // 上传图片
 // ================= 论坛 (Forum) API =================
 
-const FORUM_LIMITS = {
-  titleMax: 120,
-  postContentMax: 30000,
-  replyContentMax: 12000,
-  commentContentMax: 2000,
-  maxTags: 8,
-  maxTagLength: 20,
-  duplicateWindowMs: 60 * 1000
-};
-
-const sanitizeForumHtml = safeHtml;
-
-const stripHtml = (input = '') => String(input)
-  .replace(/<[^>]+>/g, ' ')
-  .replace(/&nbsp;/gi, ' ')
-  .replace(/\s+/g, ' ')
-  .trim();
-
-// 注意这里多加了一个 res 参数
-const getForumActorKey = (req, res) => {
-  if (req.user?.id) return `uid:${req.user.id}`;
-
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (token) {
-    try {
-      const verified = jwt.verify(token, JWT_SECRET);
-      if (verified?.id) return `uid:${verified.id}`;
-    } catch {
-      // ignore bad token and fallback to IP
-    }
-  }
-
-  // ✅ 使用官方推荐的 ipKeyGenerator 替代原始 req.ip，彻底解决 IPv6 报错
-  return ipKeyGenerator(req, res);
-};
-
-const forumPostCreateLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 15,
-  message: '发帖过于频繁，请稍后再试',
-  // keyGenerator: getForumActorKey  <-- 加上 // 注释掉
-});
-
-const forumReplyCreateLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 40,
-  message: '回答提交过于频繁，请稍后再试',
-  // keyGenerator: getForumActorKey  <-- 加上 // 注释掉
-});
-
-const forumCommentCreateLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 80,
-  message: '评论提交过于频繁，请稍后再试',
-  // keyGenerator: getForumActorKey  <-- 加上 // 注释掉
-});
-
-// 1. 发布帖子 (修复：返回 id 字段)
-
 // 2. 获取帖子列表 (修复：确保 id 存在)
 app.get('/api/forum/posts', async (req, res) => {
   try {
-    const { tab = 'recommend', page = 1 } = req.query;
+    const { tab = 'recommend' } = req.query;
     const currentUserId = await getOptionalUserId(req);
-    const limit = 20;
-    const skip = (page - 1) * limit;
+    const {limit,skip}=pagination(req.query);
 
     let sort = {};
     let filter = {};
@@ -420,8 +299,8 @@ app.get('/api/forum/posts', async (req, res) => {
     }
 
     const posts = await ForumPost.find(filter)
-      .populate('author', 'username email _id') 
-      .sort(sort)
+      .populate('author', 'username _id')
+      .sort({...sort,_id:1})
       .skip(skip)
       .limit(limit)
       .lean(); 
@@ -429,10 +308,7 @@ app.get('/api/forum/posts', async (req, res) => {
     const postIds = posts.map(p => p._id);
     const topReplyMap = new Map();
     if (postIds.length > 0) {
-      const replies = await ForumReply.find({ postId: { $in: postIds } })
-        .populate('author', 'username _id avatar')
-        .sort({ postId: 1, likes: -1, createdAt: -1 })
-        .lean();
+      const replies = (await Promise.all(postIds.map(postId=>ForumReply.findOne({postId}).populate('author','username _id avatar').sort({likes:-1,createdAt:-1,_id:1}).maxTimeMS(3000).lean()))).filter(Boolean);
 
       for (const reply of replies) {
         const key = String(reply.postId);
@@ -479,7 +355,7 @@ app.get('/api/forum/posts', async (req, res) => {
 
     res.json(formattedPosts);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 
@@ -487,21 +363,18 @@ app.get('/api/forum/posts', async (req, res) => {
 app.get('/api/forum/posts/:id', async (req, res) => {
   try {
     const currentUserId = await getOptionalUserId(req);
-    // 浏览量 +1
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
         return res.status(400).json({ error: '无效的帖子ID' });
     }
-    const post = await ForumPost.findByIdAndUpdate(
-      req.params.id, 
-      { $inc: { views: 1 } }, 
-      { new: true }
-    ).populate('author', 'username email _id').lean();
+    const post = await ForumPost.findById(req.params.id).populate('author', 'username _id').lean();
 
     if (!post) return res.status(404).json({ error: '帖子不存在' });
 
+    const {likedBy,...publicPost}=post;
     res.json({
-      ...post,
+      ...publicPost,
       id: post._id,
+      votes:post.likes||0,comments:post.replyCount||0,created_at:post.createdAt,
       hasLiked: currentUserId
         ? (post.likedBy || []).some(uid => String(uid) === currentUserId)
         : false,
@@ -511,7 +384,7 @@ app.get('/api/forum/posts/:id', async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 
@@ -524,9 +397,12 @@ app.get('/api/forum/posts/:id/replies', async (req, res) => {
         // ID 都不合法，肯定没有回复，直接回空数组
         return res.json([]); 
     }
-    const replies = await ForumReply.find({ postId: req.params.id })
-      .populate('author', 'username email _id')
-      .sort({ likes: -1, createdAt: -1 }) // 赞多的排前面
+    const {limit,skip}=pagination(req.query);
+    const filter={postId:req.params.id};
+    if(req.query.target){if(typeof req.query.target!=='string'||!/^[a-f0-9]{24}$/i.test(req.query.target))return res.status(400).json({error:'回答ID无效'});filter._id=req.query.target;}
+    const replies = await ForumReply.find(filter)
+      .populate('author', 'username _id')
+      .sort({ likes: -1, createdAt: -1, _id:1 }).skip(skip).limit(limit).maxTimeMS(3000)
       .lean();
 
     const formattedReplies = replies.map(r => ({
@@ -548,7 +424,7 @@ app.get('/api/forum/posts/:id/replies', async (req, res) => {
 
     res.json(formattedReplies);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 
@@ -568,9 +444,10 @@ app.get('/api/forum/replies/:id/comments', async (req, res) => {
       return res.json([]);
     }
 
+    const {limit,skip}=pagination(req.query,100,100);
     const comments = await ForumReplyComment.find({ replyId })
       .populate('author', 'username _id avatar')
-      .sort({ createdAt: 1 })
+      .sort({ createdAt: 1, _id:1 }).skip(skip).limit(limit).maxTimeMS(3000)
       .lean();
 
     const formatted = comments.map(c => ({
@@ -594,7 +471,7 @@ app.get('/api/forum/replies/:id/comments', async (req, res) => {
 
     res.json(formatted);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 
@@ -613,7 +490,7 @@ app.get('/api/books/:id', async (req, res) => {
       if (!book) return res.status(404).json({ error: 'Book not found' });
       res.json({ ...book.toObject(), id: book._id.toString() });
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(error.status || 500).json({ error: error.message });
     }
 });
 
@@ -623,7 +500,7 @@ app.get('/api/books/:id', async (req, res) => {
 
 // --- Chapters ---
 
-// ✅ 修复后的章节获取接口：自动增加书籍浏览量 + 用户阅读量
+// Chapter reads are side-effect free; visible reading is reported separately.
 app.get('/api/chapters/:id', async (req, res) => {
   try {
     // 1. 防盗链检查 (保持你原有的逻辑)
@@ -649,7 +526,7 @@ app.get('/api/chapters/:id', async (req, res) => {
     res.json({ ...chapter, ...navigation, id: chapter._id.toString(), bookId: chapter.bookId.toString() });
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 
@@ -667,7 +544,7 @@ app.get('/api/chapters/:id', async (req, res) => {
 
 app.use((err, req, res, next) => {
     if (err instanceof URIError) {
-        console.warn('⚠️ URL 参数解码失败:', req.url);
+        console.warn('URL decoding failed', {requestId:req.requestId});
         return res.status(400).json({ error: '无效的 URL 格式' });
     }
     

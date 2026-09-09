@@ -21,6 +21,8 @@ import ForumPost from '../models/ForumPost.js';
 import ForumReply from '../models/ForumReply.js';
 import ForumComment from '../models/ForumReplyComment.js';
 import UserDaily from '../models/UserDaily.js';
+import Bookmark from '../models/Bookmark.js';
+import Review from '../models/Review.js';
 
 test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
   const repl = await MongoMemoryReplSet.create({binary:{version:'7.0.40'},replSet:{count:1,storageEngine:'wiredTiger'}});
@@ -54,6 +56,27 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       assert.equal((await guest.request('/api/auth/signin','POST',{email:a.email,password:'Test-password-123'},{origin:'https://attacker.test'})).status,403);
     });
     for(const [c,u] of [[owner,a],[other,b],[administrator,admin]]) assert.equal((await c.write('/api/auth/signin','POST',{email:u.email,password:'Test-password-123'})).status,200);
+    await t.test('every authenticated write entry rejects an anonymous caller with valid CSRF and forged headers',async()=>{
+      const csrf=(await guest.request('/api/auth/csrf')).data.csrfToken;
+      const entries=[
+        ['POST','/api/books'],['PATCH',`/api/books/${book._id}`],['DELETE',`/api/books/${book._id}`],['POST',`/api/books/${book._id}/restore`],
+        ['POST','/api/chapters'],['PATCH',`/api/chapters/${chapter._id}`],['DELETE',`/api/chapters/${chapter._id}`],['POST',`/api/chapters/${chapter._id}/restore`],
+        ['PUT',`/api/books/${book._id}/draft`],['POST',`/api/books/${book._id}/draft/publish`],['DELETE',`/api/books/${book._id}/draft`],
+        ['POST',`/api/users/${a._id}/bookmarks`],['DELETE',`/api/users/${a._id}/bookmarks/${book._id}`],['POST',`/api/books/${book._id}/reviews`],
+        ['POST','/api/upload/cover'],['DELETE','/api/upload/cover'],['PATCH',`/api/users/${a._id}`],
+        ['POST','/api/forum/posts'],['POST',`/api/forum/posts/${book._id}/replies`],['POST',`/api/forum/replies/${book._id}/comments`],
+        ...['posts','replies','comments'].map(path=>['POST',`/api/forum/${path}/${book._id}/like`]),
+        ['PATCH',`/api/admin/users/${a._id}/ban`],['POST',`/api/admin/impersonate/${a._id}`],['POST','/api/admin/clean-dirty-chapters'],
+        ['POST','/api/auth/logout'],['POST','/api/auth/change-password'],
+      ];
+      for(const [method,path] of entries)assert.equal((await guest.request(path,method,{}, {origin:'http://127.0.0.1:3000','x-csrf-token':csrf,'x-user-id':String(admin._id),authorization:'Bearer forged-admin'})).status,401,method+' '+path);
+      assert.equal((await Book.findById(book._id)).title,'Controlled book');
+      assert.equal((await Chapter.findById(chapter._id)).content,'Controlled content');
+      assert.equal((await User.findById(a._id)).isBanned,false);
+    });
+    assert.equal((await administrator.write(`/api/admin/users/${admin._id}/ban`,'PATCH',{isBanned:true})).status,400);
+    assert.equal((await administrator.request('/api/auth/session')).status,200);
+    assert.ok((await administrator.request('/api/admin/users')).data.every(user=>user.id===user._id));
     await t.test('other users cannot change books, chapters or shelves; fields cannot elevate',async()=>{
       for(const [path,method,body] of [[`/api/books/${book._id}`,'PATCH',{title:'attack'}],[`/api/books/${book._id}`,'DELETE',{}],[`/api/chapters/${chapter._id}`,'PATCH',{content:'attack'}],[`/api/chapters/${chapter._id}`,'DELETE',{}],['/api/chapters','POST',{bookId:String(book._id),title:'attack',content:'attack',chapter_number:2}],[`/api/users/${a._id}/bookmarks`,'POST',{bookId:String(book._id)}]]) assert.equal((await other.write(path,method,body)).status,403,path);
       assert.equal((await other.request(`/api/users/${a._id}/bookmarks`)).status,403);
@@ -62,6 +85,28 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       assert.equal((await Chapter.findById(chapter._id)).content,'Controlled content');
       assert.equal(await Chapter.countDocuments(),1);
       assert.equal((await owner.write(`/api/books/${book._id}`,'PATCH',{title:'Edited'})).status,200);
+    });
+    await t.test('drafts remain private, publish once, and detect changes to published originals',async()=>{
+      const draftBook=await Book.create({title:'Draft isolation',author_id:a._id});
+      const url=`/api/books/${draftBook._id}/draft`;
+      assert.equal((await guest.request(url)).status,401);
+      assert.equal((await other.write(url,'PUT',{title:'steal',content:'private'})).status,403);
+      const saved=await owner.write(url,'PUT',{title:'Private chapter',content:'Not public'});
+      assert.equal(saved.status,200);assert.equal(await Chapter.countDocuments({bookId:draftBook._id}),0);
+      assert.equal((await other.request(url)).status,403);
+      assert.equal((await guest.request('/api/chapters/'+saved.data.id)).status,404);
+      const requests=await Promise.all(Array.from({length:3},()=>owner.write(url+'/publish','POST',{draftId:saved.data.id})));
+      for(const response of requests)assert.equal(response.status,200);
+      assert.equal(new Set(requests.map(r=>r.data.id)).size,1);assert.equal(await Chapter.countDocuments({bookId:draftBook._id}),1);
+      const published=requests[0].data;
+      const edit=await owner.write(url,'PUT',{targetChapterId:published.id,title:'Edited draft',content:'Private revision'});
+      assert.equal(edit.status,200);assert.equal((await Chapter.findById(published.id)).content,'Not public');
+      await Chapter.updateOne({_id:published.id},{$set:{content:'Concurrent real edit'}});
+      assert.equal((await owner.write(url+'/publish','POST',{draftId:edit.data.id})).status,409);
+      assert.equal((await Chapter.findById(published.id)).content,'Concurrent real edit');
+      assert.equal((await owner.request(url)).data.content,'Private revision');
+      assert.equal((await owner.write(url,'DELETE')).status,200);
+      assert.equal((await owner.request(url)).data,null);
     });
     await t.test('media validates bytes, ownership and active references',async()=>{
       async function upload(bytes,type){
@@ -136,8 +181,9 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       assert.equal((await updateStatistics(now)).claimed,false);
       assert.equal((await Job.findById('statistics')).status,'done');
       const activity=await UserDaily.findOne({userId:a._id,day});
-      assert.equal(activity.views,1);assert.equal(activity.uploads,2);
-      const accountStats=await User.findById(a._id);assert.equal(accountStats.stats.today_views,1);assert.equal(accountStats.weekly_score,101);
+      // Two chapter operations plus one draft publication; three concurrent publish retries count once.
+      assert.equal(activity.views,1);assert.equal(activity.uploads,3);
+      const accountStats=await User.findById(a._id);assert.equal(accountStats.stats.today_views,1);assert.equal(accountStats.weekly_score,151);
       const daily=await mongoose.connection.collection('readdailies').findOne({_id:`${book._id}:${day}`});
       assert.ok(daily.expiresAt > new Date(Date.now()+60*86400000));
       // A later month must clear period counters without clearing lifetime views.
@@ -169,6 +215,9 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       const likes=await Promise.all(Array.from({length:6},()=>owner.write(`/api/forum/posts/${post.id}/like`,'POST',{liked:true})));
       assert.ok(likes.every(r=>r.status===200&&r.data.votes===1));
       const detail=await owner.request(`/api/forum/posts/${post.id}`);
+      assert.equal((await ForumPost.findById(post.id)).views,0);
+      const views=await Promise.all([1,2,3].map(()=>owner.write(`/api/forum/posts/${post.id}/views`,'POST')));
+      assert.equal(views.filter(r=>r.data.counted).length,1);assert.equal((await ForumPost.findById(post.id)).views,1);
       assert.equal(detail.data.hasLiked,true);assert.match(detail.headers.get('cache-control'),/no-store/);
       assert.equal((await guest.request(`/api/forum/posts/${post.id}`)).data.hasLiked,false);
       assert.equal((await other.write(`/api/forum/posts/${post.id}/like`,'POST',{liked:true})).data.votes,2);
@@ -179,6 +228,7 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       const previous=process.env.IMPORT_SECRET;process.env.IMPORT_SECRET=crypto.randomBytes(32).toString('hex');
       const payload={title:'Edited',sourceUrl:'https://source.example.test/controlled',chapters:[{chapter_number:1,title:'Imported',content:'Original imported bytes'}]};
       const headers={'x-import-secret':process.env.IMPORT_SECRET};
+      assert.equal((await guest.request('/api/admin/upload-book','POST',{}, {'x-import-secret':'é'.repeat(process.env.IMPORT_SECRET.length)})).status,403);
       try{
         const count=await Book.countDocuments();
         assert.equal((await guest.request('/api/admin/upload-book','POST',payload)).status,403);
@@ -189,6 +239,14 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
         const repeated=await guest.request('/api/admin/upload-book','POST',payload,headers);assert.equal(repeated.data.unchanged,1);
         assert.equal((await Book.findById(book._id)).author_id.toString(),String(a._id));
         const original=await Chapter.findOne({bookId:importedId});
+        const linked={...payload,chapters:[{...payload.chapters[0],link:'https://source.example.test/chapter/1'}]};
+        assert.equal((await guest.request('/api/admin/upload-book','POST',{...linked,dryRun:true},headers)).data.enriched,1);
+        assert.equal((await Chapter.findById(original._id)).sourceUrl,undefined);
+        assert.equal((await guest.request('/api/admin/upload-book','POST',linked,headers)).data.enriched,1);
+        assert.equal((await Chapter.findById(original._id)).sourceUrl,linked.chapters[0].link);
+        assert.equal((await guest.request('/api/admin/upload-book','POST',linked,headers)).data.unchanged,1);
+        assert.equal((await guest.request('/api/admin/upload-book','POST',{...linked,chapters:[{...linked.chapters[0],link:'https://source.example.test/chapter/conflict'}]},headers)).status,409);
+        assert.equal((await Chapter.findById(original._id)).sourceUrl,linked.chapters[0].link);
         const conflict={...payload,chapters:[{chapter_number:2,title:'Tentative',content:'Must roll back'},{...payload.chapters[0],content:'Changed bytes'}]};
         assert.equal((await guest.request('/api/admin/upload-book','POST',conflict,headers)).status,409);
         assert.equal(await Chapter.countDocuments({bookId:importedId}),1);
@@ -207,6 +265,34 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       assert.ok(results.every(r=>r.status===201));assert.equal(results[0].data.id,results[1].data.id);
       assert.equal((await owner.request('/api/books','POST',{title:'Changed title'},headers)).status,409);
       assert.equal(await Book.countDocuments({title:data.title}),1);
+    });
+    await t.test('bounded shelves, reviews, admin and forum pages preserve totals, private ownership and reply deep links',async()=>{
+      const books=await Book.insertMany(Array.from({length:25},(_,i)=>({title:`分页作品${i}`,author_id:a._id})));
+      await Bookmark.insertMany(books.map(book=>({user_id:a._id,bookId:book._id})));
+      await Book.updateOne({_id:books[0]._id},{$set:{deletedAt:new Date()}});
+      const shelf1=await owner.request(`/api/users/${a._id}/bookmarks?limit=20`),shelf2=await owner.request(`/api/users/${a._id}/bookmarks?limit=20&page=2`);
+      assert.equal(shelf1.data.length,20);assert.equal(shelf2.data.length,5);assert.equal(shelf1.headers.get('x-total-count'),'25');
+      assert.ok([...shelf1.data,...shelf2.data].some(row=>row.bookId===null&&row.unavailableBookId===String(books[0]._id)));
+      assert.equal((await other.request(`/api/users/${a._id}/bookmarks?page=2`)).status,403);
+      const users=await User.insertMany(Array.from({length:25},(_,i)=>({username:`page-user-${i}`,email:`page-${i}@example.test`,password:hash})));
+      await Review.insertMany(users.map(user=>({book:book._id,user:user._id,rating:3,content:'分页评价'})));
+      const reviews=await guest.request(`/api/books/${book._id}/reviews?page=2`);
+      assert.equal(reviews.data.length,7);assert.equal(reviews.headers.get('x-total-count'),'27');
+      assert.equal(JSON.parse(reviews.headers.get('x-review-distribution'))['3'],25);
+      assert.equal((await owner.request(`/api/books/${book._id}/reviews/mine`)).data.user._id,String(a._id));
+      assert.equal((await guest.request(`/api/books/${book._id}/reviews/mine`)).status,401);
+      assert.equal((await administrator.request('/api/admin/users?search=page-user-&page=2')).data.length,10);
+      assert.equal((await administrator.request('/api/admin/users?search=%5B')).status,200);
+      const post=await ForumPost.findOne({title:'并发问题？'});
+      const replies=await ForumReply.insertMany(Array.from({length:25},(_,i)=>({postId:post._id,author:a._id,content:`分页回答${i}`})));
+      await ForumPost.updateOne({_id:post._id},{$inc:{replyCount:25}});
+      assert.equal((await guest.request(`/api/forum/posts/${post._id}/replies?page=2`)).data.length,6);
+      assert.equal((await guest.request(`/api/forum/posts/${post._id}/replies?target=${replies[0]._id}`)).data[0].id,String(replies[0]._id));
+      await ForumComment.insertMany(Array.from({length:101},(_,i)=>({postId:post._id,replyId:replies[0]._id,author:a._id,content:`分页评论${i}`})));
+      await ForumReply.updateOne({_id:replies[0]._id},{$set:{comments:101}});
+      assert.equal((await guest.request(`/api/forum/replies/${replies[0]._id}/comments`)).data.length,100);
+      assert.equal((await guest.request(`/api/forum/replies/${replies[0]._id}/comments?page=2`)).data.length,1);
+      for(const path of [`/api/books/${book._id}/reviews?page=-1`,`/api/forum/posts?page=bad`,`/api/forum/posts/${post._id}/replies?page=0`])assert.equal((await guest.request(path)).status,400,path);
     });
     await t.test('logout and ban revoke previously valid cookies',async()=>{
       const oldCookie=owner.jar.get('session');

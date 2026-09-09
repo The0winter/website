@@ -1,0 +1,16 @@
+{
+  "result": "passed",
+  "elapsedMs": 129492,
+  "apiRecoveryMs": 665,
+  "workerRecoveryMs": 126400,
+  "leaseWaitMs": 119678,
+  "booksRetained": 1000,
+  "checks": [
+    "owned API hard kill and fresh process reconnect",
+    "unchanged book IDs and lifetime views",
+    "owned worker hard kill",
+    "live lease excludes replacement",
+    "real lease expiry permits replacement without manual DB edits"
+  ],
+  "limitations": "Scripted local Windows process restart; systemd automatic boot/restart and graceful Linux signals remain unverified"
+}

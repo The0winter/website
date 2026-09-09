@@ -8,7 +8,7 @@ import {fail,validateChapter,lockBook,contentHash} from '../services/content.js'
 export function importRoutes(app) {
   const credential=(req,res,next)=>{
     const supplied=req.headers['x-import-secret'],expected=process.env.IMPORT_SECRET;
-    if(typeof supplied!=='string'||!expected||expected.length<32||supplied.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected)))return res.status(403).json({error:'导入凭据无效'});
+    if(typeof supplied!=='string'||!expected||expected.length<32||Buffer.byteLength(supplied)!==Buffer.byteLength(expected)||!crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected)))return res.status(403).json({error:'导入凭据无效'});
     next();
   };
   app.post('/api/admin/check-sync',credential,asyncRoute(async(req,res)=>{
@@ -22,7 +22,11 @@ export function importRoutes(app) {
   app.post('/api/admin/upload-book',credential,asyncRoute(async(req,res)=>{
     const data=req.body;
     if(typeof data.sourceUrl!=='string'||!/^https?:\/\//.test(data.sourceUrl)||data.sourceUrl.length>2000||typeof data.title!=='string'||!data.title||data.title.length>200||!Array.isArray(data.chapters)||data.chapters.length>200)fail(400,'导入需稳定来源、书名及最多200章');
-    const validated=data.chapters.map(validateChapter);
+    const validated=data.chapters.map(chapter=>{
+      const result=validateChapter(chapter),sourceUrl=chapter.link??chapter.sourceUrl;
+      if(sourceUrl!==undefined){if(typeof sourceUrl!=='string'||sourceUrl.length>2000||!/^https?:\/\//.test(sourceUrl))fail(400,'章节来源链接无效');result.sourceUrl=sourceUrl;}
+      return result;
+    });
     if(new Set(validated.map(c=>c.chapter_number)).size!==validated.length)fail(409,'批次内存在重复章号');
     let result;
     await mongoose.connection.transaction(async session=>{
@@ -33,13 +37,16 @@ export function importRoutes(app) {
         if(data.dryRun){result={dryRun:true,newBook:true,insert:validated.length};return;}
         [book]=await Book.create([{title:data.title,author:typeof data.author==='string'?data.author:'未知',sourceUrl:data.sourceUrl,importManaged:true,category:data.category||'未分类'}],{session});
       } else if(!data.dryRun) await lockBook(book._id,{role:'import'},session);
-      let inserted=0,unchanged=0;
+      let inserted=0,unchanged=0,enriched=0;
       for(const chapter of validated){
         const existing=await Chapter.findOne({bookId:book._id,chapter_number:chapter.chapter_number}).session(session);
-        if(existing){if(existing.deletedAt||existing.title!==chapter.title||existing.content!==chapter.content)fail(409,`章号 ${chapter.chapter_number} 已下架或内容冲突，需显式恢复/编辑原章节`);unchanged++;}
+        if(existing){
+          if(existing.deletedAt||existing.title!==chapter.title||existing.content!==chapter.content||(existing.sourceUrl&&chapter.sourceUrl&&existing.sourceUrl!==chapter.sourceUrl))fail(409,`章号 ${chapter.chapter_number} 已下架或内容冲突，需显式恢复/编辑原章节`);
+          if(chapter.sourceUrl&&!existing.sourceUrl){enriched++;if(!data.dryRun){existing.sourceUrl=chapter.sourceUrl;await existing.save({session});}}else unchanged++;
+        }
         else {inserted++;if(!data.dryRun)await Chapter.create([{...chapter,bookId:book._id}],{session});}
       }
-      result={dryRun:!!data.dryRun,bookId:String(book._id),inserted,unchanged};
+      result={dryRun:!!data.dryRun,bookId:String(book._id),inserted,unchanged,enriched};
     });res.json(result);
   }));
 }

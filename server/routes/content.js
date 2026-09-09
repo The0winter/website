@@ -6,6 +6,7 @@ import Review from '../models/Review.js';
 import Media from '../models/Media.js';
 import User from '../models/User.js';
 import Operation from '../models/Operation.js';
+import {pagination} from '../services/pagination.js';
 import {asyncRoute} from '../security.js';
 import {createChapter,lockBook,chargeQuota,validateChapter,fail,jsonDoc,contentHash} from '../services/content.js';
 
@@ -16,6 +17,11 @@ function bookFields(body){
   if(body.title!==undefined&&!body.title.trim())fail(400,'标题不能为空');
 }
 export function contentRoutes(app,auth) {
+  app.get('/api/books/:id/reviews/mine',auth.authenticate,asyncRoute(async(req,res)=>{
+    if(!await Book.exists({_id:req.params.id,deletedAt:null}))fail(404,'作品不可用');
+    res.set('Cache-Control','private, no-store');
+    res.json(await Review.findOne({book:req.params.id,user:req.user.id}).populate('user','username avatar'));
+  }));
   app.post('/api/books',auth.authenticate,asyncRoute(async(req,res)=>{
     bookFields(req.body);
     if(typeof req.body.title!=='string' || !req.body.title.trim() || req.body.title.length>200)fail(400,'标题无效');
@@ -67,7 +73,7 @@ export function contentRoutes(app,auth) {
     fields(req.body,['title','content','chapter_number']);
     let result;
     await mongoose.connection.transaction(async session=>{
-      const chapter=await Chapter.findById(req.params.id).session(session);if(!chapter)fail(404,'章节不存在');
+      const chapter=await Chapter.findById(req.params.id).session(session);if(!chapter||chapter.deletedAt)fail(404,'章节不存在或已下架，请先恢复');
       await lockBook(chapter.bookId,req.user,session);
       const data=validateChapter({...chapter.toObject(),...req.body});
       if(data.content!==chapter.content)await chargeQuota(req.user,data.content.length,session);
@@ -92,8 +98,11 @@ export function contentRoutes(app,auth) {
   }));
   const own=(req,res,next)=>req.params.userId===req.user.id?next():res.status(403).json({error:'只能访问本人书架'});
   app.get('/api/users/:userId/bookmarks',auth.authenticate,own,asyncRoute(async(req,res)=>{
-    const bookmarks=await Bookmark.find({user_id:req.user.id}).populate('bookId');
-    res.json(bookmarks.map(b=>({...b.toObject(),bookId:b.bookId?.deletedAt?null:b.bookId})));
+    const {limit,skip}=pagination(req.query),filter={user_id:req.user.id};
+    const bookmarks=await Bookmark.find(filter).sort({_id:-1}).skip(skip).limit(limit).populate('bookId').maxTimeMS(3000);
+    res.set('X-Total-Count',String(await Bookmark.countDocuments(filter).maxTimeMS(3000)));
+    res.set('Cache-Control','private, no-store');
+    res.json(bookmarks.map(b=>({...b.toObject(),unavailableBookId:String(b.populated('bookId')||''),bookId:b.bookId?.deletedAt?null:b.bookId})));
   }));
   app.get('/api/users/:userId/bookmarks/:bookId/check',auth.authenticate,own,asyncRoute(async(req,res)=>res.json({isBookmarked:!!await Bookmark.exists({user_id:req.user.id,bookId:req.params.bookId})})));
   app.post('/api/users/:userId/bookmarks',auth.authenticate,own,asyncRoute(async(req,res)=>{

@@ -32,5 +32,11 @@ test('importing app does not connect or schedule work', async () => {
     assert.equal((await fetch(base + '/health/live')).status, 200);
     assert.equal((await fetch(base + '/health/ready')).status, 503);
     assert.equal((await fetch(base + '/api/books')).status, 503);
+    assert.equal((await fetch(base + '/health/metrics')).status,404);
+    process.env.MONITOR_SECRET='monitor-test-'.repeat(4);
+    const metrics=await fetch(base+'/health/metrics',{headers:{'x-monitor-secret':process.env.MONITOR_SECRET}});
+    assert.equal(metrics.status,200);assert.equal(metrics.headers.get('cache-control'),'private, no-store');
+    const snapshot=await metrics.json();assert.equal(snapshot.databaseReady,false);assert.equal(snapshot.buckets[0].errors,1);
+    delete process.env.MONITOR_SECRET;
   } finally { await new Promise(resolve => server.close(resolve)); }
 });

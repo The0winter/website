@@ -1,0 +1,32 @@
+{
+  "result": "passed",
+  "elapsedMs": 3274,
+  "mongodb": "7.0.40",
+  "tools": "100.17.0",
+  "backup": {
+    "status": "success",
+    "startedAt": "2026-09-08T18:40:45.958Z",
+    "finishedAt": "2026-09-08T18:40:46.184Z",
+    "archive": "test1-2026-09-08T18-40-45-958Z-75ddb59f-2eff-4c47-947d-d14b367f59ae.archive.gz",
+    "bytes": 2963,
+    "sha256": "41a91766932e560f2cfc15ac1460520e9a07ba166c4214e023775250b3717090",
+    "codeVersion": "working-candidate",
+    "schemaVersion": "r3-v2",
+    "oplog": true,
+    "offsite": "not-verified"
+  },
+  "checked": [
+    "chapter ID and exact content",
+    "book-user-shelf-review relations",
+    "password login",
+    "private draft retention",
+    "unique chapter index",
+    "readiness and restored HTTP reading"
+  ],
+  "limitations": [
+    "synthetic data only",
+    "same Windows machine",
+    "no offsite copy",
+    "no browser or Linux boot verification"
+  ]
+}

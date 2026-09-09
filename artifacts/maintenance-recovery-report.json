@@ -1,0 +1,9 @@
+{
+  "result": "passed",
+  "elapsedMs": 757,
+  "proxy": "actual nginx TLS reload",
+  "preservedChapterId": "6aa149d82649da6801a01418",
+  "contentSha256": "a31bf675bb4c5116178d1eb78c1362c653d1d22a68a8e86b71d2d88c2f96ca61",
+  "mode": "candidate to maintenance to same candidate",
+  "limitations": "No safe earlier release exists; this is a maintenance fallback drill, not a two-version schema rollback or production data restore"
+}

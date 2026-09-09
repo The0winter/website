@@ -1,0 +1,1208 @@
+{
+  "sourceUrl": "https://source.example.test/mixed-1788954885606",
+  "seconds": 300,
+  "elapsedMs": 300881.2023,
+  "inserted": 2400,
+  "batches": [
+    {
+      "offsetMs": 0.006599999999998829,
+      "ms": 91.02380000000001,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 2501.6074999999996,
+      "ms": 62.79760000000033,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 5015.2483999999995,
+      "ms": 64.09470000000056,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 7515.452,
+      "ms": 64.63619999999992,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 10026.804,
+      "ms": 68.25920000000042,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 12533.7298,
+      "ms": 138.6936999999998,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 15045.516,
+      "ms": 76.53720000000067,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 17545.4228,
+      "ms": 52.66569999999774,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 20047.6558,
+      "ms": 118.80119999999806,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 22560.0021,
+      "ms": 42.966199999998935,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 25066.1572,
+      "ms": 67.65779999999722,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 27569.894,
+      "ms": 63.730899999998655,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 30083.1588,
+      "ms": 65.98809999999867,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 32584.7342,
+      "ms": 59.53450000000157,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 35085.3962,
+      "ms": 69.03929999999673,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 37592.0837,
+      "ms": 50.12399999999616,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 40099.9289,
+      "ms": 78.64360000000306,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 42601.4523,
+      "ms": 63.9233000000022,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 45104.7421,
+      "ms": 54.925999999999476,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 47607.6301,
+      "ms": 59.82539999999426,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 50119.499,
+      "ms": 53.94899999999325,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 52626.5083,
+      "ms": 58.10689999999886,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 55134.8975,
+      "ms": 60.26310000000376,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 57635.8112,
+      "ms": 50.383700000005774,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 60142.4573,
+      "ms": 52.934000000001106,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 62655.3167,
+      "ms": 117.94159999999829,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 65156.142,
+      "ms": 55.965400000000955,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 67671.20700000001,
+      "ms": 46.12969999999041,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 70175.83760000001,
+      "ms": 50.98599999998987,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 72677.38620000001,
+      "ms": 131.86990000000515,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 75178.27440000001,
+      "ms": 60.646099999998114,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 77691.31060000001,
+      "ms": 49.296000000002095,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 80198.61290000001,
+      "ms": 47.80599999999686,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 82698.85870000001,
+      "ms": 57.31339999999909,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 85200.7834,
+      "ms": 48.16120000000228,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 87714.29250000001,
+      "ms": 61.50209999999788,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 90227.35160000001,
+      "ms": 66.06969999999274,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 92734.38260000001,
+      "ms": 72.51919999999518,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 95248.68870000001,
+      "ms": 51.64890000000014,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 97763.49100000001,
+      "ms": 48.06789999999455,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 100277.25630000001,
+      "ms": 57.3347999999969,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 102777.87860000001,
+      "ms": 71.47149999999965,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 105287.63620000001,
+      "ms": 58.49980000000505,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 107795.4124,
+      "ms": 252.66310000000522,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 110307.29960000001,
+      "ms": 61.96379999999772,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 112816.0892,
+      "ms": 371.40580000000773,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 115317.52870000001,
+      "ms": 346.8542000000016,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 117830.8404,
+      "ms": 82.55770000000484,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 120331.0693,
+      "ms": 52.17190000000119,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 122844.1398,
+      "ms": 51.839099999997416,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 125352.10290000001,
+      "ms": 56.06989999998768,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 127854.28090000001,
+      "ms": 51.91389999999956,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 130367.1606,
+      "ms": 57.145100000008824,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 132868.1153,
+      "ms": 62.320599999977276,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 135375.55409999998,
+      "ms": 61.52180000001681,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 137886.6677,
+      "ms": 47.48610000000917,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 140390.8613,
+      "ms": 48.10670000000391,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 142890.7125,
+      "ms": 54.14679999998771,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 145400.1898,
+      "ms": 47.958600000012666,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 147910.7192,
+      "ms": 60.01879999999073,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 150412.4663,
+      "ms": 46.89530000000377,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 152914.452,
+      "ms": 51.24859999999171,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 155424.2725,
+      "ms": 47.94190000000526,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 157939.0001,
+      "ms": 49.06739999999991,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 160452.4094,
+      "ms": 30.206099999981234,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 162951.5349,
+      "ms": 56.19120000000112,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 165454.3683,
+      "ms": 49.10699999998906,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 167967.90829999998,
+      "ms": 50.03489999999874,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 170469.63689999998,
+      "ms": 45.789300000004005,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 172969.2933,
+      "ms": 53.967700000008335,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 175484.6794,
+      "ms": 46.805300000007264,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 177997.788,
+      "ms": 47.820699999982025,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 180508.6316,
+      "ms": 51.80960000000778,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 183013.6874,
+      "ms": 54.99890000000596,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 185526.1876,
+      "ms": 45.30649999997695,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 188030.8631,
+      "ms": 64.63390000001527,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 190534.81819999998,
+      "ms": 50.491700000013225,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 193045.3413,
+      "ms": 56.19740000000456,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 195557.75999999998,
+      "ms": 50.4318000000203,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 198071.9442,
+      "ms": 65.49020000000019,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 200578.16009999998,
+      "ms": 50.90040000001318,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 203091.4381,
+      "ms": 49.55559999999241,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 205603.9415,
+      "ms": 52.99240000001737,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 208116.2873,
+      "ms": 60.93979999999283,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 210618.05969999998,
+      "ms": 50.83759999999893,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 213130.7942,
+      "ms": 66.33150000000023,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 215633.47819999998,
+      "ms": 49.31460000001243,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 218143.0791,
+      "ms": 57.78049999999348,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 220656.8548,
+      "ms": 56.315199999982724,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 223169.4484,
+      "ms": 55.35999999998603,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 225670.9566,
+      "ms": 60.82119999997667,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 228185.4955,
+      "ms": 56.06729999999516,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 230691.4049,
+      "ms": 68.13420000000042,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 233191.679,
+      "ms": 52.796699999977136,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 235699.1444,
+      "ms": 40.66159999999218,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 238211.4483,
+      "ms": 41.974600000015926,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 240715.8927,
+      "ms": 48.00560000000405,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 243215.7254,
+      "ms": 59.01829999999609,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 245713.8645,
+      "ms": 59.08139999999548,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 248214.2887,
+      "ms": 55.04780000000028,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 250715.5154,
+      "ms": 57.16799999997602,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 253213.86719999998,
+      "ms": 58.61490000001504,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 255717.48179999998,
+      "ms": 54.27580000000307,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 258231.524,
+      "ms": 65.5337999999756,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 260742.1282,
+      "ms": 53.87999999997555,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 263255.9269,
+      "ms": 54.36479999998119,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 265761.1677,
+      "ms": 50.83299999998417,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 268276.2151,
+      "ms": 40.04390000004787,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 270786.0548,
+      "ms": 49.335200000030454,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 273287.1455,
+      "ms": 55.34779999998864,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 275795.7217,
+      "ms": 48.69209999998566,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 278309.5421,
+      "ms": 49.761699999973644,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 280817.0791,
+      "ms": 55.73110000003362,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 283327.5291,
+      "ms": 55.38890000001993,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 285827.6392,
+      "ms": 47.61980000004405,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 288335.1987,
+      "ms": 57.53469999996014,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 290846.8922,
+      "ms": 50.135699999984354,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 293352.9894,
+      "ms": 58.43679999996675,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 295866.0689,
+      "ms": 54.476800000004005,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    },
+    {
+      "offsetMs": 298379.1477,
+      "ms": 53.37660000001779,
+      "status": 200,
+      "dryRun": false,
+      "bookId": "6aa1490523c744b4a2cd4f63",
+      "inserted": 20,
+      "unchanged": 0,
+      "enriched": 0
+    }
+  ]
+}

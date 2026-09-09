@@ -1,0 +1,17 @@
+[Unit]
+Description=Test1 local health and backup monitoring
+After=test1-api.service
+
+[Service]
+Type=oneshot
+User=test1-monitor
+Group=test1-monitor
+SupplementaryGroups=test1-backup
+ExecStart=/opt/node-v22.23.2-linux-x64/bin/node /srv/test1/current/infra/monitor.mjs /etc/test1/monitor.json
+StateDirectory=test1-monitor
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+TimeoutStartSec=15
+UMask=0077

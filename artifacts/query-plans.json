@@ -1,0 +1,307 @@
+{
+  "at": "2026-09-08T18:44:37.346Z",
+  "plans": {
+    "body": {
+      "returned": 1,
+      "keysExamined": 1,
+      "documentsExamined": 1,
+      "executionMs": 0,
+      "winningPlan": {
+        "stage": "LIMIT",
+        "limitAmount": 1,
+        "inputStage": {
+          "stage": "FETCH",
+          "filter": {
+            "deletedAt": {
+              "$eq": null
+            }
+          },
+          "inputStage": {
+            "stage": "IXSCAN",
+            "keyPattern": {
+              "_id": 1
+            },
+            "indexName": "_id_",
+            "isMultiKey": false,
+            "isUnique": true,
+            "isSparse": false,
+            "isPartial": false,
+            "indexVersion": 2,
+            "direction": "forward",
+            "indexBounds": {
+              "_id": [
+                "[ObjectId('0000000000000000000f4240'), ObjectId('0000000000000000000f4240')]"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "catalog": {
+      "returned": 100,
+      "keysExamined": 100,
+      "documentsExamined": 100,
+      "executionMs": 0,
+      "winningPlan": {
+        "stage": "LIMIT",
+        "limitAmount": 100,
+        "inputStage": {
+          "stage": "PROJECTION_SIMPLE",
+          "transformBy": {
+            "title": 1,
+            "chapter_number": 1
+          },
+          "inputStage": {
+            "stage": "FETCH",
+            "filter": {
+              "deletedAt": {
+                "$eq": null
+              }
+            },
+            "inputStage": {
+              "stage": "IXSCAN",
+              "keyPattern": {
+                "bookId": 1,
+                "chapter_number": 1
+              },
+              "indexName": "bookId_1_chapter_number_1",
+              "isMultiKey": false,
+              "multiKeyPaths": {
+                "bookId": [],
+                "chapter_number": []
+              },
+              "isUnique": true,
+              "isSparse": false,
+              "isPartial": false,
+              "indexVersion": 2,
+              "direction": "forward",
+              "indexBounds": {
+                "bookId": [
+                  "[ObjectId('0000000000000000000186a0'), ObjectId('0000000000000000000186a0')]"
+                ],
+                "chapter_number": [
+                  "[MinKey, MaxKey]"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "rank": {
+      "returned": 20,
+      "keysExamined": 20,
+      "documentsExamined": 20,
+      "executionMs": 1,
+      "winningPlan": {
+        "stage": "LIMIT",
+        "limitAmount": 20,
+        "inputStage": {
+          "stage": "FETCH",
+          "filter": {
+            "deletedAt": {
+              "$eq": null
+            }
+          },
+          "inputStage": {
+            "stage": "SORT_MERGE",
+            "sortPattern": {
+              "views": -1,
+              "_id": 1
+            },
+            "inputStages": [
+              {
+                "stage": "IXSCAN",
+                "keyPattern": {
+                  "deletedAt": 1,
+                  "views": -1,
+                  "_id": 1
+                },
+                "indexName": "deletedAt_1_views_-1__id_1",
+                "isMultiKey": false,
+                "multiKeyPaths": {
+                  "deletedAt": [],
+                  "views": [],
+                  "_id": []
+                },
+                "isUnique": false,
+                "isSparse": false,
+                "isPartial": false,
+                "indexVersion": 2,
+                "direction": "forward",
+                "indexBounds": {
+                  "deletedAt": [
+                    "[undefined, undefined]"
+                  ],
+                  "views": [
+                    "[MaxKey, MinKey]"
+                  ],
+                  "_id": [
+                    "[MinKey, MaxKey]"
+                  ]
+                }
+              },
+              {
+                "stage": "IXSCAN",
+                "keyPattern": {
+                  "deletedAt": 1,
+                  "views": -1,
+                  "_id": 1
+                },
+                "indexName": "deletedAt_1_views_-1__id_1",
+                "isMultiKey": false,
+                "multiKeyPaths": {
+                  "deletedAt": [],
+                  "views": [],
+                  "_id": []
+                },
+                "isUnique": false,
+                "isSparse": false,
+                "isPartial": false,
+                "indexVersion": 2,
+                "direction": "forward",
+                "indexBounds": {
+                  "deletedAt": [
+                    "[null, null]"
+                  ],
+                  "views": [
+                    "[MaxKey, MinKey]"
+                  ],
+                  "_id": [
+                    "[MinKey, MaxKey]"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "search": {
+      "returned": 20,
+      "keysExamined": 20,
+      "documentsExamined": 20,
+      "executionMs": 1,
+      "winningPlan": {
+        "stage": "LIMIT",
+        "limitAmount": 20,
+        "inputStage": {
+          "stage": "FETCH",
+          "filter": {
+            "$and": [
+              {
+                "deletedAt": {
+                  "$eq": null
+                }
+              },
+              {
+                "title": {
+                  "$regex": "合成",
+                  "$options": "i"
+                }
+              }
+            ]
+          },
+          "inputStage": {
+            "stage": "SORT_MERGE",
+            "sortPattern": {
+              "views": -1,
+              "_id": 1
+            },
+            "inputStages": [
+              {
+                "stage": "IXSCAN",
+                "keyPattern": {
+                  "deletedAt": 1,
+                  "views": -1,
+                  "_id": 1
+                },
+                "indexName": "deletedAt_1_views_-1__id_1",
+                "isMultiKey": false,
+                "multiKeyPaths": {
+                  "deletedAt": [],
+                  "views": [],
+                  "_id": []
+                },
+                "isUnique": false,
+                "isSparse": false,
+                "isPartial": false,
+                "indexVersion": 2,
+                "direction": "forward",
+                "indexBounds": {
+                  "deletedAt": [
+                    "[undefined, undefined]"
+                  ],
+                  "views": [
+                    "[MaxKey, MinKey]"
+                  ],
+                  "_id": [
+                    "[MinKey, MaxKey]"
+                  ]
+                }
+              },
+              {
+                "stage": "IXSCAN",
+                "keyPattern": {
+                  "deletedAt": 1,
+                  "views": -1,
+                  "_id": 1
+                },
+                "indexName": "deletedAt_1_views_-1__id_1",
+                "isMultiKey": false,
+                "multiKeyPaths": {
+                  "deletedAt": [],
+                  "views": [],
+                  "_id": []
+                },
+                "isUnique": false,
+                "isSparse": false,
+                "isPartial": false,
+                "indexVersion": 2,
+                "direction": "forward",
+                "indexBounds": {
+                  "deletedAt": [
+                    "[null, null]"
+                  ],
+                  "views": [
+                    "[MaxKey, MinKey]"
+                  ],
+                  "_id": [
+                    "[MinKey, MaxKey]"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "mongodb": {
+    "connections": {
+      "current": 7,
+      "available": 206162,
+      "totalCreated": 11,
+      "rejected": 0,
+      "active": 2,
+      "queuedForEstablishment": 0,
+      "establishmentRateLimit": {
+        "rejected": 0,
+        "exempted": 0,
+        "interruptedDueToClientDisconnect": 0
+      },
+      "threaded": 7,
+      "exhaustIsMaster": 0,
+      "exhaustHello": 1,
+      "awaitingTopologyChanges": 1
+    },
+    "memory": {
+      "bits": 64,
+      "resident": 448,
+      "virtual": 4845,
+      "supported": true
+    },
+    "cacheBytes": 372656198
+  },
+  "limitations": "Single sample during synthetic mixed load; substring search is not a text index"
+}

@@ -484,7 +484,7 @@ return (
             onTouchEnd={handleTouchEnd}
           >
             {TABS.map(tab => (
-              <div key={tab.id} className="w-full shrink-0">
+              <div key={tab.id} className="w-full shrink-0" inert={tab.id!==activeTab} aria-hidden={tab.id!==activeTab}>
                 {/* 替换原有的 {renderPostList(tab.id)} */}
                 {tab.id === 'hot' ? renderHotList(tab.id) : renderPostList(tab.id)}
               </div>

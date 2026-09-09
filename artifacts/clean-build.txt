@@ -1,0 +1,54 @@
+
+> web-next@0.1.0 build
+> next build
+
+▲ Next.js 16.3.4 (Turbopack)
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of F:\Website\Test1\package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * F:\Website\Test1\.runtime\clean-room-1788955176483\web-next\package-lock.json
+
+✓ Running next.config.ts took 27ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 2.7s
+  Running TypeScript ...
+  Finished TypeScript in 3.5s ...
+  Collecting page data using 23 workers ...
+  Generating static pages using 23 workers (0/15) ...
+  Generating static pages using 23 workers (3/15) 
+  Generating static pages using 23 workers (7/15) 
+  Generating static pages using 23 workers (11/15) 
+✓ Generating static pages using 23 workers (15/15) in 367ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /author/[id]
+├ ○ /authorsList
+├ ƒ /book/[id]
+├ ƒ /book/[id]/[chapterId]
+├ ○ /forum
+├ ƒ /forum/[postId]
+├ ○ /forum/create
+├ ƒ /forum/question/[qid]
+├ ○ /icon.png
+├ ○ /library
+├ ○ /login
+├ ○ /profile
+├ ○ /ranking
+├ ○ /register
+├ ○ /robots.txt
+├ ○ /search
+├ ƒ /sitemap.xml
+├ ƒ /sitemaps/[bookId]/[page]
+├ ƒ /sitemaps/static.xml
+└ ○ /writer
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

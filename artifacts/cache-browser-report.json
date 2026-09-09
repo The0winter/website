@@ -1,0 +1,55 @@
+{
+  "result": "passed",
+  "distinctChapters": 34,
+  "distinctBooks": 5,
+  "samples": [
+    {
+      "chapter": 10,
+      "cache": 10,
+      "dom": {
+        "documents": 1,
+        "nodes": 1612,
+        "jsEventListeners": 707
+      }
+    },
+    {
+      "chapter": 20,
+      "cache": 20,
+      "dom": {
+        "documents": 1,
+        "nodes": 1612,
+        "jsEventListeners": 688
+      }
+    },
+    {
+      "chapter": 30,
+      "cache": 20,
+      "dom": {
+        "documents": 1,
+        "nodes": 1612,
+        "jsEventListeners": 707
+      }
+    },
+    {
+      "book": 2,
+      "books": 1,
+      "chapters": 20
+    },
+    {
+      "book": 3,
+      "books": 2,
+      "chapters": 20
+    },
+    {
+      "book": 4,
+      "books": 3,
+      "chapters": 20
+    },
+    {
+      "book": 5,
+      "books": 3,
+      "chapters": 20
+    }
+  ],
+  "limits": "Counts read from actual Map sizes at render; sampled DOM counters do not prove absence of every browser leak"
+}

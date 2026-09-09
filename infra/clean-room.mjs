@@ -13,7 +13,7 @@ async function copy(relative){
   if(stat.isDirectory()){await fs.mkdir(target,{recursive:true});for(const child of await fs.readdir(source))await copy(path.join(relative,child));}
   else{const data=await fs.readFile(source);await fs.writeFile(target,data);manifest.push({path:relative,sha256:crypto.createHash('sha256').update(data).digest('hex')});}
 }
-for(const entry of ['server','web-next'])await copy(entry);
+for(const entry of ['server','web-next','infra'])await copy(entry);
 await fs.mkdir(path.join(destination,'artifacts'));
 const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>['path','systemroot','windir','temp','tmp','userprofile','localappdata','appdata','comspec','processor_architecture'].includes(key.toLowerCase())));
 Object.assign(env,{npm_config_cache:path.join(root,'.runtime','npm-cache'),EXTERNAL_SERVICES:'disabled',NEXT_PUBLIC_EXTERNAL_SERVICES:'disabled',NEXT_TELEMETRY_DISABLED:'1',INTERNAL_API_URL:'http://127.0.0.1:59999/api',NEXT_PUBLIC_SITE_URL:'http://127.0.0.1:3000'});

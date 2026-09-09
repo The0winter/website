@@ -34,8 +34,8 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-        setToast({ msg: '图片太大，请上传 2MB 以内的图片', type: 'error' });
+    if (file.size > 1.5 * 1024 * 1024) {
+        setToast({ msg: '图片太大，请上传 1.5MB 以内的图片', type: 'error' });
         return;
     }
 
@@ -56,7 +56,6 @@ export default function ProfilePage() {
         if (setUser) {
             setUser(newUser);
         }
-        localStorage.setItem('user', JSON.stringify(newUser));
         setToast({ msg: '头像更新成功！', type: 'success' });
 
     } catch (caught: unknown) { const err = caught instanceof Error ? caught : new Error('操作失败');
@@ -352,9 +351,9 @@ return (
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 text-sm transition"
-                            placeholder="设置新密码（至少6位）"
+                            placeholder="设置新密码（至少8位）"
                             required
-                            minLength={6}
+                            minLength={8}
                         />
                     </div>
                     <div>
@@ -370,7 +369,7 @@ return (
                             }`}
                             placeholder="再次输入新密码"
                             required
-                            minLength={6}
+                            minLength={8}
                         />
                         {confirmPassword && newPassword !== confirmPassword && (
                              <p className="text-xs text-red-500 mt-1 pl-1">两次输入的密码不一致</p>

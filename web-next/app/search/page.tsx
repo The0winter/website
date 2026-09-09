@@ -12,13 +12,16 @@ function SearchContent() {
   const query = searchParams.get('q') || ''; // 获取 URL 里的 ?q=xxx
   const router = useRouter();
 
-  const [page,setPage]=useState(1);
+  const [paging,setPaging]=useState({query,page:1});
+  const page=paging.query===query?paging.page:1;
+  const setPage=(next:number)=>setPaging({query,page:next});
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   // 监听 query 变化，重新触发搜索
   useEffect(() => {
+    let active=true;
     if (!query) {
       setBooks([]);
       setLoading(false);
@@ -29,20 +32,18 @@ function SearchContent() {
       setLoading(true);
       setError('');
       try {
-        // ⚠️ 注意：如果你的后端 API 支持直接搜索 (例如 /books?search=xxx)，
-        // 你可以在 api.ts 里加一个 search 方法并在这里调用。
-        // 目前我们先获取所有书，然后在前端过滤 (适用于数据量不大的情况)
         const filtered = await booksApi.getAll({q:query,limit:20,page});
-        setBooks(filtered);
+        if(active)setBooks(filtered);
       } catch (err) {
         console.error('Search error:', err);
-        setError('搜索服务暂时不可用，请稍后再试');
+        if(active)setError('搜索服务暂时不可用，请稍后再试');
       } finally {
-        setLoading(false);
+        if(active)setLoading(false);
       }
     };
 
     fetchBooks();
+    return()=>{active=false;};
   }, [query,page]);
 
   // 如果没有输入关键词
