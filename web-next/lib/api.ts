@@ -73,6 +73,7 @@ export interface Profile {
 
 export interface Book {
   writeVersion?:number;
+  lastUpdated?:string;
   coverImage?:string;
   updatedAt?:string;
   createdAt?:string;

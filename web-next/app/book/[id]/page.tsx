@@ -66,6 +66,20 @@ async function getChapters(id: string, order: 'asc' | 'desc' = 'desc', limit = 2
   }
 }
 
+async function getTotalWords(id: string): Promise<number | null> {
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/books/${id}/statistics`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('作品统计暂不可用');
+    const { totalWords } = await res.json();
+    if (!Number.isSafeInteger(totalWords) || totalWords < 0) throw new Error('作品统计无效');
+    return totalWords;
+  } catch (error) {
+    console.error('作品统计读取失败', error);
+    // Keep the book readable without displaying an incomplete or false zero count.
+    return null;
+  }
+}
+
 function buildDescription(book: Book): string {
   const raw = (book.description || '').replace(/[\r\n\t]+/g, ' ').trim();
   if (raw) return raw.length > 120 ? `${raw.slice(0, 120)}...` : raw;
@@ -103,10 +117,11 @@ export default async function BookDetailPage({ params }: Props) {
   const { id } = await params;
   
   // 并行请求书籍和章节数据
-  const [book, catalog, firstChapter] = await Promise.all([
+  const [book, catalog, firstChapter, totalWords] = await Promise.all([
     getBook(id),
     getChapters(id),
     getChapters(id, 'asc', 1),
+    getTotalWords(id),
   ]);
   
   if (!book) {
@@ -115,6 +130,11 @@ export default async function BookDetailPage({ params }: Props) {
 
   // Keep the exact first page for pagination, including legitimately repeated titles.
   const chapters = catalog?.rows ?? [];
+  // Format once on the server so hydration cannot change the date's locale or timezone.
+  const updatedAt = new Date(book.lastUpdated ?? '');
+  const updatedDate = Number.isNaN(updatedAt.getTime()) ? '近期' : new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: 'numeric', day: 'numeric',
+  }).format(updatedAt);
 
   const description = buildDescription(book);
   const jsonLd = {
@@ -137,7 +157,7 @@ export default async function BookDetailPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, String.fromCharCode(92) + 'u003c') }}
       />
-      <BookDetailClient key={book.id} initialBookData={{ book, chapters }} initialCatalog={catalog} initialFirstChapterId={firstChapter?.rows[0]?.id} />
+      <BookDetailClient key={book.id} initialBookData={{ book, chapters, summary: { totalWords, updatedDate } }} initialCatalog={catalog} initialFirstChapterId={firstChapter?.rows[0]?.id} />
     </>
   );
 }

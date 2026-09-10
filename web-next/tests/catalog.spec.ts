@@ -11,7 +11,7 @@ test.beforeAll(async()=>{
   // Only add fixtures to the synthetic server/dev.js database.
   const seed=await database.collection('books').findOne({_id:new mongoose.Types.ObjectId('000000000000000000000101')});
   if(seed?.title!=='隔离测试：山海行记')throw Error('Synthetic development fixture required');
-  await database.collection('books').insertOne({_id:bookId,title:'目录性能测试',description:'本地合成目录',author:'隔离作者',deletedAt:null,writeVersion:0});
+  await database.collection('books').insertOne({_id:bookId,title:'目录性能测试',description:'本地合成目录',author:'隔离作者',deletedAt:null,writeVersion:0,lastUpdated:new Date('2026-09-09T18:30:00Z')});
   await database.collection('chapters').insertMany(chapterIds.map((_id,index)=>({_id,bookId,title:`第${index+1}章 目录验证`,chapter_number:index+1,word_count:30,content:'目录回归的合成正文。',deletedAt:null,published_at:new Date()})));
 });
 test.afterAll(async()=>{
@@ -23,6 +23,43 @@ test.afterAll(async()=>{
 });
 test.beforeEach(async({page})=>{
   await page.route('**/*',route=>['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname)?route.continue():route.abort());
+});
+
+test('book statistics are complete in the first HTML and stable across hydration, paging and sorting',async({browser})=>{
+  // Both clients disagree with the server's default locale and with the site's date timezone.
+  for(const settings of [
+    {locale:'en-US',timezoneId:'America/Los_Angeles',viewport:{width:1440,height:900}},
+    {locale:'de-DE',timezoneId:'Europe/Berlin',viewport:{width:390,height:844}},
+  ]){
+    const context=await browser.newContext(settings);
+    const page=await context.newPage();
+    const hydrationErrors:string[]=[];
+    page.on('pageerror',error=>{if(/hydrat|#418/i.test(error.message))hydrationErrors.push(error.message);});
+    await context.route('**/*',route=>['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname)?route.continue():route.abort());
+    let release!:()=>void;
+    const gate=new Promise<void>(resolve=>{release=resolve;});
+    await page.route(`**/api/books/${bookId}/chapters*`,async route=>{
+      if(Number(new URL(route.request().url()).searchParams.get('page'))>1)await gate;
+      await route.continue();
+    });
+    try{
+      const response=await page.goto(`${base}/book/${bookId}`);
+      const html=await response!.text();
+      expect(html).toContain('3.71万字');
+      expect(html).toContain('2026/9/10');
+      const words=page.getByText('连载中 | 3.71万字',{exact:true});
+      const date=page.getByText('2026/9/10',{exact:true}).filter({visible:true});
+      await expect(page.getByRole('region',{name:'章节目录'})).toHaveAttribute('aria-busy','true');
+      await expect(words).toBeVisible();
+      await expect(date).toHaveCount(1);
+      release();
+      await expect(page.getByRole('region',{name:'章节目录'})).toHaveAttribute('aria-busy','false');
+      await page.getByRole('button',{name:'倒序',exact:true}).click();
+      await expect(words).toBeVisible();
+      await expect(date).toHaveCount(1);
+      expect(hydrationErrors).toEqual([]);
+    }finally{release();await context.close();}
+  }
 });
 
 test('detail shows latest chapters first and keeps links stable while older pages arrive',async({page})=>{
@@ -54,6 +91,8 @@ test('detail shows latest chapters first and keeps links stable while older page
     await page.getByRole('button',{name:'查看完整目录 (1238章)'}).click();
     await expect(page.getByRole('heading',{name:'全部目录'})).toBeVisible();
     await expect(page.getByText(/已加载|继续加载中/)).toHaveCount(0);
+    await expect(latest).toHaveCount(2);
+    await expect(latest.last()).toBeVisible();
     const latestPosition=await latest.last().boundingBox();
     release();
     await expect(page.getByRole('region',{name:'章节目录'})).toHaveAttribute('aria-busy','false');

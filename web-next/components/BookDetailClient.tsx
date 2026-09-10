@@ -79,6 +79,7 @@ interface BookDetailClientProps {
   initialBookData: {
     book: Book;
     chapters: Chapter[];
+    summary: { totalWords: number | null; updatedDate: string };
   };
   initialCatalog?: CatalogPage<Chapter>;
   initialFirstChapterId?: string;
@@ -326,8 +327,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   };
 
   // --- 显示辅助 ---
-  const totalWords = chapters.reduce((sum, chapter) => sum + (chapter.word_count || 0), 0);
-  const wordCount = totalWords > 10000 ? `${(totalWords / 10000).toFixed(2)}万字` : `${totalWords}字`;
+  const { totalWords, updatedDate } = bookData.summary;
+  const wordCount = totalWords === null ? null : totalWords > 10000 ? `${(totalWords / 10000).toFixed(2)}万字` : `${totalWords}字`;
   const getCategoryDisplay = (category?: string) => {
     if (!category) return '';
     const parts = category.split('>');
@@ -394,21 +395,21 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                      </div>
                      <div className="flex items-center">
                         <span className="text-gray-500 w-12 md:w-16">状态:</span>
-                        <span className="text-gray-900">{statusText} | {wordCount}</span>
+                        <span className="text-gray-900">{statusText}{wordCount !== null && ` | ${wordCount}`}</span>
                      </div>
                      <div className="flex items-center md:hidden">
                         <span className="text-gray-500 w-12">更新:</span>
-                        <span className="text-gray-900">{book.lastUpdated ? new Date(book.lastUpdated).toLocaleDateString() : '近期'}</span>
+                        <span className="text-gray-900">{updatedDate}</span>
                      </div>
                      
                      {/* 电脑端才显示的额外信息 */}
                      <div className="hidden md:flex items-center">
                         <span className="text-gray-500 w-16">阅读量:</span>
-                        <span className="text-gray-900 font-medium">{(book.views || 0).toLocaleString()}</span>
+                        <span className="text-gray-900 font-medium">{(book.views || 0).toLocaleString('zh-CN')}</span>
                      </div>
                      <div className="hidden md:flex items-center">
                         <span className="text-gray-500 w-16">更新时间:</span>
-                        <span className="text-gray-900">{book.lastUpdated ? new Date(book.lastUpdated).toLocaleDateString() : '近期'}</span>
+                        <span className="text-gray-900">{updatedDate}</span>
                      </div>
                  </div>
 

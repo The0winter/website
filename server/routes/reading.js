@@ -47,6 +47,18 @@ export function readingRoutes(app,auth) {
     const page=integer(req.query.page,1,100000);
     const books=await Book.find({deletedAt:null}).select('_id updatedAt').sort({_id:1}).skip((page-1)*100).limit(100).lean();res.json(books);
   }));
+  app.get('/api/books/:bookId/statistics',asyncRoute(async(req,res)=>{
+    const [book,statistics]=await Promise.all([
+      Book.exists({_id:req.params.bookId,deletedAt:null}).maxTimeMS(3000),
+      // Sum metadata in MongoDB once for the initial page, independent of catalog pagination.
+      Chapter.aggregate([
+        {$match:{bookId:new mongoose.Types.ObjectId(req.params.bookId),deletedAt:null}},
+        {$group:{_id:null,totalWords:{$sum:'$word_count'}}},
+      ]).option({maxTimeMS:3000}),
+    ]);
+    if(!book)fail(404,'作品不可用');
+    res.set('Cache-Control','no-store').json({totalWords:statistics[0]?.totalWords??0});
+  }));
   app.get('/api/books/:bookId/chapters',asyncRoute(async(req,res)=>{
     const limit=integer(req.query.limit,100,200),page=integer(req.query.page,1,100000);
     const filter={bookId:req.params.bookId,deletedAt:null};
