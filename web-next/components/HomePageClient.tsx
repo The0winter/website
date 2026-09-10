@@ -379,7 +379,7 @@ export default function HomePageClient({
     return (
       <>
       <MobileHome featured={featuredBooks} recommended={initialRecommendedBooks} newBooks={initialNewBooks}/>
-      <div className="desktop-home hidden md:block min-h-screen bg-[#f8f9fa] pb-12">
+      <div className="desktop-home hidden md:block min-h-screen bg-[var(--home-background)] pb-12">
 
         <h1 className="sr-only absolute w-px h-px p-0 -m-px overflow-hidden clip-rect-0 whitespace-nowrap border-0">
         九天小说站 - 您的免费在线小说图书馆

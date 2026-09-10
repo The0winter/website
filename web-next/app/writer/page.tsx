@@ -492,7 +492,7 @@ const openBookManager = (book: Book) => {
   // Effect
   useEffect(() => {
     if (authLoading) return;
-    if (!user) router.push('/login');
+    if (!user) router.replace('/login');
     else fetchMyData();
   }, [user, authLoading, router, fetchMyData]);
 

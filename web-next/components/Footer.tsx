@@ -1,14 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { Mail, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { usePathname } from 'next/navigation'; // 1. 引入路径获取钩子
 
 export default function Footer() {
   const pathname = usePathname(); // 2. 获取当前路由路径
 
   // 3. 如果当前路径是 /writer（创作中心），则直接不渲染 Footer
-  if (pathname?.startsWith('/writer')) {
+  if (pathname === '/login' || pathname?.startsWith('/writer')) {
     return null;
   }
 
@@ -63,9 +63,6 @@ export default function Footer() {
                   {link.name}
                 </a>
               ))}
-              <span className="text-xs text-gray-400 self-center">
-                (申请友链请联系底部邮箱)
-              </span>
             </div>
           </div>
         </div>
@@ -83,11 +80,6 @@ export default function Footer() {
             </p>
           </div>
           
-          <div className="flex items-center gap-6 text-gray-400 mt-1 md:mt-0">
-            <a href="mailto:support@jiutianxiaoshuo.com" className="hover:text-blue-600 transition-colors flex items-center gap-1 md:gap-2 text-[10px] md:text-xs">
-              <Mail className="w-3 h-3 md:w-4 md:h-4" /> 联系站长
-            </a>
-          </div>
         </div>
       </div>
     </footer>

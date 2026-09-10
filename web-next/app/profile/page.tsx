@@ -99,7 +99,7 @@ export default function ProfilePage() {
         const res = await authApi.changePassword(user.id, oldPassword, newPassword);
         if (res.success) {
             setUser(null);
-            router.push('/login');
+            router.replace('/login');
             setToast({ msg: '密码修改成功！', type: 'success' });
             setShowPasswordModal(false);
             setOldPassword('');
@@ -119,7 +119,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (loading) return; 
     if (!user && !leaving) {
-      router.push('/login'); 
+      router.replace('/login');
     }
   }, [user, loading, router, leaving]);
 

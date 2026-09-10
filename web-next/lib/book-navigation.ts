@@ -77,6 +77,11 @@ function onPopState(event: PopStateEvent) {
   const from = current;
   const target = stored(event.state);
   if (!from || !router) return;
+  // Forward from a book page may reopen login; leave that route to Next.
+  if (/^\/(login|register)$/.test(location.pathname)) {
+    if (pending) { cancelBookTransition(); pending = undefined; }
+    current = undefined; notify(); return;
+  }
   const forward = target?.flow === from.flow && target.level > from.level;
   if (from.catalog && target?.flow === from.flow && target.kind === 'detail' && !target.catalog) {
     event.stopImmediatePropagation();

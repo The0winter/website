@@ -7,6 +7,8 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import BookPrefetchSession from "@/components/BookPrefetchSession";
 import BookNavigation from "@/components/BookNavigation";
+import LoginNavigation from "@/components/LoginNavigation";
+import { Suspense } from 'react';
 
 import { GoogleAnalytics } from '@next/third-parties/google';
 
@@ -49,6 +51,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <BookPrefetchSession />
         <BookNavigation />
+        <Suspense fallback={null}><LoginNavigation /></Suspense>
         <AuthProvider>
           {/* ✅ Provider 结构正确 */}
           <ReadingSettingsProvider>

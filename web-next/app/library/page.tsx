@@ -31,7 +31,7 @@ export default function Library() {
   // --- 认证检查 ---
   useEffect(() => {
     if (authLoading) return;
-    if (!user) router.push('/login');
+    if (!user) router.replace('/login');
   }, [user, authLoading, router]);
 
   const [libraryPage,setLibraryPage]=useState(1);

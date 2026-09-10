@@ -3,6 +3,23 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --home-background: #f8f9fa;
+  --home-surface: #ffffff;
+  --home-text: #292d32;
+  --home-muted: #68717d;
+  --home-border: #e4e7eb;
+  --home-accent: #2563eb;
+}
+
+@media (max-width: 767px) {
+  :root {
+    --home-background: #f4ece6;
+    --home-surface: #fffaf7;
+    --home-text: #2c2925;
+    --home-muted: #85786e;
+    --home-border: #e8ddd3;
+    --home-accent: #ce3b42;
+  }
 }
 
 @theme inline {
