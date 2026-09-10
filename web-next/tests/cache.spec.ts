@@ -16,10 +16,11 @@ test('real reader caches evict across 30 chapters and five books',async({page,co
       for(let number=1;number<=(b===0?30:1);number++){const chapter=await write('/api/chapters',{bookId:book.id,title:`缓存章 ${number}`,chapter_number:number,content:`缓存测试正文 第${number}章`});expect(chapter.ok()).toBe(true);book.chapterIds.push((await chapter.json()).id);}
     }
     await page.goto(`${base}/book/${books[0].id}/${books[0].chapterIds[0]}`);
-    const cache=page.locator('[data-reader-cache-chapters]');
+    const cache=page.locator('[data-reader-cache-chapters]:visible');
+    await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready','true');
     for(let number=1;number<=30;number++){
-      if(number>1){await page.getByRole('button',{name:'下一章',exact:true}).click();await expect(page).toHaveURL(`${base}/book/${books[0].id}/${books[0].chapterIds[number-1]}`);}
-      await expect(page.getByRole('heading',{name:`第${number}章 缓存章 ${number}`,exact:true})).toBeVisible();
+      if(number>1){await page.keyboard.press('Control+ArrowRight');await expect(page).toHaveURL(`${base}/book/${books[0].id}/${books[0].chapterIds[number-1]}`);}
+      await expect(page.getByRole('heading',{name:`第${number}章 缓存章 ${number}`,exact:true})).toBeVisible();await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready','true');
       expect(Number(await cache.getAttribute('data-reader-cache-chapters'))).toBeLessThanOrEqual(20);
       if(number%10===0){await cdp.send('HeapProfiler.collectGarbage');samples.push({chapter:number,cache:Number(await cache.getAttribute('data-reader-cache-chapters')),dom:await cdp.send('Memory.getDOMCounters')});}
     }

@@ -30,7 +30,6 @@ test('one hundred chapter changes and browser back keep URL and visible content 
   await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
   await page.setViewportSize({width:1440,height:900});
   await page.goto(`${base}/book/${book}/${first}`);
-  await expect(page.getByRole('button',{name:'下一章',exact:true})).toBeEnabled();
   await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready','true');
   const samples=[];let previous=1;
   for(let step=1;step<=100;step++){
@@ -40,7 +39,7 @@ test('one hundred chapter changes and browser back keep URL and visible content 
     await expect(page).toHaveURL(`${base}/book/${book}/${id}`);
     await expect(page.getByRole('heading',{name:`第${number}章 山间来信`,exact:true})).toBeVisible();
     await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready','true');
-    await expect(page.locator('[data-reader-page]:visible')).toContainText('/');
+    await expect(page.locator('.reader-page-window > .reader-page-surface [data-reader-page]:visible')).toContainText('/');
     if(step%10===0)samples.push({step,heap:await page.evaluate(()=>(performance as Performance & {memory?:{usedJSHeapSize:number}}).memory?.usedJSHeapSize||null)});
     previous=number;
   }

@@ -1,15 +1,13 @@
 'use client';
 import {useStoredState} from '@/lib/useStoredState';
-import { safeFetch as fetch } from '@/lib/request';
  
 
-import { useEffect, useCallback, useState, useRef, useSyncExternalStore, useTransition } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { PrefetchKind } from 'next/dist/client/components/router-reducer/router-reducer-types';
-import { API_BASE_URL } from '@/lib/api';
+import { useEffect, useCallback, useState, useRef, useSyncExternalStore } from 'react';
+import { useParams, usePathname, useRouter } from 'next/navigation';
 import Link from './PrefetchLink';
 import { currentPrefetchPolicy, serverPrefetchPolicy, subscribePrefetchPolicy } from '@/lib/book-prefetch';
 import { rememberChapter } from '@/lib/reading-session';
+import {readerChapterCache as chapterCache,loadReaderChapter,loadReaderCounts} from '@/lib/reader-chapters';
 import { 
   Settings, BookOpen, List, 
   Bookmark, BookmarkCheck, Moon, X, 
@@ -38,7 +36,6 @@ class BoundedMap<K,V> extends Map<K,V> {
   constructor(private maximum:number){super();}
   set(key:K,value:V){super.delete(key);super.set(key,value);while(this.size>this.maximum){const oldest=this.keys().next();if(!oldest.done)super.delete(oldest.value);}return this;}
 }
-const chapterCache = new BoundedMap<string, Chapter>(20);
 // 🔥 [新增] 全局书籍缓存池 (防止切换章节时书名/封面闪烁)
 const bookCache = new BoundedMap<string, Book>(3);
 const catalogCache = new BoundedMap<string, {rows:Chapter[];version:number|string;expiresAt:number}>(3);
@@ -67,14 +64,13 @@ function useIsDesktop() {
 
 function ReaderContent({ initialBook = null, initialChapter = null }: { initialBook?: Book | null; initialChapter?: Chapter | null }) {
   const params = useParams();
+  const pathname=usePathname();
   //const searchParams = useSearchParams();
   const router = useRouter();
   const isDesktop = useIsDesktop(); 
   
   const bookId = params.id as string;
-  const chapterIdParam = params.chapterId as string;
-  const hasInitialBook = !!initialBook;
-  const hasInitialChapter = !!initialChapter;
+  const chapterIdParam = pathname?.split('/')[3] || params.chapterId as string;
   const catalogVersion = initialBook?.writeVersion ?? initialBook?.updatedAt;
   const initialCatalog = cachedCatalog(bookId, catalogVersion);
   const { user } = useAuth();
@@ -92,10 +88,13 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const [loading, setLoading] = useState(() => {
      return !(initialBook && initialChapter);
   });
-  const [isNavigating, startNavigation] = useTransition();
+  const [isNavigating,setNavigating]=useState(false);
+  const [navigationError,setNavigationError]=useState('');
+  const navigationSequence=useRef(0);
+  const failedChapter=useRef<string|null>(null);
+  const [adjacent,setAdjacent]=useState<{previous?:Chapter;next?:Chapter}>({});
   const prefetchPolicy = useSyncExternalStore(subscribePrefetchPolicy, currentPrefetchPolicy, serverPrefetchPolicy);
   const [nextButtonVisible, setNextButtonVisible] = useState(false);
-  const warmedNext = useRef<string | null>(null);
   const nearEnd = useCallback(() => setNextButtonVisible(true), []);
   
   const [showCatalog, setShowCatalog] = useState(false);
@@ -231,127 +230,32 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     return () => { active = false; };
   }, [bookId, catalogVersion, catalogRetry]);
 
-// --- 极速加载逻辑 (优化版：带缓存 + 预加载支持) ---
   useEffect(() => {
-    let isActive = true;
-
-    const loadData = async () => {
-
-      const token = localStorage.getItem('token');
-      const authHeaders = {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      };
-      const targetId = chapterIdParam;
-
-if (targetId) {
-        const hasServerData = hasInitialBook && hasInitialChapter && !!initialBook && !!initialChapter;
-
-        if (hasServerData) {
-          setBook(initialBook);
-          setChapter(initialChapter);
-          bookCache.set(bookId, initialBook);
-          chapterCache.set(targetId, initialChapter);
-          setLoading(false);
-          window.scrollTo(0, 0);
-        }
-        // 1. 优先检查缓存
-        if (!hasServerData && chapterCache.has(targetId) && bookCache.has(bookId)) {
-           // ⚡️ 如果书和章节都有缓存，什么都不用做！
-           // 因为我们在 useState 初始化时已经拿到了
-           setLoading(false);
-           // 但为了保险（防止初始化后数据变了），还是默默更新一下 state
-           setChapter(chapterCache.get(targetId) || null);
-           setBook(bookCache.get(bookId) || null);
-           window.scrollTo(0, 0);
-        } 
-        else if (!hasServerData) {
-          // 2. 缓存缺失，需要请求
-          // 只有在真的没数据时，才转圈圈。如果只是缺其中一个，尽量保持界面显示
-          if (!chapter || !book) setLoading(true);
-
-          try {
-            const [chapterRes, bookRes] = await Promise.all([
-              // 如果缓存有章节，就不请求了 (Promise.resolve)
-              !chapterCache.has(targetId) 
-                  ? fetch(`${API_BASE_URL}/chapters/${targetId}`, { headers: authHeaders })
-                  : Promise.resolve(null),
-              // 如果缓存有书，就不请求了
-              !bookCache.has(bookId) 
-                  ? booksApi.getById(bookId) 
-                  : Promise.resolve(null)
-            ]);
-
-            if (isActive) {
-              // 处理章节数据
-              if (chapterRes && chapterRes.ok) {
-                const chData = await chapterRes.json();
-                setChapter(chData);
-                chapterCache.set(targetId, chData); // ✅ 存入缓存
-                window.scrollTo(0, 0);
-              } else if (chapterCache.has(targetId)) {
-                // 如果这次没请求(用了缓存)，确保滚动到顶部
-                 window.scrollTo(0, 0);
-              }
-
-              // 处理书籍数据
-              if (bookRes) {
-                 setBook(bookRes);
-                 bookCache.set(bookId, bookRes); // ✅ 存入缓存
-              }
-
-              setLoading(false);
-            }
-          } catch (e) {
-            console.error("加载失败", e);
-            setLoading(false);
-          }
-        }
-
-      } 
-      
-      // === 场景 B: 慢速通道 (保持不变) ===
-      else {
-        setLoading(true);
-        try {
-          const [bookRes, chaptersRes] = await Promise.all([
-             !book ? booksApi.getById(bookId) : Promise.resolve(null),
-             chaptersApi.getByBookId(bookId)
-          ]);
-
-          if (isActive) {
-             if (bookRes) setBook(bookRes);
-             if (chaptersRes) {
-               setAllChapters(chaptersRes);
-               if (chaptersRes.length > 0) {
-                 const firstId = chaptersRes[0].id;
-                 // 🔥 [修改点 C] 即使是第一章，也尝试读缓存
-                 if (chapterCache.has(firstId)) {
-                    setChapter(chapterCache.get(firstId) || null);
-                 } else {
-                    const chRes = await fetch(`/api/chapters/${firstId}`, { headers: authHeaders });
-                    if (chRes.ok) {
-                      const chData = await chRes.json();
-                      setChapter(chData);
-                      chapterCache.set(firstId, chData); // 存缓存
-                    }
-                 }
-                 window.scrollTo(0, 0);
-               }
-             }
-             setLoading(false);
-          }
-        } catch (e) {
-          console.error("初始化加载失败", e);
-          setLoading(false);
-        }
-      }
+    let active=true;
+    navigationSequence.current++;
+    const serverChapter=initialChapter?.id===chapterIdParam?initialChapter:null;
+    if(serverChapter)chapterCache.set(serverChapter.id,serverChapter);
+    if(initialBook?.id===bookId)bookCache.set(bookId,initialBook);
+    void Promise.all([loadReaderChapter(bookId,chapterIdParam),bookCache.get(bookId) || booksApi.getById(bookId)]).then(([next,book])=>{
+      if(!active)return;
+      setChapter(next);setBook(book);if(book)bookCache.set(bookId,book);setLoading(false);setNavigating(false);setNavigationError('');
+    }).catch(error=>{if(active){failedChapter.current=chapterIdParam;setNavigationError(error instanceof Error?error.message:'章节加载失败');setLoading(false);setNavigating(false);}});
+    return()=>{active=false;};
+  },[bookId,chapterIdParam,initialBook,initialChapter]);
+  useEffect(()=>{
+    const invalidate=()=>{navigationSequence.current++;};
+    const restore=()=>{
+      invalidate();
+      const parts=window.location.pathname.split('/');
+      if(parts[2]!==bookId || !parts[3])return;
+      const cached=chapterCache.get(parts[3]);
+      setShowNav(false);setNavigationError('');
+      if(cached?.bookId===bookId){setChapter(cached);setNavigating(false);}else setNavigating(true);
     };
-
-    loadData();
-
-    return () => { isActive = false; };
-  }, [bookId, chapterIdParam, hasInitialBook, hasInitialChapter, initialBook, initialChapter]); // 依赖项不变 
+    window.addEventListener('popstate',restore);
+    return()=>{invalidate();window.removeEventListener('popstate',restore);};
+  },[bookId]);
+  useEffect(()=>{if(chapter && book)document.title=`${chapter.title} - ${book.title}`;},[chapter,book]);
 
   const toggleBookmark = async () => {
     if (!user) return router.push('/login');
@@ -365,17 +269,29 @@ if (targetId) {
       }
     } catch (error) { console.error('书架操作失败', error); }
   };
-  // Navigate through the same router cache we prefetch. A separate chapter API
-  // download here would still be followed by the server-rendered route request.
-  const goToChapter = useCallback((targetChapterId: string) => {
-    if (targetChapterId === chapterIdParam) return;
-    startNavigation(() => router.push(`/book/${bookId}/${targetChapterId}`, { scroll: false }));
-  }, [router, bookId, chapterIdParam]);
-  const prefetchChapter = useCallback((targetChapterId: string | null) => {
-    if (targetChapterId && targetChapterId !== chapterIdParam && currentPrefetchPolicy() !== 'paused') {
-      router.prefetch(`/book/${bookId}/${targetChapterId}`, { kind: PrefetchKind.FULL });
-    }
-  }, [router, bookId, chapterIdParam]);
+  const goToChapter=useCallback((targetChapterId:string)=>{
+    if(targetChapterId===chapter?.id)return;
+    const sequence=++navigationSequence.current;
+    const enter=(next:Chapter)=>{
+      if(sequence!==navigationSequence.current)return;
+      chapterCache.set(next.id,next);
+      setChapter(next);setNavigating(false);setNavigationError('');setShowNav(false);setShowCatalog(false);
+      // The same reader stays mounted; Next's native history integration keeps
+      // back/forward and hard-reload URLs without refetching the entire route.
+      const href=`/book/${bookId}/${next.id}`;
+      if(window.history.state?.catalogOpen || window.location.pathname===href)window.history.replaceState(null,'',href);
+      else window.history.pushState(null,'',href);
+    };
+    const cached=chapterCache.get(targetChapterId) || (adjacent.previous?.id===targetChapterId?adjacent.previous:adjacent.next?.id===targetChapterId?adjacent.next:undefined);
+    if(cached?.bookId===bookId){enter(cached);return;}
+    setNavigating(true);setNavigationError('');
+    void loadReaderChapter(bookId,targetChapterId).then(enter).catch(error=>{
+      if(sequence===navigationSequence.current){failedChapter.current=targetChapterId;setNavigating(false);setNavigationError(error instanceof Error?error.message:'章节加载失败，请重试');}
+    });
+  },[bookId,chapter?.id,adjacent]);
+  const prefetchChapter=useCallback((id:string|null)=>{
+    if(id && id!==chapter?.id && currentPrefetchPolicy()!=='paused')void loadReaderChapter(bookId,id).catch(()=>{});
+  },[bookId,chapter?.id]);
   const currentChapterIndex = allChapters.findIndex((ch) => ch.id === chapter?.id);
   const prevChapterId = currentChapterIndex > 0 ? allChapters[currentChapterIndex - 1].id : chapter?.previousId ?? null;
   const nextChapterId = currentChapterIndex >= 0 && currentChapterIndex < allChapters.length - 1 ? allChapters[currentChapterIndex + 1].id : chapter?.nextId ?? null;
@@ -384,21 +300,21 @@ if (targetId) {
     if (chapter?.id === chapterIdParam && chapter.bookId === bookId) rememberChapter(bookId, chapter.id);
   }, [chapter, bookId, chapterIdParam]);
 
-  // Warm exactly one next route after the current text has rendered. Never
-  // mount that reader: views, advertisements and bookmark effects run on entry.
-  useEffect(() => {
-    if (prefetchPolicy !== 'visible' || !chapter || !nextChapterId) return;
-    // Long chapters may outlast the route cache. Warm again when the reader
-    // reaches the next button, without repeatedly downloading while they read.
-    if (warmedNext.current === nextChapterId && !nextButtonVisible) return;
-    const timer = window.setTimeout(() => {
-      if (currentPrefetchPolicy() === 'visible') {
-        warmedNext.current = nextChapterId;
-        router.prefetch(`/book/${bookId}/${nextChapterId}`, { kind: PrefetchKind.FULL });
+  // Preload parsed text and paragraph counts in both directions. No hidden
+  // reader is mounted, so speculative reads never record views or bookmarks.
+  useEffect(()=>{
+    if(!chapter?.id || prefetchPolicy!=='visible')return;
+    let active=true;
+    const timer=window.setTimeout(()=>{
+      for(const [side,id] of [['previous',prevChapterId],['next',nextChapterId]] as const){
+        if(!id)continue;
+        void Promise.all([loadReaderChapter(bookId,id),loadReaderCounts(id).catch(()=>({}))]).then(([value])=>{
+          if(active)setAdjacent(previous=>({...previous,[side]:value}));
+        }).catch(()=>{});
       }
-    }, 800);
-    return () => window.clearTimeout(timer);
-  }, [prefetchPolicy, bookId, chapter, nextChapterId, nextButtonVisible, router]);
+    },nextButtonVisible?0:150);
+    return()=>{active=false;window.clearTimeout(timer);};
+  },[prefetchPolicy,bookId,chapter?.id,prevChapterId,nextChapterId,nextButtonVisible]);
 
   const fontFamilyValue = {
     sans: '"PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif',
@@ -484,7 +400,9 @@ if (loading) return (
 
       <div className="relative w-full" onPointerDown={() => { if (showHint) setShowHint(false); }}>
         <ReaderPages
-          book={book} chapter={chapter} chapterIndex={currentChapterIndex} chapterTotal={catalogTotal}
+          key={chapter.id} book={book} chapter={chapter} chapterIndex={currentChapterIndex} chapterTotal={catalogTotal}
+          previousChapter={adjacent.previous?.id===prevChapterId?adjacent.previous:chapterCache.get(prevChapterId || '')}
+          nextChapter={adjacent.next?.id===nextChapterId?adjacent.next:chapterCache.get(nextChapterId || '')}
           fontFamily={fontFamilyValue} fontSize={fontSizeNum} lineHeight={lineHeight}
           paragraphGap={paraSpacingMap[paraSpacing] || '1rem'} theme={activeTheme}
           paper={themeColor === 'cream'} dark={isActuallyDark} pageWidth={pageWidth}
@@ -615,6 +533,7 @@ if (loading) return (
         </div>
       )}
 
+      {navigationError && <div role="alert" className="reader-navigation-error">{navigationError}<button onClick={()=>goToChapter(failedChapter.current || chapterIdParam)}>重试</button><button onClick={()=>setNavigationError('')}>关闭</button></div>}
       {/* 6. 设置弹窗 */}
       {showSettings && (
         <>
@@ -870,6 +789,6 @@ if (loading) return (
 export default function ReaderPage({ initialBook = null, initialChapter = null }: { initialBook?: Book | null; initialChapter?: Chapter | null }) {
   const params = useParams();
   // Reset chapter presentation while the versioned catalog survives in its cache.
-  const componentKey = params?.chapterId ? String(params.chapterId) : 'default';
+  const componentKey = params?.id ? String(params.id) : 'default';
   return <ReaderContent key={componentKey} initialBook={initialBook} initialChapter={initialChapter} />;
 }

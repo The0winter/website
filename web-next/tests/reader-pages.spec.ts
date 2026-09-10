@@ -10,7 +10,7 @@ test('touch hold survives release, marks persist, swipes page, and exiting resto
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   try{
     await page.goto(url);
-    await expect(page.locator('[data-reader-page]:visible')).not.toHaveText('1/1');
+    await expect(page.locator('.reader-page-window > .reader-page-surface [data-reader-page]:visible')).not.toHaveText('1/1');
     await page.addStyleTag({content:'nextjs-portal{display:none!important}'});
     const paragraph=page.locator('.reader-pages-root:visible .reader-paragraph').first();
     const box=(await paragraph.boundingBox())!;
@@ -24,10 +24,10 @@ test('touch hold survives release, marks persist, swipes page, and exiting resto
     await page.reload();
     await expect(paragraph).toHaveAttribute('data-marked','true');
     await touch('touchStart',320,450);await touch('touchMove',220,450);await touch('touchMove',80,450);await touch('touchEnd');
-    await expect(page.locator('[data-reader-page]:visible')).toHaveText(/^2\//);
+    await expect(page.locator('.reader-page-window > .reader-page-surface [data-reader-page]:visible')).toHaveText(/^2\//);
     await expect(page.locator('.reader-status-top')).toHaveAttribute('data-open','false');
-    const fraction=await page.locator('[data-reader-page]:visible').innerText();
-    await page.reload();await expect(page.locator('[data-reader-page]:visible')).toHaveText(fraction);
+    const fraction=await page.locator('.reader-page-window > .reader-page-surface [data-reader-page]:visible').innerText();
+    await page.reload();await expect(page.locator('.reader-page-window > .reader-page-surface [data-reader-page]:visible')).toHaveText(fraction);
     await page.keyboard.press('m');
     await expect(page.locator('.reader-return:visible')).toHaveText('第1章 山间来信');
     await page.locator('.reader-return:visible').click();
@@ -43,7 +43,8 @@ test('immersive navigation, touch-following turns, cancellation and all three sa
   const page=await context.newPage();
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   const reader=page.locator('.reader-pages-root:visible'),viewport=reader.locator('.reader-page-window');
-  const pageNumber=reader.locator('[data-reader-page]');
+  const pageNumber=reader.locator('.reader-page-window > .reader-page-surface [data-reader-page]');
+  const textWindow=reader.locator('.reader-text-window').first();
   const cdp=await context.newCDPSession(page);
   const touch=(type:'touchStart'|'touchMove'|'touchEnd'|'touchCancel',x=0,y=0)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:['touchEnd','touchCancel'].includes(type)?[]:[{x,y,id:1}]});
   async function choose(label:string,mode:string){
@@ -71,7 +72,7 @@ test('immersive navigation, touch-following turns, cancellation and all three sa
     // A slow, short drag must follow the finger then return to the same page.
     await touch('touchStart',310,420);await touch('touchMove',280,420);
     await expect(viewport).toHaveAttribute('data-turning','dragging');
-    expect(await reader.locator('.reader-page-surface').evaluate(el=>new DOMMatrix(getComputedStyle(el).transform).m41)).toBeLessThan(-15);
+    expect(await reader.locator('.reader-page-window > .reader-page-surface').evaluate(el=>new DOMMatrix(getComputedStyle(el).transform).m41)).toBeLessThan(-15);
     await page.waitForTimeout(150);await touch('touchEnd');
     await expect(viewport).not.toHaveAttribute('data-turning');
     await expect(pageNumber).toHaveText(first);
@@ -81,7 +82,7 @@ test('immersive navigation, touch-following turns, cancellation and all three sa
     await choose('上下翻页','vertical');
     const beforeVertical=await pageNumber.innerText();
     await touch('touchStart',190,650);await touch('touchMove',190,550);
-    expect(await reader.locator('.reader-page-surface').evaluate(el=>new DOMMatrix(getComputedStyle(el).transform).m42)).toBeLessThan(-50);
+    expect(await reader.locator('.reader-page-window > .reader-page-surface').evaluate(el=>new DOMMatrix(getComputedStyle(el).transform).m42)).toBeLessThan(-50);
     await touch('touchCancel');await expect(viewport).not.toHaveAttribute('data-turning');
     await expect(pageNumber).toHaveText(beforeVertical);
     await touch('touchStart',190,650);await touch('touchMove',190,450);await touch('touchMove',190,160);await touch('touchEnd');
@@ -89,22 +90,22 @@ test('immersive navigation, touch-following turns, cancellation and all three sa
     await page.reload();await expect(reader).toHaveAttribute('data-mode','vertical');await expect(pageNumber).toHaveText(/^3\//);
     await page.addStyleTag({content:'nextjs-portal{display:none!important}'});
     await choose('上下滚屏','scroll');
-    const beforeScroll=await viewport.evaluate(el=>el.scrollTop);
+    const beforeScroll=await textWindow.evaluate(el=>el.scrollTop);
     await touch('touchStart',190,650);await touch('touchMove',190,520);await touch('touchMove',190,330);await touch('touchEnd');
-    await expect.poll(()=>viewport.evaluate(el=>el.scrollTop)).toBeGreaterThan(beforeScroll+100);
+    await expect.poll(()=>textWindow.evaluate(el=>el.scrollTop)).toBeGreaterThan(beforeScroll+100);
     await expect(page.getByRole('menu',{name:'段落操作'})).toHaveCount(0);
     // Let native inertia settle before checking an exact sub-page offset.
-    await viewport.evaluate(el=>new Promise<void>(resolve=>{const timer=setTimeout(resolve,1800);el.addEventListener('scrollend',()=>{clearTimeout(timer);resolve();},{once:true});}));
-    await viewport.evaluate(el=>{el.scrollTo({top:840,behavior:'instant'});el.dispatchEvent(new Event('scroll'));});
-    await expect.poll(()=>viewport.evaluate(el=>Math.round(el.scrollTop))).toBe(840);
+    await textWindow.evaluate(el=>new Promise<void>(resolve=>{const timer=setTimeout(resolve,1800);el.addEventListener('scrollend',()=>{clearTimeout(timer);resolve();},{once:true});}));
+    await textWindow.evaluate(el=>{el.scrollTo({top:840,behavior:'instant'});el.dispatchEvent(new Event('scroll'));});
+    await expect.poll(()=>textWindow.evaluate(el=>Math.round(el.scrollTop))).toBe(840);
     await page.reload();await expect(reader).toHaveAttribute('data-mode','scroll');
-    await expect.poll(()=>viewport.evaluate(el=>Math.round(el.scrollTop))).toBe(840);
-    await viewport.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+    await expect.poll(()=>textWindow.evaluate(el=>Math.round(el.scrollTop))).toBe(840);
+    await textWindow.evaluate(el=>{el.scrollTop=el.scrollHeight;});
     await expect(pageNumber).toHaveText(/^(\d+)\/\1$/);
     await touch('touchStart',190,650);await touch('touchMove',190,520);await touch('touchMove',190,350);await touch('touchEnd');
     await expect(page).toHaveURL(base+'/book/000000000000000000000101/000000000000000000000102');
     await expect(reader).toHaveAttribute('data-mode','scroll');
-    await expect.poll(()=>viewport.evaluate(el=>Math.round(el.scrollTop))).toBe(0);
+    await expect.poll(()=>textWindow.evaluate(el=>Math.round(el.scrollTop))).toBe(0);
     // Pull down from the beginning returns to the previous chapter's end.
     await touch('touchStart',190,300);await touch('touchMove',190,400);await touch('touchMove',190,600);await touch('touchEnd');
     await expect(page).toHaveURL(url);

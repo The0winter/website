@@ -2,6 +2,7 @@
 
 import {useCallback,useLayoutEffect,useRef} from 'react';
 import {flushSync} from 'react-dom';
+import {readerColumnLayout} from '@/lib/reader-layout';
 
 export type ReaderTurnMode='horizontal'|'scroll'|'vertical';
 type Options={
@@ -15,6 +16,7 @@ type Motion={target:number;direction:number;extent:number;axis:'X'|'Y';moving:HT
 export function useReaderPageTurn({mode,onCommit}:Options) {
   const viewport=useRef<HTMLDivElement>(null);
   const columns=useRef<HTMLDivElement>(null);
+  const textWindow=useRef<HTMLDivElement>(null);
   const surface=useRef<HTMLDivElement>(null);
   const preview=useRef<HTMLDivElement>(null);
   const motion=useRef<Motion|null>(null);
@@ -32,18 +34,24 @@ export function useReaderPageTurn({mode,onCommit}:Options) {
 
   useLayoutEffect(()=>cancel,[cancel,mode]);
 
-  const begin=useCallback((target:number,direction:number)=>{
+  const begin=useCallback((target:number,direction:number,prepared?:HTMLElement,progress?:string)=>{
     if(motion.current?.settling || mode==='scroll')return false;
     if(motion.current?.target===target)return true;
     cancel();
     const frame=viewport.current,body=columns.current,active=surface.current,adjacent=preview.current;
     if(!frame || !body || !active || !adjacent)return false;
-    const clone=body.cloneNode(true) as HTMLDivElement;
-    clone.style.transform=`translateX(${-target*(frame.clientWidth+40)}px)`;
+    const clone=(prepared || active).cloneNode(true) as HTMLDivElement;
+    clone.style.transform='';clone.removeAttribute('data-moving');
+    if(!prepared){
+      clone.querySelector<HTMLElement>('.reader-columns')!.style.transform=`translateX(${-target*readerColumnLayout(body).step}px)`;
+      const page=clone.querySelector<HTMLElement>('[data-reader-page]');
+      if(page)page.textContent=`${target+1}/${page.textContent?.split('/')[1] || 1}`;
+      if(progress)clone.querySelector<HTMLElement>('.reader-progress span:last-child')!.textContent=progress;
+    }
     clone.removeAttribute('id');
     for(const element of clone.querySelectorAll<HTMLElement>('[id],[tabindex]')){element.removeAttribute('id');element.tabIndex=-1;}
     adjacent.replaceChildren(clone);adjacent.removeAttribute('hidden');
-    const axis=mode==='vertical'?'Y':'X',extent=axis==='X'?frame.clientWidth:frame.clientHeight;
+    const axis=mode==='vertical'?'Y':'X',box=frame.getBoundingClientRect(),extent=axis==='X'?box.width:box.height;
     const moving=direction>0?active:adjacent;
     active.style.setProperty('z-index',direction>0?'2':'1');adjacent.style.setProperty('z-index',direction>0?'1':'2');
     moving.setAttribute('data-moving',axis);frame.setAttribute('data-turning','dragging');
@@ -80,5 +88,5 @@ export function useReaderPageTurn({mode,onCommit}:Options) {
 
   const busy=useCallback(()=>!!motion.current,[]);
   const settling=useCallback(()=>!!motion.current?.settling,[]);
-  return {viewport,columns,surface,preview,begin,drag,finish,cancel,busy,settling};
+  return {viewport,textWindow,columns,surface,preview,begin,drag,finish,cancel,busy,settling};
 }
