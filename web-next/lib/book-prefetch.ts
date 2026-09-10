@@ -1,7 +1,10 @@
 export type PrefetchPolicy = 'visible' | 'intent' | 'paused';
 
-export const shouldPrefetchBook = (policy: PrefetchPolicy, visible: boolean, intent: boolean) =>
-  policy !== 'paused' && (intent || (visible && policy === 'visible'));
+export const shouldPrefetchBook = (policy: PrefetchPolicy, visible: boolean, intent: boolean, mode: 'visible' | 'intent' = 'visible') =>
+  policy !== 'paused' && (intent || (visible && policy === 'visible' && mode === 'visible'));
+
+export const canPrefetchHref = (href: unknown, pathname: string) =>
+  typeof href === 'string' && href.startsWith('/') && !href.startsWith('//') && href !== pathname;
 
 export function bookPrefetchPolicy(state: {
   hidden: boolean;
@@ -50,7 +53,7 @@ export function subscribePrefetchPolicy(listener: () => void) {
   };
 }
 
-// One observer for every book card, including repeated links to the same book.
+// One observer shared by book cards, navigation and reading links.
 // A zero root margin excludes offscreen cards and CSS-hidden desktop/mobile lists.
 let observer: IntersectionObserver | null = null;
 const visibleListeners = new Map<Element, (visible: boolean) => void>();

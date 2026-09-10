@@ -3,10 +3,13 @@ import {useStoredState} from '@/lib/useStoredState';
 import { safeFetch as fetch } from '@/lib/request';
  
 
-import { useEffect, useLayoutEffect, useCallback, useState, useRef } from 'react';
+import { useEffect, useLayoutEffect, useCallback, useState, useRef, useSyncExternalStore, useTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { PrefetchKind } from 'next/dist/client/components/router-reducer/router-reducer-types';
 import { API_BASE_URL } from '@/lib/api';
-import Link from 'next/link';
+import Link from './PrefetchLink';
+import { currentPrefetchPolicy, observeBookVisibility, serverPrefetchPolicy, subscribePrefetchPolicy } from '@/lib/book-prefetch';
+import { rememberChapter } from '@/lib/reading-session';
 import { 
   Settings, BookOpen, List, 
   Bookmark, BookmarkCheck, Moon, X, 
@@ -116,7 +119,14 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const [loading, setLoading] = useState(() => {
      return !(initialBook && initialChapter);
   });
-  const [isNavigating, setIsNavigating] = useState(false);
+  const [isNavigating, startNavigation] = useTransition();
+  const prefetchPolicy = useSyncExternalStore(subscribePrefetchPolicy, currentPrefetchPolicy, serverPrefetchPolicy);
+  const nextButton = useRef<HTMLButtonElement>(null);
+  const [nextButtonVisible, setNextButtonVisible] = useState(false);
+  const warmedNext = useRef<string | null>(null);
+  useEffect(() => {
+    if (nextButton.current) return observeBookVisibility(nextButton.current, setNextButtonVisible);
+  }, [loading]);
   
   const [showCatalog, setShowCatalog] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -420,56 +430,6 @@ if (targetId) {
     return () => { isActive = false; };
   }, [bookId, chapterIdParam, hasInitialBook, hasInitialChapter, initialBook, initialChapter]); // 依赖项不变 
 
-  // ============================================================
-  // ▼▼▼ 🔥 [新增 2] 静默预加载下一章 (Prefetching) ▼▼▼
-  // ============================================================
-  useEffect(() => {
-    const controller=new AbortController();
-    // 只有当：1.当前章节已加载 2.目录已加载 时，才执行预加载
-    if (chapter && allChapters.length > 0) {
-      const currentIndex = allChapters.findIndex((ch) => ch.id === chapter.id);
-      
-      // 找到下一章
-      if (currentIndex !== -1 && currentIndex < allChapters.length - 1) {
-        const nextChapter = allChapters[currentIndex + 1];
-        
-        // 检查：如果缓存里【没有】下一章，才去下载
-        if (!chapterCache.has(nextChapter.id)) {
-          console.log(`[预加载] 开始静默下载: 第${nextChapter.chapter_number}章...`);
-
-          const token = localStorage.getItem('token');
-          
-          fetch(`/api/chapters/${nextChapter.id}`, {
-              signal:controller.signal,
-              headers: {
-                  'Content-Type': 'application/json',
-                  ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-              }
-          })
-            .then(res => {if(!res.ok)throw new Error('下一章预读暂不可用');return res.json();})
-            .then(data => {
-              if(controller.signal.aborted||String(data.id||data._id)!==nextChapter.id||String(data.bookId)!==bookId||typeof data.content!=='string')return;
-              // 下载成功，存入缓存 (注意：不要 setChapter，只存不显)
-              chapterCache.set(nextChapter.id, data);
-              console.log(`[预加载] 完成！下一章已就绪。`);
-              
-              // (可选) 简单的内存清理：如果缓存超过 20 章，删掉最早的一个，防止内存溢出
-              // ... 前面的代码
-              if (chapterCache.size > 20) {
-                  const firstKey = chapterCache.keys().next().value;
-                  // 只有当 firstKey 真的存在时才执行删除
-                  if (firstKey) {
-                      chapterCache.delete(firstKey);
-                  }
-              }
-            })
-            .catch(err => {if(err.name!=='AbortError')console.error("[预加载] 失败 (不影响当前阅读)", err);});
-        }
-      }
-    }
-    return()=>controller.abort();
-  }, [chapter, allChapters,bookId]); // 当当前章节变化时，触发下一次预加载
-
   const checkBookmark = async () => {
     try {
       const bookmarked = await bookmarksApi.check(user!.id, bookId);
@@ -489,55 +449,40 @@ if (targetId) {
       }
     } catch (error) {}
   };
-// 核心跳转逻辑：预取模式
-  const navigationSequence = useRef(0);
-  useEffect(()=>()=>{navigationSequence.current++;},[]);
-  const goToChapter = useCallback(async (targetChapterId: string) => {
-    const sequence=++navigationSequence.current;
-    // 防止重复点击
-
-
-    // A. 缓存里已经有了？直接飞过去！(秒开)
-    if (chapterCache.has(targetChapterId)) {
-       router.push(`/book/${bookId}/${targetChapterId}`, { scroll: false });
-       return;
+  // Navigate through the same router cache we prefetch. A separate chapter API
+  // download here would still be followed by the server-rendered route request.
+  const goToChapter = useCallback((targetChapterId: string) => {
+    if (targetChapterId === chapterIdParam) return;
+    startNavigation(() => router.push(`/book/${bookId}/${targetChapterId}`, { scroll: false }));
+  }, [router, bookId, chapterIdParam]);
+  const prefetchChapter = useCallback((targetChapterId: string | null) => {
+    if (targetChapterId && targetChapterId !== chapterIdParam && currentPrefetchPolicy() !== 'paused') {
+      router.prefetch(`/book/${bookId}/${targetChapterId}`, { kind: PrefetchKind.FULL });
     }
-
-    // B. 缓存里没有？先停在原地，去后台下载
-    setIsNavigating(true); // 这里可以让按钮显示“加载中...”
-    
-    try {
-      const token = localStorage.getItem('token');
-      // 手动发起 fetch
-      const res = await fetch(`/api/chapters/${targetChapterId}`, {
-         headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-         }
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if(sequence!==navigationSequence.current || data.bookId!==bookId)return;
-        // 🔥 关键：手动写入缓存！
-        // 这样等路由跳转过去时，新页面初始化就能直接读到数据，实现“无缝衔接”
-        chapterCache.set(targetChapterId, data);
-        
-        // 数据准备好了，起飞！
-        router.push(`/book/${bookId}/${targetChapterId}`, { scroll: false });
-      } else {
-        alert('加载失败，请重试');
-        setIsNavigating(false); // 失败了要恢复按钮状态
-      }
-    } catch (e) {
-      console.error(e);
-      alert('网络请求出错');
-      setIsNavigating(false);
-    }
-  }, [router, bookId]);
+  }, [router, bookId, chapterIdParam]);
   const currentChapterIndex = allChapters.findIndex((ch) => ch.id === chapter?.id);
   const prevChapterId = currentChapterIndex > 0 ? allChapters[currentChapterIndex - 1].id : chapter?.previousId ?? null;
   const nextChapterId = currentChapterIndex >= 0 && currentChapterIndex < allChapters.length - 1 ? allChapters[currentChapterIndex + 1].id : chapter?.nextId ?? null;
+
+  useEffect(() => {
+    if (chapter?.id === chapterIdParam && chapter.bookId === bookId) rememberChapter(bookId, chapter.id);
+  }, [chapter, bookId, chapterIdParam]);
+
+  // Warm exactly one next route after the current text has rendered. Never
+  // mount that reader: views, advertisements and bookmark effects run on entry.
+  useEffect(() => {
+    if (prefetchPolicy !== 'visible' || !chapter || !nextChapterId) return;
+    // Long chapters may outlast the route cache. Warm again when the reader
+    // reaches the next button, without repeatedly downloading while they read.
+    if (warmedNext.current === nextChapterId && !nextButtonVisible) return;
+    const timer = window.setTimeout(() => {
+      if (currentPrefetchPolicy() === 'visible') {
+        warmedNext.current = nextChapterId;
+        router.prefetch(`/book/${bookId}/${nextChapterId}`, { kind: PrefetchKind.FULL });
+      }
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [prefetchPolicy, bookId, chapter, nextChapterId, nextButtonVisible, router]);
 
   // ============================================================
   // ▼▼▼ 新增：键盘左右键翻页 (← 上一章 / → 下一章) ▼▼▼
@@ -878,6 +823,9 @@ if (loading) return (
           <div className="mt-16 flex items-center justify-between gap-4">
             <button 
               disabled={!prevChapterId || isNavigating}
+              onMouseEnter={() => prefetchChapter(prevChapterId)}
+              onFocus={() => prefetchChapter(prevChapterId)}
+              onTouchStart={() => prefetchChapter(prevChapterId)}
               onClick={(e) => { e.stopPropagation(); if (prevChapterId) goToChapter(prevChapterId); }}
               className="flex-1 py-3 rounded-xl border text-lg font-bold shadow-sm active:scale-95 transition-all disabled:opacity-30 disabled:active:scale-100 hover:bg-black/5"
               style={{ borderColor: activeTheme.line }}
@@ -887,6 +835,10 @@ if (loading) return (
             
             <button 
               disabled={!nextChapterId || isNavigating}
+              ref={nextButton}
+              onMouseEnter={() => prefetchChapter(nextChapterId)}
+              onFocus={() => prefetchChapter(nextChapterId)}
+              onTouchStart={() => prefetchChapter(nextChapterId)}
               onClick={(e) => { e.stopPropagation(); if (nextChapterId) goToChapter(nextChapterId); }}
               className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-md shadow-blue-200 active:scale-95 transition-all disabled:opacity-50 disabled:bg-gray-400 disabled:shadow-none disabled:active:scale-100 flex items-center justify-center gap-2"
             >
@@ -991,6 +943,9 @@ if (loading) return (
                     <button 
                       key={ch.id} 
                       id={isActive ? 'active-chapter-anchor' : undefined}
+                      onMouseEnter={() => prefetchChapter(ch.id)}
+                      onFocus={() => prefetchChapter(ch.id)}
+                      onTouchStart={() => prefetchChapter(ch.id)}
                       onClick={() => { goToChapter(ch.id); setShowCatalog(false); }}
                       className={`
                         text-left transition-all flex items-center justify-between

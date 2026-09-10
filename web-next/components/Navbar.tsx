@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import Link from 'next/link';
+import Link from './PrefetchLink';
 import { useRouter, usePathname } from 'next/navigation';
 // 1. 引入 Next.js 的图片组件
 import Image from 'next/image';

@@ -3,7 +3,8 @@ import { safeFetch as fetch, catalogPages, type CatalogPage } from '@/lib/reques
 
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import Link from 'next/link';
+import Link from './PrefetchLink';
+import ReadingEntryLink from './ReadingEntryLink';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, BookOpen, Bookmark, BookmarkCheck, Loader2, Star, User as UserIcon, Pencil, X, ArrowUpDown, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import BookArticles from './BookArticles';
@@ -415,11 +416,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                  {/* 电脑端的大按钮组 (手机端已移除，改为常驻底栏) */}
                  <div className="hidden md:flex flex-wrap gap-4 mt-auto">
                     {firstChapterId ? (
-                        <Link 
-                        href={`/book/${book.id}/${firstChapterId}`}
-                        className="bg-blue-600 text-white px-8 py-3 rounded-md hover:bg-blue-700 font-semibold transition-colors shadow-sm">
-                         开始阅读
-                      </Link>
+                        <ReadingEntryLink bookId={book.id} firstChapterId={firstChapterId}
+                          className="bg-blue-600 text-white px-8 py-3 rounded-md hover:bg-blue-700 font-semibold transition-colors shadow-sm" />
                     ) : (
                         <button disabled className="bg-gray-400 text-white px-8 py-3 rounded-md cursor-not-allowed font-semibold">{loadingChapters || chapters.length > 0 ? '加载首章…' : '暂无章节'}</button>
                     )}
@@ -629,6 +627,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                         <Link
                             key={chapter.id}
                             href={`/book/${book.id}/${chapter.id}`}
+                            prefetchMode="intent"
                             className={`group items-center p-2 bg-gray-50 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200 transition-all text-xs md:text-sm ${index >= 8 ? 'hidden md:flex' : 'flex'}`}
                         >
                             <span className="text-gray-700 truncate group-hover:text-blue-600 w-full">
@@ -673,13 +672,11 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             </button>
             
             {firstChapterId ? (
-                <Link 
-                    href={`/book/${book.id}/${firstChapterId}`}
+                <ReadingEntryLink
+                    bookId={book.id} firstChapterId={firstChapterId} label="立即阅读"
+                    icon={<BookOpen className="w-4 h-4" />}
                     className="read-now flex-[1.2] flex items-center justify-center rounded-full text-sm font-bold text-white"
-                >
-                    <BookOpen className="w-4 h-4" />
-                    <span>立即阅读</span>
-                </Link>
+                />
             ) : (
                 <button disabled className="flex-[1.2] flex items-center justify-center space-x-1.5 rounded-full text-sm font-bold text-white shadow-md bg-gray-400 cursor-not-allowed">
                     {loadingChapters || chapters.length > 0 ? '加载首章…' : '暂无章节'}
@@ -730,6 +727,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                                         <Link
                                             key={chapter.id}
                                             href={`/book/${book.id}/${chapter.id}`}
+                                            prefetchMode="intent"
                                             className="group flex items-center p-3 bg-gray-50 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200 transition-all text-sm"
                                         >
                                             <span className="text-gray-700 truncate group-hover:text-blue-600 w-full font-medium">

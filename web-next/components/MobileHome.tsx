@@ -1,7 +1,7 @@
 'use client';
 
 import {useEffect,useState} from 'react';
-import Link from 'next/link';
+import Link from './PrefetchLink';
 import BookLink from './BookLink';
 import {useRouter} from 'next/navigation';
 import {BookOpen,Search,LayoutGrid,Trophy,CalendarDays,Library,Gem,MessageCircle,UserRound,ChevronRight,ArrowLeft} from 'lucide-react';

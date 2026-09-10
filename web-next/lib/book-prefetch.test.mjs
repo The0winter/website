@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {bookPrefetchPolicy, shouldPrefetchBook, observeBookVisibility} from './book-prefetch.ts';
+import {bookPrefetchPolicy, shouldPrefetchBook, observeBookVisibility, canPrefetchHref} from './book-prefetch.ts';
+
+test('catalog entries require intent even when visible; navigation never prefetches external URLs or local actions',()=>{
+  assert.equal(shouldPrefetchBook('visible',true,false,'intent'),false);
+  assert.equal(shouldPrefetchBook('visible',true,true,'intent'),true);
+  assert.equal(shouldPrefetchBook('paused',true,true,'intent'),false);
+  for(const href of ['#category','https://example.com/','//example.com/','mailto:test@example.com','javascript:alert(1)','/']){
+    assert.equal(canPrefetchHref(href,'/'),false,href);
+  }
+  for(const href of ['/library','/ranking','/book/book/chapter','/?page=2']){
+    assert.equal(canPrefetchHref(href,'/'),true,href);
+  }
+});
 
 test('visible cards prefetch, offscreen cards wait, and background/offline tabs never prefetch',()=>{
   const active={hidden:false,online:true};

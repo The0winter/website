@@ -5,7 +5,7 @@ import type {LucideIcon} from 'lucide-react';
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { safeFetch } from '@/lib/request';
-import Link from 'next/link';
+import Link from './PrefetchLink';
 import BookLink from './BookLink';
 // 引入图标
 import { 
