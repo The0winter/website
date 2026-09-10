@@ -5,6 +5,7 @@ import {atomicWrite, readJson, hash, safeName, withLock} from './storage.mjs';
 import {makeClient, httpUrl} from './http.mjs';
 import {getCatalog, getChapter, getResource} from './adapters.mjs';
 import {chapterQuality, qualityReport, sampleCatalog, normalizedTitle} from './quality.mjs';
+import {formatChapterForExport} from './titles.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
 
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -38,7 +39,7 @@ function bookData(spec, chapters) {
   return {
     title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl,
     ...Object.fromEntries(['category', 'description', 'status', 'cover_image', 'authorSourceUrl'].filter(key => spec[key] !== undefined).map(key => [key, spec[key]])),
-    chapters: [...chapters].sort((a, b) => a.chapter_number - b.chapter_number),
+    chapters: [...chapters].sort((a, b) => a.chapter_number - b.chapter_number).map(formatChapterForExport),
   };
 }
 
