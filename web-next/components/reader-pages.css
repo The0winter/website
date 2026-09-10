@@ -1,0 +1,66 @@
+.reader-pages-root { --reader-muted:#968263; --reader-mark:#c3942740; color:var(--reader-ink); width:100%; }
+.reader-pages-root[data-dark=true] { --reader-muted:#999084; --reader-mark:#b798404a; }
+.reader-frame { height:100vh; height:100dvh; width:100%; max-width:var(--reader-width); margin:auto; display:flex; flex-direction:column; background-color:var(--reader-paper); position:relative; }
+.reader-frame[data-paper=true] { background-image:radial-gradient(ellipse at 25% 10%,#fff6da26,transparent 65%),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23836533' opacity='.045' filter='url(%23n)' d='M0 0h180v180H0z'/%3E%3C/svg%3E"); }
+.reader-status-top { display:flex; align-items:center; justify-content:space-between; flex-shrink:0; gap:16px; min-height:72px; padding:calc(24px + env(safe-area-inset-top)) 20px 12px; color:var(--reader-muted); font:12px/1.5 Arial,"Microsoft YaHei",sans-serif; }
+.reader-return { display:flex; align-items:center; min-width:0; gap:3px; min-height:32px; color:inherit; text-decoration:none; }
+.reader-return span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.reader-return svg { flex-shrink:0; }
+.reader-clock { display:flex; align-items:center; gap:9px; flex-shrink:0; font-variant-numeric:tabular-nums; }
+.reader-battery { display:flex; align-items:center; gap:3px; font-size:10px; }
+.reader-battery svg { display:block; width:20px; height:12px; }
+.reader-page-window { flex:1; min-height:0; overflow:hidden; margin:8px 20px 0; position:relative; touch-action:pan-y pinch-zoom; -webkit-tap-highlight-color:transparent; }
+.reader-columns { height:100%; column-fill:auto; column-count:1; column-gap:40px; width:100%; text-align:justify; overflow-wrap:anywhere; font-weight:400; letter-spacing:.035em; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+.reader-columns h1 { font-size:1.4em; font-family:inherit; font-weight:700; line-height:1.5; letter-spacing:.01em; margin:16px 0 32px; break-after:avoid; overflow-wrap:anywhere; }
+.reader-paragraph { text-indent:2em; margin:0 0 var(--reader-paragraph-gap); line-height:inherit; orphans:2; widows:2; }
+.reader-paragraph:focus-visible { outline:1px dashed var(--reader-muted); outline-offset:2px; }
+.reader-paragraph[data-marked=true] .reader-paragraph-text { background:var(--reader-mark); box-decoration-break:clone; -webkit-box-decoration-break:clone; border-radius:2px; }
+.reader-paragraph[data-selected=true] .reader-paragraph-text { background:#9f8b6738; box-decoration-break:clone; -webkit-box-decoration-break:clone; }
+.paragraph-bubble { display:inline-flex; align-items:center; justify-content:center; vertical-align:middle; position:relative; height:18px; min-width:23px; margin:0 0 0 10px; padding:0 4px; border:1px solid currentColor; border-radius:3px; color:var(--reader-muted); background:transparent; text-indent:0; font:10px/16px Arial,sans-serif; letter-spacing:0; cursor:pointer; transform:translateY(-1px); }
+.paragraph-bubble::before { content:''; position:absolute; top:5px; left:-4px; width:6px; height:6px; border-left:1px solid currentColor; border-bottom:1px solid currentColor; background:var(--reader-paper); transform:rotate(45deg); }
+.paragraph-bubble[data-hot=true] { color:#c84535; }
+.reader-status-bottom { display:flex; align-items:center; justify-content:space-between; min-height:54px; padding:12px 20px calc(16px + env(safe-area-inset-bottom)); gap:12px; color:var(--reader-muted); font:11px/1.5 Arial,"Microsoft YaHei",sans-serif; flex-shrink:0; }
+.reader-progress { display:flex; align-items:center; gap:13px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.reader-page-controls { display:flex; align-items:center; gap:4px; }
+.reader-page-controls button { border:0; padding:7px 8px; min-height:32px; color:inherit; background:transparent; font:inherit; }
+.reader-page-controls button:disabled { opacity:.3; }
+.reader-end { text-indent:0; text-align:center; font-size:14px; line-height:2; color:var(--reader-muted); padding:24px 0; break-inside:avoid; }
+.reader-end button { border:1px solid currentColor; border-radius:20px; padding:5px 20px; margin:8px; }
+.reader-tools { padding-bottom:env(safe-area-inset-bottom); }
+.reader-notice { position:absolute; bottom:65px; left:50%; transform:translateX(-50%); max-width:90%; padding:8px 14px; border-radius:8px; background:#302b25dc; color:#fff9eb; font:12px/1.6 sans-serif; text-align:center; pointer-events:none; }
+.paragraph-menu-backdrop { position:fixed; inset:0; z-index:75; }
+.paragraph-menu { position:fixed; display:flex; gap:1px; padding:5px; border-radius:9px; background:#302b25; color:#fff9eb; box-shadow:0 5px 20px #0003; }
+.paragraph-menu button { display:flex; align-items:center; gap:7px; min-height:40px; padding:8px 15px; border:0; border-radius:5px; font:14px/1.5 sans-serif; }
+.paragraph-menu button:hover,.paragraph-menu button:focus-visible { background:#ffffff20; }
+.paragraph-sheet-backdrop { position:fixed; inset:0; z-index:80; display:flex; align-items:flex-end; justify-content:center; background:#0005; }
+.paragraph-sheet { display:flex; flex-direction:column; width:100%; max-width:640px; max-height:85dvh; border-radius:18px 18px 0 0; background:var(--reader-panel); color:var(--reader-ink); padding-bottom:env(safe-area-inset-bottom); outline:none; font:14px/1.6 Arial,"Microsoft YaHei",sans-serif; box-shadow:0 -4px 24px #0002; }
+.paragraph-sheet header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px 10px; }
+.paragraph-sheet h2 { display:flex; align-items:center; gap:8px; font-weight:600; font-size:17px; }
+.paragraph-sheet h2 small { color:var(--reader-muted); font-size:12px; font-weight:400; }
+.paragraph-sheet header button { min-width:36px; min-height:36px; display:grid; place-items:center; }
+.paragraph-sheet blockquote { margin:0 20px 12px; padding:8px 12px; border-left:2px solid var(--reader-muted); background:#91806a12; color:var(--reader-muted); font-size:12px; max-height:96px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; flex-shrink:0; }
+.paragraph-comment-list { min-height:100px; overflow:auto; padding:0 20px; overscroll-behavior:contain; }
+.paragraph-comment-list article { padding:12px 0; border-bottom:1px solid #91806a25; }
+.paragraph-comment-byline { display:flex; justify-content:space-between; gap:8px; font-size:12px; }
+.paragraph-comment-byline time { color:var(--reader-muted); font-size:11px; }
+.paragraph-comment-list article p { white-space:pre-wrap; overflow-wrap:anywhere; margin:8px 0 4px; }
+.paragraph-delete { color:var(--reader-muted); font-size:11px; padding:3px 0; }
+.paragraph-empty { padding:32px 8px; text-align:center; color:var(--reader-muted); font-size:13px; }
+.paragraph-error { color:#bd4037; padding:10px 0; }
+.paragraph-error button { text-decoration:underline; }
+.paragraph-comment-list nav { display:flex; align-items:center; justify-content:center; gap:22px; padding:16px 0; }
+.paragraph-sheet form { padding:12px 20px; border-top:1px solid #91806a25; }
+.paragraph-sheet textarea { width:100%; resize:vertical; max-height:20vh; min-height:65px; border:1px solid #91806a50; background:transparent; border-radius:8px; padding:8px 10px; font:inherit; }
+.paragraph-sheet form>div { display:flex; align-items:center; justify-content:space-between; margin-top:7px; }
+.paragraph-sheet form small { color:var(--reader-muted); }
+.paragraph-sheet form button { background:#c53f36; color:#fff; padding:7px 18px; border-radius:20px; }
+.paragraph-sheet button:disabled { opacity:.4; }
+.paragraph-login { text-align:center; padding:18px; border-top:1px solid #91806a25; color:#c53f36; }
+@media(min-width:1024px) {
+  .reader-frame { border-left:1px solid #91806a25; border-right:1px solid #91806a25; }
+  .reader-status-top { padding:24px 48px 12px; }
+  .reader-page-window { margin:12px 48px 0; }
+  .reader-status-bottom { padding-left:48px; padding-right:48px; }
+  .paragraph-sheet-backdrop { align-items:center; }
+  .paragraph-sheet { border-radius:16px; }
+}

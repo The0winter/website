@@ -165,6 +165,12 @@ export default async function Page({ params }: Props) {
       />
       <ReaderClient initialBook={book} initialChapter={chapter} />
       <noscript>
+        <style>{`
+          .reader-frame { height:auto !important; min-height:100vh; }
+          .reader-page-window { flex:none; overflow:visible; }
+          .reader-columns { height:auto; columns:auto; transform:none !important; user-select:text; }
+          .reader-status-bottom, .reader-tools, .reader-end button, [data-reader-cache-chapters] aside { display:none !important; }
+        `}</style>
         <nav aria-label="无脚本章节导航" style={{display:'flex',justifyContent:'center',gap:'2rem',padding:'2rem'}}>
           {chapter.previousId && <a href={`/book/${bookId}/${chapter.previousId}`}>上一章</a>}
           <a href={`/book/${bookId}`}>目录</a>

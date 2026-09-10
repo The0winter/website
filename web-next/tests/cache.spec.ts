@@ -26,7 +26,8 @@ test('real reader caches evict across 30 chapters and five books',async({page,co
     await expect(cache).toHaveAttribute('data-reader-cache-chapters','20');
     for(let index=1;index<books.length;index++){
       // Real Next links retain the loaded reader module and its caches between books.
-      await page.locator('a[href="/"]').first().click();
+      await page.locator('.reader-return:visible').click();
+      await page.locator('a[href="/"]:visible').first().click();
       await page.locator(`a[href="/book/${books[index].id}"]:visible:not(.sr-only a)`).first().click({timeout:10000});
       await page.getByRole('link',{name:'开始阅读',exact:true}).filter({visible:true}).first().click({timeout:10000});
       await expect(page).toHaveURL(`${base}/book/${books[index].id}/${books[index].chapterIds[0]}`);

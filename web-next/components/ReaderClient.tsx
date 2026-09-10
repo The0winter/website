@@ -3,27 +3,25 @@ import {useStoredState} from '@/lib/useStoredState';
 import { safeFetch as fetch } from '@/lib/request';
  
 
-import { useEffect, useLayoutEffect, useCallback, useState, useRef, useSyncExternalStore, useTransition } from 'react';
+import { useEffect, useCallback, useState, useRef, useSyncExternalStore, useTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { PrefetchKind } from 'next/dist/client/components/router-reducer/router-reducer-types';
 import { API_BASE_URL } from '@/lib/api';
 import Link from './PrefetchLink';
-import { currentPrefetchPolicy, observeBookVisibility, serverPrefetchPolicy, subscribePrefetchPolicy } from '@/lib/book-prefetch';
+import { currentPrefetchPolicy, serverPrefetchPolicy, subscribePrefetchPolicy } from '@/lib/book-prefetch';
 import { rememberChapter } from '@/lib/reading-session';
 import { 
   Settings, BookOpen, List, 
   Bookmark, BookmarkCheck, Moon, X, 
-  ArrowUpDown, Check, Sun, AlignLeft, AlignJustify, User, Info, Library, Type, Layout,
-  ChevronLeft // [引用: 新增图标]
+  ArrowUpDown, Check, Sun, Info, Library,
 } from 'lucide-react';
 import { booksApi, chaptersApi, bookmarksApi, Book, Chapter } from '@/lib/api';
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
 
-import AdBanner from '@/components/AdBanner';
+import ReaderPages from './ReaderPages';
 
 let bgCleanupTimer: NodeJS.Timeout | null = null;
-let globalIsDesktop = typeof window !== 'undefined' ? window.innerWidth >= 1024 : false;
 
 // 🔥 [新增 1] 全局章节缓存池
 class BoundedMap<K,V> extends Map<K,V> {
@@ -41,55 +39,19 @@ function cachedCatalog(bookId:string, version:number|string|undefined) {
 const settingsCache = {
   themeColor: 'cream' as 'gray' | 'cream' | 'green' | 'blue',
   fontFamily: 'sans' as 'sans' | 'serif' | 'kai',
-  fontSizeNum: 20, // 电脑端默认大一点
-  lineHeight: 1.8,
+  fontSizeNum: 22,
+  lineHeight: 1.6,
   paraSpacing: 4,
   pageWidth: 1000
 };
 
 
-  // 🔥 [新增] 广告配置 
-  const topAdConfig = {
-    key: '548bdf520cc853ae859d72284e7eaa96', 
-    format: 'iframe',
-    height: 90,
-    width: 728,
-    params: {}
-  };
-
-  const mobileTopAdConfig = {
-  key: 'b1d0573321880440cdb2f56b7fa2db9a', // <--- 填入新申请的 Key
-  format: 'iframe',
-  height: 50,         // 高度改成 50
-  width: 320,         // 宽度改成 320
-  params: {}
+const subscribeViewport = (notify: () => void) => {
+  window.addEventListener('resize', notify);
+  return () => window.removeEventListener('resize', notify);
 };
-
-  const bottomAdConfig = {
-    key:  'c499a0debce3cc11988efbef57ec87d0',
-    format: 'iframe',
-    height: 250,
-    width: 300,
-    params: {}
-  };
-
-
-// Hook: 检测是否为大屏设备 (PC端)
 function useIsDesktop() {
-  // 🔥 [修改 2] 初始值直接读全局变量，不要用 false
-  const [isDesktop, setIsDesktop] = useState(globalIsDesktop);
-  
-  useEffect(() => {
-    const check = () => {
-      const isDesk = window.innerWidth >= 1024;
-      setIsDesktop(isDesk);
-      globalIsDesktop = isDesk; // 🔥 更新全局变量
-    };
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
-  return isDesktop;
+  return useSyncExternalStore(subscribeViewport, () => window.innerWidth >= 1024, () => false);
 }
 
 function ReaderContent({ initialBook = null, initialChapter = null }: { initialBook?: Book | null; initialChapter?: Chapter | null }) {
@@ -121,12 +83,9 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   });
   const [isNavigating, startNavigation] = useTransition();
   const prefetchPolicy = useSyncExternalStore(subscribePrefetchPolicy, currentPrefetchPolicy, serverPrefetchPolicy);
-  const nextButton = useRef<HTMLButtonElement>(null);
   const [nextButtonVisible, setNextButtonVisible] = useState(false);
   const warmedNext = useRef<string | null>(null);
-  useEffect(() => {
-    if (nextButton.current) return observeBookVisibility(nextButton.current, setNextButtonVisible);
-  }, [loading]);
+  const nearEnd = useCallback(() => setNextButtonVisible(true), []);
   
   const [showCatalog, setShowCatalog] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -134,13 +93,12 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
 
   // 导航栏显示状态 (移动端专用)
   const [mobileNav,setShowNav]=useState(false);
-  const showNav=isDesktop||mobileNav;
-  const [lastScrollY, setLastScrollY] = useState(0);
+  const showNav=mobileNav;
   const { theme, setTheme } = useReadingSettings();
 
   const [themeColor, setThemeColor] = useStoredState('reader_themeColor',settingsCache.themeColor,v=>['gray','cream','green','blue'].includes(String(v)));
   const [fontFamily, setFontFamily] = useStoredState('reader_fontFamily',settingsCache.fontFamily,v=>['sans','serif','kai'].includes(String(v)));
-  const [fontSizeNum, setFontSizeNum] = useStoredState('reader_fontSizeNum',isDesktop ? 22 : 20,v=>typeof v==='number'&&Number.isFinite(v)&&v>=12&&v<=72);
+  const [fontSizeNum, setFontSizeNum] = useStoredState('reader_fontSizeNum',settingsCache.fontSizeNum,v=>typeof v==='number'&&Number.isFinite(v)&&v>=12&&v<=72);
   const [lineHeight, setLineHeight] = useStoredState('reader_lineHeight',settingsCache.lineHeight,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000);
   const [paraSpacing, setParaSpacing] = useStoredState('reader_paraSpacing',settingsCache.paraSpacing,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000); 
   const [pageWidth, setPageWidth] = useStoredState('reader_pageWidth',settingsCache.pageWidth,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000);
@@ -182,7 +140,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
 
   // 主题映射
   const themeMap = {
-    cream:  { name: '羊皮纸', bg: '#f6f1e7', text: '#333333', line: '#d4cbb3', panel: '#fffbf0', desk: '#e8e4d9' },
+    cream:  { name: '羊皮纸', bg: '#e7d2ae', text: '#352a18', line: '#c7b18d', panel: '#faf3e5', desk: '#d9c6a6' },
     gray:   { name: '雅致灰', bg: '#f0f0f0', text: '#222222', line: '#dcdcdc', panel: '#ffffff', desk: '#dcdcdc' },
     green:  { name: '护眼绿', bg: '#dcedc8', text: '#222222', line: '#c5e1a5', panel: '#e8f5e9', desk: '#cce0b8' },
     blue:   { name: '极光蓝', bg: '#e3edfc', text: '#222222', line: '#d0e0f8', panel: '#f0f7ff', desk: '#d5e2f5' },
@@ -236,55 +194,6 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
       }, 100);
     }
   }, [showCatalog]);
-
-// 滚动监听 (完美适配版：手机电脑逻辑分离)
-  useEffect(() => {
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-      const diff = currentScrollY - lastScrollY;
-      
-      // 阈值检测，防抖动
-      if (Math.abs(diff) < 10) return;
-
-      // 1. 下滑隐藏逻辑 (手机、电脑通用)
-      // 向下滑动(diff > 0) 且 不在顶部时 -> 隐藏
-      if (diff > 0 && currentScrollY > 80) {
-        setShowNav(false);
-        //setShowSettings(false);
-      }
-      
-      // 2. 上滑显示逻辑 (电脑端专属)
-      // 如果是电脑端 (isDesktop) 且 向上滑动 (diff < 0) -> 自动显示
-      // 手机端不执行这一步，保持“只能点击呼出”
-      else if (isDesktop && diff < 0) {
-        setShowNav(true);
-      }
-      
-      setLastScrollY(currentScrollY);
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [lastScrollY, isDesktop]);
-  // 点击内容显隐菜单
-  const handleContentClick = (e: React.MouseEvent) => {
-    if (isDesktop) return;
-    // 网页端不通过点击正文呼出菜单
-    if (window.getSelection()?.toString().length) return;
-
-    // --- 新增：如果提示还在，点击任意位置就关闭它，并永久记录 ---
-    if (showHint) {
-      setShowHint(false);
-      localStorage.setItem('has-seen-reading-hint', 'true');
-    }
-
-    const width = window.innerWidth;
-    const x = e.clientX;
-    // [引用: 点击屏幕中央才会呼出]
-    if (x > width * 0.3 && x < width * 0.7) {
-      setShowNav(prev => !prev);
-    }
-  };
 
   // Load once per book, independently of chapter navigation and authentication.
   useEffect(() => {
@@ -430,13 +339,6 @@ if (targetId) {
     return () => { isActive = false; };
   }, [bookId, chapterIdParam, hasInitialBook, hasInitialChapter, initialBook, initialChapter]); // 依赖项不变 
 
-  const checkBookmark = async () => {
-    try {
-      const bookmarked = await bookmarksApi.check(user!.id, bookId);
-      setIsBookmarked(!!bookmarked);
-    } catch (error) {}
-  };
-
   const toggleBookmark = async () => {
     if (!user) return router.push('/login');
     try {
@@ -447,7 +349,7 @@ if (targetId) {
         await bookmarksApi.create(user.id, bookId);
         setIsBookmarked(true);
       }
-    } catch (error) {}
+    } catch (error) { console.error('书架操作失败', error); }
   };
   // Navigate through the same router cache we prefetch. A separate chapter API
   // download here would still be followed by the server-rendered route request.
@@ -484,34 +386,8 @@ if (targetId) {
     return () => window.clearTimeout(timer);
   }, [prefetchPolicy, bookId, chapter, nextChapterId, nextButtonVisible, router]);
 
-  // ============================================================
-  // ▼▼▼ 新增：键盘左右键翻页 (← 上一章 / → 下一章) ▼▼▼
-  // ============================================================
-  useLayoutEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // 1. 如果用户正在输入框(评论)里打字，按方向键是为了移动光标，不要翻页
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
-        return;
-      }
-
-      // 2. 左键 -> 上一章
-      if (e.key === 'ArrowLeft' && prevChapterId) {
-        goToChapter(prevChapterId);
-      }
-      // 3. 右键 -> 下一章
-      else if (e.key === 'ArrowRight' && nextChapterId) {
-        goToChapter(nextChapterId);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [prevChapterId, nextChapterId, goToChapter]);
-  
-  // ... 下面是 const fontFamilyValue = ...
-
   const fontFamilyValue = {
-    sans: '"PingFang SC", "Microsoft YaHei", sans-serif',
+    sans: '"PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif',
     serif: '"Songti SC", "SimSun", serif',
     kai: '"Kaiti SC", "KaiTi", serif',
   }[fontFamily];
@@ -541,114 +417,8 @@ if (loading) return (
         backgroundColor: isDesktop ? activeTheme.desk : activeTheme.bg 
       }}
     >
-      {/* ===========================================
-        1. 网页端专属导航栏 (修复：固定显示，不再随滚动隐藏) 
-        ===========================================
-      */}
-      <header 
-        className="hidden lg:flex fixed top-0 left-0 right-0 z-50 h-16 justify-center pointer-events-none transition-transform duration-300"
-      >
-        <div 
-          className="w-full flex items-center justify-between px-12 pointer-events-auto shadow-sm transition-colors duration-300"
-          style={{
-            maxWidth: `${pageWidth}px`,
-            backgroundColor: activeTheme.bg, 
-            color: activeTheme.text,
-            borderColor: activeTheme.line,
-            borderBottomWidth: '1px',
-            borderLeftWidth: '1px',
-            borderRightWidth: '1px',
-            transform: showNav ? 'translateY(0)' : 'translateY(-100%)',
-          }}
-        >
-            <Link href="/" className="flex items-center gap-3 hover:opacity-70 transition-opacity">
-              <BookOpen className="w-7 h-7 text-blue-600" />
-              <span className="font-bold text-2xl tracking-tight">九天</span>
-            </Link>
-
-            <div className="flex-1 text-center px-4 overflow-hidden">
-              <div className="text-lg font-bold truncate opacity-90 text-gray-700" style={{ color: activeTheme.text }}>
-                {chapter.title.startsWith('第') ?
-                  chapter.title : `第${chapter.chapter_number}章 ${chapter.title}`}
-              </div>
-            </div>
-
-            <Link href={user ? '/profile' : '/login'} className="flex items-center gap-3 hover:bg-black/5 py-1 px-3 rounded-full transition-colors">
-              <div className="text-right hidden xl:block">
-                <div className="text-sm font-bold">{user ? (user.username || '书友') : '点击登录'}</div>
-                {user && <div className="text-xs opacity-60">个人中心</div>}
-              </div>
-              <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex items-center justify-center shrink-0">
-                 {user?.avatar ? (
-                    <img 
-                      src={user.avatar} 
-                      alt="avatar" 
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        // 如果图片加载失败 (404)，自动把 src 变成一个透明图或默认图，防止报错很难看
-                        e.currentTarget.src = 'https://ui-avatars.com/api/?name=User&background=random'; 
-                        // 或者直接隐藏它：e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                ) : (
-                    <User className="w-6 h-6 opacity-50" />
-                )}
-              </div>
-            </Link>
-        </div>
-      </header>
-
-
-      {/* ===========================================
-        2. 移动端 新·顶部导航栏 (只在小屏显示 lg:hidden)
-        [引用: 上方为导航栏，移除订阅月票等，左侧返回，右侧头像]
-        ===========================================
-      */}
-      {/* ===========================================
-        2. 移动端 新·顶部导航栏
-        ===========================================
-      */}
-      <nav
-        className="lg:hidden fixed top-0 left-0 right-0 z-50 h-14 flex items-center justify-between px-4 shadow-sm transition-all duration-300"
-        style={{
-          backgroundColor: activeTheme.bg,
-          color: activeTheme.text,
-          borderColor: activeTheme.line,
-          borderBottomWidth: '1px',
-          transform: `translateY(${showNav ? '0' : '-100%'})`,
-        }}
-      >
-        {/* 左侧：Logo 和 名称 (点击回首页) */}
-        <Link href="/" className="flex items-center gap-2 -ml-1 p-1 relative z-10 active:opacity-60">
-           <BookOpen className="w-5 h-5 text-blue-600" />
-           <span className="font-bold text-lg tracking-tight">九天</span>
-        </Link>
-
-        {/* 中间：章节标题 (绝对定位居中) */}
-        <div className="absolute left-1/2 -translate-x-1/2 text-sm font-bold max-w-[50%] truncate opacity-90">
-            {chapter.title}
-        </div>
-
-        {/* 右侧：用户头像 */}
-        <Link href={user ? '/profile' : '/login'} className="rounded-full overflow-hidden border border-black/10 relative z-10">
-            {user?.avatar ? (
-                <img src={user.avatar} alt="avatar" className="w-8 h-8 object-cover" />
-            ) : (
-                <div className="w-8 h-8 bg-black/10 flex items-center justify-center">
-                    <User className="w-5 h-5 opacity-50" />
-                </div>
-            )}
-        </Link>
-      </nav>
-
-
-      {/* ===========================================
-        2.5 移动端 新·底部工具栏
-        顺序：[设置] - [详情] - [目录] - [夜间]
-        ===========================================
-      */}
       <div
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6 border-t transition-all duration-300 pb-safe"
+        className="reader-tools fixed bottom-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6 border-t transition-all duration-300 pb-safe"
         style={{
             backgroundColor: activeTheme.bg,
             color: activeTheme.text,
@@ -696,166 +466,19 @@ if (loading) return (
       </div>
 
 
-      {/* ===========================================
-        3. 主体阅读内容区
-        ===========================================
-      */}
-      <div 
-        className="relative transition-all duration-300"
-        style={{ width: '100%' }}
-        onClick={handleContentClick}
-      >
-        <article 
-          className={`
-            w-full min-h-screen px-6 md:px-8 
-            pt-4 pb-20  
-             lg:mx-auto lg:mt-16 lg:mb-10 lg:rounded-b-sm lg:rounded-t-none lg:pt-8 lg:px-12
-            ${isDesktop ? 'shadow-[0_4px_20px_rgba(0,0,0,0.04)]' : ''} 
-          `}
-          style={{ 
-            maxWidth: `${pageWidth}px`,
-            backgroundColor: activeTheme.bg, 
-            color: activeTheme.text 
-          }}
-        >
-          {/* 标题区 */}
-          <div className="mb-5 px-2"> 
-            <h1 className="text-3xl md:text-4xl font-bold tracking-wide leading-tight" style={{ color: activeTheme.text }}>
-              {chapter.title.startsWith('第') ?
-                chapter.title : `第${chapter.chapter_number}章 ${chapter.title}`}
-            </h1>
-          </div>
+      <div className="relative w-full" onPointerDown={() => { if (showHint) setShowHint(false); }}>
+        <ReaderPages
+          book={book} chapter={chapter} chapterIndex={currentChapterIndex} chapterTotal={catalogTotal}
+          fontFamily={fontFamilyValue} fontSize={fontSizeNum} lineHeight={lineHeight}
+          paragraphGap={paraSpacingMap[paraSpacing] || '1rem'} theme={activeTheme}
+          paper={themeColor === 'cream'} dark={isActuallyDark} pageWidth={pageWidth}
+          previousId={prevChapterId} nextId={nextChapterId} navigating={isNavigating}
+          blocked={showCatalog || showSettings}
+          onChapter={goToChapter} onTools={() => { setShowHint(false); setShowNav(value => !value); }}
+          onNearEnd={nearEnd}
+        />
 
-          {/* ========================================================= */}
-          {/* 1. 💻 PC 端广告 (728x90) - 放在标题之下 */}
-          {/* 关键修改：加上 hidden lg:flex，防止手机加载它 */}
-          {/* ========================================================= */}
-          <div className="hidden lg:flex my-6 justify-center">
-              <div className="min-h-[90px] w-[728px] flex justify-center items-center bg-black/5 rounded-lg overflow-hidden">
-                {/* 确保这里用的是 728 的 Key */}
-                <AdBanner atOptions={topAdConfig} />
-              </div>
-          </div>
-
-          {/* ========================================================= */}
-          {/* 2. 📱 手机端广告 (320x50) - 放在标题之下 */}
-          {/* 关键修改：保持 lg:hidden，防止电脑加载它 */}
-          {/* ========================================================= */}
-          <div className="lg:hidden mb-6 flex justify-center">
-              <div className="min-h-[50px] w-[320px] flex justify-center items-center bg-black/5 rounded overflow-hidden">
-                {/* 确保这里用的是 320 的 Key */}
-                <AdBanner atOptions={mobileTopAdConfig} />
-              </div>
-          </div>
-
-          {/* 正文 */}
-          <div 
-            className="text-justify break-words"
-            style={{ 
-              fontFamily: fontFamilyValue, 
-              fontSize: `${fontSizeNum}px`,
-              lineHeight: lineHeight
-            }}
-          >
-            {(chapter.content || '').split('\n').map((para, i) => {
-              const text = para.trim();
-              
-              // === 🧹 智能清洗逻辑 (新增) ===
-              
-              // 1. 空行直接跳过
-              if (!text) return null;
-
-              // 2. 过滤元数据 (日期、作者、来源网站广告)
-              // 匹配: "2025-12-10" 或 "作者：" 或 "69书吧"
-              if (/^\d{4}-\d{2}-\d{2}/.test(text) || text.includes('作者：') || text.includes('69书吧') || text.includes('www.')) {
-                return null;
-              }
-
-              // 3. 过滤重复标题 (核心修改)
-              // 将“当前行”和“章节标题”都去掉标点和空格，进行模糊比对
-              const cleanLine = text.replace(/\s+|[()（）]/g, '');
-              const cleanTitle = chapter.title.replace(/\s+|[()（）]/g, '');
-
-              // 如果这行字包含了标题，或者标题包含了这行字（且这行字长度大于3），视为重复标题
-              // 比如：Line="第500章 繁育税..." Title="第500章 繁育税" -> 匹配，隐藏
-              if ((cleanLine.includes(cleanTitle) || cleanTitle.includes(cleanLine)) && cleanLine.length > 3) {
-                 // 这里加一个保险：如果这行字特别长（比如超过50字），那可能是正文正好提到了标题，就不删
-                 if (text.length < 50) return null;
-              }
-
-              // 4. 过滤单纯的 "第xxx章" 这种只有两三个字的行 (通常是爬虫残留)
-              if (/^第\d+章$/.test(text)) {
-                 return null;
-              }
-
-              // === 清洗结束，渲染正文 ===
-              return (
-                <p 
-                  key={i} 
-                  style={{ textIndent: '2em', marginBottom: paraSpacingMap[paraSpacing] || '1rem' }}
-                >
-                  {text}
-                </p>
-              );
-            })}
-          </div>
-
-{/* 🔥 底部双广告位布局 */}
-          <div className="mt-12 mb-8 px-4">
-             <div className="flex flex-col md:flex-row justify-center items-center gap-6">
-                
-                {/* 左边的广告 */}
-                <div className="min-h-[250px] min-w-[300px] flex justify-center items-center bg-black/5 rounded-lg overflow-hidden">
-                   {/* 使用同一个配置 */}
-                   <AdBanner atOptions={bottomAdConfig} />
-                </div>
-
-                {/* 右边的广告 (仅电脑显示) */}
-                <div className="hidden md:flex min-h-[250px] min-w-[300px] justify-center items-center bg-black/5 rounded-lg overflow-hidden">
-                   {/* 🔥 直接复用同一个配置！效果完全一样 */}
-                   <AdBanner atOptions={bottomAdConfig} /> 
-                </div>
-
-             </div>
-          </div>
-
-{/* 底部翻页按钮 */}
-          <div className="mt-16 flex items-center justify-between gap-4">
-            <button 
-              disabled={!prevChapterId || isNavigating}
-              onMouseEnter={() => prefetchChapter(prevChapterId)}
-              onFocus={() => prefetchChapter(prevChapterId)}
-              onTouchStart={() => prefetchChapter(prevChapterId)}
-              onClick={(e) => { e.stopPropagation(); if (prevChapterId) goToChapter(prevChapterId); }}
-              className="flex-1 py-3 rounded-xl border text-lg font-bold shadow-sm active:scale-95 transition-all disabled:opacity-30 disabled:active:scale-100 hover:bg-black/5"
-              style={{ borderColor: activeTheme.line }}
-            >
-              上一章
-            </button>
-            
-            <button 
-              disabled={!nextChapterId || isNavigating}
-              ref={nextButton}
-              onMouseEnter={() => prefetchChapter(nextChapterId)}
-              onFocus={() => prefetchChapter(nextChapterId)}
-              onTouchStart={() => prefetchChapter(nextChapterId)}
-              onClick={(e) => { e.stopPropagation(); if (nextChapterId) goToChapter(nextChapterId); }}
-              className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-md shadow-blue-200 active:scale-95 transition-all disabled:opacity-50 disabled:bg-gray-400 disabled:shadow-none disabled:active:scale-100 flex items-center justify-center gap-2"
-            >
-              {/* 👇 动态显示文字 */}
-              {isNavigating ? (
-                 <>
-                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                   加载中...
-                 </>
-              ) : (
-                 nextChapterId ? '下一章' : '已是最新'
-              )}
-            </button>
-          </div>
-        </article>
-
- <div 
+      <div
         className="hidden xl:block absolute top-0 h-full pointer-events-none" // pointer-events-none 防止隐形长条遮挡点击
         style={{ 
           left: '50%',
@@ -925,7 +548,7 @@ if (loading) return (
                 >
                    <ArrowUpDown className="w-3 h-3"/> {catalogReversed ? '正序' : '倒序'}
                 </button>
-                <button onClick={() => setShowCatalog(false)} className="p-1.5 hover:bg-black/10 rounded-full bg-black/5 active:scale-95">
+                <button aria-label="关闭目录" onClick={() => setShowCatalog(false)} className="p-1.5 hover:bg-black/10 rounded-full bg-black/5 active:scale-95">
                   <X className="w-4 h-4 opacity-60"/>
                 </button>
               </div>
@@ -1212,13 +835,13 @@ if (loading) return (
 
       {/* 7. 新手引导提示 (仅第一次出现，半透明浮层) */}
       {showHint && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center pointer-events-none animate-in fade-in duration-500">
-            <div className="bg-black/70 backdrop-blur-sm text-white px-6 py-4 rounded-2xl shadow-xl flex flex-col items-center gap-2 animate-bounce">
+        <div className="fixed bottom-20 left-0 right-0 z-[70] flex items-center justify-center pointer-events-none">
+            <div className="bg-black/70 backdrop-blur-sm text-white px-6 py-4 rounded-2xl shadow-xl flex flex-col items-center gap-2 ">
                 {/* 圆圈点点图标 */}
                 <div className="w-8 h-8 rounded-full border-2 border-white/50 flex items-center justify-center">
                     <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
                 </div>
-                <span className="text-sm font-bold tracking-wide">点击屏幕中央呼出菜单</span>
+                <span className="text-sm font-bold tracking-wide">点击两侧翻页，点击中间打开菜单</span><span className="text-xs opacity-80">长按段落可评论或标记</span>
             </div>
         </div>
       )}
