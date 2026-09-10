@@ -25,12 +25,14 @@ test.beforeEach(async({page})=>{
   await page.route('**/*',route=>['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname)?route.continue():route.abort());
 });
 
-test('detail retains its server-rendered catalog during slow remaining pages and session refresh',async({page})=>{
+test('detail shows latest chapters first and keeps links stable while older pages arrive',async({page})=>{
   const requested:number[]=[];
   let release!:()=>void;
   const gate=new Promise<void>(resolve=>{release=resolve;});
   await page.route(`**/api/books/${bookId}/chapters*`,async route=>{
-    const pageNumber=Number(new URL(route.request().url()).searchParams.get('page'));
+    const url=new URL(route.request().url());
+    expect(url.searchParams.get('order')).toBe('desc');
+    const pageNumber=Number(url.searchParams.get('page'));
     requested.push(pageNumber);
     if(pageNumber>1)await gate;
     await route.continue();
@@ -41,16 +43,52 @@ test('detail retains its server-rendered catalog during slow remaining pages and
   });
   try{
     await page.goto(`${base}/book/${bookId}`);
-    await expect(page.getByRole('link',{name:'第200章 目录验证',exact:true})).toBeVisible();
+    const latest=page.getByRole('link',{name:'第1238章 目录验证',exact:true});
+    await expect(latest).toBeVisible();
+    await expect(latest).toHaveAttribute('href',`/book/${bookId}/${chapterIds[1237]}`);
+    await expect(page.getByRole('link',{name:'开始阅读',exact:true}).filter({visible:true})).toHaveAttribute('href',`/book/${bookId}/${chapterIds[0]}`);
     await expect(page.getByRole('status')).toContainText('200 / 1238');
     await expect.poll(()=>requested.length).toBe(3);
     expect(requested).toEqual([2,3,4]);
     await page.getByRole('button',{name:'查看完整目录 (1238章)'}).click();
     await expect(page.getByRole('heading',{name:'全部目录'})).toBeVisible();
     release();
-    await expect(page.getByRole('link',{name:'第1238章 目录验证',exact:true}).first()).toBeVisible();
     await expect(page.getByRole('status')).toHaveCount(0);
+    await expect(latest.first()).toHaveAttribute('href',`/book/${bookId}/${chapterIds[1237]}`);
     expect(requested.slice().sort((a,b)=>a-b)).toEqual([2,3,4,5,6,7]);
+    await page.unroute(`**/api/books/${bookId}/chapters*`);
+    await latest.last().click();
+    await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[1237]}`);
+  }finally{release();}
+});
+
+test('changing sort during loading starts from the matching end and ignores late opposite pages',async({page})=>{
+  let release!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  const requested:{order:string|null;page:number}[]=[];
+  await page.route(`**/api/books/${bookId}/chapters*`,async route=>{
+    const url=new URL(route.request().url());
+    const order=url.searchParams.get('order'),pageNumber=Number(url.searchParams.get('page'));
+    requested.push({order,page:pageNumber});
+    if(order==='desc'&&pageNumber>1)await gate;
+    await route.continue();
+  });
+  try{
+    await page.goto(`${base}/book/${bookId}`);
+    await expect(page.getByRole('link',{name:'第1238章 目录验证',exact:true})).toBeVisible();
+    await expect.poll(()=>requested.length).toBe(3);
+    await page.getByRole('button',{name:'倒序',exact:true}).click();
+    await expect(page.getByRole('link',{name:'第1章 目录验证',exact:true})).toBeVisible();
+    await expect(page.getByRole('status')).toHaveCount(0);
+    release();
+    await expect(page.getByRole('link',{name:'第1章 目录验证',exact:true})).toHaveAttribute('href',`/book/${bookId}/${chapterIds[0]}`);
+    const finishedRequests=requested.length;
+    await page.getByRole('button',{name:'正序',exact:true}).click();
+    await expect(page.getByRole('link',{name:'第1238章 目录验证',exact:true})).toBeVisible();
+    expect(requested.length).toBe(finishedRequests);
+    expect(requested.filter(item=>item.order==='desc').map(item=>item.page)).toEqual([2,3,4]);
+    await page.getByRole('link',{name:'开始阅读',exact:true}).filter({visible:true}).click();
+    await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[0]}`);
   }finally{release();}
 });
 

@@ -41,6 +41,34 @@ test('catalog loading', async t => {
     assert.deepEqual(calls,[]);
   });
 
+  await t.test('descending pagination appends older chapters without replacing the visible prefix',async()=>{
+    const progress=[];
+    globalThis.fetch=async input=>{
+      const url=new URL(String(input),'http://local');assert.equal(url.searchParams.get('order'),'desc');
+      const page=Number(url.searchParams.get('page'));
+      await delay(page===2?15:1);
+      return new Response(JSON.stringify(rows(page,1238).map(number=>1239-number)),{headers:{'X-Total-Count':'1238'}});
+    };
+    const result=await catalogPages('/descending?order=desc',{onProgress:data=>progress.push([...data])});
+    assert.deepEqual(result,Array.from({length:1238},(_,i)=>1238-i));
+    for(const data of progress)assert.deepEqual(data.slice(0,30),Array.from({length:30},(_,i)=>1238-i));
+  });
+
+  await t.test('cancelling a sort stops publishing or requesting further pages',async()=>{
+    const controller=new AbortController(),calls=[],progress=[];
+    let release;
+    const gate=new Promise(resolve=>{release=resolve;});
+    globalThis.fetch=async input=>{
+      const page=Number(new URL(String(input),'http://local').searchParams.get('page'));calls.push(page);
+      if(page>1)await gate;
+      return response(page,1238);
+    };
+    const pending=catalogPages('/cancel',{signal:controller.signal,onProgress:data=>progress.push(data.length)});
+    await delay(10);controller.abort();release();
+    await assert.rejects(pending,{name:'AbortError'});
+    assert.deepEqual(calls,[1,2,3,4]);assert.deepEqual(progress,[200]);
+  });
+
   await t.test('overlapping callers share reads, but the next load sees new chapters',async()=>{
     let count=0,total=12;
     globalThis.fetch=async()=>{count++;await delay(10);return response(1,total);};

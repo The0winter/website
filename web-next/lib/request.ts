@@ -24,6 +24,7 @@ export interface CatalogPage<T> {
 export interface CatalogOptions<T> {
   initialPage?: CatalogPage<T>;
   onProgress?: (rows: T[], total: number | null) => void;
+  signal?: AbortSignal;
 }
 
 const catalogPageSize = 200;
@@ -51,7 +52,9 @@ function readCatalogPage<T>(url: string, page: number): Promise<CatalogPage<T>> 
 }
 
 export async function catalogPages<T>(url: string, options: CatalogOptions<T> = {}): Promise<T[]> {
+  options.signal?.throwIfAborted();
   const first = options.initialPage ?? await readCatalogPage<T>(url, 1);
+  options.signal?.throwIfAborted();
   const pages: T[][] = [first.rows];
   let result = [...first.rows];
   options.onProgress?.(result, first.total);
@@ -60,7 +63,9 @@ export async function catalogPages<T>(url: string, options: CatalogOptions<T> = 
   // Older endpoints without a count still work, with progressive serial loading.
   if (first.total === null) {
     for (let page = 2; ; page++) {
+      options.signal?.throwIfAborted();
       const { rows } = await readCatalogPage<T>(url, page);
+      options.signal?.throwIfAborted();
       result = [...result, ...rows];
       options.onProgress?.(result, null);
       if (rows.length < catalogPageSize) return result;
@@ -73,9 +78,11 @@ export async function catalogPages<T>(url: string, options: CatalogOptions<T> = 
   let failed = false;
   const worker = async () => {
     while (!failed && nextPage <= lastPage) {
+      options.signal?.throwIfAborted();
       const page = nextPage++;
       try {
         const { rows } = await readCatalogPage<T>(url, page);
+        options.signal?.throwIfAborted();
         if (failed) return;
         pages[page - 1] = rows;
         const previous = contiguousPages;

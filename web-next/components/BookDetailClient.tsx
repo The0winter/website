@@ -2,7 +2,7 @@
 import { safeFetch as fetch, catalogPages, type CatalogPage } from '@/lib/request';
 
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { BookOpen, List, Bookmark, BookmarkCheck, Loader2, Star, User as UserIcon, Pencil, X, ArrowUpDown, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
@@ -81,6 +81,7 @@ interface BookDetailClientProps {
     chapters: Chapter[];
   };
   initialCatalog?: CatalogPage<Chapter>;
+  initialFirstChapterId?: string;
 }
 
 // --- 智能处理章节标题 ---
@@ -107,7 +108,7 @@ const formatChapterTitle = (title: string, chapterNumber: number) => {
   return `第${chapterNumber}章 ${cleanTitle}`;
 };
 
-export default function BookDetailClient({ initialBookData, initialCatalog }: BookDetailClientProps) {
+export default function BookDetailClient({ initialBookData, initialCatalog, initialFirstChapterId }: BookDetailClientProps) {
   const { user } = useAuth(); 
   const router = useRouter();
   const [bookData,setBookData] = useState(initialBookData);
@@ -122,10 +123,20 @@ export default function BookDetailClient({ initialBookData, initialCatalog }: Bo
   const [chapterTotal, setChapterTotal] = useState<number | null>(initialCatalog?.total ?? null);
   const [chapterError, setChapterError] = useState('');
   const [catalogRetry, setCatalogRetry] = useState(0);
+  const [firstChapterId, setFirstChapterId] = useState(initialFirstChapterId ?? null);
+  const completeCatalog = useRef<Chapter[] | null>(null);
   
   // 🔥 目录交互状态
   const [isReversed, setIsReversed] = useState(true); // 默认倒序 (最新章节在前)
   const [showAllChapters, setShowAllChapters] = useState(false); // 是否显示全部章节弹窗
+  const toggleCatalogOrder = () => {
+    setIsReversed(value => !value);
+    if (!completeCatalog.current) {
+      setChapters([]);
+      setLoadingChapters(true);
+      setChapterError('');
+    }
+  };
 
   // 🔥 简介展开状态 (新增)
   const [isDescExpanded, setIsDescExpanded] = useState(false);
@@ -166,23 +177,30 @@ export default function BookDetailClient({ initialBookData, initialCatalog }: Bo
   }, [user, book.id]);
 
   useEffect(() => {
+    if (completeCatalog.current && catalogRetry === 0) return;
     let active = true;
+    const controller = new AbortController();
     setLoadingChapters(true);
     setChapterError('');
-    catalogPages<Chapter>(`/api/books/${book.id}/chapters`, {
-      initialPage: catalogRetry === 0 ? initialCatalog : undefined,
+    catalogPages<Chapter>(`/api/books/${book.id}/chapters?order=${isReversed ? 'desc' : 'asc'}`, {
+      initialPage: isReversed && catalogRetry === 0 ? initialCatalog : undefined,
+      signal: controller.signal,
       onProgress: (rows, total) => {
         if (active) { setChapters(rows); setChapterTotal(total); }
       },
     }).then(rows => {
-      if (active) setChapterTotal(rows.length);
+      if (active) {
+        completeCatalog.current = rows;
+        setChapterTotal(rows.length);
+        setFirstChapterId(rows.length ? rows.reduce((first, row) => row.chapter_number < first.chapter_number ? row : first).id : null);
+      }
     }).catch(error => {
       if (active) setChapterError(error instanceof Error ? error.message : '目录暂不可用，请重试');
     }).finally(() => {
       if (active) setLoadingChapters(false);
     });
-    return () => { active = false; };
-  }, [book.id, initialCatalog, catalogRetry]);
+    return () => { active = false; controller.abort(); };
+  }, [book.id, initialCatalog, catalogRetry, isReversed]);
 
   // --- 逻辑：章节排序与切片 ---
   const sortedChapters = useMemo(() => {
@@ -328,16 +346,6 @@ export default function BookDetailClient({ initialBookData, initialCatalog }: Bo
   };
   const displayRating = book.rating ? (book.rating * 2).toFixed(1) : '0.0';
 
-  // 计算第一章的 ID，用于“开始阅读”按钮
-  const firstChapterId = useMemo(() => {
-    if (chapters.length === 0) return null;
-    // O(N) 复杂度找到第一章，不需要 O(N log N) 的 sort
-    const firstChapter = chapters.reduce((prev, curr) => 
-      prev.chapter_number < curr.chapter_number ? prev : curr
-    );
-    return firstChapter.id;
-  }, [chapters]);
-
   return (
     // 修改1：增加手机端底部 padding (pb-24)，防止被常驻底栏遮挡内容
     <div className="min-h-screen bg-gray-50 pb-24 md:pb-12">
@@ -406,14 +414,14 @@ export default function BookDetailClient({ initialBookData, initialCatalog }: Bo
 
                  {/* 电脑端的大按钮组 (手机端已移除，改为常驻底栏) */}
                  <div className="hidden md:flex flex-wrap gap-4 mt-auto">
-                    {chapters.length > 0 ? (
+                    {firstChapterId ? (
                         <Link 
-                        href={firstChapterId ? `/book/${book.id}/${firstChapterId}` : '#'} 
+                        href={`/book/${book.id}/${firstChapterId}`}
                         className="bg-blue-600 text-white px-8 py-3 rounded-md hover:bg-blue-700 font-semibold transition-colors shadow-sm">
                          开始阅读
                       </Link>
                     ) : (
-                        <button disabled className="bg-gray-400 text-white px-8 py-3 rounded-md cursor-not-allowed font-semibold">暂无章节</button>
+                        <button disabled className="bg-gray-400 text-white px-8 py-3 rounded-md cursor-not-allowed font-semibold">{loadingChapters || chapters.length > 0 ? '加载首章…' : '暂无章节'}</button>
                     )}
                     <button 
                         onClick={handleToggleBookmark} 
@@ -590,7 +598,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog }: Bo
                     <span className="text-xs md:text-sm font-normal text-gray-500 ml-2">{book.status === 'completed' ? '已完结' : '连载中'} · 共{chapterTotal ?? chapters.length}章</span>
                 </h2>
                 <button 
-                    onClick={() => setIsReversed(!isReversed)} 
+                    onClick={toggleCatalogOrder}
                     className="flex items-center space-x-1 text-xs md:text-sm text-gray-600 hover:text-blue-600 transition-colors"
                 >
                     <ArrowUpDown className="w-3 h-3 md:w-4 md:h-4" />
@@ -657,9 +665,9 @@ export default function BookDetailClient({ initialBookData, initialCatalog }: Bo
                 <span>{isBookmarked ? '已在书架' : '加入书架'}</span>
             </button>
             
-            {chapters.length > 0 ? (
+            {firstChapterId ? (
                 <Link 
-                    href={firstChapterId ? `/book/${book.id}/${firstChapterId}` : '#'} 
+                    href={`/book/${book.id}/${firstChapterId}`}
                     className="flex-[1.2] flex items-center justify-center space-x-1.5 rounded-full text-sm font-bold text-white shadow-md transition-all active:scale-95 bg-gradient-to-r from-blue-500 to-blue-600 active:from-blue-600 active:to-blue-700"
                 >
                     <BookOpen className="w-4 h-4" />
@@ -667,7 +675,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog }: Bo
                 </Link>
             ) : (
                 <button disabled className="flex-[1.2] flex items-center justify-center space-x-1.5 rounded-full text-sm font-bold text-white shadow-md bg-gray-400 cursor-not-allowed">
-                    暂无章节
+                    {loadingChapters || chapters.length > 0 ? '加载首章…' : '暂无章节'}
                 </button>
             )}
         </div>
@@ -687,7 +695,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog }: Bo
                     </div>
                     <div className="flex items-center space-x-4">
                         <button 
-                            onClick={() => setIsReversed(!isReversed)} 
+                            onClick={toggleCatalogOrder}
                             className="flex items-center space-x-1 text-xs md:text-sm bg-white border px-3 py-1.5 rounded-md text-gray-700 hover:bg-gray-50 hover:border-blue-400 transition-colors"
                         >
                             <ArrowUpDown className="w-4 h-4" />

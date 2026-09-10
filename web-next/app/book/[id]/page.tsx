@@ -50,10 +50,10 @@ async function getBook(id: string): Promise<Book | null> {
   }
 }
 
-async function getChapters(id: string): Promise<CatalogPage<Chapter> | undefined> {
+async function getChapters(id: string, order: 'asc' | 'desc' = 'desc', limit = 200): Promise<CatalogPage<Chapter> | undefined> {
   try {
     const baseUrl = getApiBaseUrl(); // 动态获取：服务端走内网，客户端走公网
-    const res = await fetch(`${baseUrl}/books/${id}/chapters?page=1&limit=200`, {
+    const res = await fetch(`${baseUrl}/books/${id}/chapters?order=${order}&page=1&limit=${limit}`, {
       cache: 'no-store'
     });
     if (!res.ok) return undefined;
@@ -103,9 +103,10 @@ export default async function BookDetailPage({ params }: Props) {
   const { id } = await params;
   
   // 并行请求书籍和章节数据
-  const [book, catalog] = await Promise.all([
+  const [book, catalog, firstChapter] = await Promise.all([
     getBook(id),
-    getChapters(id)
+    getChapters(id),
+    getChapters(id, 'asc', 1),
   ]);
   
   if (!book) {
@@ -136,7 +137,7 @@ export default async function BookDetailPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, String.fromCharCode(92) + 'u003c') }}
       />
-      <BookDetailClient key={book.id} initialBookData={{ book, chapters }} initialCatalog={catalog} />
+      <BookDetailClient key={book.id} initialBookData={{ book, chapters }} initialCatalog={catalog} initialFirstChapterId={firstChapter?.rows[0]?.id} />
     </>
   );
 }
