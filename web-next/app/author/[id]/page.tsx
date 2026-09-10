@@ -7,7 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { BookOpen, Award, Flame, Plus, Clock } from 'lucide-react';
 // ✅ 确保引用路径正确
-import { usersApi, Book, Profile } from '@/lib/api';
+import { Book, Profile } from '@/lib/api';
 import {safeFetch} from '@/lib/request';
 import Link from 'next/link';
 
@@ -28,7 +28,7 @@ export default function AuthorProfile() {
         let active=true;
         Promise.all([
             safeFetch(`/api/books?author_id=${encodeURIComponent(String(authorId))}&page=${page}&limit=20&orderBy=updatedAt`),
-            usersApi.getProfile(String(authorId)),
+            safeFetch(`/api/authors/${encodeURIComponent(String(authorId))}`).then(async r=>{if(!r.ok)throw new Error('作者加载失败');return r.json();}),
         ]).then(async ([response, user])=>{
             if(!response.ok)throw new Error('作品加载失败，请重试');
             const data: Book[]=await response.json();

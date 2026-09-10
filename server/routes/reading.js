@@ -1,3 +1,5 @@
+import Author from '../models/Author.js';
+import User from '../models/User.js';
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import rateLimit from 'express-rate-limit';
@@ -15,6 +17,12 @@ const Daily=mongoose.models.ReadDaily||mongoose.model('ReadDaily',dailySchema);
 const integer=(value,fallback,max)=>{const n=value===undefined?fallback:Number(value);if(!Number.isSafeInteger(n)||n<1||n>max)fail(400,'分页参数无效');return n;};
 const formatted=doc=>({...doc,id:String(doc._id)});
 export function readingRoutes(app,auth) {
+  app.get('/api/authors/:id',asyncRoute(async(req,res)=>{
+    const profile=await Author.findById(req.params.id).lean();
+    if(profile)return res.json({id:String(profile._id),username:profile.name,avatar:'',created_at:profile.createdAt});
+    const user=await User.findById(req.params.id).lean();if(!user)fail(404,'作者不存在');
+    res.json({id:String(user._id),username:user.username,avatar:user.avatar,created_at:user.created_at});
+  }));
   app.get('/api/sitemap-books',asyncRoute(async(req,res)=>{
     const page=integer(req.query.page,1,100000);
     const books=await Book.find({deletedAt:null}).select('_id updatedAt').sort({_id:1}).skip((page-1)*100).limit(100).lean();
@@ -26,7 +34,7 @@ export function readingRoutes(app,auth) {
     if(!['views','weekly_views','daily_views','monthly_views','updatedAt','createdAt','rating','composite'].includes(orderBy)||!['asc','desc'].includes(order))fail(400,'排序参数无效');
     const limit=integer(req.query.limit,20,100),page=integer(req.query.page,1,100000);
     const filter={deletedAt:null};
-    if(author_id){if(typeof author_id!=='string'||!/^[a-f0-9]{24}$/i.test(author_id))fail(400,'作者ID无效');filter.author_id=new mongoose.Types.ObjectId(author_id);}
+    if(author_id){if(typeof author_id!=='string'||!/^[a-f0-9]{24}$/i.test(author_id))fail(400,'作者ID无效');filter.$and=[{$or:[{author_id:new mongoose.Types.ObjectId(author_id)},{author_profile_id:new mongoose.Types.ObjectId(author_id)}]}];}
     if(category)filter.category=String(category).slice(0,80);
     if(q){if(typeof q!=='string'||q.length>100)fail(400,'搜索关键词过长');const escaped=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');filter.$or=[{title:{$regex:escaped,$options:'i'}},{author:{$regex:escaped,$options:'i'}}];}
     let books;
