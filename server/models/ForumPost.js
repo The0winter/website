@@ -9,6 +9,7 @@ const forumPostSchema = new mongoose.Schema({
     enum: ['question', 'article'], // 类型：是问题还是文章
     default: 'question' 
   },
+  bookId: { type: mongoose.Schema.Types.ObjectId, ref: 'Book' },
   tags: [String], // 标签 ["社会学", "经济"]
   
   author: { 
@@ -33,6 +34,7 @@ const forumPostSchema = new mongoose.Schema({
 
 // 索引：加快查询速度
 forumPostSchema.index({ type: 1, createdAt: -1 }); 
+forumPostSchema.index({ bookId: 1, type: 1, createdAt: -1 });
 forumPostSchema.index({ views: -1 });
 
 export default mongoose.model('ForumPost', forumPostSchema);

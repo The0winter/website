@@ -5,8 +5,9 @@ import { safeFetch as fetch, catalogPages, type CatalogPage } from '@/lib/reques
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, List, Bookmark, BookmarkCheck, Loader2, Star, User as UserIcon, Pencil, X, ArrowUpDown, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
-import { booksApi } from '@/lib/api';
+import { ArrowLeft, BookOpen, Bookmark, BookmarkCheck, Loader2, Star, User as UserIcon, Pencil, X, ArrowUpDown, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import BookArticles from './BookArticles';
+import './book-detail.css';
 import { useAuth } from '@/contexts/AuthContext';
 import { Virtuoso } from 'react-virtuoso';
 
@@ -90,7 +91,7 @@ const formatChapterTitle = (title: string, chapterNumber: number) => {
   if (!title) return `第${chapterNumber}章`;
 
   // 1. 去掉开头的数字和标点符号 (例如 "7.第7章" -> "第7章", "12、第12章" -> "第12章")
-  const cleanTitle = title.trim().replace(/^\d+[\.、\s]+/, '');
+  const cleanTitle = title.trim().replace(/^\d+[.、\s]+/, '');
 
   // 2. 识别是否为感言、请假条等非正文 (你可以根据需要增删这里的关键词)
   const isExtraContent = /(感言|同人|请假|通知|单章|说明|番外|新书|设定|总结|推书)/.test(cleanTitle);
@@ -140,13 +141,13 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   };
 
   // 🔥 简介展开状态 (新增)
+  const [communityTab, setCommunityTab] = useState<'reviews' | 'articles'>('reviews');
   const [isDescExpanded, setIsDescExpanded] = useState(false);
 
   // --- 评论相关状态 ---
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewPage,setReviewPage]=useState(1);
   const [reviewTotal,setReviewTotal]=useState(0);
-  const [reviewCounts,setReviewCounts]=useState<Record<number,number>>({});
   const [myReview,setMyReview]=useState<Review|null>(null);
   const [reviewRefresh,setReviewRefresh]=useState(0);
   const [reviewError,setReviewError]=useState('');
@@ -240,14 +241,13 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
           const distribution:Record<string,number>=JSON.parse(response.headers.get('X-Review-Distribution')||'{}');
           const total=Number(response.headers.get('X-Total-Count'));
           const rating=total?Object.entries(distribution).reduce((sum,[score,count])=>sum+Number(score)*count,0)/total:0;
-          setReviews(rows);setMyReview(personal);setReviewTotal(total);setReviewCounts(distribution);setReviewError('');
+          setReviews(rows);setMyReview(personal);setReviewTotal(total);setReviewError('');
           setBookData(previous=>({...previous,book:{...previous.book,rating,numReviews:total}}));
         }
       }catch(e){if(active)setReviewError(e instanceof Error?e.message:'评价读取失败');}
     }
     load();return()=>{active=false;};
   },[book.id,user,reviewPage,reviewRefresh]);
-  const ratingDistribution=useMemo(()=>Object.fromEntries([1,2,3,4,5].map(rating=>[rating,reviewTotal?(reviewCounts[rating]||0)/reviewTotal*100:0])),[reviewCounts,reviewTotal]);
   // --- 逻辑：评论排序 ---
   const sortedReviews = useMemo(() => {
     if (!myReview) return reviews;
@@ -298,7 +298,6 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
     if (!user) return router.push('/login');
     if (submittingReview) return;
 
-    const userId = user.id || user._id;
     setSubmittingReview(true);
     
     try {
@@ -335,7 +334,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
     return parts[parts.length - 1].trim();
   };
   const categoryDisplay = getCategoryDisplay(book.category);
-  const statusText = book.status === 'completed' ? '已完结' : '连载中';
+  const statusText = ['completed', '完结', '已完结'].includes(book.status || '') ? '已完结' : '连载中';
   const getAuthorName = () => {
     if (typeof book.author_id === 'object' && book.author_id?.username) return book.author_id.username;
     return book.author || '未知作者';
@@ -349,14 +348,14 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
   return (
     // 修改1：增加手机端底部 padding (pb-24)，防止被常驻底栏遮挡内容
-    <div className="min-h-screen bg-gray-50 pb-24 md:pb-12">
-      <div className="h-[10px] md:h-[20px]"></div> 
+    <div className="book-detail min-h-screen bg-gray-50 pb-24 md:pb-12">
+      <div className="book-topbar md:hidden"><Link href="/" aria-label="返回首页"><ArrowLeft size={24} /></Link><span>书籍详情</span><Link href="/search" aria-label="搜索小说">找书</Link></div><div className="hidden md:block h-[20px]"></div>
 
       {/* ⚠️ 修改2：将 space-y 替换为 flex flex-col 和 gap，以便利用 order 属性实现手机端模块换位 */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 md:py-8 flex flex-col gap-3 md:gap-6">
+      <div className="book-layout max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 md:py-8 flex flex-col gap-3 md:gap-6">
         
         {/* === 第一部分：书籍核心信息 === */}
-        <div className="bg-white rounded-lg shadow-sm p-4 md:p-8 order-1">
+        <div className="book-hero bg-white rounded-lg shadow-sm p-4 md:p-8 order-1">
             <div className="flex flex-row gap-4 md:gap-8">
               {/* 左侧封面 */}
               <div className="flex-shrink-0">
@@ -375,14 +374,14 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                  <div className="flex items-start justify-between mb-1 md:mb-4">
                      <h1 className="text-lg md:text-3xl font-bold text-gray-900 line-clamp-2">{book.title}</h1>
                      {/* 🔥 新增：手机端评分角标 */}
-                     <div className="md:hidden flex-shrink-0 flex items-center bg-yellow-50 px-2 py-0.5 rounded border border-yellow-100 text-yellow-600 text-xs font-bold whitespace-nowrap ml-2 mt-0.5">
+                     <div className="hidden flex-shrink-0 items-center bg-yellow-50 px-2 py-0.5 rounded border border-yellow-100 text-yellow-600 text-xs font-bold whitespace-nowrap ml-2 mt-0.5">
                          <Star className="w-3 h-3 fill-yellow-400 text-yellow-400 mr-1" />
                          {displayRating}分
                      </div>
                  </div>
 
                  {/* 信息列表 */}
-                 <div className="flex flex-col space-y-1 md:space-y-2 mb-2 md:mb-8 text-xs md:text-sm text-gray-600">
+                 <div className="book-meta flex flex-col space-y-1 md:space-y-2 mb-2 md:mb-8 text-xs md:text-sm text-gray-600">
                      <div className="flex items-center">
                         <span className="text-gray-500 w-12 md:w-16">作者:</span>
                         <Link href={`/author/${getAuthorId()}`} className="text-blue-600 hover:text-blue-800 font-medium md:text-base">
@@ -397,7 +396,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                         <span className="text-gray-500 w-12 md:w-16">状态:</span>
                         <span className="text-gray-900">{statusText}{wordCount !== null && ` | ${wordCount}`}</span>
                      </div>
-                     <div className="flex items-center md:hidden">
+                     <div className="hidden">
                         <span className="text-gray-500 w-12">更新:</span>
                         <span className="text-gray-900">{updatedDate}</span>
                      </div>
@@ -458,14 +457,14 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             </div>
 
             {/* 🔥 新增：手机端专属作品简介 (紧贴封面下方，支持折叠) */}
-            <div className="md:hidden mt-4 pt-3 border-t border-gray-100">
+            <div className="book-intro md:hidden mt-4 pt-3 border-t border-gray-100">
                 <div className="relative">
-                    <div className={`text-gray-600 leading-relaxed text-sm whitespace-pre-wrap transition-all duration-300 ${!isDescExpanded ? 'line-clamp-2' : ''}`}>
+                    <div className={`text-gray-600 leading-relaxed text-sm whitespace-pre-wrap transition-all duration-300 ${!isDescExpanded ? 'line-clamp-4' : ''}`}>
                         {book.description || '暂无简介'}
                     </div>
                     <button 
                         onClick={() => setIsDescExpanded(!isDescExpanded)}
-                        className="w-full mt-1.5 flex items-center justify-center text-blue-500 bg-blue-50/50 rounded py-1 text-xs font-medium active:bg-blue-100 transition-colors"
+                        className={`${!book.description || book.description === '暂无简介' ? 'hidden' : 'flex'} w-full mt-1.5 items-center justify-center text-blue-500 bg-blue-50/50 rounded py-1 text-xs font-medium active:bg-blue-100 transition-colors`}
                     >
                         {isDescExpanded ? (
                             <><ChevronUp className="w-3 h-3 mr-1"/> 收起简介</>
@@ -488,10 +487,16 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
         </div>
 
         {/* === 第三部分：书友评价区 (⚠️ 利用 order-3 md:order-4 在手机端提到目录前面，电脑端仍为第4) === */}
-        <div id="reviews-section" className="bg-white rounded-lg shadow-sm p-4 md:p-8 order-3 md:order-4">
+        <div id="reviews-section" className="book-community bg-white rounded-lg shadow-sm p-4 md:p-8 order-4">
+            <div className="community-tabs" role="tablist" aria-label="书友交流">
+              <button id="reviews-tab" role="tab" aria-selected={communityTab === 'reviews'} aria-controls="reviews-panel" onClick={() => setCommunityTab('reviews')}>评论 <small>{reviewTotal}</small></button>
+              <button id="articles-tab" role="tab" aria-selected={communityTab === 'articles'} aria-controls="articles-panel" onClick={() => setCommunityTab('articles')}>文章</button>
+            </div>
+            {communityTab === 'articles' && <div id="articles-panel" role="tabpanel" aria-labelledby="articles-tab"><BookArticles bookId={book.id} title={book.title} /></div>}
+            <div id="reviews-panel" role="tabpanel" aria-labelledby="reviews-tab" hidden={communityTab !== 'reviews'}>
             <div className="flex items-center justify-between mb-4 md:mb-6">
                 <h2 className="text-base md:text-xl font-bold text-gray-900 flex items-center space-x-2 border-l-4 border-blue-600 pl-3">
-                    <span>书友评价 ({reviewTotal})</span>
+                    <span className="hidden md:inline">书友评价 ({reviewTotal})</span>
                 </h2>
                 {!showReviewForm && !myReview && (
                      <button 
@@ -539,7 +544,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             )}
 
             {reviewError&&<p role="alert">{reviewError}<button onClick={()=>setReviewRefresh(value=>value+1)}>重试</button></p>}
-            <nav aria-label="评价分页" className="flex gap-4 justify-center my-4"><button disabled={reviewPage===1} onClick={()=>setReviewPage(reviewPage-1)}>上一页</button><span>第 {reviewPage} 页</span><button disabled={reviewPage*20>=reviewTotal} onClick={()=>setReviewPage(reviewPage+1)}>下一页</button></nav>
+            <nav hidden={reviewTotal <= 20} aria-label="评价分页" className="flex gap-4 justify-center my-4"><button disabled={reviewPage===1} onClick={()=>setReviewPage(reviewPage-1)}>上一页</button><span>第 {reviewPage} 页</span><button disabled={reviewPage*20>=reviewTotal} onClick={()=>setReviewPage(reviewPage+1)}>下一页</button></nav>
             {/* 评论列表 */}
             <div className="space-y-6 md:space-y-8">
                 {reviews.length === 0 ? (
@@ -588,15 +593,17 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                     })
                 )}
             </div>
+            </div>
         </div>
 
         {/* === 第四部分：目录 (⚠️ 利用 order-4 md:order-3 在手机端沉底，电脑端仍为第3) === */}
-        <div role="region" aria-label="章节目录" aria-busy={loadingChapters} className="bg-white rounded-lg shadow-sm order-4 md:order-3">
-          <div className="p-4 md:p-8">
+        <div role="region" aria-label="章节目录" aria-busy={loadingChapters} className="book-catalog bg-white rounded-lg shadow-sm order-3">
+          <button className="mobile-catalog md:hidden" onClick={() => setShowAllChapters(true)}><strong>目录</strong><span>{statusText} · 共{chapterTotal ?? chapters.length}章<br/><small>{updatedDate} 更新</small></span><ChevronRight size={18}/></button>
+          <div className="hidden md:block p-4 md:p-8">
             <div className="flex justify-between items-center mb-3 md:mb-6">
                 <h2 className="text-base md:text-xl font-bold text-gray-900 flex items-center space-x-2 border-l-4 border-blue-600 pl-3">
                     <span>目录</span>
-                    <span className="text-xs md:text-sm font-normal text-gray-500 ml-2">{book.status === 'completed' ? '已完结' : '连载中'} · 共{chapterTotal ?? chapters.length}章</span>
+                    <span className="text-xs md:text-sm font-normal text-gray-500 ml-2">{['completed', '完结', '已完结'].includes(book.status || '') ? '已完结' : '连载中'} · 共{chapterTotal ?? chapters.length}章</span>
                 </h2>
                 <button 
                     onClick={toggleCatalogOrder}
@@ -648,7 +655,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
       {/* === 🔥 新增：移动端常驻悬浮底栏 === */}
       <div 
-        className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-100 z-40 shadow-[0_-8px_20px_rgba(0,0,0,0.06)]"
+        className="book-actions md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-100 z-40 shadow-[0_-8px_20px_rgba(0,0,0,0.06)]"
         // 兼容 iOS 底部安全区
         style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))', paddingTop: '0.75rem', paddingLeft: '1rem', paddingRight: '1rem' }}
       >
@@ -668,10 +675,10 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             {firstChapterId ? (
                 <Link 
                     href={`/book/${book.id}/${firstChapterId}`}
-                    className="flex-[1.2] flex items-center justify-center space-x-1.5 rounded-full text-sm font-bold text-white shadow-md transition-all active:scale-95 bg-gradient-to-r from-blue-500 to-blue-600 active:from-blue-600 active:to-blue-700"
+                    className="read-now flex-[1.2] flex items-center justify-center rounded-full text-sm font-bold text-white"
                 >
                     <BookOpen className="w-4 h-4" />
-                    <span>开始阅读</span>
+                    <span>立即阅读</span>
                 </Link>
             ) : (
                 <button disabled className="flex-[1.2] flex items-center justify-center space-x-1.5 rounded-full text-sm font-bold text-white shadow-md bg-gray-400 cursor-not-allowed">
@@ -705,7 +712,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                             onClick={() => setShowAllChapters(false)}
                             className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-500 hover:text-gray-800"
                         >
-                            <X className="w-6 h-6" />
+                            <X aria-label="关闭目录" className="w-6 h-6" />
                         </button>
                     </div>
                 </div>

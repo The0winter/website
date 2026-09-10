@@ -21,7 +21,9 @@ const TAG_MAX = 8;
 function CreatePostContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const defaultType = searchParams.get('type') === 'article' ? 'article' : 'question';
+  const bookId = searchParams.get('bookId') || undefined;
+  const bookTitle = searchParams.get('bookTitle');
+  const defaultType = bookId || searchParams.get('type') === 'article' ? 'article' : 'question';
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -76,11 +78,12 @@ function CreatePostContent() {
         title: title.trim(),
         content: content.trim().replace(/\n/g, '<br/>'),
         type,
-        tags: parsedTags
+        tags: parsedTags,
+        ...(bookId ? {bookId} : {})
       });
 
       setShowSuccess(true);
-      setTimeout(() => router.push('/forum'), 1200);
+      setTimeout(() => router.push(bookId ? `/book/${bookId}` : '/forum'), 1200);
     } catch (caught: unknown) { const error = caught instanceof Error ? caught : new Error('操作失败');
       alert(`发布失败：${error.message || '请稍后重试'}`);
     } finally {
@@ -90,6 +93,7 @@ function CreatePostContent() {
 
   return (
     <div className={`min-h-screen ${theme.bg} pb-24 relative font-sans`}>
+      {bookId && <p className="bg-white px-4 py-3 text-sm text-gray-600">为《{bookTitle || "这本书"}》写文章</p>}
       <div className="bg-white/92 backdrop-blur-md border-b border-[#e6e8eb] sticky top-0 z-30">
         <div className="max-w-[860px] mx-auto px-4 h-14 md:h-16 flex items-center justify-between">
           <button
@@ -116,7 +120,7 @@ function CreatePostContent() {
       <div className="max-w-[860px] mx-auto mt-4 md:mt-8 px-4">
         <div className="flex bg-[#edf0f3] p-1 rounded-xl mb-4 md:mb-6 w-full md:w-fit">
           <button
-            onClick={() => setType('question')}
+            disabled={!!bookId} onClick={() => setType('question')}
             className={`flex-1 md:flex-none px-4 md:px-6 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${type === 'question' ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6b7280] hover:text-[#1f2329]'}`}
           >
             <HelpCircle className="w-4 h-4" /> 提问

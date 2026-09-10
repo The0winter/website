@@ -332,7 +332,7 @@ export const forumApi = {
     });
   },
 
-  create: async (data: { title: string; content: string; type: 'question' | 'article'; tags?: string[] }): Promise<ForumPost> => {
+  create: async (data: { title: string; content: string; type: 'question' | 'article'; tags?: string[]; bookId?: string }): Promise<ForumPost> => {
     return apiCall<ForumPost>('/forum/posts', {
       method: 'POST',
       body: JSON.stringify(data),

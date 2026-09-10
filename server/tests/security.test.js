@@ -294,6 +294,18 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       assert.equal((await guest.request(`/api/forum/replies/${replies[0]._id}/comments?page=2`)).data.length,1);
       for(const path of [`/api/books/${book._id}/reviews?page=-1`,`/api/forum/posts?page=bad`,`/api/forum/posts/${post._id}/replies?page=0`])assert.equal((await guest.request(path)).status,400,path);
     });
+    await t.test('book articles preserve association, filter other books and reject invalid targets',async()=>{
+      const article=await owner.write('/api/forum/posts','POST',{title:'本书读后感',content:'这是一篇书友文章',type:'article',bookId:String(book._id)});
+      assert.equal(article.status,201);
+      assert.equal(article.data.bookId,String(book._id));
+      const list=await guest.request(`/api/books/${book._id}/articles`);
+      assert.equal(list.status,200);assert.equal(list.data.total,1);
+      assert.equal(list.data.items[0].title,'本书读后感');
+      assert.equal(list.data.items[0].author.username,'owner');
+      assert.equal((await guest.request(`/api/books/${new mongoose.Types.ObjectId()}/articles`)).data.total,0);
+      for(const bookId of ['invalid',String(new mongoose.Types.ObjectId())])assert.equal((await owner.write('/api/forum/posts','POST',{title:'无效关联',content:'内容',type:'article',bookId})).status,400);
+      assert.equal((await owner.write('/api/forum/posts','POST',{title:'问题？',content:'内容',type:'question',bookId:String(book._id)})).status,400);
+    });
     await t.test('logout and ban revoke previously valid cookies',async()=>{
       const oldCookie=owner.jar.get('session');
       assert.equal((await owner.write('/api/auth/logout','POST',{})).status,200);

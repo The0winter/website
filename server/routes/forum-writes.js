@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import rateLimit from 'express-rate-limit';
 import {asyncRoute,safeHtml} from '../security.js';
 import {fail} from '../services/content.js';
+import Book from '../models/Book.js';
 import User from '../models/User.js';
 import Post from '../models/ForumPost.js';
 import Reply from '../models/ForumReply.js';
@@ -13,17 +14,26 @@ function content(value,max){if(typeof value!=='string'||value.length>max*4)fail(
 const recent=()=>({$gte:new Date(Date.now()-60000)});
 async function lockActor(req,session){if(!(await User.updateOne({_id:req.user.id,isBanned:{$ne:true}},{$inc:{contentVersion:1}},{session})).matchedCount)fail(403,'账户不可用');}
 export function forumWrites(app,auth){
+  app.get('/api/books/:id/articles',asyncRoute(async(req,res)=>{
+    if(!/^[a-f0-9]{24}$/i.test(req.params.id))fail(400,'书籍ID无效');
+    const page=Math.max(1,Math.min(10000,Number.parseInt(req.query.page,10)||1));
+    const filter={bookId:req.params.id,type:'article'};
+    const [items,total]=await Promise.all([Post.find(filter).sort({createdAt:-1,_id:-1}).skip((page-1)*20).limit(20).select('title summary author createdAt').populate('author','username').lean(),Post.countDocuments(filter)]);
+    res.json({items,total});
+  }));
   const limiter=n=>rateLimit({windowMs:3600000,limit:n,message:{error:'提交过于频繁，请稍后重试'}});
   app.post('/api/forum/posts',auth.authenticate,limiter(20),asyncRoute(async(req,res)=>{
-    fields(req.body,['title','content','type','tags']);
+    fields(req.body,['title','content','type','tags','bookId']);
     const title=plain(req.body.title),html=content(req.body.content,30000),type=req.body.type||'question';
     if(!title||title.length>120||!['question','article'].includes(type)||(type==='question'&&!/[?？]\s*$/.test(title)))fail(400,'提问标题须以问号结尾，标题最多120字');
     const tags=Array.isArray(req.body.tags)?[...new Set(req.body.tags.map(t=>plain(t).slice(0,20)).filter(Boolean))].slice(0,8):[];
+    const bookId=req.body.bookId;
+    if(bookId&&(typeof bookId!=='string'||!/^[a-f0-9]{24}$/i.test(bookId)||type!=='article'||!await Book.exists({_id:bookId,deletedAt:null})))fail(400,'关联书籍无效');
     let post;
     await mongoose.connection.transaction(async session=>{
       await lockActor(req,session);
       if(await Post.exists({author:req.user.id,title,type,createdAt:recent()}).session(session))fail(429,'请勿重复发布');
-      [post]=await Post.create([{title,content:html,type,tags,summary:plain(html).slice(0,100),author:req.user.id}],{session});
+      [post]=await Post.create([{title,content:html,type,tags,...(bookId?{bookId}:{}),summary:plain(html).slice(0,100),author:req.user.id}],{session});
     });res.status(201).json({...post.toObject(),id:String(post._id)});
   }));
   app.post('/api/forum/posts/:id/replies',auth.authenticate,limiter(40),asyncRoute(async(req,res)=>{
