@@ -18,7 +18,7 @@ export default function Footer() {
   const friendLinks: { name: string; url: string }[] = [];
 
   return (
-    <footer data-site-chrome="true" className="bg-white dark:bg-[#1a1a1a] border-t border-gray-200 dark:border-[#333] transition-colors duration-300 mt-auto">
+    <footer data-site-chrome="true" className={`${pathname === '/profile' ? 'hidden md:block' : ''} bg-white dark:bg-[#1a1a1a] border-t border-gray-200 dark:border-[#333] transition-colors duration-300 mt-auto`}>
       {/* 调整了移动端的上下 padding (py-4)，保留网页端的 py-12 */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-12">
         

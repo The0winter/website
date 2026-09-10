@@ -1,0 +1,10 @@
+.mh-bottom { display:none; }
+@media (max-width:767px) {
+  .mh-bottom { position:fixed; bottom:0; left:0; right:0; z-index:45; display:grid; grid-template-columns:repeat(4,1fr); padding:10px 0 calc(9px + env(safe-area-inset-bottom)); background:#fffaf7f5; backdrop-filter:blur(14px); border-top:1px solid #eee4dc; }
+  .mh-bottom a { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:44px; gap:5px; color:#554d45; font-size:11px; }
+  .mh-bottom a:has([data-link-pending]), .mh-bottom a[aria-busy=true] { opacity:.55; cursor:progress; }
+  .mh-bottom svg { width:26px; height:26px; stroke-width:1.9; }
+  .mh-bottom [aria-current=page] { color:#df3a47; }
+  .mh-bottom [aria-current=page] svg { fill:#df3a4717; }
+  .profile-page { padding-bottom:calc(88px + env(safe-area-inset-bottom)); }
+}

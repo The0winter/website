@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import AccountLoading from '@/components/AccountLoading';
+import MobileBottomNav from '@/components/MobileBottomNav';
+import AdminModeNotice from '@/components/AdminModeNotice';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -14,7 +16,7 @@ import { authApi } from '@/lib/api';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, profile, loading, logout, setUser } = useAuth();
+  const { user, profile, loading, adminMode, logout, setUser } = useAuth();
 
   // ================= State 定义 =================
   const [leaving,setLeaving]=useState(false);
@@ -134,7 +136,7 @@ export default function ProfilePage() {
   if (loading || !user) return <AccountLoading checking={loading} />;
 
 return (
-    <div className="min-h-screen bg-gray-50 font-sans">
+    <div className="profile-page min-h-screen bg-gray-50 font-sans">
       
       {/* 全局 Toast (保持不变) */}
       {toast && (
@@ -261,6 +263,8 @@ return (
                 </Link>
             </div>
 
+            {adminMode && <div className="px-6 pt-4 text-gray-900"><AdminModeNotice/></div>}
+
             {/* ================= 账户安全 (保持原样) ================= */}
             <div className="mt-2">
                 <div className="px-8 py-4 flex items-center gap-2 mt-4">
@@ -308,6 +312,8 @@ return (
         </div> {/* End of 大容器 */}
 
       </div>
+
+      <MobileBottomNav/>
 
       {/* ================= 修改密码 Modal (保持不变) ================= */}
       {showPasswordModal && (

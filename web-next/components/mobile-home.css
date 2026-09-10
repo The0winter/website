@@ -39,12 +39,6 @@
   .mh-book-meta { display:flex; gap:5px; align-items:center; justify-content:space-between; font-size:11px; color:#ada398; margin-top:auto; padding-top:7px; }
   .mh-book-meta>span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mh-book-meta small { flex-shrink:0; background:#f5eddf; color:#b79b70; border-radius:3px; padding:1px 5px; font-size:10px; }
-  .mh-bottom { position:fixed; bottom:0; left:0; right:0; z-index:45; display:grid; grid-template-columns:repeat(4,1fr); padding:10px 0 calc(9px + env(safe-area-inset-bottom)); background:#fffaf7f5; backdrop-filter:blur(14px); border-top:1px solid #eee4dc; }
-  .mh-bottom a { display:flex; flex-direction:column; align-items:center; gap:5px; color:#554d45; font-size:11px; }
-  .mh-bottom a:has([data-link-pending]), .mh-bottom a[aria-busy=true] { opacity:.55; cursor:progress; }
-  .mh-bottom svg { width:26px; height:26px; stroke-width:1.9; }
-  .mh-bottom [aria-current=page] { color:#df3a47; }
-  .mh-bottom [aria-current=page] svg { fill:#df3a4717; }
   .mh-categories { display:flex; flex-wrap:wrap; gap:9px; margin-bottom:20px; }
   .mh-categories button { background:#f4eee8; padding:7px 12px; border-radius:18px; font-size:13px; color:#8a7a6b; }
   .mh-categories [aria-pressed=true] { color:#d63843; background:#fce6e6; }

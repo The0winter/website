@@ -2,7 +2,7 @@
 import {createContext,useContext,useEffect,useState,type ReactNode} from 'react';
 import {authApi,type Profile,type AuthUser} from '@/lib/api';
 interface AuthContextType {
- user:AuthUser|null;profile:Profile|null;loading:boolean;
+ user:AuthUser|null;profile:Profile|null;loading:boolean;adminMode:boolean;
  setUser:(user:AuthUser|null)=>void;
  signUp:(email:string,password:string,username:string,role:'reader',code:string)=>Promise<{error:Error|null}>;
  register:(username:string,email:string,password:string,code:string)=>Promise<{error:Error|null}>;
@@ -21,6 +21,7 @@ export function AuthProvider({children}:{children:ReactNode}) {
  const signUp:AuthContextType['signUp']=async(email,password,username,role,code)=>{try{const response=await authApi.signUp(email,password,username,role,code);accept(response.user,response.profile);return {error:null};}catch(e){return {error:e instanceof Error?e:new Error('注册失败')};}};
  const signIn:AuthContextType['signIn']=async(email,password)=>{try{const response=await authApi.signIn(email,password);accept(response.user,response.profile);return {error:null,user:response.user};}catch(e){return {error:e instanceof Error?e:new Error('登录失败')};}};
  const logout=async()=>{await authApi.logout();setUser(null);setProfile(null);for(const key of ['token','user','novelhub_user'])localStorage.removeItem(key);};
- return <AuthContext.Provider value={{user,profile,loading,setUser,signUp,signIn,logout,register:(username,email,password,code)=>signUp(email,password,username,'reader',code)}}>{children}</AuthContext.Provider>;
+ const adminMode=!loading && user?.role==='admin';
+ return <AuthContext.Provider value={{user,profile,loading,adminMode,setUser,signUp,signIn,logout,register:(username,email,password,code)=>signUp(email,password,username,'reader',code)}}>{children}</AuthContext.Provider>;
 }
 export function useAuth(){const value=useContext(AuthContext);if(!value)throw new Error('AuthProvider is required');return value;}

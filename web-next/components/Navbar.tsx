@@ -53,7 +53,7 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
   const hoverText = 'hover:text-blue-600';
 
   return (
-    <nav data-site-chrome="true" className={`${navBg} border-b ${navBorder} sticky top-0 z-50 transition-colors duration-300`}>
+    <nav data-site-chrome="true" className={`${pathname === '/profile' ? 'hidden md:block' : ''} ${navBg} border-b ${navBorder} sticky top-0 z-50 transition-colors duration-300`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* ==================== 1. 电脑端布局 (hidden md:flex) ==================== */}

@@ -19,6 +19,7 @@ import { useReadingSettings } from '@/contexts/ReadingSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
 
 import ReaderPages from './ReaderPages';
+import AdminModeNotice from './AdminModeNotice';
 import type {ReaderTurnMode} from './useReaderPageTurn';
 
 const turnModes=[
@@ -538,6 +539,7 @@ if (loading) return (
                 </div>
 
                 <div className="space-y-6">
+                    <AdminModeNotice/>
                     <ReaderModeSetting value={turnMode} onChange={setTurnMode}/>
                     {/* Theme */}
                     <div className="flex items-center">
@@ -660,6 +662,7 @@ if (loading) return (
             }}
           >
             <div className="flex items-center justify-between mb-3"><span className="text-sm font-bold">阅读设置</span><button aria-label="关闭阅读设置" onClick={()=>setShowSettings(false)} className="p-1"><X size={18}/></button></div>
+            <AdminModeNotice/>
             <ReaderModeSetting value={turnMode} onChange={setTurnMode}/>
             {/* 紧凑排版：字号调整 (放在最上面方便操作) */}
             <div className="flex items-center gap-3 mb-4 bg-black/5 rounded-lg p-2">

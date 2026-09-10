@@ -1,11 +1,15 @@
-// components/AdBanner.js
+'use client';
+
 import { useEffect, useRef } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
 const AdBanner = ({ atOptions }) => {
   const containerRef = useRef(null);
+  const { loading, adminMode } = useAuth();
+  const showAd = !loading && !adminMode && process.env.NEXT_PUBLIC_EXTERNAL_SERVICES === 'enabled';
 
   useEffect(() => {
-    if (!containerRef.current || process.env.NEXT_PUBLIC_EXTERNAL_SERVICES !== 'enabled') return;
+    if (!showAd || !containerRef.current) return;
 
     const { key, format, height, width, params } = atOptions;
 
@@ -40,6 +44,7 @@ const AdBanner = ({ atOptions }) => {
     // 设置 iframe 的属性
     iframe.width = width;
     iframe.height = height;
+    iframe.title = '广告';
     iframe.style.border = 'none';
     iframe.style.overflow = 'hidden';
     iframe.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox';
@@ -60,7 +65,10 @@ const AdBanner = ({ atOptions }) => {
       console.error('AdBanner render error:', e);
     }
 
-  }, [atOptions]); // 只要配置变了，就重新画这个 iframe
+    return () => iframe.remove();
+  }, [atOptions, showAd]);
+
+  if (!showAd) return null;
 
   return (
     <div 
