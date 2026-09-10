@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "shudugu",
+  "name": "速读谷",
+  "home": "https://www.shudugu.org/",
+  "hosts": ["www.shudugu.org", "shudugu.org"],
+  "book": {
+    "urlPattern": "^/(?<bookId>[0-9]+)/$",
+    "metadata": {
+      "title": "h1 > a",
+      "author": {"selector": ".itemtxt a[href^='/zuozhe/']", "pattern": "^作者：[\\s]*(.+)$"}
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-shudugu-v1",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": ["www.shudugu.org", "shudugu.org"],
+    "delayMs": 8000,
+    "retries": 0,
+    "timeoutMs": 15000,
+    "metadata": {
+      "title": "h1 > a",
+      "author": {"selector": ".itemtxt a[href^='/zuozhe/']", "pattern": "^作者：[\\s]*(.+)$"}
+    },
+    "catalog": {"links": "#list > ul > li > a"},
+    "chapter": {
+      "title": {"selector": "h1", "pattern": ">\\s*(.+)$"},
+      "content": ".con",
+      "remove": ["script", "style"],
+      "next": "a:contains('下一页')",
+      "maxPages": 10
+    }
+  }
+}
