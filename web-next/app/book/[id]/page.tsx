@@ -1,4 +1,4 @@
-import { safeFetch as fetch } from '@/lib/request';
+import { safeFetch as fetch, type CatalogPage } from '@/lib/request';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import BookDetailClient from '@/components/BookDetailClient';
@@ -50,16 +50,19 @@ async function getBook(id: string): Promise<Book | null> {
   }
 }
 
-async function getChapters(id: string): Promise<Chapter[]> {
+async function getChapters(id: string): Promise<CatalogPage<Chapter> | undefined> {
   try {
     const baseUrl = getApiBaseUrl(); // 动态获取：服务端走内网，客户端走公网
-    const res = await fetch(`${baseUrl}/books/${id}/chapters`, { 
-      next: { revalidate: 60 } 
+    const res = await fetch(`${baseUrl}/books/${id}/chapters?page=1&limit=200`, {
+      cache: 'no-store'
     });
-    if (!res.ok) return [];
-    return await res.json();
+    if (!res.ok) return undefined;
+    const header = res.headers.get('X-Total-Count');
+    const count = header === null ? NaN : Number(header);
+    return { rows: await res.json(), total: Number.isSafeInteger(count) && count >= 0 ? count : null };
   } catch (error) {
-    throw error;
+    console.error('首批目录读取失败', error);
+    return undefined;
   }
 }
 
@@ -100,7 +103,7 @@ export default async function BookDetailPage({ params }: Props) {
   const { id } = await params;
   
   // 并行请求书籍和章节数据
-  const [book, rawChapters] = await Promise.all([
+  const [book, catalog] = await Promise.all([
     getBook(id),
     getChapters(id)
   ]);
@@ -109,18 +112,8 @@ export default async function BookDetailPage({ params }: Props) {
     notFound();
   }
 
-  // 按照章节标题去重，保留列表中第一次出现的该标题章节
-  const uniqueChaptersMap = new Map();
-  rawChapters.forEach((chapter) => {
-    const cleanTitle = chapter.title ? chapter.title.trim() : ''; 
-    
-    if (cleanTitle && !uniqueChaptersMap.has(cleanTitle)) {
-      uniqueChaptersMap.set(cleanTitle, chapter);
-    }
-  });
-  
-  // 转换回数组，这就是干净的章节列表了
-  const chapters = Array.from(uniqueChaptersMap.values());
+  // Keep the exact first page for pagination, including legitimately repeated titles.
+  const chapters = catalog?.rows ?? [];
 
   const description = buildDescription(book);
   const jsonLd = {
@@ -134,7 +127,7 @@ export default async function BookDetailPage({ params }: Props) {
     description,
     image: book.cover_image, // 这里已经是我们转换过的绝对路径图片了，SEO 满分
     url: `${SITE_URL}/book/${book.id}`,
-    numberOfPages: chapters.length || undefined,
+    numberOfPages: catalog?.total || undefined,
   };
 
   return (
@@ -143,7 +136,7 @@ export default async function BookDetailPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, String.fromCharCode(92) + 'u003c') }}
       />
-      <BookDetailClient initialBookData={{ book, chapters }} />
+      <BookDetailClient key={book.id} initialBookData={{ book, chapters }} initialCatalog={catalog} />
     </>
   );
 }

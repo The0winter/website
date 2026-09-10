@@ -1,5 +1,5 @@
 'use client';
-import { safeFetch as fetch, catalogPages } from '@/lib/request';
+import { safeFetch as fetch, catalogPages, type CatalogPage } from '@/lib/request';
 
 
 import { useState, useEffect, useMemo } from 'react';
@@ -80,6 +80,7 @@ interface BookDetailClientProps {
     book: Book;
     chapters: Chapter[];
   };
+  initialCatalog?: CatalogPage<Chapter>;
 }
 
 // --- 智能处理章节标题 ---
@@ -106,7 +107,7 @@ const formatChapterTitle = (title: string, chapterNumber: number) => {
   return `第${chapterNumber}章 ${cleanTitle}`;
 };
 
-export default function BookDetailClient({ initialBookData }: BookDetailClientProps) {
+export default function BookDetailClient({ initialBookData, initialCatalog }: BookDetailClientProps) {
   const { user } = useAuth(); 
   const router = useRouter();
   const [bookData,setBookData] = useState(initialBookData);
@@ -118,6 +119,9 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
   // --- 章节相关状态 ---
   const [chapters, setChapters] = useState<Chapter[]>(bookData.chapters || []); 
   const [loadingChapters, setLoadingChapters] = useState(!(bookData.chapters && bookData.chapters.length > 0));
+  const [chapterTotal, setChapterTotal] = useState<number | null>(initialCatalog?.total ?? null);
+  const [chapterError, setChapterError] = useState('');
+  const [catalogRetry, setCatalogRetry] = useState(0);
   
   // 🔥 目录交互状态
   const [isReversed, setIsReversed] = useState(true); // 默认倒序 (最新章节在前)
@@ -159,24 +163,26 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
       checkBookmarkStatus();
     }
 
-    const fetchChapters = async () => {
-      try {
-        setLoadingChapters(true);
-        const data = await catalogPages<Chapter>(`/api/books/${book.id}/chapters`);
-        setChapters(data);
-      } catch (err) {
-        console.error("获取章节失败", err);
-      } finally {
-        setLoadingChapters(false);
-      }
-    };
+  }, [user, book.id]);
 
-    if (book.id) {
-
-      fetchChapters();
-    }
-
-  }, [user, book.id, bookData.chapters]);
+  useEffect(() => {
+    let active = true;
+    setLoadingChapters(true);
+    setChapterError('');
+    catalogPages<Chapter>(`/api/books/${book.id}/chapters`, {
+      initialPage: catalogRetry === 0 ? initialCatalog : undefined,
+      onProgress: (rows, total) => {
+        if (active) { setChapters(rows); setChapterTotal(total); }
+      },
+    }).then(rows => {
+      if (active) setChapterTotal(rows.length);
+    }).catch(error => {
+      if (active) setChapterError(error instanceof Error ? error.message : '目录暂不可用，请重试');
+    }).finally(() => {
+      if (active) setLoadingChapters(false);
+    });
+    return () => { active = false; };
+  }, [book.id, initialCatalog, catalogRetry]);
 
   // --- 逻辑：章节排序与切片 ---
   const sortedChapters = useMemo(() => {
@@ -581,7 +587,7 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
             <div className="flex justify-between items-center mb-3 md:mb-6">
                 <h2 className="text-base md:text-xl font-bold text-gray-900 flex items-center space-x-2 border-l-4 border-blue-600 pl-3">
                     <span>目录</span>
-                    <span className="text-xs md:text-sm font-normal text-gray-500 ml-2">{book.status === 'completed' ? '已完结' : '连载中'} · 共{chapters.length}章</span>
+                    <span className="text-xs md:text-sm font-normal text-gray-500 ml-2">{book.status === 'completed' ? '已完结' : '连载中'} · 共{chapterTotal ?? chapters.length}章</span>
                 </h2>
                 <button 
                     onClick={() => setIsReversed(!isReversed)} 
@@ -592,13 +598,15 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
                 </button>
             </div>
 
-            {loadingChapters ? (
+            {loadingChapters && chapters.length > 0 && <p role="status" className="mb-3 text-xs text-gray-500">已加载 {chapters.length}{chapterTotal === null ? '' : ` / ${chapterTotal}`} 章，继续加载中…</p>}
+            {chapterError && <p role="alert" className="mb-3 text-sm text-red-600">{chapterError} <button onClick={() => setCatalogRetry(value => value + 1)} className="underline">重试</button></p>}
+            {loadingChapters && chapters.length === 0 ? (
                <div className="py-6 md:py-10 text-center text-gray-500 flex flex-col items-center">
                   <Loader2 className="w-6 h-6 md:w-8 md:h-8 animate-spin mb-2 text-blue-500" />
                   <p className="text-xs md:text-sm">加载目录...</p>
                </div>
             ) : chapters.length === 0 ? (
-              <p className="text-gray-600 text-sm">暂无章节</p>
+              !chapterError && <p className="text-gray-600 text-sm">暂无章节</p>
             ) : (
               <div>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
@@ -619,7 +627,7 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
                         onClick={() => setShowAllChapters(true)}
                         className="w-full md:w-auto bg-gray-100 md:bg-gray-100 text-gray-700 md:px-12 py-3 rounded-lg md:rounded-full hover:bg-gray-200 transition-colors font-medium text-sm flex items-center justify-center mx-auto space-x-2"
                     >
-                        <span>查看完整目录 ({chapters.length}章)</span>
+                        <span>查看完整目录 ({chapterTotal ?? chapters.length}章)</span>
                         <ChevronRight className="w-4 h-4" />
                     </button>
                 </div>
@@ -675,7 +683,7 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
                 <div className="flex items-center justify-between p-4 md:p-5 border-b border-gray-100 bg-gray-50">
                     <div>
                         <h3 className="text-lg md:text-xl font-bold text-gray-900">全部目录</h3>
-                        <p className="text-xs md:text-sm text-gray-500 mt-1">共 {chapters.length} 章</p>
+                        <p className="text-xs md:text-sm text-gray-500 mt-1">共 {chapterTotal ?? chapters.length} 章{loadingChapters ? ` · 已加载 ${chapters.length} 章` : ''}</p>
                     </div>
                     <div className="flex items-center space-x-4">
                         <button 
@@ -694,6 +702,7 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
                     </div>
                 </div>
 
+                {chapterError && <p role="alert" className="p-3 text-sm text-red-600">{chapterError} <button onClick={() => setCatalogRetry(value => value + 1)} className="underline">重试</button></p>}
                 <div className="flex-1 bg-white p-2">
                     <Virtuoso
                         style={{ height: '100%' }}

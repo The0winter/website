@@ -1,4 +1,4 @@
-import { catalogPages } from './request';
+import { catalogPages, type CatalogOptions } from './request';
 import { safeFetch as fetch } from '@/lib/request';
 import { getApiBaseUrl } from '@/utils/api';
 export const API_BASE_URL = getApiBaseUrl();
@@ -72,6 +72,7 @@ export interface Profile {
 }
 
 export interface Book {
+  writeVersion?:number;
   coverImage?:string;
   updatedAt?:string;
   createdAt?:string;
@@ -200,8 +201,8 @@ export const booksApi = {
 };
 
 export const chaptersApi = {
-  getByBookId: async (bookId: string): Promise<Chapter[]> => {
-    return catalogPages<Chapter>(`${API_BASE_URL}/books/${bookId}/chapters`);
+  getByBookId: async (bookId: string, options?: CatalogOptions<Chapter>): Promise<Chapter[]> => {
+    return catalogPages<Chapter>(`${API_BASE_URL}/books/${bookId}/chapters`, options);
   },
 
   getById: async (chapterId: string): Promise<Chapter | null> => {

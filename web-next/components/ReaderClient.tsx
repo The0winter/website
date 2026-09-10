@@ -30,6 +30,11 @@ class BoundedMap<K,V> extends Map<K,V> {
 const chapterCache = new BoundedMap<string, Chapter>(20);
 // 🔥 [新增] 全局书籍缓存池 (防止切换章节时书名/封面闪烁)
 const bookCache = new BoundedMap<string, Book>(3);
+const catalogCache = new BoundedMap<string, {rows:Chapter[];version:number|string;expiresAt:number}>(3);
+function cachedCatalog(bookId:string, version:number|string|undefined) {
+  const cached=catalogCache.get(bookId);
+  return cached && cached.version===version && cached.expiresAt>Date.now() ? cached.rows : undefined;
+}
 const settingsCache = {
   themeColor: 'cream' as 'gray' | 'cream' | 'green' | 'blue',
   fontFamily: 'sans' as 'sans' | 'serif' | 'kai',
@@ -94,8 +99,14 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const chapterIdParam = params.chapterId as string;
   const hasInitialBook = !!initialBook;
   const hasInitialChapter = !!initialChapter;
+  const catalogVersion = initialBook?.writeVersion ?? initialBook?.updatedAt;
+  const initialCatalog = cachedCatalog(bookId, catalogVersion);
   const { user } = useAuth();
-  const [allChapters, setAllChapters] = useState<Chapter[]>([]);
+  const [allChapters, setAllChapters] = useState<Chapter[]>(initialCatalog ?? []);
+  const [catalogTotal, setCatalogTotal] = useState<number | null>(initialCatalog?.length ?? null);
+  const [catalogLoading, setCatalogLoading] = useState(!initialCatalog);
+  const [catalogError, setCatalogError] = useState('');
+  const [catalogRetry, setCatalogRetry] = useState(0);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [book, setBook] = useState<Book | null>(initialBook || null);
   const [chapter, setChapter] = useState<Chapter | null>(initialChapter || null);
@@ -265,6 +276,28 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     }
   };
 
+  // Load once per book, independently of chapter navigation and authentication.
+  useEffect(() => {
+    if (catalogRetry === 0 && cachedCatalog(bookId, catalogVersion)) return;
+    let active = true;
+    chaptersApi.getByBookId(bookId, {
+      onProgress: (rows, total) => {
+        if (active) { setAllChapters(rows); setCatalogTotal(total); }
+      },
+    }).then(rows => {
+      if (active) {
+        setCatalogTotal(rows.length);
+        // Chapter routes can remount. Reuse only a complete, recent, unchanged book.
+        if (catalogVersion !== undefined && rows.length <= 10000) catalogCache.set(bookId, {rows, version:catalogVersion, expiresAt:Date.now()+60000});
+      }
+    }).catch(error => {
+      if (active) setCatalogError(error instanceof Error ? error.message : '目录暂不可用，请重试');
+    }).finally(() => {
+      if (active) setCatalogLoading(false);
+    });
+    return () => { active = false; };
+  }, [bookId, catalogVersion, catalogRetry]);
+
 // --- 极速加载逻辑 (优化版：带缓存 + 预加载支持) ---
   useEffect(() => {
     let isActive = true;
@@ -342,13 +375,6 @@ if (targetId) {
           }
         }
 
-        // [第二步] 后台默默加载目录 (保持不变)
-        if (allChapters.length === 0) {
-          try {
-            const chaptersRes = await chaptersApi.getByBookId(bookId);
-            if (isActive && chaptersRes) setAllChapters(chaptersRes);
-          } catch(e) {}
-        }
       } 
       
       // === 场景 B: 慢速通道 (保持不变) ===
@@ -510,8 +536,8 @@ if (targetId) {
     }
   }, [router, bookId]);
   const currentChapterIndex = allChapters.findIndex((ch) => ch.id === chapter?.id);
-  const prevChapter = currentChapterIndex > 0 ? allChapters[currentChapterIndex - 1] : null;
-  const nextChapter = currentChapterIndex < allChapters.length - 1 ? allChapters[currentChapterIndex + 1] : null;
+  const prevChapterId = currentChapterIndex > 0 ? allChapters[currentChapterIndex - 1].id : chapter?.previousId ?? null;
+  const nextChapterId = currentChapterIndex >= 0 && currentChapterIndex < allChapters.length - 1 ? allChapters[currentChapterIndex + 1].id : chapter?.nextId ?? null;
 
   // ============================================================
   // ▼▼▼ 新增：键盘左右键翻页 (← 上一章 / → 下一章) ▼▼▼
@@ -524,18 +550,18 @@ if (targetId) {
       }
 
       // 2. 左键 -> 上一章
-      if (e.key === 'ArrowLeft' && prevChapter) {
-        goToChapter(prevChapter.id);
+      if (e.key === 'ArrowLeft' && prevChapterId) {
+        goToChapter(prevChapterId);
       }
       // 3. 右键 -> 下一章
-      else if (e.key === 'ArrowRight' && nextChapter) {
-        goToChapter(nextChapter.id);
+      else if (e.key === 'ArrowRight' && nextChapterId) {
+        goToChapter(nextChapterId);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [prevChapter, nextChapter, goToChapter]);
+  }, [prevChapterId, nextChapterId, goToChapter]);
   
   // ... 下面是 const fontFamilyValue = ...
 
@@ -851,8 +877,8 @@ if (loading) return (
 {/* 底部翻页按钮 */}
           <div className="mt-16 flex items-center justify-between gap-4">
             <button 
-              disabled={!prevChapter || isNavigating} // 👈 加上 isNavigating
-              onClick={(e) => { e.stopPropagation(); prevChapter && goToChapter(prevChapter.id); }}
+              disabled={!prevChapterId || isNavigating}
+              onClick={(e) => { e.stopPropagation(); if (prevChapterId) goToChapter(prevChapterId); }}
               className="flex-1 py-3 rounded-xl border text-lg font-bold shadow-sm active:scale-95 transition-all disabled:opacity-30 disabled:active:scale-100 hover:bg-black/5"
               style={{ borderColor: activeTheme.line }}
             >
@@ -860,8 +886,8 @@ if (loading) return (
             </button>
             
             <button 
-              disabled={!nextChapter || isNavigating} // 👈 加上 isNavigating
-              onClick={(e) => { e.stopPropagation(); nextChapter && goToChapter(nextChapter.id); }}
+              disabled={!nextChapterId || isNavigating}
+              onClick={(e) => { e.stopPropagation(); if (nextChapterId) goToChapter(nextChapterId); }}
               className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-md shadow-blue-200 active:scale-95 transition-all disabled:opacity-50 disabled:bg-gray-400 disabled:shadow-none disabled:active:scale-100 flex items-center justify-center gap-2"
             >
               {/* 👇 动态显示文字 */}
@@ -871,7 +897,7 @@ if (loading) return (
                    加载中...
                  </>
               ) : (
-                 nextChapter ? '下一章' : '已是最新'
+                 nextChapterId ? '下一章' : '已是最新'
               )}
             </button>
           </div>
@@ -938,7 +964,7 @@ if (loading) return (
             <div className="px-5 py-4 border-b flex justify-between items-center shrink-0 bg-black/5" style={{ borderColor: activeTheme.line }}>
               <div className="flex items-baseline gap-2">
                  <h2 className="text-lg font-bold">目录</h2>
-                 <span className="text-xs opacity-50">共 {allChapters.length} 章</span>
+                 <span className="text-xs opacity-50">共 {catalogTotal ?? allChapters.length} 章</span>
               </div>
               <div className="flex gap-2">
                 <button 
@@ -955,6 +981,9 @@ if (loading) return (
             
             {/* List */}
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+              {catalogLoading && <p role="status" className="mb-3 text-sm opacity-60">{allChapters.length ? `已加载 ${allChapters.length} 章，继续加载中…` : '加载目录…'}</p>}
+              {catalogError && <p role="alert" className="mb-3 text-sm text-red-600">{catalogError} <button onClick={() => { setCatalogLoading(true); setCatalogError(''); setCatalogRetry(value => value + 1); }} className="underline">重试</button></p>}
+              {!catalogLoading && !catalogError && !allChapters.length && <p className="text-sm opacity-60">暂无章节</p>}
               <div className={`${isDesktop ? 'grid grid-cols-2 gap-x-12 gap-y-2' : 'flex flex-col gap-1'}`}>
                 {displayChapters.map(ch => {
                   const isActive = ch.id === chapter.id;
@@ -1244,18 +1273,8 @@ if (loading) return (
 }
 
 export default function ReaderPage({ initialBook = null, initialChapter = null }: { initialBook?: Book | null; initialChapter?: Chapter | null }) {
-  // 1. 获取当前 URL 参数
   const params = useParams();
-  
-  // 2. 生成一个唯一的 Key
-  // 只要 chapterId 变了，Key 就变了，React 就会强制销毁并重建组件
+  // Reset chapter presentation while the versioned catalog survives in its cache.
   const componentKey = params?.chapterId ? String(params.chapterId) : 'default';
-
-  return (
-    <>
-      {/* 🔥 核心修改：加上 key 属性 */}
-      {/* 这样每次切章节，组件都会“重生”，直接从缓存读取新数据，彻底根除闪烁！ */}
-      <ReaderContent key={componentKey} initialBook={initialBook} initialChapter={initialChapter} />
-    </>
-  );
+  return <ReaderContent key={componentKey} initialBook={initialBook} initialChapter={initialChapter} />;
 }

@@ -48,12 +48,17 @@ export function readingRoutes(app,auth) {
     const books=await Book.find({deletedAt:null}).select('_id updatedAt').sort({_id:1}).skip((page-1)*100).limit(100).lean();res.json(books);
   }));
   app.get('/api/books/:bookId/chapters',asyncRoute(async(req,res)=>{
-    if(!await Book.exists({_id:req.params.bookId,deletedAt:null}))fail(404,'作品不可用');
     const limit=integer(req.query.limit,100,200),page=integer(req.query.page,1,100000);
     const filter={bookId:req.params.bookId,deletedAt:null};
-    // (bookId, chapter_number) is unique: no extra _id sort that forces a full catalog sort.
-    const chapters=await Chapter.find(filter).select('title chapter_number published_at bookId word_count').sort({chapter_number:req.query.order==='desc'?-1:1}).skip((page-1)*limit).limit(limit).maxTimeMS(3000).lean();
-    res.set('X-Total-Count',String(await Chapter.countDocuments(filter)));res.json(chapters.map(formatted));
+    // Fetch bounded metadata in one batch; independent reads share one network wait.
+    // (bookId, chapter_number) is unique, so no extra in-memory _id sort is needed.
+    const [book,chapters,total]=await Promise.all([
+      Book.exists({_id:req.params.bookId,deletedAt:null}).maxTimeMS(3000),
+      Chapter.find(filter).select('title chapter_number published_at bookId word_count').sort({chapter_number:req.query.order==='desc'?-1:1}).skip((page-1)*limit).limit(limit).setOptions({batchSize:limit,singleBatch:true}).maxTimeMS(3000).lean(),
+      Chapter.countDocuments(filter).maxTimeMS(3000),
+    ]);
+    if(!book)fail(404,'作品不可用');
+    res.set('X-Total-Count',String(total));res.json(chapters.map(formatted));
   }));
   app.post('/api/books/:id/views',rateLimit({windowMs:60000,limit:30,message:{error:'阅读上报过于频繁'}}),asyncRoute(async(req,res)=>{
     const chapter=await Chapter.findOne({_id:req.body.chapterId,bookId:req.params.id,deletedAt:null});

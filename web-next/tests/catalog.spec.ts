@@ -1,0 +1,112 @@
+import {test, expect} from '@playwright/test';
+import mongoose from 'mongoose';
+
+const base='http://127.0.0.1:3000';
+const bookId=new mongoose.Types.ObjectId();
+const chapterIds=Array.from({length:1238},()=>new mongoose.Types.ObjectId());
+let database: mongoose.Connection;
+
+test.beforeAll(async()=>{
+  database=await mongoose.createConnection('mongodb://127.0.0.1:27028/test1_dev?replicaSet=testset',{serverSelectionTimeoutMS:5000}).asPromise();
+  // Only add fixtures to the synthetic server/dev.js database.
+  const seed=await database.collection('books').findOne({_id:new mongoose.Types.ObjectId('000000000000000000000101')});
+  if(seed?.title!=='隔离测试：山海行记')throw Error('Synthetic development fixture required');
+  await database.collection('books').insertOne({_id:bookId,title:'目录性能测试',description:'本地合成目录',author:'隔离作者',deletedAt:null,writeVersion:0});
+  await database.collection('chapters').insertMany(chapterIds.map((_id,index)=>({_id,bookId,title:`第${index+1}章 目录验证`,chapter_number:index+1,word_count:30,content:'目录回归的合成正文。',deletedAt:null,published_at:new Date()})));
+});
+test.afterAll(async()=>{
+  if(database){
+    await database.collection('chapters').deleteMany({bookId});
+    await database.collection('books').deleteOne({_id:bookId});
+    await database.close();
+  }
+});
+test.beforeEach(async({page})=>{
+  await page.route('**/*',route=>['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname)?route.continue():route.abort());
+});
+
+test('detail retains its server-rendered catalog during slow remaining pages and session refresh',async({page})=>{
+  const requested:number[]=[];
+  let release!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  await page.route(`**/api/books/${bookId}/chapters*`,async route=>{
+    const pageNumber=Number(new URL(route.request().url()).searchParams.get('page'));
+    requested.push(pageNumber);
+    if(pageNumber>1)await gate;
+    await route.continue();
+  });
+  await page.route('**/api/auth/session',async route=>{
+    await new Promise(resolve=>setTimeout(resolve,500));
+    await route.fulfill({json:{user:{id:'000000000000000000000001',username:'隔离作者',role:'reader'},profile:{id:'000000000000000000000001',username:'隔离作者'}}});
+  });
+  try{
+    await page.goto(`${base}/book/${bookId}`);
+    await expect(page.getByRole('link',{name:'第200章 目录验证',exact:true})).toBeVisible();
+    await expect(page.getByRole('status')).toContainText('200 / 1238');
+    await expect.poll(()=>requested.length).toBe(3);
+    expect(requested).toEqual([2,3,4]);
+    await page.getByRole('button',{name:'查看完整目录 (1238章)'}).click();
+    await expect(page.getByRole('heading',{name:'全部目录'})).toBeVisible();
+    release();
+    await expect(page.getByRole('link',{name:'第1238章 目录验证',exact:true}).first()).toBeVisible();
+    await expect(page.getByRole('status')).toHaveCount(0);
+    expect(requested.slice().sort((a,b)=>a-b)).toEqual([2,3,4,5,6,7]);
+  }finally{release();}
+});
+
+test('reader shows the first batch, surfaces errors, retries, and keeps its catalog across chapter changes',async({page})=>{
+  const requested:number[]=[];
+  let fail=true;
+  await page.route(`**/api/books/${bookId}/chapters*`,async route=>{
+    const pageNumber=Number(new URL(route.request().url()).searchParams.get('page'));
+    requested.push(pageNumber);
+    if(fail&&pageNumber>1){await route.fulfill({status:503,json:{error:'controlled catalog failure'}});return;}
+    await route.continue();
+  });
+  await page.goto(`${base}/book/${bookId}/${chapterIds[0]}`);
+  await page.getByRole('button',{name:'目录',exact:true}).click();
+  await expect(page.getByRole('button',{name:'第1章 目录验证',exact:true})).toBeVisible();
+  await expect(page.getByRole('alert').filter({hasText:'目录暂不可用'})).toBeVisible();
+  fail=false;
+  await page.getByRole('button',{name:'重试',exact:true}).click();
+  await expect(page.getByRole('button',{name:'第1238章 目录验证',exact:true})).toBeAttached();
+  await expect(page.getByRole('status')).toHaveCount(0);
+  const requestsAfterLoad=requested.length;
+  await page.getByRole('button',{name:'第1章 目录验证',exact:true}).click();
+  await page.getByRole('button',{name:'下一章',exact:true}).click();
+  await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[1]}`);
+  await expect(page.getByRole('heading',{name:'第2章 目录验证',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'目录',exact:true}).click();
+  await expect(page.getByRole('button',{name:'第1238章 目录验证',exact:true})).toBeAttached();
+  expect(requested.length).toBe(requestsAfterLoad);
+  // A publication changes writeVersion, so a subsequent chapter must refresh.
+  const addedId=new mongoose.Types.ObjectId();
+  await database.collection('chapters').insertOne({_id:addedId,bookId,title:'第1239章 新章节',chapter_number:1239,content:'合成新章节',deletedAt:null});
+  await database.collection('books').updateOne({_id:bookId},{$inc:{writeVersion:1}});
+  try{
+    await page.getByRole('button',{name:'第3章 目录验证',exact:true}).click();
+    await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[2]}`);
+    await page.getByRole('button',{name:'目录',exact:true}).click();
+    await expect(page.getByRole('button',{name:'第1239章 新章节',exact:true})).toBeAttached();
+    expect(requested.length).toBeGreaterThan(requestsAfterLoad);
+  }finally{
+    await database.collection('chapters').deleteOne({_id:addedId});
+    await database.collection('books').updateOne({_id:bookId},{$inc:{writeVersion:1}});
+  }
+});
+
+test('a deep chapter never navigates to chapter one while later catalog pages are pending',async({page})=>{
+  let release!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  await page.route(`**/api/books/${bookId}/chapters*`,async route=>{
+    if(Number(new URL(route.request().url()).searchParams.get('page'))>1)await gate;
+    await route.continue();
+  });
+  try{
+    await page.goto(`${base}/book/${bookId}/${chapterIds[999]}`);
+    await expect(page.getByRole('button',{name:'下一章',exact:true})).toBeEnabled();
+    await page.getByRole('button',{name:'下一章',exact:true}).click();
+    await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[1000]}`);
+    await expect(page.getByRole('heading',{name:'第1001章 目录验证',exact:true})).toBeVisible();
+  }finally{release();}
+});
