@@ -1,4 +1,5 @@
 'use client';
+import MobileHome from './MobileHome';
 import type {LucideIcon} from 'lucide-react';
 
 
@@ -15,6 +16,7 @@ import type { Book } from '@/lib/api';
 
 type HomePageClientProps = {
   initialBooks: Book[];
+  initialNewBooks?: Book[];
   initialFeaturedBooks?: Book[];
   initialWeekRankBooks?: Book[];
   initialDayRankBooks?: Book[];
@@ -221,6 +223,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
 
 export default function HomePageClient({
   initialBooks,
+  initialNewBooks = [],
   initialFeaturedBooks = [],
   initialWeekRankBooks = [],
   initialDayRankBooks = [],
@@ -373,7 +376,9 @@ export default function HomePageClient({
   }, [allBooks, initialWeekRankBooks, initialDayRankBooks, initialRecommendedBooks]);
 
     return (
-      <div className="min-h-screen bg-[#f8f9fa] pb-12">
+      <>
+      <MobileHome featured={featuredBooks} recommended={initialRecommendedBooks} newBooks={initialNewBooks}/>
+      <div className="hidden md:block min-h-screen bg-[#f8f9fa] pb-12">
 
         <h1 className="sr-only absolute w-px h-px p-0 -m-px overflow-hidden clip-rect-0 whitespace-nowrap border-0">
         九天小说站 - 您的免费在线小说图书馆
@@ -739,5 +744,6 @@ export default function HomePageClient({
 
         </div>
       </div>
+      </>
     );
 }
