@@ -1,6 +1,7 @@
 'use client';
 
 import {useEffect,useState} from 'react';
+import Image from 'next/image';
 import Link from './PrefetchLink';
 import BookLink from './BookLink';
 import {useRouter} from 'next/navigation';
@@ -45,7 +46,10 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
   function browse(next:'category'|'new'){setMode(next);setPage(1);window.scrollTo({top:0,behavior:'smooth'});}
   return <div className="mobile-home md:hidden">
     <h1 className="sr-only">九天小说 · 精选</h1>
-    <form className="mh-search" role="search" onSubmit={event=>{event.preventDefault();if(query.trim())router.push(`/search?q=${encodeURIComponent(query.trim())}`);}}><Search size={21}/><input aria-label="搜索书名或作者" placeholder="搜索书名、作者，发现好故事" value={query} onChange={event=>setQuery(event.target.value)}/>{query&&<button type="submit">搜索</button>}</form>
+    <header className="mh-topbar">
+      <Link href="/" className="mh-logo" aria-label="九天小说首页" onClick={()=>setMode('home')}><Image src="/icon.png" alt="九天小说" width={40} height={40} sizes="40px" priority/></Link>
+      <form className="mh-search" role="search" onSubmit={event=>{event.preventDefault();if(query.trim())router.push(`/search?q=${encodeURIComponent(query.trim())}`);}}><Search size={19}/><input aria-label="搜索书名或作者" placeholder="搜索书名、作者" value={query} onChange={event=>setQuery(event.target.value)}/>{query&&<button type="submit">搜索</button>}</form>
+    </header>
     {mode==='home'?<>
       {hero&&<BookLink href={`/book/${hero.id}`} className="mh-banner"><div><span className="mh-kicker">九天精选 · 好书推荐</span><h2>{hero.title}</h2><span className="mh-banner-sub">{hero.author||'九天小说'} <ChevronRight size={13}/></span></div><Cover book={hero}/><div className="mh-banner-seal" aria-hidden="true">阅</div></BookLink>}
       <nav className="mh-shortcuts" aria-label="找书入口"><button onClick={()=>browse('category')}><span className="mh-icon coral"><LayoutGrid/></span>分类</button><Link href="/ranking"><span className="mh-icon purple"><Trophy/></span>排行</Link><button onClick={()=>browse('new')}><span className="mh-icon rose"><CalendarDays/></span>新书</button></nav>

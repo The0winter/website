@@ -87,7 +87,10 @@ function onPopState(event: PopStateEvent) {
   if (from.kind === 'detail' && forward && target?.catalog) {
     event.stopImmediatePropagation(); current = target; notify(); return;
   }
-  if (from.kind === 'home' && !forward) return;
+  if (from.kind === 'home' && !forward) {
+    if (pending) { cancelBookTransition(); pending = undefined; }
+    return;
+  }
   event.stopImmediatePropagation();
   const destination = forward && target ? target : from.kind === 'reader'
     ? entryFor({kind: 'detail', href: `/book/${from.bookId}`, bookId: from.bookId}, from.flow)
@@ -113,6 +116,9 @@ export function navigateBookLink(href: string) {
   if (document.documentElement.dataset.bookTransition) return true;
   if (current.kind === 'reader' && target.kind === 'detail' && current.bookId === target.bookId || current.kind === 'detail' && target.kind === 'home') {
     window.history.back(); return true;
+  }
+  if (current.kind === 'home' && target.kind === 'detail') {
+    navigate(entryFor(target, current.flow), 'enter', false); return true;
   }
   if (current.kind === 'detail' && target.kind === 'reader' && current.bookId === target.bookId) {
     navigate(entryFor(target, current.flow), 'enter', Boolean(current.catalog)); return true;

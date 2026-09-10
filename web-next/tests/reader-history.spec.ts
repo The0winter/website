@@ -18,6 +18,7 @@ async function expectDetails(page: Page) {
   await expect(page).toHaveURL(detail);
   await expect(page.locator('.book-detail')).toBeVisible();
   await expect(root(page)).toHaveCount(0);
+  await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
 }
 
 test('direct entry, chapter changes, reload and forward all keep Back pointed at details', async ({page}) => {
@@ -48,6 +49,7 @@ test('entering from details and using the return button does not create a back l
   const entries = await page.evaluate(() => history.length);
   await page.getByRole('link', {name: '立即阅读', exact: true}).click();
   await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
+  await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
   expect(await page.evaluate(() => history.length)).toBe(entries + 1);
   await page.keyboard.press('Control+ArrowRight');
   await expect(page).toHaveURL(`${detail}/${second}`);

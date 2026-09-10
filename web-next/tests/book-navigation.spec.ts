@@ -14,6 +14,53 @@ test.beforeEach(async ({page}) => {
   await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
 });
 
+for (const width of [390, 1440]) {
+  test(`home entry slides in after details are ready and keeps reader → details → home at ${width}px`, async ({page}) => {
+    await page.setViewportSize({width, height: 844});
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}});
+      const original = Element.prototype.animate;
+      const animations: unknown[] = [];
+      (window as Window & {bookAnimations?: unknown[]}).bookAnimations = animations;
+      Element.prototype.animate = function(keyframes, options) {
+        if (this.classList.contains('book-transition-snapshot')) animations.push({
+          path: location.pathname,
+          direction: document.documentElement.dataset.bookTransition,
+          keyframes,
+          detailReady: Boolean(document.querySelector('.book-detail')?.getBoundingClientRect().width),
+        });
+        return original.call(this, keyframes, options);
+      };
+    });
+    await page.goto(base); await idle(page);
+    const length = await page.evaluate(() => history.length);
+    let requested = false;
+    await page.route(`**/book/${book}?_rsc=*`, async route => {
+      requested = true;
+      await new Promise(resolve => setTimeout(resolve, 650));
+      await route.continue();
+    });
+    await page.locator(width < 768 ? '.mobile-home' : '.desktop-home').locator(`a[href="/book/${book}"]:visible`).first().click();
+    await expect.poll(() => requested).toBe(true);
+    await expect(page.locator('html')).toHaveAttribute('data-book-transition-phase', 'loading');
+    await expect(page.locator('.book-transition-snapshot')).toHaveCount(1);
+    await details(page);
+    expect(await page.evaluate(() => history.length)).toBe(length + 1);
+    expect(await page.evaluate(() => (window as Window & {bookAnimations?: unknown[]}).bookAnimations)).toEqual([{
+      path: `/book/${book}`, direction: 'enter', detailReady: true,
+      keyframes: [{transform: 'translateX(100%)'}, {transform: 'translateX(0)'}],
+    }]);
+    await page.getByRole('link', {name: width < 768 ? '立即阅读' : '开始阅读', exact: true}).click(); await ready(page);
+    await page.goBack(); await details(page);
+    await page.goBack(); await expect(page).toHaveURL(`${base}/`); await idle(page);
+    await expect(page.locator(width < 768 ? '.mobile-home' : '.desktop-home')).toBeVisible();
+    await expect(page.locator('.book-transition-snapshot')).toHaveCount(0);
+    await page.goForward(); await details(page);
+    await page.goBack(); await expect(page).toHaveURL(`${base}/`); await idle(page);
+    expect(await page.evaluate(() => history.length)).toBe(length + 2);
+  });
+}
+
 for (const origin of ['direct details', 'search', 'direct reader', 'legacy reader']) {
   test(`${origin}: Back always follows reader, details, home without re-entering a chapter`, async ({page}) => {
     if (origin === 'search') await page.goto(`${base}/search`);
@@ -38,6 +85,25 @@ for (const origin of ['direct details', 'search', 'direct reader', 'legacy reade
     await page.goBack(); await home(page);
   });
 }
+
+test('Back cancels a slow home-to-detail animation when returning to another page', async ({page}) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}}));
+  await page.goto(`${base}/search`);
+  await page.locator('[data-site-chrome] a[href="/"]:visible').click(); await home(page);
+  let requested = false;
+  await page.route(`**/book/${book}?_rsc=*`, async route => {
+    requested = true;
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    await route.continue();
+  });
+  await page.locator(`.mobile-home a[href="/book/${book}"]`).first().click();
+  await expect.poll(() => requested).toBe(true);
+  await expect(page.locator('html')).toHaveAttribute('data-book-transition-phase', 'loading');
+  await page.goBack(); await expect(page).toHaveURL(`${base}/search`); await idle(page);
+  await expect(page.locator('.book-transition-snapshot')).toHaveCount(0);
+  await page.waitForTimeout(1400);
+  await expect(page).toHaveURL(`${base}/search`);
+});
 
 test('reader entry and exit animate in opposite directions after the target is ready', async ({page}) => {
   await page.addInitScript(() => {

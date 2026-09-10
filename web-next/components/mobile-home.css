@@ -1,10 +1,14 @@
 @media (max-width:767px) {
   body:has(.mobile-home) [data-site-chrome] { display:none; }
   .mobile-home { min-height:100vh; padding:18px 12px calc(88px + env(safe-area-inset-bottom)); background:#f4ece6; color:#2c2925; font-family:Arial,"Microsoft YaHei",sans-serif; }
-  .mh-search { display:flex; align-items:center; gap:9px; background:#fffaf7; border-radius:28px; padding:0 15px; height:44px; margin-bottom:18px; color:#b8b0a8; }
+  .mh-topbar { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .mh-logo { display:flex; align-items:center; justify-content:center; flex:0 0 44px; height:44px; border-radius:6px; }
+  .mh-logo img { width:40px; height:40px; object-fit:contain; }
+  .mh-search { display:flex; align-items:center; flex:1; min-width:0; gap:8px; background:#fffaf7; border-radius:28px; padding:0 13px; height:44px; color:#b8b0a8; }
+  .mh-search>svg,.mh-search button { flex-shrink:0; }
   .mh-search input { min-width:0; flex:1; font-size:14px; color:#433a33; outline:0; }
   .mh-search input::placeholder { color:#b1a9a1; }
-  .mh-search button { color:#ce3b42; font-size:13px; }
+  .mh-search button { color:#ce3b42; font-size:13px; min-height:44px; }
   .mh-banner { position:relative; isolation:isolate; display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:144px; padding:20px; overflow:hidden; border-radius:15px; color:#ffebc5; background:radial-gradient(ellipse at 65% 120%,#af7548 0,transparent 65%),linear-gradient(115deg,#302c27,#6e5940); }
   .mh-banner::before,.mh-banner::after { content:''; position:absolute; z-index:-1; width:250px; height:250px; border:1px solid #e4bd7826; border-radius:50%; right:-75px; top:-125px; }
   .mh-banner::after { width:300px; height:300px; right:-90px; top:-140px; }
@@ -14,10 +18,10 @@
   .mh-banner-sub { display:flex; align-items:center; gap:4px; font-size:11px; color:#dbc7a8; }
   .mh-banner .mh-cover { width:68px; height:94px; transform:rotate(7deg); border:1px solid #dbc09566; box-shadow:6px 9px 12px #201b1b66; background:#c7b38f; color:#66533c; }
   .mh-banner-seal { position:absolute; right:99px; bottom:18px; font:14px SimSun,serif; border:1px solid #c56448; color:#d68a62; padding:2px; opacity:.65; }
-  .mh-shortcuts { display:grid; grid-template-columns:repeat(3,1fr); background:#fbf5ef; border-radius:15px; margin:10px 0; padding:18px 10px 16px; }
-  .mh-shortcuts>a,.mh-shortcuts>button { display:flex; flex-direction:column; align-items:center; gap:8px; font-size:13px; color:#5e554d; }
-  .mh-icon { display:flex; align-items:center; justify-content:center; width:39px; height:39px; border-radius:12px; color:white; box-shadow:0 4px 9px #b672691c,inset 0 1px 2px #fff9; }
-  .mh-icon svg { width:24px; height:24px; stroke-width:1.8; }
+  .mh-shortcuts { display:grid; grid-template-columns:repeat(3,1fr); background:#fbf5ef; border-radius:15px; margin:10px 0; padding:11px 10px 10px; }
+  .mh-shortcuts>a,.mh-shortcuts>button { display:flex; flex-direction:column; align-items:center; gap:5px; min-height:44px; font-size:12px; color:#5e554d; }
+  .mh-icon { display:flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:10px; color:white; box-shadow:0 3px 7px #b672691c,inset 0 1px 2px #fff9; }
+  .mh-icon svg { width:20px; height:20px; stroke-width:1.8; }
   .mh-icon.coral { background:linear-gradient(135deg,#f6ad8f,#e96673); }
   .mh-icon.purple { background:linear-gradient(135deg,#c7a1f3,#9170d4); }
   .mh-icon.rose { background:linear-gradient(135deg,#ffa6a6,#ed6977); }

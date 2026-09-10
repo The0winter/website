@@ -113,6 +113,13 @@ const formatChapterTitle = (title: string, chapterNumber: number) => {
   return `第${chapterNumber}章 ${cleanTitle}`;
 };
 
+const coverTones = ['sage', 'slate', 'mauve', 'clay', 'olive'] as const;
+function coverTone(bookId: string) {
+  // Keep each book's palette consistent across navigation, reloads and SSR.
+  const hash = Array.from(bookId).reduce((value, character) => (value * 31 + character.charCodeAt(0)) >>> 0, 0);
+  return coverTones[hash % coverTones.length];
+}
+
 export default function BookDetailClient({ initialBookData, initialCatalog, initialFirstChapterId }: BookDetailClientProps) {
   const { user } = useAuth(); 
   const router = useRouter();
@@ -362,7 +369,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
       <div className="book-layout max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 md:py-8 flex flex-col gap-3 md:gap-6">
         
         {/* === 第一部分：书籍核心信息 === */}
-        <div className="book-hero bg-white rounded-lg shadow-sm p-4 md:p-8 order-1">
+        <div className="book-hero bg-white rounded-lg shadow-sm p-4 md:p-8 order-1" data-cover-tone={coverTone(book.id)}>
             <div className="flex flex-row gap-4 md:gap-8">
               {/* 左侧封面 */}
               <div className="flex-shrink-0">
