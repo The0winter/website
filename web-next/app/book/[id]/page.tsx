@@ -1,5 +1,6 @@
 import { safeFetch as fetch, type CatalogPage } from '@/lib/request';
 import type { Metadata } from 'next';
+import { cache } from 'react';
 import { notFound } from 'next/navigation';
 import BookDetailClient from '@/components/BookDetailClient';
 import type { Book, Chapter } from '@/lib/api';
@@ -26,7 +27,7 @@ function normalizeCoverImage(coverImage?: string): string {
   return `${PUBLIC_IMAGE_HOST}${coverImage.startsWith('/') ? '' : '/'}${coverImage}`;
 }
 
-async function getBook(id: string): Promise<Book | null> {
+const getBook = cache(async (id: string): Promise<Book | null> => {
   try {
     const baseUrl = getApiBaseUrl(); // 动态获取：服务端走内网，客户端走公网
     const res = await fetch(`${baseUrl}/books/${id}`, { 
@@ -48,9 +49,9 @@ async function getBook(id: string): Promise<Book | null> {
   } catch (error) {
     throw error;
   }
-}
+});
 
-async function getChapters(id: string, order: 'asc' | 'desc' = 'desc', limit = 200): Promise<CatalogPage<Chapter> | undefined> {
+async function getChapters(id: string, order: 'asc' | 'desc' = 'desc', limit = 30): Promise<CatalogPage<Chapter> | undefined> {
   try {
     const baseUrl = getApiBaseUrl(); // 动态获取：服务端走内网，客户端走公网
     const res = await fetch(`${baseUrl}/books/${id}/chapters?order=${order}&page=1&limit=${limit}`, {
@@ -59,7 +60,7 @@ async function getChapters(id: string, order: 'asc' | 'desc' = 'desc', limit = 2
     if (!res.ok) return undefined;
     const header = res.headers.get('X-Total-Count');
     const count = header === null ? NaN : Number(header);
-    return { rows: await res.json(), total: Number.isSafeInteger(count) && count >= 0 ? count : null };
+    return { rows: await res.json(), total: Number.isSafeInteger(count) && count >= 0 ? count : null, pageSize: limit };
   } catch (error) {
     console.error('首批目录读取失败', error);
     return undefined;
@@ -128,7 +129,7 @@ export default async function BookDetailPage({ params }: Props) {
     notFound();
   }
 
-  // Keep the exact first page for pagination, including legitimately repeated titles.
+  // Render only the visible preview; the client fills the complete catalog in the background.
   const chapters = catalog?.rows ?? [];
   // Format once on the server so hydration cannot change the date's locale or timezone.
   const updatedAt = new Date(book.lastUpdated ?? '');

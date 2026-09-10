@@ -1,7 +1,7 @@
 import {test, expect} from '@playwright/test';
 import mongoose from 'mongoose';
 
-const base='http://127.0.0.1:3000';
+const base=process.env.TEST_SITE_URL || 'http://127.0.0.1:3000';
 const bookId=new mongoose.Types.ObjectId();
 const chapterIds=Array.from({length:1238},()=>new mongoose.Types.ObjectId());
 let database: mongoose.Connection;
@@ -86,8 +86,8 @@ test('detail shows latest chapters first and keeps links stable while older page
     await expect(page.getByRole('link',{name:'开始阅读',exact:true}).filter({visible:true})).toHaveAttribute('href',`/book/${bookId}/${chapterIds[0]}`);
     await expect(page.getByRole('region',{name:'章节目录'})).toHaveAttribute('aria-busy','true');
     await expect(page.getByText(/已加载|继续加载中/)).toHaveCount(0);
-    await expect.poll(()=>requested.length).toBe(3);
-    expect(requested).toEqual([2,3,4]);
+    await expect.poll(()=>requested.length).toBe(4);
+    expect(requested).toEqual([1,2,3,4]);
     await page.getByRole('button',{name:'查看完整目录 (1238章)'}).click();
     await expect(page.getByRole('heading',{name:'全部目录'})).toBeVisible();
     await expect(page.getByText(/已加载|继续加载中/)).toHaveCount(0);
@@ -98,7 +98,7 @@ test('detail shows latest chapters first and keeps links stable while older page
     await expect(page.getByRole('region',{name:'章节目录'})).toHaveAttribute('aria-busy','false');
     expect(await latest.last().boundingBox()).toEqual(latestPosition);
     await expect(latest.first()).toHaveAttribute('href',`/book/${bookId}/${chapterIds[1237]}`);
-    expect(requested.slice().sort((a,b)=>a-b)).toEqual([2,3,4,5,6,7]);
+    expect(requested.slice().sort((a,b)=>a-b)).toEqual([1,2,3,4,5,6,7]);
     await page.unroute(`**/api/books/${bookId}/chapters*`);
     await latest.last().click();
     await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[1237]}`);
@@ -119,7 +119,7 @@ test('changing sort during loading starts from the matching end and ignores late
   try{
     await page.goto(`${base}/book/${bookId}`);
     await expect(page.getByRole('link',{name:'第1238章 目录验证',exact:true})).toBeVisible();
-    await expect.poll(()=>requested.length).toBe(3);
+    await expect.poll(()=>requested.length).toBe(4);
     await page.getByRole('button',{name:'倒序',exact:true}).click();
     await expect(page.getByRole('link',{name:'第1章 目录验证',exact:true})).toBeVisible();
     await expect(page.getByRole('region',{name:'章节目录'})).toHaveAttribute('aria-busy','false');
@@ -129,7 +129,7 @@ test('changing sort during loading starts from the matching end and ignores late
     await page.getByRole('button',{name:'正序',exact:true}).click();
     await expect(page.getByRole('link',{name:'第1238章 目录验证',exact:true})).toBeVisible();
     expect(requested.length).toBe(finishedRequests);
-    expect(requested.filter(item=>item.order==='desc').map(item=>item.page)).toEqual([2,3,4]);
+    expect(requested.filter(item=>item.order==='desc').map(item=>item.page)).toEqual([1,2,3,4]);
     await page.getByRole('link',{name:'开始阅读',exact:true}).filter({visible:true}).click();
     await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[0]}`);
   }finally{release();}

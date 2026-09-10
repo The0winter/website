@@ -54,6 +54,41 @@ test('catalog loading', async t => {
     for(const data of progress)assert.deepEqual(data.slice(0,30),Array.from({length:30},(_,i)=>1238-i));
   });
 
+  await t.test('a short SSR preview stays visible while full pages load without gaps or duplicates',async()=>{
+    const calls=[],progress=[];
+    let release;
+    const gate=new Promise(resolve=>{release=resolve;});
+    globalThis.fetch=async input=>{
+      const page=Number(new URL(String(input),'http://local').searchParams.get('page'));
+      calls.push(page);await gate;return response(page,1238);
+    };
+    const preview=Array.from({length:30},(_,i)=>i+1);
+    const pending=catalogPages('/preview',{initialPage:{rows:preview,total:1238,pageSize:30},onProgress:data=>progress.push([...data])});
+    await delay(10);
+    assert.deepEqual(progress,[preview]);assert.deepEqual(calls,[1]);
+    release();
+    assert.deepEqual(await pending,Array.from({length:1238},(_,i)=>i+1));
+    assert.deepEqual(calls,[1,2,3,4,5,6,7]);
+    for(const data of progress)assert.deepEqual(data.slice(0,30),preview);
+  });
+
+  await t.test('a complete preview needs no request, including empty books and the exact preview boundary',async()=>{
+    globalThis.fetch=async()=>{throw Error('Unexpected catalog request');};
+    for(const total of [0,12,30]){
+      const preview=Array.from({length:total},(_,i)=>i+1);
+      assert.deepEqual(await catalogPages('/complete-preview',{initialPage:{rows:preview,total,pageSize:30}}),preview);
+    }
+  });
+
+  await t.test('preview upgrades without a count still paginate and surface failed reads for retry',async()=>{
+    const preview=rows(1,30),progress=[];
+    globalThis.fetch=async()=>new Response('',{status:503});
+    await assert.rejects(catalogPages('/preview-error',{initialPage:{rows:preview,total:null,pageSize:30},onProgress:data=>progress.push(data)}),/目录暂不可用/);
+    assert.deepEqual(progress,[preview]);
+    globalThis.fetch=async input=>response(Number(new URL(String(input),'http://local').searchParams.get('page')),201,false);
+    assert.equal((await catalogPages('/preview-error',{initialPage:{rows:preview,total:null,pageSize:30}})).length,201);
+  });
+
   await t.test('cancelling a sort stops publishing or requesting further pages',async()=>{
     const controller=new AbortController(),calls=[],progress=[];
     let release;

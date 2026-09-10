@@ -6,6 +6,7 @@ import type {LucideIcon} from 'lucide-react';
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { safeFetch } from '@/lib/request';
 import Link from 'next/link';
+import BookLink from './BookLink';
 // 引入图标
 import { 
   BookOpen, TrendingUp, Star, Zap, ChevronRight,
@@ -64,7 +65,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                 <div className="flex flex-col items-center justify-center h-60 text-gray-400 text-sm">暂无数据</div>
             ) : (
                 books.map((book: Book, index: number) => (
-                    <Link 
+                    <BookLink
                         key={book.id} 
                         href={`/book/${book.id}`}
                         className="flex items-center gap-4 p-4 border-b border-gray-100 last:border-0 active:bg-gray-50"
@@ -102,7 +103,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                                 <ChevronRight className="w-5 h-5 text-gray-300" />
                             )}
                         </div>
-                    </Link>
+                    </BookLink>
                 ))
             )}
         </div>
@@ -118,7 +119,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
             <>
                 {/* === NO.1 === */}
                 {first && (
-                <Link 
+                <BookLink
                     href={`/book/${first.id}`}
                     className={`relative flex gap-5 p-5 border-b border-gray-100 bg-gradient-to-b ${bgTheme} group hover:bg-gray-50 transition-colors z-10`}
                 >
@@ -143,7 +144,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                             <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{first.category}</span>
                         </div>
                     </div>
-                </Link>
+                </BookLink>
                 )}
 
                 {/* === NO.2 & NO.3 === */}
@@ -154,7 +155,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                             const rank = i + 2;
                             const isSecond = rank === 2;
                             return (
-                                <Link 
+                                <BookLink
                                     key={book.id} 
                                     href={`/book/${book.id}`} 
                                     className={`group relative flex flex-col p-4 transition-all hover:bg-gray-50 ${isSecond ? 'border-r border-gray-100' : ''}`}
@@ -180,7 +181,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                                             </div>
                                         </div>
                                     </div>
-                                </Link>
+                                </BookLink>
                             );
                         })}
                     </div>
@@ -191,7 +192,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                     {others.map((book: Book, i: number) => {
                         const rank = i + 4;
                         return (
-                        <Link 
+                        <BookLink
                             key={book.id} 
                             href={`/book/${book.id}`}
                             className="flex items-center gap-3 p-2 rounded hover:bg-gray-50 transition-colors group"
@@ -207,7 +208,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                                 {/* 修改：作者移出，分类放在右侧保持平衡 */}
                                 <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded whitespace-nowrap">{book.category}</span>
                             </div>
-                        </Link>
+                        </BookLink>
                         );
                     })}
                 </div>
@@ -408,7 +409,7 @@ export default function HomePageClient({
                           style={{ transform: `translateX(-${activeBookIndex * 100}%)` }}
                       >
                           {sliderList.map((book, index) => (
-                              <Link 
+                              <BookLink eager
                                   key={`${book.id}-${index}`} 
                                   href={`/book/${book.id}`} 
                                   className="min-w-full h-full relative block"
@@ -444,7 +445,7 @@ export default function HomePageClient({
                                         </div>
                                       </div>
                                   </div>
-                              </Link>
+                              </BookLink>
                           ))}
                       </div>
 
@@ -698,7 +699,7 @@ export default function HomePageClient({
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
                   {categoryBooks.length > 0 ? (
                     categoryBooks.map((book: Book) => (
-                      <Link 
+                      <BookLink
                         key={book.id}
                         href={`/book/${book.id}`}
                         className="group flex flex-col gap-3"
@@ -730,7 +731,7 @@ export default function HomePageClient({
                         <span>{(book.views||0) > 10000 ? `${((book.views || 0)/10000).toFixed(1)}万` : book.views}热度</span>
                         </div>
                         </div>
-                      </Link>
+                      </BookLink>
                     ))
                   ) : (
                     <div className="col-span-full py-20 flex flex-col items-center justify-center text-gray-400">

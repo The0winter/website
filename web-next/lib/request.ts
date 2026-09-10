@@ -19,6 +19,8 @@ export async function safeFetch(input: RequestInfo | URL, init?: RequestInit): P
 export interface CatalogPage<T> {
   rows: T[];
   total: number | null;
+  // A small server-rendered preview may use a different size from background pages.
+  pageSize?: number;
 }
 
 export interface CatalogOptions<T> {
@@ -53,7 +55,15 @@ function readCatalogPage<T>(url: string, page: number): Promise<CatalogPage<T>> 
 
 export async function catalogPages<T>(url: string, options: CatalogOptions<T> = {}): Promise<T[]> {
   options.signal?.throwIfAborted();
-  const first = options.initialPage ?? await readCatalogPage<T>(url, 1);
+  let first = options.initialPage;
+  if (first && first.pageSize && first.pageSize !== catalogPageSize) {
+    options.onProgress?.(first.rows, first.total);
+    if (first.rows.length < first.pageSize || (first.total !== null && first.rows.length >= first.total)) return first.rows;
+    // Page numbers use the 200-row background size. Restart at page one so the
+    // shorter preview never causes skipped chapters or an incomplete catalog.
+    first = undefined;
+  }
+  first ??= await readCatalogPage<T>(url, 1);
   options.signal?.throwIfAborted();
   const pages: T[][] = [first.rows];
   let result = [...first.rows];
