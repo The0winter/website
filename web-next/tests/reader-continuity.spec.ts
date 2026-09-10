@@ -68,13 +68,17 @@ test('the whole sheet follows touch across cached chapters in both directions wi
     const mark=requests.length;
     await touch('touchStart',310,12);await touch('touchMove',220,12);await touch('touchMove',150,12);
     await expect(root.locator('.reader-page-preview h1')).toHaveText('第3章 山林远行');
+    await expect.poll(async()=>{
+      const sheet=(await root.locator('.reader-page-window > .reader-page-surface').boundingBox())!,frame=(await root.locator('.reader-frame').boundingBox())!;
+      return sheet.x-frame.x;
+    }).toBeLessThan(-100);
     const sheet=(await root.locator('.reader-page-window > .reader-page-surface').boundingBox())!,frame=(await root.locator('.reader-frame').boundingBox())!;
     expect(sheet.y).toBe(frame.y);expect(sheet.height).toBe(frame.height);expect(sheet.x).toBeLessThan(frame.x-100);
     await touch('touchEnd');await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[2]}`);await expect(number).toHaveText(/^1\//);
     await touch('touchStart',65,12);await touch('touchMove',170,12);await touch('touchMove',320,12);await touch('touchEnd');
     await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[1]}`);await expect(number).toHaveText(/^(\d+)\/\1$/);
     expect(requests.slice(mark).filter(url=>url.includes('_rsc') || /\/api\/chapters\/[^/?]+\?navigation/.test(url))).toEqual([]);
-    await page.goBack();await expect(root).toHaveAttribute('data-reader-chapter',chapterIds[2]);await expect(number).toHaveText(/^1\//);
+    await page.goBack();await expect(page).toHaveURL(`${base}/book/${bookId}`);await expect(page.locator('.book-detail')).toBeVisible();
     await page.goForward();await expect(root).toHaveAttribute('data-reader-chapter',chapterIds[1]);await expect(number).toHaveText(/^(\d+)\/\1$/);
     expect(errors).toEqual([]);
   }finally{await context.close();}

@@ -16,11 +16,15 @@ function PendingFeedback({ label }: { label: string }) {
   return <span role="status" className="fixed inset-x-0 top-0 z-[100] h-1 bg-blue-500 motion-safe:animate-pulse pointer-events-none"><span className="sr-only">{label}</span></span>;
 }
 
-export default function PrefetchLink({ children, href, prefetchMode = 'visible', pendingLabel = '正在打开页面…', onMouseEnter, onMouseLeave, onFocus, onTouchStart, onBlur, ...props }: Props) {
+export default function PrefetchLink({ children, href, prefetchMode = 'visible', pendingLabel = '正在打开页面…', onMouseEnter, onMouseLeave, onFocus, onTouchStart, onBlur, onNavigate, ...props }: Props) {
   const anchor = useRef<HTMLAnchorElement>(null);
   const [visible, setVisible] = useState(false);
   const [intent, setIntent] = useState(false);
   const pathname = usePathname();
+  // The reader inserts its own return entry. Reuse the detail entry when
+  // entering from there so exiting the reader never leaves duplicate details.
+  const enteringReader = typeof href === 'string' && /^\/book\/[^/]+$/.test(pathname) && href.startsWith(`${pathname}/`);
+  const readerBook = /^\/book\/([^/]+)\/[^/]+$/.exec(pathname)?.[1];
   const policy = useSyncExternalStore(subscribePrefetchPolicy, currentPrefetchPolicy, serverPrefetchPolicy);
   useEffect(() => {
     if (!anchor.current) return;
@@ -34,9 +38,18 @@ export default function PrefetchLink({ children, href, prefetchMode = 'visible',
   const prefetch = canPrefetchHref(href, pathname) && shouldPrefetchBook(policy, visible, intent, prefetchMode);
   return <Link
     {...props}
+    replace={props.replace ?? enteringReader}
     href={href}
     ref={anchor}
     prefetch={prefetch}
+    onNavigate={event => {
+      let cancelled = false;
+      onNavigate?.({preventDefault() { cancelled = true; event.preventDefault(); }});
+      if (!cancelled && readerBook && href === `/book/${readerBook}` && window.history.state?.readerBook === readerBook) {
+        event.preventDefault();
+        window.history.back();
+      }
+    }}
     onMouseEnter={event => { setIntent(true); onMouseEnter?.(event); }}
     onMouseLeave={event => { setIntent(false); onMouseLeave?.(event); }}
     onFocus={event => { setIntent(true); onFocus?.(event); }}

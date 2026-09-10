@@ -129,27 +129,25 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const showHint=!isDesktop&&!hintSeen;
   const setShowHint=(visible:boolean)=>setHintSeen(!visible); // 新手引导提示
 
-  // --- 新增：监听安卓/小米的侧滑返回，实现“侧滑关闭目录” ---
+  // Keep a return entry even when a chapter is opened directly in a new tab.
+  // Give it the real detail URL so Back also works across a document reload.
+  // For same-document Back, replace the retained reader tree with the detail route.
   useEffect(() => {
-    if (showCatalog) {
-      // 1. 当目录打开时，手动往历史记录推入一个状态
-      // 这样用户侧滑时，消耗的是这个状态，而不是直接退出页面
-      window.history.pushState({ catalogOpen: true }, '', window.location.href);
-
-      // 2. 定义处理函数：当检测到“后退”动作时
-      const handlePopState = () => {
-        setShowCatalog(false); // 关闭目录
-      };
-
-      // 3. 监听浏览器的 popstate 事件（侧滑、实体返回键都会触发）
-      window.addEventListener('popstate', handlePopState);
-
-      // 4. 清理函数
-      return () => {
-        window.removeEventListener('popstate', handlePopState);
-      };
+    if (window.history.state?.readerBook !== bookId) {
+      const href = window.location.href;
+      const state = window.history.state;
+      window.history.replaceState({...state, readerReturn: bookId}, '', `/book/${bookId}`);
+      window.history.pushState({...state, readerBook: bookId}, '', href);
     }
-  }, [showCatalog]); // 依赖 showCatalog，只有它变化时才执行
+    const returnToDetail = (event: PopStateEvent) => {
+      if (event.state?.readerReturn !== bookId) return;
+      event.stopImmediatePropagation();
+      navigationSequence.current++;
+      router.replace(`/book/${bookId}`);
+    };
+    window.addEventListener('popstate', returnToDetail, true);
+    return () => window.removeEventListener('popstate', returnToDetail, true);
+  }, [bookId, router]);
 
   // 主题映射
   const themeMap = {
@@ -275,12 +273,12 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     const enter=(next:Chapter)=>{
       if(sequence!==navigationSequence.current)return;
       chapterCache.set(next.id,next);
+      rememberChapter(bookId,next.id);
       setChapter(next);setNavigating(false);setNavigationError('');setShowNav(false);setShowCatalog(false);
-      // The same reader stays mounted; Next's native history integration keeps
-      // back/forward and hard-reload URLs without refetching the entire route.
+      // Chapter turns share one history entry. Native history integration keeps
+      // the URL in sync without refetching the route; Back exits to book details.
       const href=`/book/${bookId}/${next.id}`;
-      if(window.history.state?.catalogOpen || window.location.pathname===href)window.history.replaceState(null,'',href);
-      else window.history.pushState(null,'',href);
+      window.history.replaceState({readerBook:bookId},'',href);
     };
     const cached=chapterCache.get(targetChapterId) || (adjacent.previous?.id===targetChapterId?adjacent.previous:adjacent.next?.id===targetChapterId?adjacent.next:undefined);
     if(cached?.bookId===bookId){enter(cached);return;}
@@ -297,8 +295,8 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const nextChapterId = currentChapterIndex >= 0 && currentChapterIndex < allChapters.length - 1 ? allChapters[currentChapterIndex + 1].id : chapter?.nextId ?? null;
 
   useEffect(() => {
-    if (chapter?.id === chapterIdParam && chapter.bookId === bookId) rememberChapter(bookId, chapter.id);
-  }, [chapter, bookId, chapterIdParam]);
+    if (chapter?.id === chapterIdParam && chapter.bookId === bookId && pathname === `/book/${bookId}/${chapter.id}`) rememberChapter(bookId, chapter.id);
+  }, [chapter, bookId, chapterIdParam, pathname]);
 
   // Preload parsed text and paragraph counts in both directions. No hidden
   // reader is mounted, so speculative reads never record views or bookmarks.

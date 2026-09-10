@@ -25,12 +25,13 @@ test('sitemap index and chapter file use public legacy paths and missing paths r
   expect((await request.get(`${base}/sitemaps/${book}/99999.xml`)).status()).toBe(404);
   expect((await request.get(`${base}/book/${book}/000000000000000000ffffff`)).status()).toBe(404);
 });
-test('one hundred chapter changes and browser back keep URL and visible content aligned',async({page})=>{
+test('one hundred chapter changes share one history entry and Back returns to book details',async({page})=>{
   test.setTimeout(180000);
   await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
   await page.setViewportSize({width:1440,height:900});
   await page.goto(`${base}/book/${book}/${first}`);
   await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready','true');
+  const historyLength = await page.evaluate(() => history.length);
   const samples=[];let previous=1;
   for(let step=1;step<=100;step++){
     const position=step%22,number=position<=11?position+1:23-position;
@@ -44,7 +45,8 @@ test('one hundred chapter changes and browser back keep URL and visible content 
     previous=number;
   }
   await page.goBack();
-  const id=page.url().split('/').pop()!,number=parseInt(id,16)-256;
-  await expect(page.getByRole('heading',{name:`第${number}章 山间来信`,exact:true})).toBeVisible();
+  await expect(page).toHaveURL(`${base}/book/${book}`);
+  await expect(page.locator('.book-detail')).toBeVisible();
+  expect(await page.evaluate(() => history.length)).toBe(historyLength);
   await fs.writeFile('artifacts/reader-100-switches.json',JSON.stringify({switches:100,backVerified:true,samples},null,2));
 });
