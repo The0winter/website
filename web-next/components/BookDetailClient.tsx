@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from './PrefetchLink';
 import ReadingEntryLink from './ReadingEntryLink';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, BookOpen, Bookmark, BookmarkCheck, Loader2, Star, User as UserIcon, Pencil, X, ArrowUpDown, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, User as UserIcon, Pencil, X, ArrowUpDown, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import BookArticles from './BookArticles';
 import './book-detail.css';
 import { useAuth } from '@/contexts/AuthContext';
@@ -81,7 +81,7 @@ interface BookDetailClientProps {
   initialBookData: {
     book: Book;
     chapters: Chapter[];
-    summary: { totalWords: number | null; updatedDate: string };
+    summary: { totalWords: number | null; updatedLabel: string };
   };
   initialCatalog?: CatalogPage<Chapter>;
   initialFirstChapterId?: string;
@@ -327,7 +327,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   };
 
   // --- 显示辅助 ---
-  const { totalWords, updatedDate } = bookData.summary;
+  const { totalWords, updatedLabel } = bookData.summary;
   const wordCount = totalWords === null ? null : totalWords > 10000 ? `${(totalWords / 10000).toFixed(2)}万字` : `${totalWords}字`;
   const getCategoryDisplay = (category?: string) => {
     if (!category) return '';
@@ -336,6 +336,9 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   };
   const categoryDisplay = getCategoryDisplay(book.category);
   const statusText = ['completed', '完结', '已完结'].includes(book.status || '') ? '已完结' : '连载中';
+  const catalogProgress = chapterTotal === null && loadingChapters
+    ? '目录加载中'
+    : `${statusText === '已完结' ? '全' : '连载至'}${chapterTotal ?? chapters.length}章`;
   const getAuthorName = () => {
     if (typeof book.author_id === 'object' && book.author_id?.username) return book.author_id.username;
     return book.author || '未知作者';
@@ -350,7 +353,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   return (
     // 修改1：增加手机端底部 padding (pb-24)，防止被常驻底栏遮挡内容
     <div className="book-detail min-h-screen bg-gray-50 pb-24 md:pb-12">
-      <div className="book-topbar md:hidden"><Link href="/" aria-label="返回首页"><ArrowLeft size={24} /></Link><span>书籍详情</span><Link href="/search" aria-label="搜索小说">找书</Link></div><div className="hidden md:block h-[20px]"></div>
+      <div className="hidden md:block h-[20px]"></div>
 
       {/* ⚠️ 修改2：将 space-y 替换为 flex flex-col 和 gap，以便利用 order 属性实现手机端模块换位 */}
       <div className="book-layout max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 md:py-8 flex flex-col gap-3 md:gap-6">
@@ -399,7 +402,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                      </div>
                      <div className="hidden">
                         <span className="text-gray-500 w-12">更新:</span>
-                        <span className="text-gray-900">{updatedDate}</span>
+                        <span className="text-gray-900">{updatedLabel}</span>
                      </div>
                      
                      {/* 电脑端才显示的额外信息 */}
@@ -409,7 +412,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                      </div>
                      <div className="hidden md:flex items-center">
                         <span className="text-gray-500 w-16">更新时间:</span>
-                        <span className="text-gray-900">{updatedDate}</span>
+                        <span className="text-gray-900">{updatedLabel}</span>
                      </div>
                  </div>
 
@@ -596,7 +599,11 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
         {/* === 第四部分：目录 (⚠️ 利用 order-4 md:order-3 在手机端沉底，电脑端仍为第3) === */}
         <div role="region" aria-label="章节目录" aria-busy={loadingChapters} className="book-catalog bg-white rounded-lg shadow-sm order-3">
-          <button className="mobile-catalog md:hidden" onClick={() => setShowAllChapters(true)}><strong>目录</strong><span>{statusText} · 共{chapterTotal ?? chapters.length}章<br/><small>{updatedDate} 更新</small></span><ChevronRight size={18}/></button>
+          <button className="mobile-catalog md:hidden" onClick={() => setShowAllChapters(true)}>
+            <strong>目录</strong>
+            <span>{catalogProgress} · {updatedLabel}</span>
+            <ChevronRight size={18}/>
+          </button>
           <div className="hidden md:block p-4 md:p-8">
             <div className="flex justify-between items-center mb-3 md:mb-6">
                 <h2 className="text-base md:text-xl font-bold text-gray-900 flex items-center space-x-2 border-l-4 border-blue-600 pl-3">

@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { cache } from 'react';
 import { notFound } from 'next/navigation';
 import BookDetailClient from '@/components/BookDetailClient';
+import { formatRelativeUpdate } from '@/lib/relative-update';
 import type { Book, Chapter } from '@/lib/api';
 import { getApiBaseUrl } from '@/utils/api'; // 新增：引入我们写的智能地址判断工具
 
@@ -131,11 +132,8 @@ export default async function BookDetailPage({ params }: Props) {
 
   // Render only the visible preview; the client fills the complete catalog in the background.
   const chapters = catalog?.rows ?? [];
-  // Format once on the server so hydration cannot change the date's locale or timezone.
-  const updatedAt = new Date(book.lastUpdated ?? '');
-  const updatedDate = Number.isNaN(updatedAt.getTime()) ? '近期' : new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai', year: 'numeric', month: 'numeric', day: 'numeric',
-  }).format(updatedAt);
+  // Compute once on the server to keep relative-time boundaries stable during hydration.
+  const updatedLabel = formatRelativeUpdate(book.lastUpdated);
 
   const description = buildDescription(book);
   const jsonLd = {
@@ -158,7 +156,7 @@ export default async function BookDetailPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, String.fromCharCode(92) + 'u003c') }}
       />
-      <BookDetailClient key={book.id} initialBookData={{ book, chapters, summary: { totalWords, updatedDate } }} initialCatalog={catalog} initialFirstChapterId={firstChapter?.rows[0]?.id} />
+      <BookDetailClient key={book.id} initialBookData={{ book, chapters, summary: { totalWords, updatedLabel } }} initialCatalog={catalog} initialFirstChapterId={firstChapter?.rows[0]?.id} />
     </>
   );
 }
