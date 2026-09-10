@@ -46,6 +46,29 @@ function extractionHash(spec) {
   return hash(extraction);
 }
 
+function exportPath(spec, id, outputDir) {
+  return path.join(path.resolve(outputDir || path.join(projectRoot, 'downloads')), `${safeName(spec.title)}--${safeName(spec.author)}--${id.slice(0, 8)}.json`);
+}
+
+export function localBookState(spec, {stateDir = defaultStateDir, outputDir} = {}) {
+  spec = validateSpec(spec);
+  const id = jobId(spec), dir = path.join(stateDir, 'jobs', id);
+  try {
+    const previous = readJson(path.join(dir, 'spec.json'));
+    if (!previous) return {state: 'new', saved: 0, total: 0, message: '尚未采集'};
+    if (extractionHash(previous) !== extractionHash(spec)) return {state: 'incompatible', saved: 0, total: 0, message: '来源规则已有变化，旧进度保留，需先核对适配规则。'};
+    const catalog = readJson(path.join(dir, 'catalog.json'), []), chaptersDir = path.join(dir, 'chapters');
+    const files = new Set(fs.existsSync(chaptersDir) ? fs.readdirSync(chaptersDir) : []);
+    const saved = catalog.filter(entry => files.has(hash(entry.link) + '.json')).length;
+    const exported = readJson(path.join(dir, 'export.json')), file = exportPath(spec, id, outputDir);
+    const fileExists = fs.existsSync(file), fileValid = fileExists && exported?.path === file && hash(fs.readFileSync(file)) === exported.hash;
+    const total = catalog.length;
+    if (fileExists && !fileValid) return {state: 'modified', saved, total, message: `已保存 ${saved} / ${total} 章；导出文件存在或已被修改，程序会保护它，拒绝覆盖。`};
+    if (saved && saved === total && fileValid) return {state: 'complete', saved, total, message: `已下载完成 · ${saved} 章。再次采集会检查更新，已有正文不会重复下载。`};
+    return {state: saved ? 'partial' : 'new', saved, total, message: saved ? `已保存 ${saved} / ${total} 章；继续时自动补齐缺少的章节。` : '尚未保存章节'};
+  } catch { return {state: 'unknown', saved: 0, total: 0, message: '本地记录需要核对；旧文件会保留。'}; }
+}
+
 function bookData(spec, chapters) {
   return {
     title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl,
@@ -112,9 +135,10 @@ export async function acquire(input, options = {}) {
     const specFile = path.join(dir, 'spec.json'), previousSpec = readJson(specFile);
     if (previousSpec && extractionHash(previousSpec) !== extractionHash(spec) && fs.existsSync(chaptersDir) && fs.readdirSync(chaptersDir).length) throw Error(`提取规则发生变化，请使用新的 --state-dir 重新试采，避免混用旧正文：${dir}`);
     atomicWrite(specFile, spec);
-    const client = makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser, onStatus: options.onStatus, shouldStop: options.shouldStop});
+    const shouldStop = () => options.signal?.aborted || options.shouldStop?.();
+    const client = makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser, onStatus: options.onStatus, shouldStop, signal: options.signal});
     const started = Date.now(), chapters = [], failures = [];
-    let catalog = [], evidence, report, exportFile, paused = false;
+    let catalog = [], evidence, report, exportFile, paused = false, reusedExport = false;
     try {
       const source = spec.kind === 'html' ? await getCatalog(spec, client) : await getResource(spec, client, dir);
       catalog = source.catalog;
@@ -133,7 +157,7 @@ export async function acquire(input, options = {}) {
       let fetched = 0, consecutiveFailures = 0;
       options.onProgress?.({jobId: id, mode, downloaded: 0, total: targets.length, failed: 0});
       for (const entry of targets) {
-        if (options.shouldStop?.()) { paused = true; break; }
+        if (shouldStop()) { paused = true; break; }
         const chapterFile = path.join(chaptersDir, hash(entry.link) + '.json');
         const saved = readJson(chapterFile);
         if (saved && !options.refresh) {
@@ -157,7 +181,7 @@ export async function acquire(input, options = {}) {
           chapters.push(chapter);
           consecutiveFailures = 0;
         } catch (error) {
-          if (options.shouldStop?.()) { paused = true; break; }
+          if (shouldStop()) { paused = true; break; }
           failures.push({chapter: entry.chapter_number, title: entry.title, link: entry.link, error: error.message});
           // Three consecutive failing pages usually mean the source has stopped serving us.
           if (error.stopSource || ++consecutiveFailures >= 3) break;
@@ -177,16 +201,17 @@ export async function acquire(input, options = {}) {
         if (report.completeAgainstSource && report.structuralPass) {
           const book = bookData(spec, chapters);
           prepareImport(book);
-          exportFile = path.join(path.resolve(options.outputDir || path.join(projectRoot, 'downloads')), `${safeName(spec.title)}--${safeName(spec.author)}--${id.slice(0, 8)}.json`);
+          exportFile = exportPath(spec, id, options.outputDir);
           const exported = readJson(path.join(dir, 'export.json'));
           if (fs.existsSync(exportFile) && (!exported || exported.path !== exportFile || hash(fs.readFileSync(exportFile)) !== exported.hash)) throw Error(`输出文件已存在或被其他程序修改，拒绝覆盖：${exportFile}`);
-          atomicWrite(exportFile, book);
+          reusedExport = fs.existsSync(exportFile) && hash(fs.readFileSync(exportFile)) === hash(JSON.stringify(book, null, 2) + '\n');
+          if (!reusedExport) atomicWrite(exportFile, book);
           atomicWrite(path.join(dir, 'export.json'), {path: exportFile, hash: hash(fs.readFileSync(exportFile))});
         }
       }
     } catch (error) {
       exportFile = null;
-      if (options.shouldStop?.()) paused = true;
+      if (shouldStop()) paused = true;
       else failures.push({error: error.message});
       report = qualityReport(catalog, chapters, failures, mode);
       report.structuralPass = false;
@@ -194,7 +219,7 @@ export async function acquire(input, options = {}) {
     } finally {
       await client.close();
     }
-    const details = {...report, paused, title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, jobId: id, checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: client.stats, evidence, exportFile: exportFile || null};
+    const details = {...report, paused, reusedExport, title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, jobId: id, checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: client.stats, evidence, exportFile: exportFile || null};
     atomicWrite(path.join(dir, `${mode}-report.json`), details);
     atomicWrite(path.join(dir, `${mode}-report.md`), reportMarkdown(details));
     atomicWrite(path.join(dir, 'history', `${Date.now()}-${mode}.json`), details);

@@ -95,10 +95,15 @@ export function parseSearch(html, baseUrl, site) {
   return {results, next: next?.attr('href') ? httpUrl(next.attr('href'), baseUrl) : null};
 }
 
-export async function searchBooks({website, title, author = '', stateDir = defaultStateDir, sites = loadSites().sites, onStatus, shouldStop}) {
+export function specForBook({url, title, author}, sites = loadSites().sites) {
+  const site = siteFor(url, sites), match = bookUrl(url, site);
+  return validateSpec(fillTemplate(site.spec, {...match.groups, title, author, sourceUrl: url}));
+}
+
+export async function searchBooks({website, title, author = '', stateDir = defaultStateDir, sites = loadSites().sites, onStatus, shouldStop, signal}) {
   website = normalizeWebsite(website);
   if (typeof title !== 'string' || !title.trim() || title.length > 200 || typeof author !== 'string' || author.length > 200) throw Error('请输入书名，书名和作者各不超过 200 字');
-  const site = siteFor(website, sites), client = makeSiteClient(site, stateDir, {onStatus, shouldStop});
+  const site = siteFor(website, sites), client = makeSiteClient(site, stateDir, {onStatus, shouldStop, signal});
   try {
     if (new URL(website).pathname !== '/') {
       bookUrl(website, site);
@@ -126,9 +131,11 @@ export async function searchBooks({website, title, author = '', stateDir = defau
   } finally { await client.close(); }
 }
 
-export async function resolveBook({url, title, author, stateDir = defaultStateDir, sites = loadSites().sites, reuseSaved = false, onStatus, shouldStop}) {
+export async function resolveBook({url, title, author, stateDir = defaultStateDir, sites = loadSites().sites, reuseSaved = false, onStatus, shouldStop, signal}) {
   url = normalizeWebsite(url);
-  const site = siteFor(url, sites), match = bookUrl(url, site), client = makeSiteClient(site, stateDir, {onStatus, shouldStop});
+  const site = siteFor(url, sites);
+  bookUrl(url, site);
+  const client = makeSiteClient(site, stateDir, {onStatus, shouldStop, signal});
   try {
     const response = await client.get(url, {fresh: true, render: (site.book.transport || site.spec.transport) === 'browser', readySelector: site.book.readySelector});
     if (response.url !== url) throw Error('书籍详情页地址发生跳转，需要核实适配');
@@ -143,6 +150,6 @@ export async function resolveBook({url, title, author, stateDir = defaultStateDi
         if (spec && spec.sourceUrl === url && normalizedTitle(spec.title) === normalizedTitle(title) && normalizedTitle(spec.author) === normalizedTitle(author)) return validateSpec(spec);
       }
     }
-    return validateSpec(fillTemplate(site.spec, {...match.groups, title: actual.title, author: actual.author, sourceUrl: url}));
+    return specForBook({url, ...actual}, sites);
   } finally { await client.close(); }
 }

@@ -21,15 +21,65 @@ export function decode(bytes, contentType = '', encoding) {
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop}) {
+export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal}) {
   const hosts = new Set(allowedHosts.map(h => h.toLowerCase()));
   // Also space out search, detail lookup and a new worker's first request.
   let lastRequest = Date.now();
   const stats = {requests: 0, cacheHits: 0, retries: 0, bytes: 0};
-  let browser;
+  let browser, page, closingBrowser;
   const stopped = () => {
-    if (shouldStop?.()) throw Object.assign(Error('任务已暂停，已完成的章节保留。'), {stopSource: true});
+    if (signal?.aborted || shouldStop?.()) throw Object.assign(Error(`任务已${signal?.aborted ? '停止' : '暂停'}，已完成的章节保留。`), {stopSource: true});
   };
+  const windowClosed = () => Object.assign(Error('采集浏览器已关闭，任务已停止；已保存的章节可以继续采集。'), {stopSource: true});
+  async function closeBrowser() {
+    if (closingBrowser) return closingBrowser;
+    if (browser?.connected) { closingBrowser = browser.close(); await closingBrowser; }
+  }
+  const abort = () => { void closeBrowser().catch(() => {}); };
+  signal?.addEventListener('abort', abort, {once: true});
+  async function windowState(state) {
+    if (browserOptions.headless !== false) return;
+    const cdp = await page.createCDPSession();
+    try {
+      const {windowId} = await cdp.send('Browser.getWindowForTarget');
+      await cdp.send('Browser.setWindowBounds', {windowId, bounds: {windowState: state}});
+      if (state === 'normal') await page.bringToFront();
+    } finally { await cdp.detach(); }
+  }
+  async function ensureBrowser() {
+    stopped();
+    if (browser) {
+      if (!browser.connected || page.isClosed()) throw windowClosed();
+      return;
+    }
+    const {default: puppeteer} = await import('puppeteer');
+    const installed = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'];
+    const candidates = [process.env.NOVEL_CRAWLER_BROWSER, ...(browserOptions.headless === false ? [...installed, puppeteer.executablePath()] : [puppeteer.executablePath(), ...installed])].filter(Boolean);
+    const executablePath = candidates.find(file => fs.existsSync(file));
+    if (!executablePath) throw Error('未找到浏览器；用 NOVEL_CRAWLER_BROWSER 指定 Chrome/Edge');
+    browser = await puppeteer.launch({headless: browserOptions.headless ?? true, executablePath, args: browserOptions.minimized ? ['--start-minimized'] : []});
+    stopped();
+    const pages = await browser.pages();
+    page = pages[0] || await browser.newPage();
+    await Promise.all(pages.slice(1).map(extra => extra.close()));
+    // Keep one collector tab; advertisements must not leave extra blank windows.
+    browser.on('targetcreated', target => {
+      if (target.type() === 'page' && target !== page.target()) void target.page().then(extra => extra?.close()).catch(() => {});
+    });
+    if (browserOptions.minimized) await windowState('minimized');
+    if (browserOptions.responseMode === 'source') await page.setCacheEnabled(false);
+    await page.setRequestInterception(true);
+    page.on('request', req => {
+      try {
+        const parsed = new URL(req.url());
+        if (['data:', 'blob:', 'about:'].includes(parsed.protocol)) return req.continue();
+        assertUrl(req.url());
+        const verificationAsset = browserOptions.manualVerificationMs && parsed.hostname === 'challenges.cloudflare.com';
+        if (!verificationAsset && ['image', 'media', 'font'].includes(req.resourceType())) return req.abort();
+        return req.continue();
+      } catch { return req.abort(); }
+    });
+  }
   async function wait(ms) {
     const end = Date.now() + ms;
     do { stopped(); await sleep(Math.min(200, Math.max(0, end - Date.now()))); } while (Date.now() < end);
@@ -41,6 +91,7 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
     return url;
   }
   async function get(input, {fresh = false, request, render = false, readySelector} = {}) {
+    stopped();
     const original = assertUrl(input), key = hash({url: original, request, render, browser: render ? browserOptions : undefined});
     const metaPath = path.join(cacheDir, key + '.json'), bodyPath = path.join(cacheDir, key + '.bin');
     const cached = readJson(metaPath);
@@ -51,51 +102,23 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
     }
     if (render) {
       if (request) throw Error('浏览器模式只支持网页导航');
-      if (!browser) {
-        const {default: puppeteer} = await import('puppeteer');
-        const installed = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'];
-        const candidates = [process.env.NOVEL_CRAWLER_BROWSER, ...(browserOptions.headless === false ? [...installed, puppeteer.executablePath()] : [puppeteer.executablePath(), ...installed])].filter(Boolean);
-        const executablePath = candidates.find(file => fs.existsSync(file));
-        if (!executablePath) throw Error('未找到浏览器；用 NOVEL_CRAWLER_BROWSER 指定 Chrome/Edge');
-        browser = await puppeteer.launch({headless: browserOptions.headless ?? true, executablePath, args: browserOptions.minimized ? ['--start-minimized'] : []});
-      }
       for (let attempt = 0; attempt <= retries; attempt++) {
-        const page = await browser.newPage();
-        let retryAfterMs;
+        await wait(Math.max(0, lastRequest + delayMs - Date.now()));
+        await ensureBrowser();
+        let retryAfterMs, responseListener;
         try {
-          // Source responses must include their body, even if another page prefetched
-          // this URL. The collector already keeps its own verified response cache.
-          if (browserOptions.responseMode === 'source') await page.setCacheEnabled(false);
-          await page.setRequestInterception(true);
-          page.on('request', req => {
-            try {
-              const parsed = new URL(req.url());
-              if (['data:', 'blob:', 'about:'].includes(parsed.protocol)) return req.continue();
-              assertUrl(req.url());
-              const verificationAsset = browserOptions.manualVerificationMs && parsed.hostname === 'challenges.cloudflare.com';
-              if (!verificationAsset && ['image', 'media', 'font'].includes(req.resourceType())) return req.abort();
-              return req.continue();
-            } catch { return req.abort(); }
-          });
-          await wait(Math.max(0, lastRequest + delayMs - Date.now()));
           lastRequest = Date.now();
           stats.requests++;
           let documentResponse;
-          page.on('response', response => {
+          responseListener = response => {
             if (response.request().isNavigationRequest() && response.frame() === page.mainFrame()) documentResponse = response;
-          });
+          };
+          page.on('response', responseListener);
           await page.goto(original, {waitUntil: 'domcontentloaded', timeout: timeoutMs});
           if (documentResponse?.headers()['cf-mitigated'] === 'challenge') {
             const limit = browserOptions.manualVerificationMs;
             if (!limit) throw Object.assign(Error('网站要求人机验证，采集已停止；请使用支持手动验证的浏览器来源配置。'), {stopSource: true});
-            if (browserOptions.headless === false) {
-              const cdp = await page.createCDPSession();
-              try {
-                const {windowId} = await cdp.send('Browser.getWindowForTarget');
-                await cdp.send('Browser.setWindowBounds', {windowId, bounds: {windowState: 'normal'}});
-                await page.bringToFront();
-              } finally { await cdp.detach(); }
-            }
+            await windowState('normal');
             onStatus?.({kind: 'verification', message: `网站要求人机验证：请在弹出的采集浏览器中手动完成，完成后自动继续。最多等待 ${Math.round(limit / 60000 * 10) / 10} 分钟。`});
             const deadline = Date.now() + limit;
             while (true) {
@@ -108,6 +131,7 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
               await wait(200);
             }
             lastRequest = Date.now();
+            if (browserOptions.minimized) await windowState('minimized');
             onStatus?.({kind: 'active', message: '验证已完成，正在继续读取网页…'});
           }
           const status = documentResponse?.status();
@@ -140,10 +164,12 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
           atomicWrite(metaPath, meta);
           return {...meta, body};
         } catch (error) {
+          stopped();
+          if (!browser.connected || page.isClosed()) throw windowClosed();
           if (attempt === retries || !Number.isFinite(error.retryAfterMs)) throw error;
           retryAfterMs = error.retryAfterMs;
           stats.retries++;
-        } finally { if (!page.isClosed()) await page.close(); }
+        } finally { if (responseListener) page.off('response', responseListener); }
         onStatus?.({kind: 'waiting', message: `网站暂时限制访问，等待 ${Math.ceil(retryAfterMs / 1000)} 秒后重试；已完成的章节保留。`});
         await wait(retryAfterMs);
         onStatus?.({kind: 'active', message: '正在重试读取网页…'});
@@ -158,8 +184,9 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
         lastRequest = Date.now();
         stats.requests++;
         try {
-          response = await axios({url, method: request ? 'POST' : 'GET', data: request ? new URLSearchParams(request.form).toString() : undefined, timeout: timeoutMs, responseType: 'arraybuffer', maxRedirects: 0, maxContentLength: maxBytes, maxBodyLength: maxBytes, validateStatus: () => true, headers: {'User-Agent': 'NovelCollector/1.0', Accept: '*/*', ...(request ? {'Content-Type': 'application/x-www-form-urlencoded'} : {})}});
+          response = await axios({url, signal, method: request ? 'POST' : 'GET', data: request ? new URLSearchParams(request.form).toString() : undefined, timeout: timeoutMs, responseType: 'arraybuffer', maxRedirects: 0, maxContentLength: maxBytes, maxBodyLength: maxBytes, validateStatus: () => true, headers: {'User-Agent': 'NovelCollector/1.0', Accept: '*/*', ...(request ? {'Content-Type': 'application/x-www-form-urlencoded'} : {})}});
         } catch (error) {
+          stopped();
           if (attempt === retries || error.code === 'ERR_BAD_RESPONSE') throw Error(`下载失败：${url}（${error.code || error.message}）`);
           stats.retries++;
           await wait(Math.min(10000, 1000 * 2 ** attempt));
@@ -191,5 +218,5 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
     }
     throw Error('重定向次数超过限制');
   }
-  return {get, assertUrl, stats, close: async () => { if (browser?.connected) await browser.close(); }};
+  return {get, assertUrl, stats, close: async () => { signal?.removeEventListener('abort', abort); await closeBrowser(); }};
 }

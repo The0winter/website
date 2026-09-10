@@ -3,8 +3,8 @@ const token = location.hash.slice(1) || sessionStorage.getItem('desktop-token');
 if (token) sessionStorage.setItem('desktop-token', token);
 history.replaceState(null, '', '/');
 let data, selectedUrl = '', initialized = false, pollRunning = false, active = false, resultsKey = '', sitesKey = '';
-const phases = {idle: '等待开始', search: '查找中', ready: '等待选择', resolving: '读取目录', probe: '抽样检查', download: '正在下载', pausing: '正在暂停', paused: '已暂停', probed: '试采通过', complete: '已完成', error: '需要处理'};
-const working = phase => ['search', 'resolving', 'probe', 'download', 'pausing'].includes(phase);
+const phases = {idle: '等待开始', search: '查找中', ready: '等待选择', resolving: '读取目录', probe: '抽样检查', download: '正在下载', pausing: '正在暂停', paused: '已暂停', stopping: '正在停止', stopped: '已停止', probed: '试采通过', complete: '已完成', error: '需要处理'};
+const working = phase => ['search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(phase);
 async function api(action, body) {
   const response = await fetch(`/api/${action}`, {method: body === undefined ? 'GET' : 'POST', headers: {'x-desktop-token': token || '', 'Content-Type': 'application/json'}, ...(body === undefined ? {} : {body: JSON.stringify(body)})});
   const result = await response.json();
@@ -72,6 +72,9 @@ function render() {
   $('search').textContent = task.phase === 'search' ? '正在查找…' : '查找书籍 →';
   $('phase').textContent = phases[task.phase] || '等待开始';
   $('phase').className = `status-pill ${active ? 'running' : task.phase}`;
+  $('stop').hidden = !active;
+  $('stop').disabled = task.phase === 'stopping';
+  $('stop').textContent = task.phase === 'stopping' ? '正在停止…' : '停止';
   const isEmpty = ['idle', 'ready'].includes(task.phase);
   $('task-empty').hidden = !isEmpty;
   $('task-content').hidden = isEmpty;
@@ -89,17 +92,26 @@ function render() {
   if (report) $('report-stats').replaceChildren(...[[`${report.downloaded} / ${report.expected}`, '已采集章节'], [report.errors, '检测到的错误'], [report.warnings, '待核对警告']].map(([number, label]) => { const div = document.createElement('div'), strong = document.createElement('strong'); strong.textContent = number; div.append(strong, label); return div; }));
   $('open-folder').hidden = !report?.exportFile;
   $('open-report').hidden = !report?.jobId;
-  $('resume').hidden = !['paused', 'probed', 'error'].includes(task.phase) || !task.sourceUrl;
+  $('resume').hidden = !['paused', 'stopped', 'probed', 'error'].includes(task.phase) || !task.sourceUrl;
   $('results-panel').hidden = !data.candidates.length;
   const nextKey = JSON.stringify(data.candidates);
   if (nextKey !== resultsKey) {
     resultsKey = nextKey;
-    selectedUrl = data.candidates[0]?.url || '';
-    $('results').replaceChildren(...data.candidates.map((book, i) => { const label = document.createElement('label'); label.className = 'book-result'; const radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'book'; radio.value = book.url; radio.checked = i === 0; radio.onchange = () => { selectedUrl = book.url; }; const content = document.createElement('span'), title = document.createElement('strong'), detail = document.createElement('small'); title.textContent = book.title; detail.textContent = `${book.author} · ${book.site}`; content.append(title, detail); label.append(radio, content); return label; }));
+    if (!data.candidates.some(book => book.url === selectedUrl)) selectedUrl = data.candidates[0]?.url || '';
+    $('results').replaceChildren(...data.candidates.map(book => {
+      const label = document.createElement('label'); label.className = 'book-result';
+      const radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'book'; radio.value = book.url; radio.checked = book.url === selectedUrl;
+      radio.onchange = () => { selectedUrl = book.url; render(); };
+      const content = document.createElement('span'), title = document.createElement('strong'), detail = document.createElement('small');
+      title.textContent = book.title; detail.textContent = `${book.author} · ${book.site}`; content.append(title, detail);
+      if (book.local) { const status = document.createElement('small'); status.className = `local-state ${book.local.state}`; status.textContent = book.local.message; content.append(status); }
+      label.append(radio, content); return label;
+    }));
   }
   for (const radio of document.querySelectorAll('input[name=book]')) radio.disabled = active;
   $('start').disabled = active || !selectedUrl;
-  $('start').textContent = $('probe-only').checked ? '开始试采 →' : '试采并下载 ↓';
+  const selected = data.candidates.find(book => book.url === selectedUrl);
+  $('start').textContent = $('probe-only').checked ? '开始试采 →' : selected?.local?.state === 'complete' ? '检查更新 ↓' : selected?.local?.saved ? '继续采集 ↓' : '试采并下载 ↓';
   if (data.adapterErrors.length) feedback(`有站点配置需要修复：${data.adapterErrors.join('；')}`);
 }
 async function poll() { if (pollRunning) return; pollRunning = true; try { data = await api('state'); render(); } catch (error) { feedback(error.message === 'Failed to fetch' ? '程序连接已断开，请关闭窗口后重新打开。' : error.message); } finally { pollRunning = false; } }
@@ -109,7 +121,7 @@ async function search(event) {
   feedback(); $('search').disabled = true;
   try {
     const result = await api('search', {website: $('website').value, title: $('title').value.trim(), author: $('author').value.trim()});
-    if (!result.candidates.length) feedback(result.task.message);
+    if (!result.candidates.length && result.task.phase !== 'stopped') feedback(result.task.message);
     await poll();
   } catch (error) { feedback(error.message); await poll(); }
 }
@@ -119,6 +131,7 @@ $('website').addEventListener('change', remember);
 $('probe-only').addEventListener('change', () => { if (data) render(); });
 $('start').onclick = async () => { feedback(); $('start').disabled = true; try { await api('start', {url: selectedUrl, probeOnly: $('probe-only').checked}); } catch (error) { feedback(error.message); } await poll(); };
 $('pause').onclick = async () => { try { await api('pause', {}); } catch (error) { feedback(error.message); } await poll(); };
+$('stop').onclick = async () => { $('stop').disabled = true; try { await api('stop', {}); } catch (error) { feedback(error.message); } await poll(); };
 $('resume').onclick = async () => { if (data.task.title) $('title').value = data.task.title; if (data.task.author) $('author').value = data.task.author; if (data.task.sourceUrl) $('website').value = data.task.sourceUrl; $('probe-only').checked = false; await search(); $('results-panel').scrollIntoView({behavior: 'smooth', block: 'nearest'}); };
 for (const id of ['folder-nav', 'open-folder', 'open-report']) $(id).onclick = async () => { try { await api('open', {kind: id === 'open-report' ? 'report' : 'folder'}); } catch (error) { feedback(error.message); } };
 document.querySelector('.brand').onclick = event => event.preventDefault();

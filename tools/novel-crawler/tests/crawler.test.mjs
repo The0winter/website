@@ -7,7 +7,7 @@ import http from 'node:http';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import iconv from 'iconv-lite';
-import {acquire, sourcePlan} from '../core.mjs';
+import {acquire, sourcePlan, localBookState} from '../core.mjs';
 import {chapterQuality, qualityReport, checkIdentity} from '../quality.mjs';
 import {decode, makeClient} from '../http.mjs';
 import {splitText} from '../adapters.mjs';
@@ -62,10 +62,14 @@ test('paged catalogs preserve notices, volume resets and source order; resume an
     if (!pages[req.url]) {res.statusCode = 404; res.end('missing');} else res.end(pages[req.url]);
   });
   const spec = specFor(f.base);
+  assert.equal(localBookState(spec, f.options).state, 'new');
   const partial = await acquire(spec, {...f.options, maxNew: 1});
   assert.equal(partial.completeAgainstSource, false);
   assert.equal(partial.exportFile, null);
   assert.equal(partial.downloaded, 1);
+  assert.equal(localBookState(spec, f.options).state, 'partial');
+  assert.equal(localBookState(spec, f.options).saved, 1);
+  assert.equal(localBookState({...spec, variant: 'different-source-version'}, f.options).state, 'new');
   const complete = await acquire(spec, f.options);
   assert.equal(complete.completeAgainstSource, true);
   assert.equal(complete.structuralPass, true);
@@ -79,7 +83,9 @@ test('paged catalogs preserve notices, volume resets and source order; resume an
   assert.equal(book.chapters[1].content, '今天请假。');
   assert.equal(prepareImport(book).length, 1);
   assert.equal(sourcePlan('下一本', '作者', f.options.stateDir).preferred[0].verifiedBooks, 1);
+  assert.equal(localBookState(spec, f.options).state, 'complete');
   fs.appendFileSync(complete.exportFile, ' ');
+  assert.equal(localBookState(spec, f.options).state, 'modified');
   const conflict = await acquire(spec, f.options);
   assert.equal(conflict.structuralPass, false);
   assert.match(conflict.failures.at(-1).error, /拒绝覆盖/);
@@ -250,6 +256,45 @@ test('a browser-rendered chapter is supported without reading text into the mode
   const report = await acquire(spec, f.options);
   assert.equal(report.structuralPass, true, JSON.stringify(report.failures));
   assert.equal(readJson(report.exportFile).chapters[0].content, '浏览器渲染的合成正文。');
+});
+
+test('browser navigation reuses one tab and closes extra popup pages', async t => {
+  const f = await fixture(t, (req, res) => {
+    if (req.url === '/first') res.end(`<div id="content"></div><script>
+      sessionStorage.setItem('collector-tab', 'same-tab');
+      const popup = window.open('about:blank');
+      const timer = setInterval(() => {
+        if (popup?.closed) { document.querySelector('#content').textContent = 'popup-closed'; clearInterval(timer); }
+      }, 30);
+      </script>`);
+    else res.end(`<div id="content"></div><script>document.querySelector('#content').textContent = sessionStorage.getItem('collector-tab');</script>`);
+  });
+  const client = makeClient({cacheDir: path.join(f.dir, 'one-tab'), allowedHosts: ['127.0.0.1'], delayMs: 200, timeoutMs: 3000});
+  try {
+    const first = await client.get(f.base + '/first', {render: true, readySelector: '#content:not(:empty)'});
+    assert.match(first.body.toString(), /id="content">popup-closed/);
+    const second = await client.get(f.base + '/second', {render: true, readySelector: '#content:not(:empty)'});
+    assert.match(second.body.toString(), /id="content">same-tab/);
+  } finally { await client.close(); }
+});
+
+test('stop aborts a hung browser navigation and closes its connection promptly', async t => {
+  let arrived, disconnected;
+  const waiting = new Promise(resolve => { arrived = resolve; });
+  const closed = new Promise(resolve => { disconnected = resolve; });
+  const f = await fixture(t, (req, res) => { res.once('close', disconnected); arrived(); });
+  const controller = new AbortController();
+  const client = makeClient({cacheDir: path.join(f.dir, 'stop-browser'), allowedHosts: ['127.0.0.1'], delayMs: 200, timeoutMs: 20000, signal: controller.signal});
+  try {
+    const rejected = assert.rejects(client.get(f.base + '/hang', {render: true}), error => error.stopSource && /已停止/.test(error.message));
+    await waiting;
+    const start = Date.now();
+    controller.abort();
+    await rejected;
+    await client.close();
+    await closed;
+    assert.ok(Date.now() - start < 3000, 'stop must not wait for the navigation timeout');
+  } finally { controller.abort(); await client.close(); }
 });
 
 test('browser source mode uses the full catalog and preserves server text despite DOM translation', async t => {

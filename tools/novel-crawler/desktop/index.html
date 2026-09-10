@@ -27,7 +27,7 @@
       <div id="results-panel" hidden><div class="results-heading">匹配书籍 <span>核对后开始采集</span></div><div id="results"></div><div class="result-actions"><label class="checkbox"><input id="probe-only" type="checkbox">仅试采，先看看来源质量</label><button id="start" class="primary" type="button">试采并下载 <span>↓</span></button></div></div>
     </section>
     <section class="card task-card" aria-live="polite">
-      <div class="task-heading"><div class="section-title"><span class="step">02</span><h2>采集进度</h2></div><span id="phase" class="status-pill">等待开始</span></div>
+      <div class="task-heading"><div class="section-title"><span class="step">02</span><h2>采集进度</h2></div><div class="task-controls"><span id="phase" class="status-pill">等待开始</span><button id="stop" type="button" class="stop-button" title="停止当前任务并关闭采集页面，保留已保存章节" hidden>停止</button></div></div>
       <div id="task-empty" class="empty-state"><div class="empty-icon">▤</div><div><h3>你的下一本书，从这里出发</h3><p>查找并选择书籍后，采集进度会显示在这里。</p></div></div>
       <div id="task-content" hidden><h3 id="task-title"></h3><p id="task-message"></p><div class="progress-track"><div id="progress-bar"></div></div><div class="progress-caption"><span id="progress-text"></span><button id="pause" type="button" class="text-button" hidden>暂停采集</button></div><div id="report-stats" class="stats" hidden></div><div class="task-actions"><button id="resume" type="button" class="secondary" hidden>继续采集</button><button id="open-folder" type="button" class="secondary" hidden>打开下载文件夹 ↗</button><button id="open-report" type="button" class="text-button" hidden>查看质量报告 ↗</button></div></div>
     </section>

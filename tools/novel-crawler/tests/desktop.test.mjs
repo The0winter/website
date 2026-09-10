@@ -35,6 +35,16 @@ async function fixture(t) {
 }
 const request = (app, route, body, headers = {}) => fetch(`${app.baseUrl}/api/${route}`, {method: body === undefined ? 'GET' : 'POST', headers: {'x-desktop-token': app.token, 'Content-Type': 'application/json', ...headers}, ...(body === undefined ? {} : {body: JSON.stringify(body)})});
 
+async function until(check, timeout = 10000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const value = await check();
+    if (value) return value;
+    await new Promise(resolve => setTimeout(resolve, 40));
+  }
+  assert.fail('timed out waiting for task state');
+}
+
 test('site history retains every site, moves reused sites to front, and keeps the last site on disk', t => {
   const dir = temp(t);
   for (const site of ['a.example', 'b.example', 'c.example', 'd.example', 'b.example/read/123/?a=1']) rememberWebsite(dir, site);
@@ -127,12 +137,117 @@ test('pause finishes a checkpoint, skips source scoring, and continuation export
   assert.ok(fs.existsSync(next.exportFile));
 });
 
+test('stop cancels lookup and resolving without allowing late results to start a worker', async t => {
+  const stateDir = temp(t), spec = await fixture(t);
+  const book = {title: spec.title, author: spec.author, url: spec.sourceUrl, site: '测试来源'};
+  let blockSearch = true, searchSignal, resolveSignal;
+  const app = await createDesktop({stateDir, outputDir: path.join(stateDir, 'out'),
+    findBooks: async ({signal}) => {
+      searchSignal = signal;
+      if (blockSearch) await new Promise(resolve => signal.addEventListener('abort', resolve, {once: true}));
+      return [book]; // Even a late successful result must be discarded after stop.
+    },
+    prepareBook: async ({signal}) => {
+      resolveSignal = signal;
+      await new Promise(resolve => signal.addEventListener('abort', resolve, {once: true}));
+      return spec;
+    },
+  });
+  try {
+    const pending = request(app, 'search', {website: 'ixdzs8.com', title: book.title});
+    await until(() => searchSignal);
+    assert.equal((await request(app, 'stop', {})).status, 200);
+    assert.equal(searchSignal.aborted, true);
+    const stopped = await (await pending).json();
+    assert.equal(stopped.task.phase, 'stopped');
+    assert.deepEqual(stopped.candidates, []);
+    blockSearch = false;
+    await request(app, 'search', {website: 'ixdzs8.com', title: book.title});
+    const starting = request(app, 'start', {url: book.url});
+    await until(() => resolveSignal);
+    assert.equal(app.state().phase, 'resolving');
+    await request(app, 'stop', {});
+    assert.equal((await (await starting).json()).stopped, true);
+    assert.equal(app.state().phase, 'stopped');
+    assert.equal(fs.existsSync(path.join(stateDir, 'jobs')), false);
+    assert.equal((await request(app, 'stop', {})).status, 200);
+  } finally { await app.close(); }
+});
+
+test('stop interrupts an active worker request; resume and update reuse saved chapters and the unchanged export', async t => {
+  const stateDir = temp(t), counts = new Map();
+  let block = true, chapterCount = 3;
+  const server = http.createServer((req, res) => {
+    counts.set(req.url, (counts.get(req.url) || 0) + 1);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    if (req.url === '/book') res.end(`<h1>续传测试</h1><b>测试作者</b><nav>${Array.from({length: chapterCount}, (_, i) => `<a href="/c${i + 1}">第${i + 1}章 测试</a>`).join('')}</nav>`);
+    else if (req.url === '/c2' && block) { /* Remain pending until the user stops. */ }
+    else {
+      const n = Number(req.url.slice(2));
+      const prose = ['山间的清晨在鸟鸣中展开，小路通往静静的村庄。', '码头上的客船刚刚启程，河面的风吹动沿岸柳枝。', '小城傍晚亮起许多灯火，邻居围坐院落谈论往事。', '雨后的庭院散发泥土气息，孩子走过花园与石阶。'];
+      res.end(`<h1>第${n}章 测试</h1><article>${prose[n - 1]?.repeat(20)}</article>`);
+    }
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const spec = {version: 1, kind: 'html', title: '续传测试', author: '测试作者', sourceUrl: `http://127.0.0.1:${server.address().port}/book`, metadata: {title: 'h1', author: 'b'}, catalog: {links: 'nav a'}, chapter: {title: 'h1', content: 'article'}, delayMs: 200};
+  const book = {title: spec.title, author: spec.author, url: spec.sourceUrl, site: '本地测试来源'};
+  const app = await createDesktop({stateDir, outputDir: path.join(stateDir, 'out'), findBooks: async () => [book], prepareBook: async () => spec});
+  const start = async () => {
+    await until(async () => {
+      const response = await request(app, 'start', {url: book.url});
+      assert.ok([200, 409].includes(response.status));
+      return response.status === 200;
+    });
+  };
+  const local = async () => (await (await request(app, 'state')).json()).candidates[0].local;
+  try {
+    await request(app, 'search', {website: 'ixdzs8.com', title: book.title});
+    await start();
+    await until(() => counts.has('/c2'));
+    const stoppedAt = Date.now();
+    await request(app, 'stop', {});
+    await until(() => app.state().phase === 'stopped');
+    assert.ok(Date.now() - stoppedAt < 3000, 'stop must abort the pending HTTP request');
+    assert.equal(app.state().report.downloaded, 1);
+    assert.equal((await local()).state, 'partial');
+    assert.equal((await local()).saved, 1);
+    assert.equal(counts.has('/c3'), false);
+    block = false;
+    await start();
+    await until(() => ['complete', 'error'].includes(app.state().phase));
+    assert.equal(app.state().phase, 'complete', app.state().message);
+    assert.equal(app.state().report.downloaded, 3);
+    assert.equal(counts.get('/c1'), 1);
+    assert.equal(counts.get('/c2'), 2);
+    assert.equal(counts.get('/c3'), 1);
+    assert.equal((await local()).state, 'complete');
+    const file = app.state().report.exportFile, before = fs.statSync(file).mtimeMs;
+    await start();
+    await until(() => ['complete', 'error'].includes(app.state().phase));
+    assert.equal(app.state().report.reusedExport, true);
+    assert.match(app.state().message, /没有重复下载正文/);
+    assert.equal(fs.statSync(file).mtimeMs, before);
+    assert.deepEqual(['/c1', '/c2', '/c3'].map(url => counts.get(url)), [1, 2, 1]);
+    chapterCount = 4;
+    await start();
+    await until(() => ['complete', 'error'].includes(app.state().phase));
+    assert.equal(app.state().phase, 'complete', app.state().message);
+    assert.equal(app.state().report.downloaded, 4);
+    assert.equal(app.state().report.reusedExport, false);
+    assert.deepEqual(['/c1', '/c2', '/c3', '/c4'].map(url => counts.get(url)), [1, 2, 1, 1]);
+  } finally { await app.close(); }
+});
+
 test('window searches, selects, downloads through worker, and shows result without console errors', async t => {
   const stateDir = temp(t), spec = await fixture(t), opened = [];
   for (let i = 0; i < 30; i++) rememberWebsite(stateDir, `history-${i}.example`);
   rememberWebsite(stateDir, 'ixdzs8.com');
   const book = {title: spec.title, author: spec.author, url: spec.sourceUrl, site: '本地测试来源'};
-  const app = await createDesktop({stateDir, outputDir: path.join(stateDir, 'out'), findBooks: async ({title}) => title === book.title ? [book] : [], prepareBook: async () => spec, open: target => opened.push(target)});
+  const app = await createDesktop({stateDir, outputDir: path.join(stateDir, 'out'), findBooks: async ({title, signal}) => {
+    if (title === '停止测试') await new Promise(resolve => signal.addEventListener('abort', resolve, {once: true}));
+    return title === book.title ? [book] : [];
+  }, prepareBook: async () => spec, open: target => opened.push(target)});
   const executablePath = ['C:/Program Files/Google/Chrome/Application/chrome.exe', puppeteer.executablePath()].find(file => fs.existsSync(file));
   const browser = await puppeteer.launch({headless: true, executablePath});
   try {
@@ -166,6 +281,8 @@ test('window searches, selects, downloads through worker, and shows result witho
     await page.click('#start');
     await page.waitForFunction(() => document.getElementById('phase').textContent === '已完成', {timeout: 20000});
     assert.match(await page.$eval('#report-stats', el => el.textContent), /4 \/ 4/);
+    assert.match(await page.$eval('.local-state', el => el.textContent), /已下载完成/);
+    assert.match(await page.$eval('#start', el => el.textContent), /检查更新/);
     assert.ok(fs.existsSync(app.state().report.exportFile));
     await page.click('#open-folder');
     await page.waitForFunction(() => !document.getElementById('feedback').textContent);
@@ -175,6 +292,14 @@ test('window searches, selects, downloads through worker, and shows result witho
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `horizontal overflow at ${width}`);
       assert.equal(await page.$eval('#sites', el => el.getBoundingClientRect().height > 0), true, `site history inaccessible at ${width}`);
     }
+    await page.$eval('#title', el => { el.value = '停止测试'; });
+    await page.click('#search');
+    await page.waitForSelector('#stop', {visible: true});
+    await page.click('#stop');
+    await page.waitForFunction(() => document.getElementById('phase').textContent === '已停止');
+    assert.equal(await page.$eval('#stop', el => el.hidden), true);
+    assert.equal(await page.$eval('#feedback', el => el.textContent), '');
+    assert.equal(await page.$eval('#search', el => el.disabled), false);
     assert.deepEqual(errors, []);
   } finally { await browser.close(); await app.close(); }
 });
