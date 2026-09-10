@@ -20,6 +20,16 @@ import { useReadingSettings } from '@/contexts/ReadingSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
 
 import ReaderPages from './ReaderPages';
+import type {ReaderTurnMode} from './useReaderPageTurn';
+
+const turnModes=[
+  {value:'horizontal',label:'左右翻页',hint:'左右滑动或点击两侧翻页，点击中央打开菜单'},
+  {value:'scroll',label:'上下滚屏',hint:'上下滑动阅读，到章末继续上滑进入下一章'},
+  {value:'vertical',label:'上下翻页',hint:'上下滑动或点击上下区域翻页，点击中央打开菜单'},
+] as const;
+function ReaderModeSetting({value,onChange}:{value:ReaderTurnMode;onChange:(value:ReaderTurnMode)=>void}){
+  return <fieldset className="reader-mode-setting"><legend>翻页方式</legend><div className="reader-mode-options">{turnModes.map(mode=><button key={mode.value} type="button" aria-pressed={value===mode.value} onClick={()=>onChange(mode.value)}>{mode.label}</button>)}</div><p>{turnModes.find(mode=>mode.value===value)?.hint}</p></fieldset>;
+}
 
 let bgCleanupTimer: NodeJS.Timeout | null = null;
 
@@ -42,7 +52,8 @@ const settingsCache = {
   fontSizeNum: 22,
   lineHeight: 1.6,
   paraSpacing: 4,
-  pageWidth: 1000
+  pageWidth: 1000,
+  turnMode: 'horizontal' as ReaderTurnMode,
 };
 
 
@@ -102,6 +113,8 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const [lineHeight, setLineHeight] = useStoredState('reader_lineHeight',settingsCache.lineHeight,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000);
   const [paraSpacing, setParaSpacing] = useStoredState('reader_paraSpacing',settingsCache.paraSpacing,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000); 
   const [pageWidth, setPageWidth] = useStoredState('reader_pageWidth',settingsCache.pageWidth,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000);
+  const [turnMode,setTurnMode]=useStoredState<ReaderTurnMode>('reader_turnMode',settingsCache.turnMode,value=>turnModes.some(mode=>mode.value===value));
+  const hideTools=useCallback(()=>setShowNav(false),[]);
 
   // 🔥 新增：当这些设置改变时，自动同步回全局缓存
   // 这样下一章加载时，就能记住你刚才的设置了
@@ -111,6 +124,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   useEffect(() => { settingsCache.lineHeight = lineHeight; }, [lineHeight]);
   useEffect(() => { settingsCache.paraSpacing = paraSpacing; }, [paraSpacing]);
   useEffect(() => { settingsCache.pageWidth = pageWidth; }, [pageWidth]);
+  useEffect(() => { settingsCache.turnMode = turnMode; }, [turnMode]);
 
   const [hintSeen,setHintSeen]=useStoredState('has-seen-reading-hint',false);
   const showHint=!isDesktop&&!hintSeen;
@@ -419,6 +433,8 @@ if (loading) return (
     >
       <div
         className="reader-tools fixed bottom-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6 border-t transition-all duration-300 pb-safe"
+        inert={!showNav}
+        aria-hidden={!showNav}
         style={{
             backgroundColor: activeTheme.bg,
             color: activeTheme.text,
@@ -474,6 +490,7 @@ if (loading) return (
           paper={themeColor === 'cream'} dark={isActuallyDark} pageWidth={pageWidth}
           previousId={prevChapterId} nextId={nextChapterId} navigating={isNavigating}
           blocked={showCatalog || showSettings}
+          turnMode={turnMode} toolsVisible={showNav} onHideTools={hideTools}
           onChapter={goToChapter} onTools={() => { setShowHint(false); setShowNav(value => !value); }}
           onNearEnd={nearEnd}
         />
@@ -606,7 +623,7 @@ if (loading) return (
           {isDesktop ? (
             // ============ 桌面端大设置面板 (保留不变) ============
             <div 
-                className="fixed top-32 z-50 w-[500px] rounded-xl shadow-2xl border p-6 animate-in fade-in zoom-in-95"
+                className="fixed top-20 z-50 w-[500px] max-h-[calc(100dvh-160px)] overflow-y-auto rounded-xl shadow-2xl border p-6 animate-in fade-in zoom-in-95"
                 style={{ 
                 right: `calc(50% - ${pageWidth / 2 + 15}px)`,
                 backgroundColor: isActuallyDark ? '#2a2a2a' : activeTheme.panel,
@@ -616,12 +633,13 @@ if (loading) return (
             >
                 <div className="flex justify-between items-center mb-6 pb-4 border-b" style={{ borderColor: activeTheme.line }}>
                     <h3 className="font-bold text-xl flex items-center gap-2"><Settings className="w-5 h-5" /> 阅读设置</h3>
-                    <button onClick={() => setShowSettings(false)} className="p-1 hover:bg-black/5 rounded-full">
+                    <button onClick={() => setShowSettings(false)} aria-label="关闭阅读设置" className="p-1 hover:bg-black/5 rounded-full">
                         <X className="w-6 h-6 opacity-60"/>
                     </button>
                 </div>
 
                 <div className="space-y-6">
+                    <ReaderModeSetting value={turnMode} onChange={setTurnMode}/>
                     {/* Theme */}
                     <div className="flex items-center">
                         <span className="w-20 font-bold opacity-70 shrink-0">阅读主题</span>
@@ -733,11 +751,8 @@ if (loading) return (
                 </div>
             </div>
           ) : (
-            // ============ 移动端设置面板 (保留基本功能，配合底部工具栏) ============
-            // 注意：这里我们保留原有的顶部弹出样式，如果你想改为底部弹出(Bottom Sheet)，需要大幅改动 CSS。
-            // 鉴于要求“不影响网页端且基于此代码”，维持原样但在视觉上与底部栏配合。
             <div 
-            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-[320px] rounded-xl shadow-2xl border p-4 animate-in slide-in-from-bottom-5 fade-in duration-200"
+            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-[360px] max-h-[calc(100dvh-120px)] overflow-y-auto rounded-xl shadow-2xl border p-4 animate-in slide-in-from-bottom-5 fade-in duration-200"
             style={{ 
               backgroundColor: isActuallyDark ? 'rgba(40,40,40,0.95)' : 'rgba(255,255,255,0.95)',
               backdropFilter: 'blur(10px)',
@@ -745,6 +760,8 @@ if (loading) return (
               borderColor: activeTheme.line 
             }}
           >
+            <div className="flex items-center justify-between mb-3"><span className="text-sm font-bold">阅读设置</span><button aria-label="关闭阅读设置" onClick={()=>setShowSettings(false)} className="p-1"><X size={18}/></button></div>
+            <ReaderModeSetting value={turnMode} onChange={setTurnMode}/>
             {/* 紧凑排版：字号调整 (放在最上面方便操作) */}
             <div className="flex items-center gap-3 mb-4 bg-black/5 rounded-lg p-2">
                 <button onClick={() => setFontSizeNum(Math.max(12, fontSizeNum - 1))} className="px-3 font-serif hover:bg-black/10 rounded">A-</button>
@@ -841,7 +858,7 @@ if (loading) return (
                 <div className="w-8 h-8 rounded-full border-2 border-white/50 flex items-center justify-center">
                     <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
                 </div>
-                <span className="text-sm font-bold tracking-wide">点击两侧翻页，点击中间打开菜单</span><span className="text-xs opacity-80">长按段落可评论或标记</span>
+                <span className="text-sm font-bold tracking-wide">{turnModes.find(mode=>mode.value===turnMode)?.hint}</span><span className="text-xs opacity-80">长按段落可评论或标记</span>
             </div>
         </div>
       )}
