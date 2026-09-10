@@ -10,7 +10,7 @@
     <div class="nav-label">我的工作台</div>
     <div class="nav-item active"><span>▤</span> 采集书籍 <span class="nav-dot"></span></div>
     <button class="nav-item" id="folder-nav"><span>▱</span> 下载文件夹 <span>↗</span></button>
-    <div class="source-section"><div class="nav-label">已适配网站 <span id="site-count"></span></div><div id="sites"></div></div>
+    <div class="source-section"><div class="nav-label">我的网站 <span id="site-count"></span></div><p class="source-hint">最近使用的排在前面</p><div id="sites" aria-label="网站列表，按最近使用排序"></div></div>
     <div class="sidebar-bottom"><span class="local-dot"></span> 本地运行 <small>书籍与记录保存在这台电脑</small></div>
   </aside>
   <main>
@@ -20,7 +20,6 @@
       <form id="search-form">
         <label for="website">小说网站 <span>也可以粘贴书籍详情页</span></label>
         <div class="site-input"><span aria-hidden="true">◎</span><input id="website" name="website" type="text" placeholder="例如：ixdzs8.com" autocomplete="off" required maxlength="2000"><span id="adapter-status" class="input-tag">输入网址</span></div>
-        <div class="recent-row"><span>最近使用</span><div id="recent"><span class="muted">使用过的网站会出现在这里，最多保留 3 个</span></div></div>
         <div class="book-fields"><div><label for="title">书名</label><input id="title" name="title" placeholder="输入完整书名" required maxlength="200" autocomplete="off"></div><div><label for="author">作者 <span>选填，帮助区分同名书</span></label><input id="author" name="author" placeholder="知道作者的话，可以填在这里" maxlength="200" autocomplete="off"></div></div>
         <div class="form-footer"><span id="form-note">下次打开时，会保留上次使用的网站。</span><button id="search" class="primary" type="submit">查找书籍 <span>→</span></button></div>
       </form>

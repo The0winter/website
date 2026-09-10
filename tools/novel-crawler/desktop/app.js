@@ -2,7 +2,7 @@ const $ = id => document.getElementById(id);
 const token = location.hash.slice(1) || sessionStorage.getItem('desktop-token');
 if (token) sessionStorage.setItem('desktop-token', token);
 history.replaceState(null, '', '/');
-let data, selectedUrl = '', initialized = false, pollRunning = false, active = false, resultsKey = '', recentKey = '', sitesKey = '';
+let data, selectedUrl = '', initialized = false, pollRunning = false, active = false, resultsKey = '', sitesKey = '';
 const phases = {idle: '等待开始', search: '查找中', ready: '等待选择', resolving: '读取目录', probe: '抽样检查', download: '正在下载', pausing: '正在暂停', paused: '已暂停', probed: '试采通过', complete: '已完成', error: '需要处理'};
 const working = phase => ['search', 'resolving', 'probe', 'download', 'pausing'].includes(phase);
 async function api(action, body) {
@@ -19,21 +19,42 @@ function adapterStatus() {
   $('adapter-status').textContent = found ? '✓ 已适配' : host ? '待适配' : '输入网址';
   $('adapter-status').className = `input-tag ${found ? 'supported' : host ? 'unsupported' : ''}`;
   $('form-note').textContent = found || !host ? '下次打开时，会保留上次使用的网站。' : '把网址发给 Codex，即可继续适配这个来源。';
+  for (const button of document.querySelectorAll('.site-choice')) {
+    const selected = found ? button.dataset.siteId === found.id : button.dataset.host === host;
+    button.classList.toggle('selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  }
 }
 function chooseWebsite(url) { $('website').value = url; adapterStatus(); remember(); }
-async function remember() { if (!$('website').value.trim()) return; try { const settings = await api('remember', {website: $('website').value}); if (data) { data.settings = settings; renderSettings(); } } catch {} }
+async function remember() { if (!$('website').value.trim()) return; try { const settings = await api('remember', {website: $('website').value}); if (data) { data.settings = settings; renderSettings(); adapterStatus(); $('sites').scrollTop = 0; } } catch {} }
 function renderSettings() {
-  const nextRecentKey = JSON.stringify(data.settings.recentWebsites);
-  if (nextRecentKey !== recentKey) {
-    recentKey = nextRecentKey;
-    const buttons = data.settings.recentWebsites.map(url => { const button = document.createElement('button'); button.type = 'button'; button.className = 'recent-chip'; button.textContent = new URL(url).hostname; button.title = url; button.onclick = () => chooseWebsite(url); return button; });
-    if (buttons.length) $('recent').replaceChildren(...buttons);
-  }
-  const nextSitesKey = JSON.stringify(data.sites);
+  const nextSitesKey = JSON.stringify([data.sites, data.settings.recentWebsites]);
   if (nextSitesKey !== sitesKey) {
     sitesKey = nextSitesKey;
-    $('site-count').textContent = data.sites.length;
-    $('sites').replaceChildren(...data.sites.map(site => { const button = document.createElement('button'); button.type = 'button'; button.className = 'site-choice'; button.textContent = site.name; const small = document.createElement('small'); small.textContent = new URL(site.home).hostname; button.append(small); button.onclick = () => chooseWebsite(site.home); return button; }));
+    const rows = [], seen = new Set();
+    for (const url of [...data.settings.recentWebsites, ...data.sites.map(site => site.home)]) {
+      const host = new URL(url).hostname;
+      const site = data.sites.find(site => site.hosts.includes(host));
+      const key = site ? `site:${site.id}` : url;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({url, host, site});
+    }
+    $('site-count').textContent = rows.length;
+    $('sites').replaceChildren(...rows.map(({url, host, site}) => {
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'site-choice'; button.title = url;
+      button.dataset.host = host; button.dataset.siteId = site?.id || '';
+      button.disabled = working(data.task.phase);
+      const heading = document.createElement('span'), name = document.createElement('span'), status = document.createElement('span');
+      heading.className = 'site-choice-heading'; name.className = 'site-choice-name'; name.textContent = site?.name || host;
+      status.className = `site-state ${site ? 'adapted' : 'pending'}`;
+      status.textContent = site ? '已适配' : '待适配';
+      heading.append(name, status); button.append(heading);
+      if (site) { const small = document.createElement('small'); small.textContent = host; button.append(small); }
+      button.onclick = () => chooseWebsite(url);
+      return button;
+    }));
   }
 }
 function render() {
@@ -47,7 +68,7 @@ function render() {
   const task = data.task;
   active = working(task.phase);
   for (const id of ['website', 'title', 'author', 'search', 'probe-only']) $(id).disabled = active;
-  for (const button of document.querySelectorAll('.recent-chip,.site-choice')) button.disabled = active;
+  for (const button of document.querySelectorAll('.site-choice')) button.disabled = active;
   $('search').textContent = task.phase === 'search' ? '正在查找…' : '查找书籍 →';
   $('phase').textContent = phases[task.phase] || '等待开始';
   $('phase').className = `status-pill ${active ? 'running' : task.phase}`;

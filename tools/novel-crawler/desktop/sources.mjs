@@ -38,7 +38,7 @@ export function rememberWebsite(stateDir, website) {
   const file = path.join(stateDir, 'desktop-settings.json');
   const previous = readJson(file, {});
   // Remember sites, not individual book URLs, so the next title searches the whole site.
-  const recentWebsites = [origin, ...(previous.recentWebsites || []).filter(v => v !== origin)].slice(0, 3);
+  const recentWebsites = [...new Set([origin, ...(previous.recentWebsites || [])])];
   const next = {version: 1, lastWebsite: origin, recentWebsites};
   atomicWrite(file, next);
   return next;

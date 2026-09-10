@@ -34,10 +34,15 @@ async function fixture(t) {
 }
 const request = (app, route, body, headers = {}) => fetch(`${app.baseUrl}/api/${route}`, {method: body === undefined ? 'GET' : 'POST', headers: {'x-desktop-token': app.token, 'Content-Type': 'application/json', ...headers}, ...(body === undefined ? {} : {body: JSON.stringify(body)})});
 
-test('three recent sites are unique, move to front, and retain last site on disk', t => {
+test('site history retains every site, moves reused sites to front, and keeps the last site on disk', t => {
   const dir = temp(t);
   for (const site of ['a.example', 'b.example', 'c.example', 'd.example', 'b.example/read/123/?a=1']) rememberWebsite(dir, site);
-  assert.deepEqual(readSettings(dir), {version: 1, lastWebsite: 'https://b.example/', recentWebsites: ['https://b.example/', 'https://d.example/', 'https://c.example/']});
+  assert.deepEqual(readSettings(dir), {version: 1, lastWebsite: 'https://b.example/', recentWebsites: ['https://b.example/', 'https://d.example/', 'https://c.example/', 'https://a.example/']});
+  for (let i = 0; i < 100; i++) rememberWebsite(dir, `history-${i}.example`);
+  rememberWebsite(dir, 'a.example/book/1/');
+  assert.equal(readSettings(dir).recentWebsites.length, 104);
+  assert.equal(readSettings(dir).recentWebsites[0], 'https://a.example/');
+  assert.equal(readSettings(dir).recentWebsites.at(-1), 'https://c.example/');
   assert.equal(normalizeWebsite(' HTTPS://IXDZS8.COM/read/38804/#chapter '), 'https://ixdzs8.com/read/38804/');
   for (const url of ['javascript:alert(1)', 'file:///C:/test', 'https://user:pass@example.com', 'localhost', '127.0.0.1:4444', 'https://example.com:5000']) assert.throws(() => normalizeWebsite(url));
 });
@@ -73,7 +78,7 @@ test('desktop API rejects unauthenticated and foreign-origin requests, preserves
   try {
     const {settings} = await (await request(app, 'state')).json();
     assert.equal(settings.lastWebsite, 'https://unadapted.example/');
-    assert.deepEqual(settings.recentWebsites, ['https://unadapted.example/', 'https://d.example/', 'https://c.example/']);
+    assert.deepEqual(settings.recentWebsites, ['https://unadapted.example/', 'https://d.example/', 'https://c.example/', 'https://b.example/', 'https://a.example/']);
   } finally { await app.close(); }
 });
 
@@ -93,6 +98,7 @@ test('pause finishes a checkpoint, skips source scoring, and continuation export
 
 test('window searches, selects, downloads through worker, and shows result without console errors', async t => {
   const stateDir = temp(t), spec = await fixture(t), opened = [];
+  for (let i = 0; i < 30; i++) rememberWebsite(stateDir, `history-${i}.example`);
   rememberWebsite(stateDir, 'ixdzs8.com');
   const book = {title: spec.title, author: spec.author, url: spec.sourceUrl, site: '本地测试来源'};
   const app = await createDesktop({stateDir, outputDir: path.join(stateDir, 'out'), findBooks: async ({title}) => title === book.title ? [book] : [], prepareBook: async () => spec, open: target => opened.push(target)});
@@ -106,6 +112,18 @@ test('window searches, selects, downloads through worker, and shows result witho
     await page.goto(app.url);
     await page.waitForFunction(() => document.getElementById('website').value === 'https://ixdzs8.com/');
     assert.equal(await page.$eval('#adapter-status', el => el.textContent), '✓ 已适配');
+    assert.equal(await page.$$eval('.site-choice', els => els.length), 31);
+    assert.equal(await page.$eval('.site-choice', el => el.dataset.host), 'ixdzs8.com');
+    assert.equal(await page.$eval('#sites', el => el.scrollHeight > el.clientHeight), true);
+    await page.click('.site-choice[data-host="history-29.example"]');
+    await page.waitForFunction(() => document.querySelector('.site-choice').dataset.host === 'history-29.example');
+    assert.equal(await page.$eval('.site-choice .site-state', el => el.textContent), '待适配');
+    assert.equal(await page.$eval('#website', el => el.value), 'https://history-29.example/');
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById('website').value === 'https://history-29.example/');
+    assert.equal(await page.$eval('.site-choice', el => el.dataset.host), 'history-29.example');
+    await page.click('.site-choice[data-host="ixdzs8.com"]');
+    await page.waitForFunction(() => document.querySelector('.site-choice').dataset.host === 'ixdzs8.com');
     await page.type('#title', spec.title);
     await page.click('#search');
     await page.waitForSelector('.book-result');
@@ -120,6 +138,7 @@ test('window searches, selects, downloads through worker, and shows result witho
     for (const width of [1180, 800, 560]) {
       await page.setViewport({width, height: 920});
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `horizontal overflow at ${width}`);
+      assert.equal(await page.$eval('#sites', el => el.getBoundingClientRect().height > 0), true, `site history inaccessible at ${width}`);
     }
     assert.deepEqual(errors, []);
   } finally { await browser.close(); await app.close(); }
