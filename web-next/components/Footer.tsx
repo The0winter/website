@@ -1,14 +1,17 @@
 'use client';
 
 import Link from 'next/link';
+import AccountLink from './AccountLink';
 import { ExternalLink } from 'lucide-react';
 import { usePathname } from 'next/navigation'; // 1. 引入路径获取钩子
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Footer() {
   const pathname = usePathname(); // 2. 获取当前路由路径
+  const { user, loading } = useAuth();
 
   // 3. 如果当前路径是 /writer（创作中心），则直接不渲染 Footer
-  if (pathname === '/login' || pathname?.startsWith('/writer')) {
+  if (pathname === '/login' || ((pathname === '/profile' || pathname === '/library') && (loading || !user)) || pathname?.startsWith('/writer')) {
     return null;
   }
 
@@ -39,7 +42,7 @@ export default function Footer() {
               快速导航
             </h3>
             <ul className="space-y-2 text-sm text-gray-500 dark:text-gray-400">
-              <li><Link href="/library" className="hover:text-blue-600 transition-colors">我的书架</Link></li>
+              <li><AccountLink href="/library" className="hover:text-blue-600 transition-colors">我的书架</AccountLink></li>
               <li><Link href="/ranking" className="hover:text-blue-600 transition-colors">排行榜</Link></li>
               <li><Link href="/writer" className="hover:text-blue-600 transition-colors">创作管理</Link></li>
               <li><Link href="/sitemap.xml" className="hover:text-blue-600 transition-colors">站点地图</Link></li>

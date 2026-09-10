@@ -21,7 +21,7 @@ for (const width of [320, 390, 768, 1440]) {
     const home = page.locator(width < 768 ? '.mobile-home' : '.desktop-home');
     const background = await home.evaluate(element => getComputedStyle(element).backgroundColor);
     expect(background).toBe(width < 768 ? 'rgb(244, 236, 230)' : 'rgb(248, 249, 250)');
-    await page.locator(width < 768 ? '.mh-bottom a[href="/profile"]' : 'nav a[href="/login"]:visible').click();
+    await (width < 768 ? page.locator('.mh-bottom').getByRole('link', { name: '我', exact: true }) : page.locator('nav').getByRole('link', { name: '登录', exact: true })).click();
     await atLogin(page);
     await expect(page.locator('nav, footer')).toHaveCount(0);
     await expect(page.locator('a[href^="mailto:"]')).toHaveCount(0);
@@ -88,7 +88,7 @@ test('book login supports Back, Forward and a real username session returning to
 test('search query survives login and email authentication', async ({ page }) => {
   const source = '/search?q=' + encodeURIComponent('山海');
   await page.goto(base + source);
-  await page.locator('nav a[href="/login"]:visible').click(); await atLogin(page);
+  await page.locator('nav').getByRole('link', { name: '登录', exact: true }).click(); await atLogin(page);
   await page.getByRole('button', { name: '邮箱登录', exact: true }).click();
   await page.getByPlaceholder('请输入邮箱').fill('reader@example.test');
   await page.getByPlaceholder('请输入密码').fill('Local-test-12345');
@@ -100,7 +100,7 @@ test('search query survives login and email authentication', async ({ page }) =>
 test('login opened in a new tab returns to the referring page instead of leaving the site', async ({ page }) => {
   await page.goto(base + detail); await idle(page);
   const opened = page.waitForEvent('popup');
-  await page.locator('nav a[href="/login"]:visible').evaluate((link: HTMLAnchorElement) => window.open(link.href, '_blank'));
+  await page.locator('nav').getByRole('link', { name: '登录', exact: true }).evaluate((link: HTMLAnchorElement) => window.open(link.href, '_blank'));
   const popup = await opened;
   await atLogin(popup);
   await popup.reload(); await atLogin(popup);

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import Link from './PrefetchLink';
+import AccountLink from './AccountLink';
 import { useRouter, usePathname } from 'next/navigation';
 // 1. 引入 Next.js 的图片组件
 import Image from 'next/image';
@@ -12,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext'; 
 
 export default function Navbar() {
-  const { user, logout } = useAuth();
+  const { user, logout, loading: authLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [searchQuery, setSearchQuery] = useState('');
@@ -25,7 +26,7 @@ export default function Navbar() {
 
 const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
   // 只要是旧版阅读页(/read/)、新版阅读页、或者论坛主页，都隐藏
-  if (pathname === '/login' || pathname?.startsWith('/read/') || pathname?.startsWith('/forum') || isNewReadingPage) {
+  if (pathname === '/login' || ((pathname === '/profile' || pathname === '/library') && (authLoading || !user)) || pathname?.startsWith('/read/') || pathname?.startsWith('/forum') || isNewReadingPage) {
     return null;
   }
 
@@ -96,12 +97,12 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
 
           {/* 右侧按钮 (保持原有逻辑完全不动) */}
           <div className="flex items-center space-x-4">
-            <Link 
+            <AccountLink
               href="/library" 
               className={`${textSecondary} ${hoverText} px-3 py-2 rounded-md text-sm font-medium transition-colors`}
             >
               书架
-            </Link>
+            </AccountLink>
 
             {user ? (
               <div className="flex items-center space-x-4">
@@ -167,14 +168,14 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
                    </button>
                    
                    {/* 书架图标 */}
-                   <Link href="/library"><Library className="w-5 h-5" /></Link>
+                   <AccountLink href="/library" aria-label="书架"><Library className="w-5 h-5" /></AccountLink>
                    
                    {/* 用户头像 */}
-                   <Link href={user ? "/profile" : "/login"}>
+                   <AccountLink href="/profile" aria-label="我的">
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center ${isDark ? 'bg-[#333]' : 'bg-gray-100'}`}>
                           <User className="w-4 h-4" />
                       </div>
-                   </Link>
+                   </AccountLink>
                 </div>
             </div>
 

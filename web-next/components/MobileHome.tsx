@@ -3,6 +3,7 @@
 import {useEffect,useState} from 'react';
 import Image from 'next/image';
 import Link from './PrefetchLink';
+import AccountLink from './AccountLink';
 import BookLink from './BookLink';
 import {useRouter} from 'next/navigation';
 import {BookOpen,Search,LayoutGrid,Trophy,CalendarDays,Library,Gem,MessageCircle,UserRound,ChevronRight,ArrowLeft} from 'lucide-react';
@@ -60,6 +61,6 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
       {loading?<p className="mh-empty" role="status">正在加载…</p>:error?<p role="alert" className="mh-empty">{error} <button onClick={()=>setRetry(n=>n+1)}>重试</button></p>:<BookRows books={rows}/>}
       <nav className="mh-pagination" aria-label="书籍分页"><button disabled={loading||page===1} onClick={()=>setPage(n=>n-1)}>上一页</button><span>第 {page} 页</span><button disabled={loading||page*20>=total} onClick={()=>setPage(n=>n+1)}>下一页</button></nav>
     </section>}
-    <nav className="mh-bottom" aria-label="移动端主导航"><Link href="/library"><Library/><span>书架</span></Link><Link href="/" aria-current="page" onClick={()=>setMode('home')}><Gem/><span>精选</span></Link><Link href="/forum"><MessageCircle/><span>论坛</span></Link><Link href="/profile"><UserRound/><span>我</span></Link></nav>
+    <nav className="mh-bottom" aria-label="移动端主导航"><AccountLink href="/library"><Library/><span>书架</span></AccountLink><Link href="/" aria-current="page" onClick={()=>setMode('home')}><Gem/><span>精选</span></Link><Link href="/forum"><MessageCircle/><span>论坛</span></Link><AccountLink href="/profile"><UserRound/><span>我</span></AccountLink></nav>
   </div>;
 }

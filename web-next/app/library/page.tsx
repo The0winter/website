@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { Bookmark, BookOpen, Eye, Trash2, AlertTriangle, X } from 'lucide-react';
 import { bookmarksApi, booksApi, Book } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import AccountLoading from '@/components/AccountLoading';
 // ✅ 1. 引入设置 Context (用来重置主题)
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext'; 
 
@@ -80,7 +81,9 @@ export default function Library() {
     }
   };
 
-  if (authLoading || loading) {
+  if (authLoading || !user) return <AccountLoading checking={authLoading} />;
+
+  if (loading) {
     // 🔥🔥 核心修复在这里：加上 bg-gray-50 🔥🔥
     // 之前是透明的，所以会漏出底下的黑色背景
     return (

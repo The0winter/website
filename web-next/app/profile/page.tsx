@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import AccountLoading from '@/components/AccountLoading';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -130,18 +131,7 @@ export default function ProfilePage() {
     }
   }, [toast]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center gap-3">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className="text-gray-500 text-sm">正在获取用户信息...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) return null;
+  if (loading || !user) return <AccountLoading checking={loading} />;
 
 return (
     <div className="min-h-screen bg-gray-50 font-sans">

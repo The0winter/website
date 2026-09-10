@@ -14,7 +14,7 @@ type Props = Omit<ComponentProps<typeof Link>, 'prefetch' | 'ref'> & {
 function PendingFeedback({ label }: { label: string }) {
   const { pending } = useLinkStatus();
   if (!pending) return null;
-  return <span role="status" className="fixed inset-x-0 top-0 z-[100] h-1 bg-blue-500 motion-safe:animate-pulse pointer-events-none"><span className="sr-only">{label}</span></span>;
+  return <span role="status" data-link-pending className="sr-only">{label}</span>;
 }
 
 export default function PrefetchLink({ children, href, prefetchMode = 'visible', pendingLabel = '正在打开页面…', onMouseEnter, onMouseLeave, onFocus, onTouchStart, onBlur, onNavigate, ...props }: Props) {
