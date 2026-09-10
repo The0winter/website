@@ -590,7 +590,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
         </div>
 
         {/* === 第四部分：目录 (⚠️ 利用 order-4 md:order-3 在手机端沉底，电脑端仍为第3) === */}
-        <div className="bg-white rounded-lg shadow-sm order-4 md:order-3">
+        <div role="region" aria-label="章节目录" aria-busy={loadingChapters} className="bg-white rounded-lg shadow-sm order-4 md:order-3">
           <div className="p-4 md:p-8">
             <div className="flex justify-between items-center mb-3 md:mb-6">
                 <h2 className="text-base md:text-xl font-bold text-gray-900 flex items-center space-x-2 border-l-4 border-blue-600 pl-3">
@@ -606,7 +606,6 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                 </button>
             </div>
 
-            {loadingChapters && chapters.length > 0 && <p role="status" className="mb-3 text-xs text-gray-500">已加载 {chapters.length}{chapterTotal === null ? '' : ` / ${chapterTotal}`} 章，继续加载中…</p>}
             {chapterError && <p role="alert" className="mb-3 text-sm text-red-600">{chapterError} <button onClick={() => setCatalogRetry(value => value + 1)} className="underline">重试</button></p>}
             {loadingChapters && chapters.length === 0 ? (
                <div className="py-6 md:py-10 text-center text-gray-500 flex flex-col items-center">
@@ -691,7 +690,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                 <div className="flex items-center justify-between p-4 md:p-5 border-b border-gray-100 bg-gray-50">
                     <div>
                         <h3 className="text-lg md:text-xl font-bold text-gray-900">全部目录</h3>
-                        <p className="text-xs md:text-sm text-gray-500 mt-1">共 {chapterTotal ?? chapters.length} 章{loadingChapters ? ` · 已加载 ${chapters.length} 章` : ''}</p>
+                        <p className="text-xs md:text-sm text-gray-500 mt-1">共 {chapterTotal ?? chapters.length} 章</p>
                     </div>
                     <div className="flex items-center space-x-4">
                         <button 

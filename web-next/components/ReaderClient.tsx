@@ -980,8 +980,8 @@ if (loading) return (
             </div>
             
             {/* List */}
-            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-              {catalogLoading && <p role="status" className="mb-3 text-sm opacity-60">{allChapters.length ? `已加载 ${allChapters.length} 章，继续加载中…` : '加载目录…'}</p>}
+            <div role="region" aria-label="阅读目录" aria-busy={catalogLoading} className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+              {catalogLoading && allChapters.length === 0 && <p role="status" className="mb-3 text-sm opacity-60">加载目录…</p>}
               {catalogError && <p role="alert" className="mb-3 text-sm text-red-600">{catalogError} <button onClick={() => { setCatalogLoading(true); setCatalogError(''); setCatalogRetry(value => value + 1); }} className="underline">重试</button></p>}
               {!catalogLoading && !catalogError && !allChapters.length && <p className="text-sm opacity-60">暂无章节</p>}
               <div className={`${isDesktop ? 'grid grid-cols-2 gap-x-12 gap-y-2' : 'flex flex-col gap-1'}`}>

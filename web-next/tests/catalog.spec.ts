@@ -47,13 +47,17 @@ test('detail shows latest chapters first and keeps links stable while older page
     await expect(latest).toBeVisible();
     await expect(latest).toHaveAttribute('href',`/book/${bookId}/${chapterIds[1237]}`);
     await expect(page.getByRole('link',{name:'开始阅读',exact:true}).filter({visible:true})).toHaveAttribute('href',`/book/${bookId}/${chapterIds[0]}`);
-    await expect(page.getByRole('status')).toContainText('200 / 1238');
+    await expect(page.getByRole('region',{name:'章节目录'})).toHaveAttribute('aria-busy','true');
+    await expect(page.getByText(/已加载|继续加载中/)).toHaveCount(0);
     await expect.poll(()=>requested.length).toBe(3);
     expect(requested).toEqual([2,3,4]);
     await page.getByRole('button',{name:'查看完整目录 (1238章)'}).click();
     await expect(page.getByRole('heading',{name:'全部目录'})).toBeVisible();
+    await expect(page.getByText(/已加载|继续加载中/)).toHaveCount(0);
+    const latestPosition=await latest.last().boundingBox();
     release();
-    await expect(page.getByRole('status')).toHaveCount(0);
+    await expect(page.getByRole('region',{name:'章节目录'})).toHaveAttribute('aria-busy','false');
+    expect(await latest.last().boundingBox()).toEqual(latestPosition);
     await expect(latest.first()).toHaveAttribute('href',`/book/${bookId}/${chapterIds[1237]}`);
     expect(requested.slice().sort((a,b)=>a-b)).toEqual([2,3,4,5,6,7]);
     await page.unroute(`**/api/books/${bookId}/chapters*`);
@@ -79,7 +83,7 @@ test('changing sort during loading starts from the matching end and ignores late
     await expect.poll(()=>requested.length).toBe(3);
     await page.getByRole('button',{name:'倒序',exact:true}).click();
     await expect(page.getByRole('link',{name:'第1章 目录验证',exact:true})).toBeVisible();
-    await expect(page.getByRole('status')).toHaveCount(0);
+    await expect(page.getByRole('region',{name:'章节目录'})).toHaveAttribute('aria-busy','false');
     release();
     await expect(page.getByRole('link',{name:'第1章 目录验证',exact:true})).toHaveAttribute('href',`/book/${bookId}/${chapterIds[0]}`);
     const finishedRequests=requested.length;
@@ -108,7 +112,8 @@ test('reader shows the first batch, surfaces errors, retries, and keeps its cata
   fail=false;
   await page.getByRole('button',{name:'重试',exact:true}).click();
   await expect(page.getByRole('button',{name:'第1238章 目录验证',exact:true})).toBeAttached();
-  await expect(page.getByRole('status')).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'阅读目录'})).toHaveAttribute('aria-busy','false');
+  await expect(page.getByText(/已加载|继续加载中/)).toHaveCount(0);
   const requestsAfterLoad=requested.length;
   await page.getByRole('button',{name:'第1章 目录验证',exact:true}).click();
   await page.getByRole('button',{name:'下一章',exact:true}).click();
