@@ -42,6 +42,7 @@ interface Book {
   title: string;
   description: string;
   cover_image?: string;
+  author_profile_id?: string;
   author_id?: string | {_id?:string;id?:string;username?:string} | null; 
   author?: string;
   status?: string;
@@ -315,6 +316,7 @@ export default function BookDetailClient({ initialBookData }: BookDetailClientPr
     return book.author || '未知作者';
   };
   const getAuthorId = () => {
+     if (book.author_profile_id) return book.author_profile_id;
      if (typeof book.author_id === 'object') return book.author_id?.id || book.author_id?._id;
      return book.author_id;
   };

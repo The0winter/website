@@ -1,3 +1,5 @@
+import Author from '../models/Author.js';
+import {importMetadata} from '../services/import-metadata.js';
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import Book from '../models/Book.js';
@@ -22,7 +24,10 @@ export function importRoutes(app) {
   app.post('/api/admin/upload-book',credential,asyncRoute(async(req,res)=>{
     const data=req.body;
     if(typeof data.sourceUrl!=='string'||!/^https?:\/\//.test(data.sourceUrl)||data.sourceUrl.length>2000||typeof data.title!=='string'||!data.title||data.title.length>200||!Array.isArray(data.chapters)||data.chapters.length>200)fail(400,'导入需稳定来源、书名及最多200章');
+    if(data.dryRun!==undefined&&typeof data.dryRun!=='boolean')fail(400,'dryRun 必须为布尔值');
+    const {author,metadata}=importMetadata(data);
     const validated=data.chapters.map(chapter=>{
+      if(!chapter||typeof chapter!=='object')fail(400,'章节无效');
       const result=validateChapter(chapter),sourceUrl=chapter.link??chapter.sourceUrl;
       if(sourceUrl!==undefined){if(typeof sourceUrl!=='string'||sourceUrl.length>2000||!/^https?:\/\//.test(sourceUrl))fail(400,'章节来源链接无效');result.sourceUrl=sourceUrl;}
       return result;
@@ -31,12 +36,19 @@ export function importRoutes(app) {
     let result;
     await mongoose.connection.transaction(async session=>{
       let book=await Book.findOne({sourceUrl:data.sourceUrl,importManaged:true}).session(session);
+      if(book?.author_id)fail(409,'导入作品已绑定登录账号，需要人工核实归属');
+      if(book?.author_profile_id){const previous=await Author.findById(book.author_profile_id).session(session);if(!previous||previous.sourceKey!==author.sourceKey)fail(409,'作者来源发生变化，需要明确核实');}
       if(book?.deletedAt)fail(409,'来源对应作品已下架，须显式恢复');
       if(!book) {
         if(await Book.exists({sourceUrl:data.sourceUrl}).session(session))fail(409,'已有来源映射未经核实，需人工处理');
         if(data.dryRun){result={dryRun:true,newBook:true,insert:validated.length};return;}
         [book]=await Book.create([{title:data.title,author:typeof data.author==='string'?data.author:'未知',sourceUrl:data.sourceUrl,importManaged:true,category:data.category||'未分类'}],{session});
       } else if(!data.dryRun) await lockBook(book._id,{role:'import'},session);
+      if(!data.dryRun){
+        const profile=await Author.findOneAndUpdate({sourceKey:author.sourceKey},{$setOnInsert:author},{upsert:true,new:true,session});
+        Object.assign(book,metadata,{author:profile.name,author_profile_id:profile._id});
+        await book.save({session});
+      }
       let inserted=0,unchanged=0,enriched=0;
       for(const chapter of validated){
         const existing=await Chapter.findOne({bookId:book._id,chapter_number:chapter.chapter_number}).session(session);
@@ -46,7 +58,7 @@ export function importRoutes(app) {
         }
         else {inserted++;if(!data.dryRun)await Chapter.create([{...chapter,bookId:book._id}],{session});}
       }
-      result={dryRun:!!data.dryRun,bookId:String(book._id),inserted,unchanged,enriched};
+      result={dryRun:!!data.dryRun,bookId:String(book._id),authorId:book.author_profile_id?String(book.author_profile_id):null,inserted,unchanged,enriched};
     });res.json(result);
   }));
 }
