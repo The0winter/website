@@ -2,9 +2,11 @@
 import { safeFetch as fetch, catalogPages, type CatalogPage } from '@/lib/request';
 
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import Link from './PrefetchLink';
 import ReadingEntryLink from './ReadingEntryLink';
+import BookCatalogSheet from './BookCatalogSheet';
+import {openDetailCatalog, closeDetailCatalog, detailCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import { useRouter } from 'next/navigation';
 import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, User as UserIcon, Pencil, X, ArrowUpDown, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import BookArticles from './BookArticles';
@@ -131,7 +133,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   
   // 🔥 目录交互状态
   const [isReversed, setIsReversed] = useState(true); // 默认倒序 (最新章节在前)
-  const [showAllChapters, setShowAllChapters] = useState(false); // 是否显示全部章节弹窗
+  const showAllChapters = useSyncExternalStore(subscribeBookNavigation, () => detailCatalogOpen(book.id), serverCatalogClosed);
+  const setShowAllChapters = (open: boolean) => open ? openDetailCatalog(book.id) : closeDetailCatalog();
   const toggleCatalogOrder = () => {
     setIsReversed(value => !value);
     if (!completeCatalog.current) {
@@ -352,7 +355,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
   return (
     // 修改1：增加手机端底部 padding (pb-24)，防止被常驻底栏遮挡内容
-    <div className="book-detail min-h-screen bg-gray-50 pb-24 md:pb-12">
+    <div data-book-id={book.id} className="book-detail min-h-screen bg-gray-50 pb-24 md:pb-12">
       <div className="hidden md:block h-[20px]"></div>
 
       {/* ⚠️ 修改2：将 space-y 替换为 flex flex-col 和 gap，以便利用 order 属性实现手机端模块换位 */}
@@ -692,13 +695,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
         </div>
       </div>
 
-      {/* === 全屏目录弹窗 (保留原有逻辑，原封不动) === */}
-      {showAllChapters && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 sm:p-6" onClick={() => setShowAllChapters(false)}>
-            <div 
-                className="bg-white w-full max-w-5xl h-[85vh] rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200"
-                onClick={e => e.stopPropagation()} 
-            >
+      <BookCatalogSheet open={showAllChapters} onClose={closeDetailCatalog}>
                 <div className="flex items-center justify-between p-4 md:p-5 border-b border-gray-100 bg-gray-50">
                     <div>
                         <h3 className="text-lg md:text-xl font-bold text-gray-900">全部目录</h3>
@@ -714,9 +711,10 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                         </button>
                         <button 
                             onClick={() => setShowAllChapters(false)}
+                            aria-label="关闭目录"
                             className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-500 hover:text-gray-800"
                         >
-                            <X aria-label="关闭目录" className="w-6 h-6" />
+                            <X className="w-6 h-6" />
                         </button>
                     </div>
                 </div>
@@ -750,9 +748,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                         )}
                     />
                 </div>
-            </div>
-        </div>
-      )}
+      </BookCatalogSheet>
 
     </div>
   );

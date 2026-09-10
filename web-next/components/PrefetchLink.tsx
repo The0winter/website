@@ -4,6 +4,7 @@ import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, useSyncExternalStore, type ComponentProps } from 'react';
 import { canPrefetchHref, currentPrefetchPolicy, observeBookVisibility, serverPrefetchPolicy, shouldPrefetchBook, subscribePrefetchPolicy } from '@/lib/book-prefetch';
+import {navigateBookLink} from '@/lib/book-navigation';
 
 type Props = Omit<ComponentProps<typeof Link>, 'prefetch' | 'ref'> & {
   prefetchMode?: 'visible' | 'intent';
@@ -21,10 +22,6 @@ export default function PrefetchLink({ children, href, prefetchMode = 'visible',
   const [visible, setVisible] = useState(false);
   const [intent, setIntent] = useState(false);
   const pathname = usePathname();
-  // The reader inserts its own return entry. Reuse the detail entry when
-  // entering from there so exiting the reader never leaves duplicate details.
-  const enteringReader = typeof href === 'string' && /^\/book\/[^/]+$/.test(pathname) && href.startsWith(`${pathname}/`);
-  const readerBook = /^\/book\/([^/]+)\/[^/]+$/.exec(pathname)?.[1];
   const policy = useSyncExternalStore(subscribePrefetchPolicy, currentPrefetchPolicy, serverPrefetchPolicy);
   useEffect(() => {
     if (!anchor.current) return;
@@ -38,16 +35,14 @@ export default function PrefetchLink({ children, href, prefetchMode = 'visible',
   const prefetch = canPrefetchHref(href, pathname) && shouldPrefetchBook(policy, visible, intent, prefetchMode);
   return <Link
     {...props}
-    replace={props.replace ?? enteringReader}
     href={href}
     ref={anchor}
     prefetch={prefetch}
     onNavigate={event => {
       let cancelled = false;
       onNavigate?.({preventDefault() { cancelled = true; event.preventDefault(); }});
-      if (!cancelled && readerBook && href === `/book/${readerBook}` && window.history.state?.readerBook === readerBook) {
+      if (!cancelled && typeof href === 'string' && navigateBookLink(href)) {
         event.preventDefault();
-        window.history.back();
       }
     }}
     onMouseEnter={event => { setIntent(true); onMouseEnter?.(event); }}

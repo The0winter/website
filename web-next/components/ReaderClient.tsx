@@ -7,6 +7,7 @@ import { useParams, usePathname, useRouter } from 'next/navigation';
 import Link from './PrefetchLink';
 import { currentPrefetchPolicy, serverPrefetchPolicy, subscribePrefetchPolicy } from '@/lib/book-prefetch';
 import { rememberChapter } from '@/lib/reading-session';
+import {replaceReaderChapter} from '@/lib/book-navigation';
 import {readerChapterCache as chapterCache,loadReaderChapter,loadReaderCounts} from '@/lib/reader-chapters';
 import { 
   Settings, BookOpen, List, 
@@ -129,26 +130,6 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const showHint=!isDesktop&&!hintSeen;
   const setShowHint=(visible:boolean)=>setHintSeen(!visible); // 新手引导提示
 
-  // Keep a return entry even when a chapter is opened directly in a new tab.
-  // Give it the real detail URL so Back also works across a document reload.
-  // For same-document Back, replace the retained reader tree with the detail route.
-  useEffect(() => {
-    if (window.history.state?.readerBook !== bookId) {
-      const href = window.location.href;
-      const state = window.history.state;
-      window.history.replaceState({...state, readerReturn: bookId}, '', `/book/${bookId}`);
-      window.history.pushState({...state, readerBook: bookId}, '', href);
-    }
-    const returnToDetail = (event: PopStateEvent) => {
-      if (event.state?.readerReturn !== bookId) return;
-      event.stopImmediatePropagation();
-      navigationSequence.current++;
-      router.replace(`/book/${bookId}`);
-    };
-    window.addEventListener('popstate', returnToDetail, true);
-    return () => window.removeEventListener('popstate', returnToDetail, true);
-  }, [bookId, router]);
-
   // 主题映射
   const themeMap = {
     cream:  { name: '羊皮纸', bg: '#e7d2ae', text: '#352a18', line: '#c7b18d', panel: '#faf3e5', desk: '#d9c6a6' },
@@ -251,7 +232,8 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
       if(cached?.bookId===bookId){setChapter(cached);setNavigating(false);}else setNavigating(true);
     };
     window.addEventListener('popstate',restore);
-    return()=>{invalidate();window.removeEventListener('popstate',restore);};
+    window.addEventListener('book-navigation-leave',invalidate);
+    return()=>{invalidate();window.removeEventListener('popstate',restore);window.removeEventListener('book-navigation-leave',invalidate);};
   },[bookId]);
   useEffect(()=>{if(chapter && book)document.title=`${chapter.title} - ${book.title}`;},[chapter,book]);
 
@@ -278,7 +260,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
       // Chapter turns share one history entry. Native history integration keeps
       // the URL in sync without refetching the route; Back exits to book details.
       const href=`/book/${bookId}/${next.id}`;
-      window.history.replaceState({readerBook:bookId},'',href);
+      replaceReaderChapter(href);
     };
     const cached=chapterCache.get(targetChapterId) || (adjacent.previous?.id===targetChapterId?adjacent.previous:adjacent.next?.id===targetChapterId?adjacent.next:undefined);
     if(cached?.bookId===bookId){enter(cached);return;}
