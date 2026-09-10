@@ -9,7 +9,7 @@ import { BookOpen, Award, Flame, Plus, Clock } from 'lucide-react';
 // ✅ 确保引用路径正确
 import { Book, Profile } from '@/lib/api';
 import {safeFetch} from '@/lib/request';
-import Link from 'next/link';
+import BookLink from '@/components/BookLink';
 
 export default function AuthorProfile() {
     const params = useParams();
@@ -112,13 +112,13 @@ export default function AuthorProfile() {
                                     <h2 className="text-2xl font-bold mb-2 text-gray-900">{latestBook.title}</h2>
                                     <p className="text-gray-600 mb-6 line-clamp-2">{latestBook.description}</p>
                                     <div className="flex gap-3">
-                                        <Link href={`/book/${latestBook.id}`} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full font-medium transition-colors">
+                                        <BookLink href={`/book/${latestBook.id}`} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full font-medium transition-colors">
                                             Read Now
-                                        </Link>
-                                        <Link href={`/book/${latestBook.id}`} className="border border-gray-300 hover:border-gray-400 text-gray-700 px-6 py-2 rounded-full font-medium flex items-center gap-2 transition-colors">
+                                        </BookLink>
+                                        <BookLink href={`/book/${latestBook.id}`} className="border border-gray-300 hover:border-gray-400 text-gray-700 px-6 py-2 rounded-full font-medium flex items-center gap-2 transition-colors">
                                             <Plus className="w-4 h-4" />
                                             Library
-                                        </Link>
+                                        </BookLink>
                                     </div>
                                 </div>
                             </div>
@@ -147,7 +147,7 @@ export default function AuthorProfile() {
                                     </div>
                                     <div className="flex-1">
                                         <div className="flex justify-between items-start">
-                                            <h4 className="font-bold text-gray-900 hover:text-blue-600 cursor-pointer"><Link href={`/book/${book.id}`}>{book.title}</Link></h4>
+                                            <h4 className="font-bold text-gray-900 hover:text-blue-600 cursor-pointer"><BookLink href={`/book/${book.id}`}>{book.title}</BookLink></h4>
                                             <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
                                                 {book.status || 'Ongoing'}
                                             </span>

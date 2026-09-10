@@ -5,6 +5,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ReadingSettingsProvider } from "@/contexts/ReadingSettingsContext"; 
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import BookPrefetchSession from "@/components/BookPrefetchSession";
 
 import { GoogleAnalytics } from '@next/third-parties/google';
 
@@ -45,6 +46,7 @@ export default function RootLayout({
   return (
     <html lang="zh">
       <body className={inter.className}>
+        <BookPrefetchSession />
         <AuthProvider>
           {/* ✅ Provider 结构正确 */}
           <ReadingSettingsProvider>

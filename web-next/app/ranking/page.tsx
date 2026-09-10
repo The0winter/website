@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link';
+import BookLink from '@/components/BookLink';
 import { booksApi, Book } from '@/lib/api';
 import { 
   Trophy, Flame, Calendar, Clock, Sparkles, 
@@ -212,7 +212,7 @@ const [error,setError]=useState('');
                                 </div>
 
                                 {/* 书封 */}
-                                <Link href={`/book/${book.id}`} className="relative flex-shrink-0 w-16 h-24 md:w-24 md:h-32 shadow-md rounded overflow-hidden group-hover:shadow-lg transition-all border border-gray-200">
+                                <BookLink href={`/book/${book.id}`} className="relative flex-shrink-0 w-16 h-24 md:w-24 md:h-32 shadow-md rounded overflow-hidden group-hover:shadow-lg transition-all border border-gray-200">
                                      {book.cover_image ? (
                                          <img src={book.cover_image} alt={book.title || '小说封面'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                      ) : (
@@ -223,16 +223,16 @@ const [error,setError]=useState('');
                                              HOT
                                          </div>
                                      )}
-                                </Link>
+                                </BookLink>
 
                                 {/* 中间信息区 */}
                                 <div className="flex-1 min-w-0 flex flex-col justify-center gap-1.5 md:gap-2">
                                     
                                     {/* 第一行：标题 + 评分 [cite: 50, 52] */}
                                     <div className="flex items-center gap-2 md:gap-3">
-                                        <Link href={`/book/${book.id}`} className="text-base md:text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1">
+                                        <BookLink href={`/book/${book.id}`} className="text-base md:text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1">
                                             {book.title}
-                                        </Link>
+                                        </BookLink>
                                         
                                         <div className="flex flex-shrink-0 items-center gap-1 bg-yellow-50 px-1.5 md:px-2 py-0.5 rounded-full border border-yellow-100">
                                             <Star className="w-3 h-3 md:w-3.5 md:h-3.5 text-yellow-500 fill-yellow-500" />
@@ -271,12 +271,12 @@ const [error,setError]=useState('');
 
                                 {/* 右侧操作按钮 */}
                                 <div className="hidden md:block pl-4 border-l border-gray-100 ml-2">
-                                    <Link 
+                                    <BookLink
                                         href={`/book/${book.id}`}
                                         className="px-5 py-2 bg-white text-gray-900 text-sm font-bold border border-gray-200 rounded-full hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-all shadow-sm whitespace-nowrap"
                                     >
                                         立即阅读
-                                    </Link>
+                                    </BookLink>
                                 </div>
                             </div>
                         );

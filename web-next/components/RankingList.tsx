@@ -4,7 +4,7 @@ import type {LucideIcon} from 'lucide-react';
 
 
 import React from 'react';
-import Link from 'next/link';
+import BookLink from '@/components/BookLink';
 // 这里只引入组件内部写死需要的图标，动态传入的 icon 由父组件决定
 import { ChevronRight, ImageOff, BookOpen, Star } from 'lucide-react';
 
@@ -59,7 +59,7 @@ const RankingList = ({
                 <div className="flex flex-col items-center justify-center h-60 text-gray-400 text-sm">暂无数据</div>
             ) : (
                 books.map((book: Book, index: number) => (
-                    <Link 
+                    <BookLink
                         key={book.id} 
                         href={`/book/${book.id}`}
                         className="flex items-center gap-4 p-4 border-b border-gray-100 last:border-0 active:bg-gray-50"
@@ -98,7 +98,7 @@ const RankingList = ({
                                 <ChevronRight className="w-5 h-5 text-gray-300" />
                             )}
                         </div>
-                    </Link>
+                    </BookLink>
                 ))
             )}
         </div>
@@ -114,7 +114,7 @@ const RankingList = ({
             <>
                 {/* === NO.1 === */}
                 {first && (
-                <Link 
+                <BookLink
                     href={`/book/${first.id}`}
                     className={`relative flex gap-5 p-5 border-b border-gray-100 bg-gradient-to-b ${bgTheme} group hover:bg-gray-50 transition-colors z-10`}
                 >
@@ -138,7 +138,7 @@ const RankingList = ({
                             <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{first.category}</span>
                         </div>
                     </div>
-                </Link>
+                </BookLink>
                 )}
 
                 {/* === NO.2 & NO.3 === */}
@@ -149,7 +149,7 @@ const RankingList = ({
                             const rank = i + 2;
                             const isSecond = rank === 2;
                             return (
-                                <Link 
+                                <BookLink
                                     key={book.id} 
                                     href={`/book/${book.id}`} 
                                     className={`group relative flex flex-col p-4 transition-all hover:bg-gray-50 ${isSecond ? 'border-r border-gray-100' : ''}`}
@@ -174,7 +174,7 @@ const RankingList = ({
                                             </div>
                                         </div>
                                     </div>
-                                </Link>
+                                </BookLink>
                             );
                         })}
                     </div>
@@ -185,7 +185,7 @@ const RankingList = ({
                     {others.map((book: Book, i: number) => {
                         const rank = i + 4;
                         return (
-                        <Link 
+                        <BookLink
                             key={book.id} 
                             href={`/book/${book.id}`}
                             className="flex items-center gap-3 p-2 rounded hover:bg-gray-50 transition-colors group"
@@ -200,7 +200,7 @@ const RankingList = ({
                                 </span>
                                 <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded whitespace-nowrap">{book.category}</span>
                             </div>
-                        </Link>
+                        </BookLink>
                         );
                     })}
                 </div>

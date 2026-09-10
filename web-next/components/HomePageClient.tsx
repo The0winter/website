@@ -409,7 +409,7 @@ export default function HomePageClient({
                           style={{ transform: `translateX(-${activeBookIndex * 100}%)` }}
                       >
                           {sliderList.map((book, index) => (
-                              <BookLink eager
+                              <BookLink
                                   key={`${book.id}-${index}`} 
                                   href={`/book/${book.id}`} 
                                   className="min-w-full h-full relative block"

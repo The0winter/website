@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import BookLink from '@/components/BookLink';
 import { Search, BookOpen, User, Clock, AlertCircle } from 'lucide-react';
 import { booksApi, Book } from '@/lib/api'; // ✅ 确保路径正确
 
@@ -105,7 +106,7 @@ function SearchContent() {
       {/* 结果列表 */}
       <div className="grid grid-cols-1 gap-6">
         {books.map((book) => (
-          <Link 
+          <BookLink
             href={`/book/${book.id}`} 
             key={book.id}
             className="group block bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-md transition-all hover:border-blue-300"
@@ -181,7 +182,7 @@ function SearchContent() {
                 </div>
               </div>
             </div>
-          </Link>
+          </BookLink>
         ))}
       </div>
     </div>

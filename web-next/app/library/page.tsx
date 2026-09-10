@@ -4,6 +4,7 @@ import { safeFetch as fetch } from '@/lib/request';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import BookLink from '@/components/BookLink';
 import { useRouter } from 'next/navigation';
 import { Bookmark, BookOpen, Eye, Trash2, AlertTriangle, X } from 'lucide-react';
 import { bookmarksApi, booksApi, Book } from '@/lib/api';
@@ -131,7 +132,7 @@ export default function Library() {
                     <Trash2 size={16} />
                 </button>
 
-                <Link href={`/book/${book.id}`} className="block h-full flex flex-col">
+                <BookLink href={`/book/${book.id}`} className="block h-full flex flex-col">
                     {book.cover_image ? (
                       <div className="relative h-64 overflow-hidden">
                         <img
@@ -166,7 +167,7 @@ export default function Library() {
                         </span>
                       </div>
                     </div>
-                </Link>
+                </BookLink>
               </div>
             ))}
           </div>
