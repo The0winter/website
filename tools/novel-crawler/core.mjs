@@ -56,6 +56,7 @@ function reportMarkdown(report) {
     `| 相对来源目录完整 | ${report.completeAgainstSource ? '是' : '否'} |`,
     `| 严重问题 | ${report.errors} |`, `| 待核对警告 | ${report.warnings} |`,
     `| 编号等信息提示 | ${report.information} |`, '',
+    ...(report.paused ? ['任务已主动暂停；缺失项表示尚未继续采集，不能据此判定来源缺章。', ''] : []),
     report.limitation, '',
     '## 问题分类', '',
     ...(counts.size ? [...counts].map(([code, count]) => `- ${code}：${count}`) : ['未发现已检测类别的问题。']), '',
@@ -102,7 +103,7 @@ export async function acquire(input, options = {}) {
     atomicWrite(specFile, spec);
     const client = makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh});
     const started = Date.now(), chapters = [], failures = [];
-    let catalog = [], evidence, report, exportFile;
+    let catalog = [], evidence, report, exportFile, paused = false;
     try {
       const source = spec.kind === 'html' ? await getCatalog(spec, client) : await getResource(spec, client, dir);
       catalog = source.catalog;
@@ -119,12 +120,15 @@ export async function acquire(input, options = {}) {
       const targets = mode === 'probe' ? sampleCatalog(catalog, options.samples || 9) : catalog;
       const links = new Set(catalog.map(c => c.link));
       let fetched = 0;
+      options.onProgress?.({jobId: id, mode, downloaded: 0, total: targets.length, failed: 0});
       for (const entry of targets) {
+        if (options.shouldStop?.()) { paused = true; break; }
         const chapterFile = path.join(chaptersDir, hash(entry.link) + '.json');
         const saved = readJson(chapterFile);
         if (saved && !options.refresh) {
           if (saved.chapter.link !== entry.link || saved.chapter.chapter_number !== entry.chapter_number || saved.hash !== hash(saved.chapter)) throw Error('章节检查点损坏或与目录不匹配');
           chapters.push(saved.chapter);
+          options.onProgress?.({jobId: id, mode, downloaded: chapters.length, total: targets.length, failed: failures.length});
           continue;
         }
         if (options.maxNew !== undefined && fetched >= options.maxNew) break;
@@ -144,7 +148,7 @@ export async function acquire(input, options = {}) {
           // Three consecutive failing pages usually mean the source has stopped serving us.
           if (failures.length >= 3 && failures.slice(-3).every((f, i) => f.chapter === entry.chapter_number - 2 + i)) break;
         }
-        if (options.onProgress && (fetched === 1 || fetched % 20 === 0)) options.onProgress({jobId: id, mode, downloaded: chapters.length, total: targets.length, failed: failures.length});
+        options.onProgress?.({jobId: id, mode, downloaded: chapters.length, total: targets.length, failed: failures.length});
       }
       report = qualityReport(catalog, chapters, failures, mode);
       if (mode === 'download') {
@@ -175,11 +179,11 @@ export async function acquire(input, options = {}) {
     } finally {
       await client.close();
     }
-    const details = {...report, title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, jobId: id, checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: client.stats, evidence, exportFile: exportFile || null};
+    const details = {...report, paused, title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, jobId: id, checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: client.stats, evidence, exportFile: exportFile || null};
     atomicWrite(path.join(dir, `${mode}-report.json`), details);
     atomicWrite(path.join(dir, `${mode}-report.md`), reportMarkdown(details));
     atomicWrite(path.join(dir, 'history', `${Date.now()}-${mode}.json`), details);
-    await recordSource(stateDir, spec, details, id);
+    if (!paused) await recordSource(stateDir, spec, details, id);
     return {...details, reportFile: path.join(dir, `${mode}-report.json`), summaryFile: path.join(dir, `${mode}-report.md`)};
   });
 }

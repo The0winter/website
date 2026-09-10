@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "id": "ixdzs8",
+  "name": "爱下电子书",
+  "home": "https://ixdzs8.com/",
+  "hosts": ["ixdzs8.com"],
+  "search": {
+    "url": "https://ixdzs8.com/bsearch?q=${query}",
+    "items": "li.burl",
+    "title": ".bname > a",
+    "author": ".bauthor > a",
+    "link": ".bname > a",
+    "next": "a[title='下一页']",
+    "maxPages": 8
+  },
+  "book": {
+    "urlPattern": "^/read/(?<bookId>[0-9]+)/?$",
+    "metadata": {"title": "h1", "author": "h1 + p > a.bauthor"}
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-ixdzs8-v1",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": ["ixdzs8.com"],
+    "delayMs": 1200,
+    "metadata": {"title": "h1", "author": "h1 + p > a.bauthor"},
+    "catalog": {
+      "url": "https://ixdzs8.com/novel/clist/",
+      "request": {"method": "POST", "form": {"bid": "${bookId}"}},
+      "json": {
+        "items": "data", "title": "title", "order": "ordernum",
+        "skip": {"field": "ctype", "equals": "1"},
+        "linkTemplate": "/read/${bookId}/p{ordernum}.html"
+      }
+    },
+    "chapter": {
+      "title": "h1.page-d-name",
+      "content": "article.page-content > section",
+      "remove": ["script", "div[id^='bg-ssp']"],
+      "transport": "browser"
+    }
+  }
+}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>拾页 · 小说采集</title><link rel="icon" href="/icon.svg"><link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="拾页首页"><img src="/icon.svg" alt=""><span>拾页<small>把故事，好好收藏。</small></span></a>
+    <div class="nav-label">我的工作台</div>
+    <div class="nav-item active"><span>▤</span> 采集书籍 <span class="nav-dot"></span></div>
+    <button class="nav-item" id="folder-nav"><span>▱</span> 下载文件夹 <span>↗</span></button>
+    <div class="source-section"><div class="nav-label">已适配网站 <span id="site-count"></span></div><div id="sites"></div></div>
+    <div class="sidebar-bottom"><span class="local-dot"></span> 本地运行 <small>书籍与记录保存在这台电脑</small></div>
+  </aside>
+  <main>
+    <header><div class="eyebrow">YOUR READING COLLECTION</div><div class="heading"><h1>收藏下一段故事</h1><span class="badge">小说采集工具</span></div><p class="subtitle">输入来源和书名，查找、检查，然后保存。</p></header>
+    <section class="card input-card">
+      <div class="section-title"><span class="step">01</span><h2>从哪里开始</h2></div>
+      <form id="search-form">
+        <label for="website">小说网站 <span>也可以粘贴书籍详情页</span></label>
+        <div class="site-input"><span aria-hidden="true">◎</span><input id="website" name="website" type="text" placeholder="例如：ixdzs8.com" autocomplete="off" required maxlength="2000"><span id="adapter-status" class="input-tag">输入网址</span></div>
+        <div class="recent-row"><span>最近使用</span><div id="recent"><span class="muted">使用过的网站会出现在这里，最多保留 3 个</span></div></div>
+        <div class="book-fields"><div><label for="title">书名</label><input id="title" name="title" placeholder="输入完整书名" required maxlength="200" autocomplete="off"></div><div><label for="author">作者 <span>选填，帮助区分同名书</span></label><input id="author" name="author" placeholder="知道作者的话，可以填在这里" maxlength="200" autocomplete="off"></div></div>
+        <div class="form-footer"><span id="form-note">下次打开时，会保留上次使用的网站。</span><button id="search" class="primary" type="submit">查找书籍 <span>→</span></button></div>
+      </form>
+      <div id="feedback" class="feedback" role="alert" hidden></div>
+      <div id="results-panel" hidden><div class="results-heading">匹配书籍 <span>核对后开始采集</span></div><div id="results"></div><div class="result-actions"><label class="checkbox"><input id="probe-only" type="checkbox">仅试采，先看看来源质量</label><button id="start" class="primary" type="button">试采并下载 <span>↓</span></button></div></div>
+    </section>
+    <section class="card task-card" aria-live="polite">
+      <div class="task-heading"><div class="section-title"><span class="step">02</span><h2>采集进度</h2></div><span id="phase" class="status-pill">等待开始</span></div>
+      <div id="task-empty" class="empty-state"><div class="empty-icon">▤</div><div><h3>你的下一本书，从这里出发</h3><p>查找并选择书籍后，采集进度会显示在这里。</p></div></div>
+      <div id="task-content" hidden><h3 id="task-title"></h3><p id="task-message"></p><div class="progress-track"><div id="progress-bar"></div></div><div class="progress-caption"><span id="progress-text"></span><button id="pause" type="button" class="text-button" hidden>暂停采集</button></div><div id="report-stats" class="stats" hidden></div><div class="task-actions"><button id="resume" type="button" class="secondary" hidden>继续采集</button><button id="open-folder" type="button" class="secondary" hidden>打开下载文件夹 ↗</button><button id="open-report" type="button" class="text-button" hidden>查看质量报告 ↗</button></div></div>
+    </section>
+    <footer><span>自动检查缺章、重复、乱码等异常；已完成的章节支持续传。</span><span>不逐章调用 AI</span></footer>
+    <p class="fine-print">检查基于来源目录和文本规则，不能保证源站没有删文或段落错序。</p>
+  </main>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
