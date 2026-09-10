@@ -58,3 +58,6 @@ web-next/test-results/
 
 web-next/.next-*/
 
+# Novel acquisition registry, checkpoints, raw pages and quality reports
+.novel-crawler/
+
