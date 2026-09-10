@@ -19,7 +19,7 @@
     "author": "${author}",
     "sourceUrl": "${sourceUrl}",
     "allowedHosts": ["www.shudugu.org", "shudugu.org"],
-    "delayMs": 8000,
+    "delayMs": 2000,
     "retries": 0,
     "timeoutMs": 15000,
     "metadata": {
