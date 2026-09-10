@@ -21,11 +21,20 @@ export function decode(bytes, contentType = '', encoding) {
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}}) {
+export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop}) {
   const hosts = new Set(allowedHosts.map(h => h.toLowerCase()));
-  let lastRequest = 0;
+  // Also space out search, detail lookup and a new worker's first request.
+  let lastRequest = Date.now();
   const stats = {requests: 0, cacheHits: 0, retries: 0, bytes: 0};
   let browser;
+  const stopped = () => {
+    if (shouldStop?.()) throw Object.assign(Error('任务已暂停，已完成的章节保留。'), {stopSource: true});
+  };
+  async function wait(ms) {
+    const end = Date.now() + ms;
+    do { stopped(); await sleep(Math.min(200, Math.max(0, end - Date.now()))); } while (Date.now() < end);
+    stopped();
+  }
   function assertUrl(value) {
     const url = httpUrl(value);
     if (!hosts.has(new URL(url).hostname.toLowerCase())) throw Error(`地址不在该来源配置的域名范围内：${url}`);
@@ -63,11 +72,12 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
               const parsed = new URL(req.url());
               if (['data:', 'blob:', 'about:'].includes(parsed.protocol)) return req.continue();
               assertUrl(req.url());
-              if (['image', 'media', 'font'].includes(req.resourceType())) return req.abort();
+              const verificationAsset = browserOptions.manualVerificationMs && parsed.hostname === 'challenges.cloudflare.com';
+              if (!verificationAsset && ['image', 'media', 'font'].includes(req.resourceType())) return req.abort();
               return req.continue();
             } catch { return req.abort(); }
           });
-          await sleep(Math.max(0, lastRequest + delayMs - Date.now()));
+          await wait(Math.max(0, lastRequest + delayMs - Date.now()));
           lastRequest = Date.now();
           stats.requests++;
           let documentResponse;
@@ -75,6 +85,31 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
             if (response.request().isNavigationRequest() && response.frame() === page.mainFrame()) documentResponse = response;
           });
           await page.goto(original, {waitUntil: 'domcontentloaded', timeout: timeoutMs});
+          if (documentResponse?.headers()['cf-mitigated'] === 'challenge') {
+            const limit = browserOptions.manualVerificationMs;
+            if (!limit) throw Object.assign(Error('网站要求人机验证，采集已停止；请使用支持手动验证的浏览器来源配置。'), {stopSource: true});
+            if (browserOptions.headless === false) {
+              const cdp = await page.createCDPSession();
+              try {
+                const {windowId} = await cdp.send('Browser.getWindowForTarget');
+                await cdp.send('Browser.setWindowBounds', {windowId, bounds: {windowState: 'normal'}});
+                await page.bringToFront();
+              } finally { await cdp.detach(); }
+            }
+            onStatus?.({kind: 'verification', message: `网站要求人机验证：请在弹出的采集浏览器中手动完成，完成后自动继续。最多等待 ${Math.round(limit / 60000 * 10) / 10} 分钟。`});
+            const deadline = Date.now() + limit;
+            while (true) {
+              stopped();
+              if (page.isClosed()) throw Object.assign(Error('验证窗口已关闭，已停止采集并保留进度。'), {stopSource: true});
+              assertUrl(page.url());
+              if (documentResponse?.headers()['cf-mitigated'] !== 'challenge' && documentResponse?.status() === 200) break;
+              if (Date.now() >= deadline) throw Object.assign(Error('等待手动人机验证超时，已停止采集并保留进度；稍后可继续。'), {stopSource: true});
+              // Only observe navigation. The user performs any verification clicks.
+              await wait(200);
+            }
+            lastRequest = Date.now();
+            onStatus?.({kind: 'active', message: '验证已完成，正在继续读取网页…'});
+          }
           const status = documentResponse?.status();
           if (status === 429 || status >= 500) {
             const raw = documentResponse.headers()['retry-after'];
@@ -108,8 +143,10 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
           if (attempt === retries || !Number.isFinite(error.retryAfterMs)) throw error;
           retryAfterMs = error.retryAfterMs;
           stats.retries++;
-        } finally { await page.close(); }
-        await sleep(retryAfterMs);
+        } finally { if (!page.isClosed()) await page.close(); }
+        onStatus?.({kind: 'waiting', message: `网站暂时限制访问，等待 ${Math.ceil(retryAfterMs / 1000)} 秒后重试；已完成的章节保留。`});
+        await wait(retryAfterMs);
+        onStatus?.({kind: 'active', message: '正在重试读取网页…'});
       }
     }
     if (request && (request.method !== 'POST' || !request.form || typeof request.form !== 'object')) throw Error('目录接口只支持显式 POST form 请求');
@@ -117,7 +154,7 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
     for (let redirects = 0; redirects <= 5; redirects++) {
       let response;
       for (let attempt = 0; attempt <= retries; attempt++) {
-        await sleep(Math.max(0, lastRequest + delayMs - Date.now()));
+        await wait(Math.max(0, lastRequest + delayMs - Date.now()));
         lastRequest = Date.now();
         stats.requests++;
         try {
@@ -125,7 +162,7 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
         } catch (error) {
           if (attempt === retries || error.code === 'ERR_BAD_RESPONSE') throw Error(`下载失败：${url}（${error.code || error.message}）`);
           stats.retries++;
-          await sleep(Math.min(10000, 1000 * 2 ** attempt));
+          await wait(Math.min(10000, 1000 * 2 ** attempt));
           continue;
         }
         if (response.status === 429 || response.status >= 500) {
@@ -134,7 +171,7 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
           if (backoff > 60000) throw Object.assign(Error(`服务器要求稍后再试：${url}；Retry-After=${raw}`), {stopSource: true});
           if (attempt === retries) break;
           stats.retries++;
-          await sleep(Math.max(delayMs, Number.isFinite(backoff) ? backoff : 1000));
+          await wait(Math.max(delayMs, Number.isFinite(backoff) ? backoff : 1000));
           continue;
         }
         break;
@@ -154,5 +191,5 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
     }
     throw Error('重定向次数超过限制');
   }
-  return {get, assertUrl, stats, close: async () => { if (browser) await browser.close(); }};
+  return {get, assertUrl, stats, close: async () => { if (browser?.connected) await browser.close(); }};
 }

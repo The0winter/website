@@ -7,7 +7,7 @@ process.on('message', async message => {
   if (message.type !== 'start' || started) return;
   started = true;
   try {
-    const options = {stateDir: message.stateDir, outputDir: message.outputDir, shouldStop: () => paused, onProgress: progress => send({type: 'progress', ...progress})};
+    const options = {stateDir: message.stateDir, outputDir: message.outputDir, shouldStop: () => paused, onProgress: progress => send({type: 'progress', ...progress}), onStatus: status => send({type: 'status', ...status})};
     send({type: 'phase', phase: 'probe'});
     let report = await acquire(message.spec, {...options, mode: 'probe'});
     if (!paused && report.structuralPass && !message.probeOnly) {

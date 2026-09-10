@@ -296,6 +296,40 @@ test('sparse probes stop after three failed requests instead of requiring adjace
   assert.ok(report.failures[2].chapter > report.failures[1].chapter + 1);
 });
 
+test('manual verification waits for an external completion and supports cancellation and timeout', async t => {
+  let completed = false;
+  const f = await fixture(t, (req, res) => {
+    if (req.url === '/verified' && completed) res.end('<h1>确认完成</h1><div id="content">合成测试正文。</div>');
+    else {
+      res.statusCode = 403; res.setHeader('cf-mitigated', 'challenge');
+      res.end('<h1>测试等待页</h1>' + (req.url === '/start' ? '<meta http-equiv="refresh" content="0.5;url=/verified">' : ''));
+    }
+  });
+  const statuses = []; let stop = false;
+  const client = makeClient({cacheDir: path.join(f.dir, 'manual-cache'), allowedHosts: ['127.0.0.1'], delayMs: 200, browser: {responseMode: 'source', manualVerificationMs: 1000}, shouldStop: () => stop, onStatus: status => { statuses.push(status); if (status.kind === 'verification') completed = true; }});
+  try {
+    const response = await client.get(f.base + '/start', {render: true, readySelector: '#content'});
+    assert.equal(response.url, f.base + '/verified');
+    assert.match(response.body.toString('utf8'), /合成测试正文/);
+    assert.deepEqual(statuses.map(s => s.kind), ['verification', 'active']);
+    assert.equal(client.stats.retries, 0);
+    await assert.rejects(client.get(f.base + '/timeout', {render: true}), e => e.stopSource === true && /验证超时/.test(e.message));
+    const pending = client.get(f.base + '/cancel', {render: true});
+    const timer = setTimeout(() => { stop = true; }, 300);
+    try { await assert.rejects(pending, /已暂停/); } finally { clearTimeout(timer); }
+  } finally { await client.close(); }
+});
+
+test('changing pacing and manual verification options preserves existing chapter checkpoints', async t => {
+  const f = await fixture(t, (req, res) => res.end(req.url === '/book' ? heading + '<div id="catalog"><a href="/a">第一章</a></div>' : '<h1>第一章</h1><div id="content">合成正文。</div>'));
+  const spec = {...specFor(f.base), browser: {responseMode: 'source'}};
+  const first = await acquire(spec, {...f.options, mode: 'probe'});
+  assert.equal(first.structuralPass, true);
+  const second = await acquire({...spec, delayMs: 300, browser: {...spec.browser, manualVerificationMs: 180000}}, {...f.options, mode: 'probe'});
+  assert.equal(second.structuralPass, true, JSON.stringify(second.failures));
+  assert.equal(f.counts.get('/a'), 1);
+});
+
 test('a long server cooldown stops the entire book before requesting other chapters', async t => {
   const f = await fixture(t, (req, res) => {
     if (req.url === '/book') res.end(heading + '<div id="catalog"><a href="/a">第一章</a><a href="/b">第二章</a></div>');

@@ -63,7 +63,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         candidates = []; selectedBook = null;
         task = {phase: 'search', message: '正在站内查找并核对书名…', title: input.title, author: input.author}; save();
         try {
-          candidates = await findBooks({website: input.website, title: input.title, author: input.author, stateDir, sites: sites().sites});
+          candidates = await findBooks({website: input.website, title: input.title, author: input.author, stateDir, sites: sites().sites, shouldStop: () => closing, onStatus: status => update({message: status.message})});
           update({phase: 'ready', message: candidates.length ? `找到 ${candidates.length} 本同名书，请核对作者。` : '未找到匹配的书。可核对书名、作者，或粘贴该书的详情页地址。'});
           return respond(200, {candidates, settings, task});
         } catch (error) { update({phase: 'error', message: error.message}); throw error; }
@@ -74,13 +74,14 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         if (!selectedBook) throw Error('请先查找并选择书籍');
         update({phase: 'resolving', message: '正在读取目录配置…', title: selectedBook.title, author: selectedBook.author, sourceUrl: selectedBook.url, report: null, progress: null, probeOnly: input.probeOnly === true});
         let spec;
-        try { spec = await prepareBook({...selectedBook, stateDir, sites: sites().sites}); }
+        try { spec = await prepareBook({...selectedBook, stateDir, sites: sites().sites, shouldStop: () => closing, onStatus: status => update({message: status.message})}); }
         catch (error) { update({phase: 'error', message: error.message}); throw error; }
         if (closing) { update({phase: 'paused', message: '任务已停止，下次可继续。'}); return respond(409, {error: '程序正在退出'}); }
         worker = fork(path.join(here, 'worker.mjs'), [], {windowsHide: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc']});
         let workerError = '';
         worker.stderr.on('data', chunk => { workerError = (workerError + chunk.toString()).slice(-1500); });
         worker.on('message', message => {
+          if (message.type === 'status' && task.phase !== 'pausing') update({message: message.message});
           if (message.type === 'phase') update({phase: task.phase === 'pausing' ? 'pausing' : message.phase, message: message.phase === 'probe' ? '先抽样检查目录、正文和编码…' : '正在下载章节，完成后检查并导出…', progress: null});
           if (message.type === 'progress') {
             task.progress = message;

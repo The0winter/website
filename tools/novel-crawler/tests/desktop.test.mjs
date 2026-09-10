@@ -6,7 +6,7 @@ import os from 'node:os';
 import http from 'node:http';
 import puppeteer from 'puppeteer';
 import {createDesktop} from '../desktop/server.mjs';
-import {rememberWebsite, readSettings, normalizeWebsite, loadSites, parseSearch, fillTemplate} from '../desktop/sources.mjs';
+import {rememberWebsite, readSettings, normalizeWebsite, loadSites, parseSearch, fillTemplate, searchBooks} from '../desktop/sources.mjs';
 import {acquire} from '../core.mjs';
 import {checkIdentity} from '../quality.mjs';
 
@@ -76,6 +76,21 @@ test('twkan matches simplified book names without accepting different authors or
   assert.throws(() => checkIdentity({...spec, identityNormalization: undefined}, results[0]), /身份不匹配/);
   assert.equal(spec.catalog.url, 'https://twkan.com/ajax_novels/chapterlist/123.html');
   assert.equal(spec.catalog.links, "li[data-num] a[href*='/txt/123/']");
+});
+
+test('a search redirect to book details is matched by title and author instead of reported empty', async t => {
+  const server = http.createServer((req, res) => {
+    if (req.url.startsWith('/search/')) { res.writeHead(302, {Location: '/book/84267.html'}); res.end(); }
+    else { res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end('<h1>神的模仿犯</h1><b>青衫取醉</b>'); }
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const site = {id: 'fixture', name: '测试来源', hosts: ['books.example', '127.0.0.1'], search: {url: base + '/search/${query}', items: '.results'}, book: {urlPattern: '^/book/[0-9]+\\.html$', metadata: {title: 'h1', author: 'b'}}, spec: {delayMs: 1}};
+  const options = {website: 'https://books.example/', stateDir: temp(t), sites: [site], title: '神的模仿犯'};
+  assert.deepEqual(await searchBooks(options), [{title: '神的模仿犯', author: '青衫取醉', url: base + '/book/84267.html', site: '测试来源'}]);
+  assert.deepEqual(await searchBooks({...options, author: '另一个作者'}), []);
+  assert.deepEqual(await searchBooks({...options, title: '其他作品'}), []);
 });
 
 test('desktop API rejects unauthenticated and foreign-origin requests, preserves settings after restart', async t => {

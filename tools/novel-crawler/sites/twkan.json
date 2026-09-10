@@ -31,9 +31,9 @@
     "sourceUrl": "${sourceUrl}",
     "allowedHosts": ["twkan.com", "challenges.cloudflare.com"],
     "transport": "browser",
-    "browser": {"headless": false, "minimized": true, "responseMode": "source"},
+    "browser": {"headless": false, "minimized": true, "responseMode": "source", "manualVerificationMs": 180000},
     "identityNormalization": "chinese-simplified",
-    "delayMs": 3000,
+    "delayMs": 8000,
     "timeoutMs": 30000,
     "metadata": {
       "title": {"selector": "meta[property='og:title']", "attribute": "content"},

@@ -59,8 +59,8 @@ export function fillTemplate(value, context) {
   return value;
 }
 
-function makeSiteClient(site, stateDir) {
-  return makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: [...new Set([...site.hosts, ...(site.spec.allowedHosts || [])])], delayMs: site.spec.delayMs, timeoutMs: site.spec.timeoutMs, browser: site.spec.browser});
+function makeSiteClient(site, stateDir, controls = {}) {
+  return makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: [...new Set([...site.hosts, ...(site.spec.allowedHosts || [])])], delayMs: site.spec.delayMs, timeoutMs: site.spec.timeoutMs, browser: site.spec.browser, ...controls});
 }
 
 function siteFor(website, sites) {
@@ -78,6 +78,11 @@ function bookUrl(url, site) {
 
 export function parseSearch(html, baseUrl, site) {
   const $ = load(html), results = [];
+  const finalUrl = new URL(baseUrl);
+  // A unique search result can redirect straight to its book page.
+  if (site.hosts.includes(finalUrl.hostname) && new RegExp(site.book.urlPattern, 'u').test(finalUrl.pathname)) {
+    return {results: [{title: selectValue($, site.book.metadata.title), author: selectValue($, site.book.metadata.author), url: httpUrl(baseUrl), site: site.name}], next: null};
+  }
   for (const element of $(site.search.items).toArray()) {
     const row = load($.html(element));
     const title = selectValue(row, site.search.title), author = selectValue(row, site.search.author);
@@ -90,10 +95,10 @@ export function parseSearch(html, baseUrl, site) {
   return {results, next: next?.attr('href') ? httpUrl(next.attr('href'), baseUrl) : null};
 }
 
-export async function searchBooks({website, title, author = '', stateDir = defaultStateDir, sites = loadSites().sites}) {
+export async function searchBooks({website, title, author = '', stateDir = defaultStateDir, sites = loadSites().sites, onStatus, shouldStop}) {
   website = normalizeWebsite(website);
   if (typeof title !== 'string' || !title.trim() || title.length > 200 || typeof author !== 'string' || author.length > 200) throw Error('请输入书名，书名和作者各不超过 200 字');
-  const site = siteFor(website, sites), client = makeSiteClient(site, stateDir);
+  const site = siteFor(website, sites), client = makeSiteClient(site, stateDir, {onStatus, shouldStop});
   try {
     if (new URL(website).pathname !== '/') {
       bookUrl(website, site);
@@ -121,9 +126,9 @@ export async function searchBooks({website, title, author = '', stateDir = defau
   } finally { await client.close(); }
 }
 
-export async function resolveBook({url, title, author, stateDir = defaultStateDir, sites = loadSites().sites, reuseSaved = false}) {
+export async function resolveBook({url, title, author, stateDir = defaultStateDir, sites = loadSites().sites, reuseSaved = false, onStatus, shouldStop}) {
   url = normalizeWebsite(url);
-  const site = siteFor(url, sites), match = bookUrl(url, site), client = makeSiteClient(site, stateDir);
+  const site = siteFor(url, sites), match = bookUrl(url, site), client = makeSiteClient(site, stateDir, {onStatus, shouldStop});
   try {
     const response = await client.get(url, {fresh: true, render: (site.book.transport || site.spec.transport) === 'browser', readySelector: site.book.readySelector});
     if (response.url !== url) throw Error('书籍详情页地址发生跳转，需要核实适配');

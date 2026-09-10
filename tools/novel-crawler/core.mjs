@@ -22,6 +22,7 @@ export function validateSpec(input) {
   if (spec.browser) {
     for (const key of ['headless', 'minimized']) if (spec.browser[key] !== undefined && typeof spec.browser[key] !== 'boolean') throw Error(`browser.${key} 必须为布尔值`);
     if (spec.browser.responseMode !== undefined && !['dom', 'source'].includes(spec.browser.responseMode)) throw Error('browser.responseMode 只支持 dom 或 source');
+    if (spec.browser.manualVerificationMs !== undefined && (!Number.isInteger(spec.browser.manualVerificationMs) || spec.browser.manualVerificationMs < 1000 || spec.browser.manualVerificationMs > 600000)) throw Error('browser.manualVerificationMs 必须在 1000–600000 毫秒之间');
   }
   if (!spec.metadata?.title || !spec.metadata?.author) throw Error('必须配置来源页面书名和作者提取规则');
   if (spec.kind === 'html' && (!(spec.catalog?.links || spec.catalog?.json) || !spec.chapter?.content || !spec.chapter?.title)) throw Error('HTML 来源需配置目录及章节选择器');
@@ -38,6 +39,10 @@ export function jobId(spec) {
 
 function extractionHash(spec) {
   const {delayMs, retries, timeoutMs, searchUrl, ...extraction} = spec;
+  if (extraction.browser) {
+    const {manualVerificationMs, ...browser} = extraction.browser;
+    extraction.browser = browser;
+  }
   return hash(extraction);
 }
 
@@ -107,7 +112,7 @@ export async function acquire(input, options = {}) {
     const specFile = path.join(dir, 'spec.json'), previousSpec = readJson(specFile);
     if (previousSpec && extractionHash(previousSpec) !== extractionHash(spec) && fs.existsSync(chaptersDir) && fs.readdirSync(chaptersDir).length) throw Error(`提取规则发生变化，请使用新的 --state-dir 重新试采，避免混用旧正文：${dir}`);
     atomicWrite(specFile, spec);
-    const client = makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser});
+    const client = makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser, onStatus: options.onStatus, shouldStop: options.shouldStop});
     const started = Date.now(), chapters = [], failures = [];
     let catalog = [], evidence, report, exportFile, paused = false;
     try {
@@ -152,6 +157,7 @@ export async function acquire(input, options = {}) {
           chapters.push(chapter);
           consecutiveFailures = 0;
         } catch (error) {
+          if (options.shouldStop?.()) { paused = true; break; }
           failures.push({chapter: entry.chapter_number, title: entry.title, link: entry.link, error: error.message});
           // Three consecutive failing pages usually mean the source has stopped serving us.
           if (error.stopSource || ++consecutiveFailures >= 3) break;
@@ -180,7 +186,8 @@ export async function acquire(input, options = {}) {
       }
     } catch (error) {
       exportFile = null;
-      failures.push({error: error.message});
+      if (options.shouldStop?.()) paused = true;
+      else failures.push({error: error.message});
       report = qualityReport(catalog, chapters, failures, mode);
       report.structuralPass = false;
       report.completeAgainstSource = false;
