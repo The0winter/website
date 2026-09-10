@@ -8,6 +8,7 @@ import puppeteer from 'puppeteer';
 import {createDesktop} from '../desktop/server.mjs';
 import {rememberWebsite, readSettings, normalizeWebsite, loadSites, parseSearch, fillTemplate} from '../desktop/sources.mjs';
 import {acquire} from '../core.mjs';
+import {checkIdentity} from '../quality.mjs';
 
 function temp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'novel-desktop-test-'));
@@ -62,6 +63,21 @@ test('adapter keeps titles and authors paired and distinguishes chapter template
   assert.throws(() => fillTemplate('${missing}', {}), /未知变量/);
 });
 
+test('twkan matches simplified book names without accepting different authors or rewriting source titles', () => {
+  const site = loadSites().sites.find(s => s.id === 'twkan');
+  const html = '<ul id="article_list_content"><li><h3><a class="imgbox" href="/book/123.html"></a><a href="/book/123.html">紅樓夢</a></h3><div class="labelbox"><label>曹雪芹</label><label>古典文學</label></div></li></ul><div id="pagelink"><a class="next" href="/search/test/2.html">&gt;</a></div>';
+  const {results, next} = parseSearch(html, site.home, site);
+  assert.equal(results[0].title, '紅樓夢');
+  assert.equal(results[0].author, '曹雪芹');
+  assert.equal(next, 'https://twkan.com/search/test/2.html');
+  const spec = fillTemplate(site.spec, {title: '红楼梦', author: '曹雪芹', sourceUrl: results[0].url, bookId: '123'});
+  assert.doesNotThrow(() => checkIdentity(spec, results[0]));
+  assert.throws(() => checkIdentity({...spec, author: '其他作者'}, results[0]), /身份不匹配/);
+  assert.throws(() => checkIdentity({...spec, identityNormalization: undefined}, results[0]), /身份不匹配/);
+  assert.equal(spec.catalog.url, 'https://twkan.com/ajax_novels/chapterlist/123.html');
+  assert.equal(spec.catalog.links, "li[data-num] a[href*='/txt/123/']");
+});
+
 test('desktop API rejects unauthenticated and foreign-origin requests, preserves settings after restart', async t => {
   const stateDir = temp(t);
   let app = await createDesktop({stateDir, outputDir: path.join(stateDir, 'downloads')});
@@ -112,9 +128,13 @@ test('window searches, selects, downloads through worker, and shows result witho
     await page.goto(app.url);
     await page.waitForFunction(() => document.getElementById('website').value === 'https://ixdzs8.com/');
     assert.equal(await page.$eval('#adapter-status', el => el.textContent), '✓ 已适配');
-    assert.equal(await page.$$eval('.site-choice', els => els.length), 31);
+    assert.equal(await page.$$eval('.site-choice', els => els.length), 30 + loadSites().sites.length);
     assert.equal(await page.$eval('.site-choice', el => el.dataset.host), 'ixdzs8.com');
     assert.equal(await page.$eval('#sites', el => el.scrollHeight > el.clientHeight), true);
+    await page.click('.site-choice[data-host="twkan.com"]');
+    await page.waitForFunction(() => document.querySelector('.site-choice').dataset.host === 'twkan.com');
+    assert.equal(await page.$eval('#website', el => el.value), 'https://twkan.com/');
+    assert.equal(await page.$eval('#adapter-status', el => el.textContent), '✓ 已适配');
     await page.click('.site-choice[data-host="history-29.example"]');
     await page.waitForFunction(() => document.querySelector('.site-choice').dataset.host === 'history-29.example');
     assert.equal(await page.$eval('.site-choice .site-state', el => el.textContent), '待适配');

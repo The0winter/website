@@ -17,6 +17,12 @@ export function validateSpec(input) {
   for (const field of ['title', 'author']) if (typeof spec[field] !== 'string' || !spec[field].trim() || spec[field].length > 200) throw Error(`缺少有效 ${field}`);
   spec.sourceUrl = httpUrl(spec.sourceUrl);
   if (!['html', 'txt', 'epub'].includes(spec.kind)) throw Error('kind 只支持 html、txt、epub');
+  if (spec.transport !== undefined && !['http', 'browser'].includes(spec.transport)) throw Error('transport 只支持 http 或 browser');
+  if (spec.identityNormalization !== undefined && spec.identityNormalization !== 'chinese-simplified') throw Error('未知的作品名称归一化方式');
+  if (spec.browser) {
+    for (const key of ['headless', 'minimized']) if (spec.browser[key] !== undefined && typeof spec.browser[key] !== 'boolean') throw Error(`browser.${key} 必须为布尔值`);
+    if (spec.browser.responseMode !== undefined && !['dom', 'source'].includes(spec.browser.responseMode)) throw Error('browser.responseMode 只支持 dom 或 source');
+  }
   if (!spec.metadata?.title || !spec.metadata?.author) throw Error('必须配置来源页面书名和作者提取规则');
   if (spec.kind === 'html' && (!(spec.catalog?.links || spec.catalog?.json) || !spec.chapter?.content || !spec.chapter?.title)) throw Error('HTML 来源需配置目录及章节选择器');
   if (spec.kind !== 'html' && !(spec.resource?.url || spec.resource?.link)) throw Error('文件来源需配置下载地址或链接选择器');
@@ -101,7 +107,7 @@ export async function acquire(input, options = {}) {
     const specFile = path.join(dir, 'spec.json'), previousSpec = readJson(specFile);
     if (previousSpec && extractionHash(previousSpec) !== extractionHash(spec) && fs.existsSync(chaptersDir) && fs.readdirSync(chaptersDir).length) throw Error(`提取规则发生变化，请使用新的 --state-dir 重新试采，避免混用旧正文：${dir}`);
     atomicWrite(specFile, spec);
-    const client = makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh});
+    const client = makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser});
     const started = Date.now(), chapters = [], failures = [];
     let catalog = [], evidence, report, exportFile, paused = false;
     try {
@@ -119,7 +125,7 @@ export async function acquire(input, options = {}) {
       atomicWrite(path.join(dir, 'catalog.json'), catalog);
       const targets = mode === 'probe' ? sampleCatalog(catalog, options.samples || 9) : catalog;
       const links = new Set(catalog.map(c => c.link));
-      let fetched = 0;
+      let fetched = 0, consecutiveFailures = 0;
       options.onProgress?.({jobId: id, mode, downloaded: 0, total: targets.length, failed: 0});
       for (const entry of targets) {
         if (options.shouldStop?.()) { paused = true; break; }
@@ -128,6 +134,7 @@ export async function acquire(input, options = {}) {
         if (saved && !options.refresh) {
           if (saved.chapter.link !== entry.link || saved.chapter.chapter_number !== entry.chapter_number || saved.hash !== hash(saved.chapter)) throw Error('章节检查点损坏或与目录不匹配');
           chapters.push(saved.chapter);
+          consecutiveFailures = 0;
           options.onProgress?.({jobId: id, mode, downloaded: chapters.length, total: targets.length, failed: failures.length});
           continue;
         }
@@ -143,10 +150,11 @@ export async function acquire(input, options = {}) {
           }
           atomicWrite(chapterFile, {hash: hash(chapter), chapter});
           chapters.push(chapter);
+          consecutiveFailures = 0;
         } catch (error) {
           failures.push({chapter: entry.chapter_number, title: entry.title, link: entry.link, error: error.message});
           // Three consecutive failing pages usually mean the source has stopped serving us.
-          if (failures.length >= 3 && failures.slice(-3).every((f, i) => f.chapter === entry.chapter_number - 2 + i)) break;
+          if (error.stopSource || ++consecutiveFailures >= 3) break;
         }
         options.onProgress?.({jobId: id, mode, downloaded: chapters.length, total: targets.length, failed: failures.length});
       }

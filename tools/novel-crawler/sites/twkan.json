@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "id": "twkan",
+  "name": "台灣小說網",
+  "home": "https://twkan.com/",
+  "hosts": ["twkan.com"],
+  "search": {
+    "url": "https://twkan.com/search/${query}/1.html",
+    "items": "#article_list_content > li",
+    "title": "h3 a:not(.imgbox)",
+    "author": ".labelbox > label:first-child",
+    "link": "h3 a:not(.imgbox)",
+    "next": "#pagelink a.next",
+    "maxPages": 10,
+    "readySelector": "h3.mytitle"
+  },
+  "book": {
+    "urlPattern": "^/book/(?<bookId>[0-9]+)\\.html$",
+    "readySelector": "h1",
+    "metadata": {
+      "title": {"selector": "meta[property='og:title']", "attribute": "content"},
+      "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"}
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-twkan-v1",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": ["twkan.com", "challenges.cloudflare.com"],
+    "transport": "browser",
+    "browser": {"headless": false, "minimized": true, "responseMode": "source"},
+    "identityNormalization": "chinese-simplified",
+    "delayMs": 3000,
+    "timeoutMs": 30000,
+    "metadata": {
+      "title": {"selector": "meta[property='og:title']", "attribute": "content"},
+      "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"},
+      "readySelector": "h1"
+    },
+    "catalog": {
+      "url": "https://twkan.com/ajax_novels/chapterlist/${bookId}.html",
+      "links": "li[data-num] a[href*='/txt/${bookId}/']",
+      "orderAncestor": "li[data-num]",
+      "orderAttribute": "data-num",
+      "readySelector": "li[data-num] a"
+    },
+    "chapter": {
+      "title": ".txtnav > h1",
+      "content": "#txtcontent0",
+      "remove": [".txtad", ".txtcenter"]
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import {hash} from './storage.mjs';
+import {normalizedIdentity} from './identity.mjs';
 
 export const normalizedTitle = value => String(value ?? '').normalize('NFKC').replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
 export const normalizedText = value => String(value).normalize('NFKC').replace(/\s+/gu, '');
@@ -6,8 +7,9 @@ const withoutChapterNumber = value => String(value).normalize('NFKC').replace(/^
 
 export function checkIdentity(spec, actual) {
   for (const field of ['title', 'author']) {
-    const permitted = [spec[field], ...(spec[`${field}Aliases`] || [])].map(normalizedTitle);
-    if (!actual[field] || !permitted.includes(normalizedTitle(actual[field]))) {
+    const normalize = value => normalizedIdentity(value, spec.identityNormalization);
+    const permitted = [spec[field], ...(spec[`${field}Aliases`] || [])].map(normalize);
+    if (!actual[field] || !permitted.includes(normalize(actual[field]))) {
       throw Error(`作品身份不匹配：${field}，实际 ${JSON.stringify(actual[field] || '')}，预期 ${JSON.stringify(spec[field])}`);
     }
   }

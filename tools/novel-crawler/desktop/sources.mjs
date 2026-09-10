@@ -6,6 +6,7 @@ import {readJson, atomicWrite} from '../storage.mjs';
 import {makeClient, httpUrl, decode} from '../http.mjs';
 import {selectValue} from '../adapters.mjs';
 import {checkIdentity, normalizedTitle} from '../quality.mjs';
+import {normalizedIdentity} from '../identity.mjs';
 
 export const sitesDir = path.join(projectRoot, 'tools/novel-crawler/sites');
 
@@ -59,7 +60,7 @@ export function fillTemplate(value, context) {
 }
 
 function makeSiteClient(site, stateDir) {
-  return makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: [...new Set([...site.hosts, ...(site.spec.allowedHosts || [])])], delayMs: site.spec.delayMs, timeoutMs: site.spec.timeoutMs});
+  return makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: [...new Set([...site.hosts, ...(site.spec.allowedHosts || [])])], delayMs: site.spec.delayMs, timeoutMs: site.spec.timeoutMs, browser: site.spec.browser});
 }
 
 function siteFor(website, sites) {
@@ -96,10 +97,10 @@ export async function searchBooks({website, title, author = '', stateDir = defau
   try {
     if (new URL(website).pathname !== '/') {
       bookUrl(website, site);
-      const response = await client.get(website, {fresh: true});
+      const response = await client.get(website, {fresh: true, render: (site.book.transport || site.spec.transport) === 'browser', readySelector: site.book.readySelector});
       const $ = load(decode(response.body, response.contentType, site.spec.encoding));
       const book = {title: selectValue($, site.book.metadata.title), author: selectValue($, site.book.metadata.author), url: response.url, site: site.name};
-      checkIdentity({title, author: author || book.author}, book);
+      checkIdentity({title, author: author || book.author, identityNormalization: site.spec.identityNormalization}, book);
       bookUrl(book.url, site);
       return [book];
     }
@@ -109,9 +110,10 @@ export async function searchBooks({website, title, author = '', stateDir = defau
     for (let page = 0; url && page < Math.min(site.search.maxPages || 3, 20); page++) {
       if (seen.has(url)) throw Error('搜索翻页循环，需要更新适配');
       seen.add(url);
-      const response = await client.get(url, {fresh: true});
+      const response = await client.get(url, {fresh: true, render: (site.search.transport || site.spec.transport) === 'browser', readySelector: site.search.readySelector});
       const parsed = parseSearch(decode(response.body, response.contentType, site.spec.encoding), response.url, site);
-      const matches = parsed.results.filter(b => normalizedTitle(b.title) === normalizedTitle(title) && (!author.trim() || normalizedTitle(b.author) === normalizedTitle(author)));
+      const normalize = value => normalizedIdentity(value, site.spec.identityNormalization);
+      const matches = parsed.results.filter(b => normalize(b.title) === normalize(title) && (!author.trim() || normalize(b.author) === normalize(author)));
       if (matches.length) return [...new Map(matches.map(b => [b.url, b])).values()];
       url = parsed.next;
     }
@@ -123,11 +125,11 @@ export async function resolveBook({url, title, author, stateDir = defaultStateDi
   url = normalizeWebsite(url);
   const site = siteFor(url, sites), match = bookUrl(url, site), client = makeSiteClient(site, stateDir);
   try {
-    const response = await client.get(url, {fresh: true});
+    const response = await client.get(url, {fresh: true, render: (site.book.transport || site.spec.transport) === 'browser', readySelector: site.book.readySelector});
     if (response.url !== url) throw Error('书籍详情页地址发生跳转，需要核实适配');
     const $ = load(decode(response.body, response.contentType, site.spec.encoding));
     const actual = {title: selectValue($, site.book.metadata.title), author: selectValue($, site.book.metadata.author)};
-    checkIdentity({title, author}, actual);
+    checkIdentity({title, author, identityNormalization: site.spec.identityNormalization}, actual);
     if (reuseSaved) {
       const registry = readJson(path.join(stateDir, 'sources.json'), {sites: {}});
       const saved = Object.values(registry.sites[new URL(url).hostname]?.books || {}).filter(b => b.sourceUrl === url && b.verified && normalizedTitle(b.title) === normalizedTitle(title) && normalizedTitle(b.author) === normalizedTitle(author)).sort((a, b) => b.lastChecked.localeCompare(a.lastChecked))[0];

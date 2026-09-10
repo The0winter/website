@@ -8,6 +8,9 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $taskRoot 'node_modules/puppeteer/package.json'))) {
         throw 'Project dependencies are missing. Run npm install in the project folder first.'
     }
+    if (-not (Test-Path -LiteralPath (Join-Path $taskRoot 'tools/novel-crawler/node_modules/opencc-js/package.json'))) {
+        throw 'Crawler dependencies are missing. Run npm install from the tools/novel-crawler folder.'
+    }
     $taskState = Join-Path $taskRoot '.novel-crawler'
     New-Item -ItemType Directory -Force -Path $taskState | Out-Null
     $taskLog = Join-Path $taskState ('desktop-' + [Guid]::NewGuid().ToString('N') + '.log')

@@ -21,7 +21,7 @@ export function decode(bytes, contentType = '', encoding) {
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024}) {
+export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}}) {
   const hosts = new Set(allowedHosts.map(h => h.toLowerCase()));
   let lastRequest = 0;
   const stats = {requests: 0, cacheHits: 0, retries: 0, bytes: 0};
@@ -32,7 +32,7 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
     return url;
   }
   async function get(input, {fresh = false, request, render = false, readySelector} = {}) {
-    const original = assertUrl(input), key = hash({url: original, request, render});
+    const original = assertUrl(input), key = hash({url: original, request, render, browser: render ? browserOptions : undefined});
     const metaPath = path.join(cacheDir, key + '.json'), bodyPath = path.join(cacheDir, key + '.bin');
     const cached = readJson(metaPath);
     if (!fresh && !refresh && cached && Date.now() - Date.parse(cached.fetchedAt) < ttlMs && fs.existsSync(bodyPath)) {
@@ -44,36 +44,73 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
       if (request) throw Error('浏览器模式只支持网页导航');
       if (!browser) {
         const {default: puppeteer} = await import('puppeteer');
-        const candidates = [process.env.NOVEL_CRAWLER_BROWSER, puppeteer.executablePath(), 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].filter(Boolean);
+        const installed = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'];
+        const candidates = [process.env.NOVEL_CRAWLER_BROWSER, ...(browserOptions.headless === false ? [...installed, puppeteer.executablePath()] : [puppeteer.executablePath(), ...installed])].filter(Boolean);
         const executablePath = candidates.find(file => fs.existsSync(file));
         if (!executablePath) throw Error('未找到浏览器；用 NOVEL_CRAWLER_BROWSER 指定 Chrome/Edge');
-        browser = await puppeteer.launch({headless: true, executablePath});
+        browser = await puppeteer.launch({headless: browserOptions.headless ?? true, executablePath, args: browserOptions.minimized ? ['--start-minimized'] : []});
       }
-      const page = await browser.newPage();
-      try {
-        await page.setRequestInterception(true);
-        page.on('request', req => {
-          try {
-            const parsed = new URL(req.url());
-            if (['data:', 'blob:', 'about:'].includes(parsed.protocol)) return req.continue();
-            assertUrl(req.url());
-            if (['image', 'media', 'font'].includes(req.resourceType())) return req.abort();
-            return req.continue();
-          } catch { return req.abort(); }
-        });
-        await sleep(Math.max(0, lastRequest + delayMs - Date.now()));
-        lastRequest = Date.now();
-        stats.requests++;
-        await page.goto(original, {waitUntil: 'domcontentloaded', timeout: timeoutMs});
-        if (readySelector) await page.waitForSelector(readySelector, {timeout: timeoutMs});
-        const url = assertUrl(page.url()), body = Buffer.from(await page.content());
-        if (body.length > maxBytes) throw Error('渲染页面超过大小限制');
-        stats.bytes += body.length;
-        const meta = {url, original, fetchedAt: new Date().toISOString(), hash: hash(body), contentType: 'text/html; charset=utf-8', bytes: body.length, rendered: true};
-        atomicWrite(bodyPath, body);
-        atomicWrite(metaPath, meta);
-        return {...meta, body};
-      } finally { await page.close(); }
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        const page = await browser.newPage();
+        let retryAfterMs;
+        try {
+          // Source responses must include their body, even if another page prefetched
+          // this URL. The collector already keeps its own verified response cache.
+          if (browserOptions.responseMode === 'source') await page.setCacheEnabled(false);
+          await page.setRequestInterception(true);
+          page.on('request', req => {
+            try {
+              const parsed = new URL(req.url());
+              if (['data:', 'blob:', 'about:'].includes(parsed.protocol)) return req.continue();
+              assertUrl(req.url());
+              if (['image', 'media', 'font'].includes(req.resourceType())) return req.abort();
+              return req.continue();
+            } catch { return req.abort(); }
+          });
+          await sleep(Math.max(0, lastRequest + delayMs - Date.now()));
+          lastRequest = Date.now();
+          stats.requests++;
+          let documentResponse;
+          page.on('response', response => {
+            if (response.request().isNavigationRequest() && response.frame() === page.mainFrame()) documentResponse = response;
+          });
+          await page.goto(original, {waitUntil: 'domcontentloaded', timeout: timeoutMs});
+          const status = documentResponse?.status();
+          if (status === 429 || status >= 500) {
+            const raw = documentResponse.headers()['retry-after'];
+            const backoff = raw ? (/^\d+$/.test(raw) ? Number(raw) * 1000 : Date.parse(raw) - Date.now()) : (status === 429 ? 15000 : 1000) * 2 ** attempt;
+            if (backoff > 60000) throw Object.assign(Error(`服务器要求稍后再试：${original}；Retry-After=${raw}`), {stopSource: true});
+            const error = Error(`HTTP ${status}：${original}；网站暂时限制访问，请稍后继续`);
+            error.stopSource = status === 429;
+            error.retryAfterMs = Math.max(delayMs, Number.isFinite(backoff) ? backoff : 15000);
+            throw error;
+          }
+          if (readySelector) {
+            try { await page.waitForSelector(readySelector, {timeout: timeoutMs}); }
+            catch {
+              const title = (await page.title().catch(() => '')).replace(/\s+/gu, ' ').slice(0, 100);
+              throw Error(`页面未出现所需内容（HTTP ${documentResponse?.status() || '未知'}${title ? `，${title}` : ''}）；网站可能要求验证或已改变页面结构`);
+            }
+          }
+          if (!documentResponse || documentResponse.status() !== 200) throw Error(`浏览器未取得有效页面（HTTP ${documentResponse?.status() || '未知'}）；如需人工验证，请在普通浏览器中核实网站是否可用`);
+          const sourceMode = browserOptions.responseMode === 'source';
+          const url = assertUrl(page.url());
+          // Some sites translate their DOM after load. Source mode preserves the server's
+          // stable titles and prose while using a normal browser for the HTTP request.
+          const body = sourceMode ? Buffer.from(await documentResponse.buffer()) : Buffer.from(await page.content());
+          if (body.length > maxBytes) throw Error('渲染页面超过大小限制');
+          stats.bytes += body.length;
+          const meta = {url, original, fetchedAt: new Date().toISOString(), hash: hash(body), contentType: sourceMode ? documentResponse.headers()['content-type'] || 'text/html; charset=utf-8' : 'text/html; charset=utf-8', bytes: body.length, rendered: !sourceMode, browserFetched: true};
+          atomicWrite(bodyPath, body);
+          atomicWrite(metaPath, meta);
+          return {...meta, body};
+        } catch (error) {
+          if (attempt === retries || !Number.isFinite(error.retryAfterMs)) throw error;
+          retryAfterMs = error.retryAfterMs;
+          stats.retries++;
+        } finally { await page.close(); }
+        await sleep(retryAfterMs);
+      }
     }
     if (request && (request.method !== 'POST' || !request.form || typeof request.form !== 'object')) throw Error('目录接口只支持显式 POST form 请求');
     let url = original;
@@ -92,10 +129,10 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
           continue;
         }
         if (response.status === 429 || response.status >= 500) {
-          if (attempt === retries) break;
           const raw = response.headers['retry-after'];
           const backoff = raw ? (/^\d+$/.test(raw) ? Number(raw) * 1000 : Date.parse(raw) - Date.now()) : 1000 * 2 ** attempt;
-          if (backoff > 60000) throw Error(`服务器要求稍后再试：${url}；Retry-After=${raw}`);
+          if (backoff > 60000) throw Object.assign(Error(`服务器要求稍后再试：${url}；Retry-After=${raw}`), {stopSource: true});
+          if (attempt === retries) break;
           stats.retries++;
           await sleep(Math.max(delayMs, Number.isFinite(backoff) ? backoff : 1000));
           continue;
@@ -107,7 +144,7 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
         url = assertUrl(httpUrl(response.headers.location, url));
         continue;
       }
-      if (response.status !== 200) throw Error(`HTTP ${response.status}：${url}`);
+      if (response.status !== 200) throw Object.assign(Error(`HTTP ${response.status}：${url}`), {stopSource: response.status === 429});
       const body = Buffer.from(response.data);
       stats.bytes += body.length;
       const meta = {url, original, fetchedAt: new Date().toISOString(), hash: hash(body), contentType: response.headers['content-type'] || '', bytes: body.length};

@@ -42,7 +42,7 @@ function nextPage($, selector, base, client) {
 }
 
 export async function getCatalog(spec, client) {
-  const first = await client.get(spec.sourceUrl, {fresh: true});
+  const first = await client.get(spec.sourceUrl, {fresh: true, render: spec.transport === 'browser', readySelector: spec.metadata.readySelector});
   const $ = load(decode(first.body, first.contentType, spec.encoding));
   const actual = {title: selectValue($, spec.metadata.title), author: selectValue($, spec.metadata.author)};
   checkIdentity(spec, actual);
@@ -81,7 +81,7 @@ export async function getCatalog(spec, client) {
     if (seenPages.has(url)) throw Error('目录翻页形成循环，未使用不完整目录');
     if (seenPages.size >= (config.maxPages || 100)) throw Error('目录页数超过配置上限');
     seenPages.add(url);
-    const page = url === first.url ? first : await client.get(url, {fresh: true});
+    const page = url === first.url ? first : await client.get(url, {fresh: true, render: (config.transport || spec.transport) === 'browser', readySelector: config.readySelector});
     if (page.url !== url) throw Error('目录页面跳转，需核实来源配置');
     const doc = load(decode(page.body, page.contentType, spec.encoding));
     const links = doc(config.links);
@@ -119,7 +119,7 @@ export async function getChapter(spec, chapter, catalogLinks, client) {
     if (seen.size >= (config.maxPages || 20)) throw Error('章节分页超过上限');
     if (url !== chapter.link && catalogLinks.has(url)) throw Error('章节下一页指向另一章，拒绝拼接');
     seen.add(url);
-    const response = await client.get(url, {render: config.transport === 'browser', readySelector: config.content});
+    const response = await client.get(url, {render: (config.transport || spec.transport) === 'browser', readySelector: config.content});
     if (response.url !== url) throw Error('章节页面发生跳转，拒绝错配正文');
     const $ = load(decode(response.body, response.contentType, spec.encoding));
     if (config.rejectSelectors && $(config.rejectSelectors.join(',')).length) throw Error('页面含需额外适配的混淆、订阅或验证标记');

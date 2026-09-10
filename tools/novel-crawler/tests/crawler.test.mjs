@@ -252,6 +252,63 @@ test('a browser-rendered chapter is supported without reading text into the mode
   assert.equal(readJson(report.exportFile).chapters[0].content, '浏览器渲染的合成正文。');
 });
 
+test('browser source mode uses the full catalog and preserves server text despite DOM translation', async t => {
+  const f = await fixture(t, (req, res) => {
+    if (req.url === '/book') res.end('<h1>合成小說</h1><p id="author">作者：測試作者</p><div id="catalog"><a href="/a">第一章</a></div><script>document.querySelector("h1").textContent="页面改过的标题"</script>');
+    else if (req.url === '/full-catalog') res.end('<ul><li data-num="2"><a href="/b">第二章</a></li><li data-num="1"><a href="/a">第一章</a></li></ul><script>document.querySelector("li").remove()</script>');
+    else if (req.url === '/denied') { res.statusCode = 403; res.end('<div id="content">Do not accept this error page.</div>'); }
+    else if (req.url === '/retry' && f.counts.get('/retry') === 1) { res.statusCode = 429; res.setHeader('Retry-After', '0'); res.end('Too many requests'); }
+    else if (req.url === '/later') { res.statusCode = 429; res.setHeader('Retry-After', '3600'); res.end('Try later'); }
+    else res.end(`<h1>${req.url === '/a' ? '第一章' : '第二章'}</h1><div id="content">${req.url === '/a' ? '古樹環繞著安靜的山村。' : '清晨的碼頭傳來船笛聲。'}</div><script>document.getElementById('content').textContent='页面转换后的内容'</script>`);
+  });
+  const spec = {...specFor(f.base), transport: 'browser', browser: {responseMode: 'source'}, identityNormalization: 'chinese-simplified'};
+  spec.catalog = {url: f.base + '/full-catalog', links: 'li a', orderAncestor: 'li', orderAttribute: 'data-num'};
+  const report = await acquire(spec, f.options);
+  assert.equal(report.completeAgainstSource, true, JSON.stringify(report.failures));
+  const book = readJson(report.exportFile);
+  assert.deepEqual(book.chapters.map(c => c.title), ['第一章', '第二章']);
+  assert.equal(book.chapters[0].content, '古樹環繞著安靜的山村。');
+  assert.equal(book.chapters[1].content, '清晨的碼頭傳來船笛聲。');
+  const client = makeClient({allowedHosts: ['127.0.0.1'], cacheDir: path.join(f.options.stateDir, 'cache'), delayMs: 200});
+  try {
+    const dom = await client.get(f.base + '/a', {render: true, readySelector: '#content'});
+    assert.match(dom.body.toString('utf8'), /id="content">页面转换后的内容/);
+    assert.equal(f.counts.get('/a'), 2);
+    await assert.rejects(client.get(f.base + '/denied', {render: true, readySelector: '#content'}), /HTTP 403/);
+    const retried = await client.get(f.base + '/retry', {render: true, readySelector: '#content'});
+    assert.match(retried.body.toString('utf8'), /id="content"/);
+    assert.equal(f.counts.get('/retry'), 2);
+    assert.equal(client.stats.retries, 1);
+    await assert.rejects(client.get(f.base + '/later', {render: true, readySelector: '#content'}), error => error.stopSource === true && /服务器要求稍后再试/.test(error.message));
+    assert.equal(f.counts.get('/later'), 1);
+  } finally { await client.close(); }
+});
+
+test('sparse probes stop after three failed requests instead of requiring adjacent chapter numbers', async t => {
+  const f = await fixture(t, (req, res) => {
+    if (req.url === '/book') res.end(heading + `<div id="catalog">${Array.from({length: 100}, (_, i) => `<a href="/a${i + 1}">第${i + 1}章</a>`).join('')}</div>`);
+    else { res.statusCode = 403; res.end('forbidden'); }
+  });
+  const report = await acquire(specFor(f.base), {...f.options, mode: 'probe', samples: 4});
+  assert.equal(report.structuralPass, false);
+  assert.equal(report.failures.length, 3);
+  assert.equal([...f.counts.keys()].filter(url => /^\/a\d+$/.test(url)).length, 3);
+  assert.ok(report.failures[2].chapter > report.failures[1].chapter + 1);
+});
+
+test('a long server cooldown stops the entire book before requesting other chapters', async t => {
+  const f = await fixture(t, (req, res) => {
+    if (req.url === '/book') res.end(heading + '<div id="catalog"><a href="/a">第一章</a><a href="/b">第二章</a></div>');
+    else { res.statusCode = 429; res.setHeader('Retry-After', '3600'); res.end('Try later'); }
+  });
+  const report = await acquire(specFor(f.base), {...f.options, mode: 'probe'});
+  assert.equal(report.structuralPass, false);
+  assert.equal(report.failures.length, 1);
+  assert.match(report.failures[0].error, /服务器要求稍后再试/);
+  assert.equal(f.counts.get('/a'), 1);
+  assert.equal(f.counts.has('/b'), false);
+});
+
 test('ZIP resources decode the selected TXT and do not extract unrelated archive files', async t => {
   let zipped;
   const f = await fixture(t, (req, res) => {
