@@ -35,11 +35,17 @@ test('import attribution, metadata, replay, rollback and account separation',asy
   const book=await Book.findOne();assert.equal(book.author_id,undefined);assert.ok(book.author_profile_id);
   assert.equal(book.description,sample.description);assert.equal(book.status,'完结');assert.equal(book.cover_image,sample.cover_image);
   assert.equal((await send(sample)).data.unchanged,1);
+  const updatedDescription='补采的简介。\n保留第二段。';
+  assert.equal((await send({...sample,description:updatedDescription})).data.unchanged,1);
+  assert.equal((await Book.findById(book._id)).description,updatedDescription);
+  const {description: omittedDescription,...withoutDescription}=sample;
+  assert.equal((await send(withoutDescription)).data.unchanged,1);
+  assert.equal((await Book.findById(book._id)).description,updatedDescription);
   assert.equal(await Author.countDocuments(),1);assert.equal(await User.countDocuments(),1);assert.equal(await Chapter.countDocuments(),1);
   const profile=await (await fetch(base+'/api/authors/'+book.author_profile_id)).json();assert.equal(profile.username,sample.author);
   const books=await (await fetch(base+'/api/books?author_id='+book.author_profile_id)).json();assert.equal(books.length,1);
   assert.equal((await send({...sample,description:'must rollback',chapters:[{...sample.chapters[0],content:'conflict'}]})).status,409);
-  assert.equal((await Book.findById(book._id)).description,sample.description);
+  assert.equal((await Book.findById(book._id)).description,updatedDescription);
   assert.equal((await send({...sample,author:'different'})).status,409);
   await send({...sample,sourceUrl:'https://example.test/books/2'});assert.equal(await Author.countDocuments(),2);
   for(const n of [3,4])assert.equal((await send({...sample,sourceUrl:`https://example.test/books/${n}`,authorSourceUrl:'https://example.test/authors/1'})).status,200);

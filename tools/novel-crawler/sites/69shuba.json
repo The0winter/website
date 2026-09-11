@@ -8,6 +8,7 @@
     "urlPattern": "^/book/(?<bookId>[0-9]+)\\.htm$",
     "readySelector": ".booknav2 h1",
     "metadata": {
+      "description": {"selector": ".navtxt", "remove": ["p:contains('小说关键词：')"]},
       "title": {"selector": "meta[property='og:title']", "attribute": "content"},
       "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"}
     }
@@ -27,6 +28,7 @@
     "delayMs": 8000,
     "timeoutMs": 30000,
     "metadata": {
+      "description": {"selector": ".navtxt", "remove": ["p:contains('小说关键词：')"]},
       "title": {"selector": "meta[property='og:title']", "attribute": "content"},
       "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"},
       "readySelector": ".booknav2 h1"

@@ -73,7 +73,8 @@ function adapterStatus() {
   $('clear-login').title = found ? `清除${found.name}在拾页中的登录信息，下次重新登录；已保存章节保留` : '';
   $('adapter-status').textContent = found ? '✓ 已适配' : host ? '待适配' : '输入网址';
   $('adapter-status').className = `input-tag ${found ? 'supported' : host ? 'unsupported' : ''}`;
-  $('form-note').textContent = found || !host ? '下次打开时，会保留上次使用的网站。' : '把网址发给 Codex，即可继续适配这个来源。';
+  $('form-note').hidden = !!found || !host;
+  $('form-note').textContent = '此来源待适配，请将网址发给 Codex。';
   for (const button of document.querySelectorAll('.site-choice')) {
     const selected = found ? button.dataset.siteId === found.id : button.dataset.host === host;
     button.classList.toggle('selected', selected);
@@ -137,6 +138,10 @@ function render() {
   $('task-title').textContent = task.title ? `《${task.title}》${task.author ? ` · ${task.author}` : ''}` : '采集任务';
   $('task-message').textContent = task.message;
   const report = task.report;
+  const description = report?.description || task.description;
+  $('task-description').hidden = !description && !report?.descriptionStatus;
+  $('description-status').textContent = description ? report?.descriptionStatus === 'truncated' ? '已截取前 5000 字符' : report?.descriptionStatus === 'retained' ? '沿用已保存简介' : '已获取' : '未获取';
+  $('description-text').textContent = description || '来源未提供可用简介，本次文件不包含简介。';
   const progress = !active && report ? {downloaded: report.downloaded, total: report.expected, failed: report.failures?.filter(item => item.chapter).length || 0, mode: report.mode || task.progress?.mode} : task.progress;
   const percent = progress?.total ? Math.min(100, progress.downloaded / progress.total * 100) : task.phase === 'complete' || task.phase === 'probed' ? 100 : 0;
   $('progress-bar').style.width = `${percent}%`;
@@ -146,7 +151,7 @@ function render() {
   $('pause').disabled = task.phase === 'pausing';
   $('pause').textContent = task.phase === 'pausing' ? '正在保存…' : '暂停采集';
   $('report-stats').hidden = !report;
-  if (report) $('report-stats').replaceChildren(...[[`${report.downloaded} / ${report.expected}`, '已采集章节'], [report.errors, '检测到的错误'], [report.warnings, '待核对警告']].map(([number, label]) => { const div = document.createElement('div'), strong = document.createElement('strong'); strong.textContent = number; div.append(strong, label); return div; }));
+  if (report) $('report-stats').replaceChildren(...[[report.expected, '目录章节'], [report.errors, '错误'], [report.warnings, '待核对']].map(([number, label]) => { const div = document.createElement('div'), strong = document.createElement('strong'); strong.textContent = number; div.append(strong, label); return div; }));
   renderDiagnostics(task);
   $('open-folder').hidden = !report?.exportFile;
   $('open-report').hidden = !report?.jobId;

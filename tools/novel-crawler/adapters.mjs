@@ -32,6 +32,20 @@ export function cleanHtml($, selector, remove = []) {
   return fragment.text().replace(/\r\n?/g, '\n').split('\n').map(s => s.trim()).filter(Boolean).join('\n');
 }
 
+// Optional book metadata: only use configured, unique containers, never the whole page.
+export function extractDescription($, rules) {
+  if (!rules) return {descriptionStatus: 'unconfigured'};
+  for (const rule of Array.isArray(rules) ? rules : [rules]) {
+    const config = typeof rule === 'string' ? {selector: rule} : rule;
+    if ($(config.selector).length !== 1) continue;
+    const value = config.attribute ? selectValue($, config) : cleanHtml($, config.selector, config.remove);
+    const excluded = (config.removeLines || []).map(pattern => new RegExp(pattern, 'u'));
+    const text = value.replace(/\r\n?/g, '\n').split('\n').map(line => line.replace(/[\t \u00a0\u3000]+/g, ' ').trim()).filter(line => line && !excluded.some(pattern => pattern.test(line))).join('\n');
+    if (text) return {description: text.slice(0, 5000).replace(/[\uD800-\uDBFF]$/u, '').trim(), descriptionStatus: text.length > 5000 ? 'truncated' : 'collected'};
+  }
+  return {descriptionStatus: 'missing'};
+}
+
 function nextPage($, selector, base, client) {
   if (!selector) return null;
   const links = $(selector).filter((_, el) => !$(el).is('[disabled],.disabled,[aria-disabled="true"]'));
@@ -47,6 +61,7 @@ export async function getCatalog(spec, client) {
   const $ = load(decode(first.body, first.contentType, spec.encoding));
   const actual = {title: selectValue($, spec.metadata.title), author: selectValue($, spec.metadata.author)};
   checkIdentity(spec, actual);
+  Object.assign(actual, extractDescription($, spec.metadata.description));
   const catalog = [], seenPages = new Set(), seenLinks = new Set();
   let url = spec.catalog?.url ? client.assertUrl(httpUrl(spec.catalog.url, spec.sourceUrl)) : first.url;
   const config = spec.catalog;
@@ -183,6 +198,7 @@ export async function getResource(spec, client, jobDir) {
   const $ = load(decode(evidence.body, evidence.contentType, spec.encoding));
   const actual = {title: selectValue($, spec.metadata.title), author: selectValue($, spec.metadata.author)};
   checkIdentity(spec, actual);
+  Object.assign(actual, extractDescription($, spec.metadata.description));
   const config = spec.resource;
   if (!config.url && ($(config.link).length !== 1 || !$(config.link).attr('href'))) throw Error('文件下载链接必须唯一且含 href');
   const resourceUrl = config.url || httpUrl($(config.link).attr('href'), evidence.url);

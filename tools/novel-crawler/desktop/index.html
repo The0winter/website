@@ -6,34 +6,31 @@
 </head>
 <body>
   <aside class="sidebar">
-    <a class="brand" href="/" aria-label="拾页首页"><img src="/icon.svg" alt=""><span>拾页<small>把故事，好好收藏。</small></span></a>
-    <div class="nav-label">我的工作台</div>
-    <div class="nav-item active"><span>▤</span> 采集书籍 <span class="nav-dot"></span></div>
+    <a class="brand" href="/" aria-label="拾页首页"><img src="/icon.svg" alt=""><span>拾页</span></a>
+    <div class="nav-item active"><span aria-hidden="true">▤</span> 采集书籍</div>
     <button class="nav-item" id="folder-nav"><span>▱</span> 下载文件夹 <span>↗</span></button>
-    <div class="source-section"><div class="nav-label">我的网站 <span id="site-count"></span></div><p class="source-hint">最近使用的排在前面</p><div id="sites" aria-label="网站列表，按最近使用排序"></div></div>
-    <div class="sidebar-bottom"><span class="local-dot"></span> 本地运行 <small>书籍与记录保存在这台电脑</small></div>
+    <div class="source-section"><div class="nav-label">我的网站 <span id="site-count"></span></div><div id="sites" aria-label="网站列表，按最近使用排序"></div></div>
+    <div class="sidebar-bottom"><span class="local-dot"></span> 本地运行</div>
   </aside>
   <main>
-    <header><div class="eyebrow">YOUR READING COLLECTION</div><div class="heading"><h1>收藏下一段故事</h1><span class="badge">小说采集工具</span></div><p class="subtitle">输入来源和书名，查找、检查，然后保存。</p></header>
+    <header><h1>采集书籍</h1></header>
     <section class="card input-card">
-      <div class="section-title"><span class="step">01</span><h2>从哪里开始</h2></div>
+      <div class="section-title"><h2>书籍来源</h2></div>
       <form id="search-form">
-        <label for="website">小说网站 <span>也可以粘贴书籍详情页</span></label>
-        <div class="site-input"><span aria-hidden="true">◎</span><input id="website" name="website" type="text" placeholder="例如：ixdzs8.com" autocomplete="off" required maxlength="2000"><span id="adapter-status" class="input-tag">输入网址</span></div>
-        <div id="login-memory" class="login-memory" hidden><span>本站登录会自动保留，过期后再登录。</span><button id="clear-login" type="button" class="text-button" title="清除当前网站在拾页中的登录信息，下次重新登录；已保存章节保留">清除本站登录</button></div>
-        <div class="book-fields"><div><label for="title">书名</label><input id="title" name="title" placeholder="输入完整书名" required maxlength="200" autocomplete="off"></div><div><label for="author">作者 <span>选填，帮助区分同名书</span></label><input id="author" name="author" placeholder="知道作者的话，可以填在这里" maxlength="200" autocomplete="off"></div></div>
-        <div class="form-footer"><span id="form-note">下次打开时，会保留上次使用的网站。</span><button id="search" class="primary" type="submit">查找书籍 <span>→</span></button></div>
+        <label for="website">来源网址</label>
+        <div class="site-input"><span aria-hidden="true">◎</span><input id="website" name="website" type="text" placeholder="网站首页或书籍详情页" autocomplete="off" required maxlength="2000"><span id="adapter-status" class="input-tag">输入网址</span></div>
+        <div id="login-memory" class="login-memory" hidden><span>已启用登录记忆</span><button id="clear-login" type="button" class="text-button" title="清除当前网站在拾页中的登录信息，下次重新登录；已保存章节保留">清除本站登录</button></div>
+        <div class="book-fields"><div><label for="title">书名</label><input id="title" name="title" placeholder="输入完整书名" required maxlength="200" autocomplete="off"></div><div><label for="author">作者 <span>选填</span></label><input id="author" name="author" placeholder="作者名" maxlength="200" autocomplete="off"></div></div>
+        <div class="form-footer"><span id="form-note" hidden></span><button id="search" class="primary" type="submit">查找书籍 <span>→</span></button></div>
       </form>
       <div id="feedback" class="feedback" role="alert" hidden></div>
-      <div id="results-panel" hidden><div class="results-heading">匹配书籍 <span>核对后开始采集</span></div><div id="results"></div><div class="result-actions"><label class="checkbox"><input id="probe-only" type="checkbox">仅试采，先看看来源质量</label><button id="start" class="primary" type="button">试采并下载 <span>↓</span></button></div></div>
+      <div id="results-panel" hidden><div class="results-heading">匹配书籍 <span>核对后开始采集</span></div><div id="results"></div><div class="result-actions"><label class="checkbox"><input id="probe-only" type="checkbox">仅试采</label><button id="start" class="primary" type="button">试采并下载 <span>↓</span></button></div></div>
     </section>
     <section class="card task-card" aria-live="polite">
-      <div class="task-heading"><div class="section-title"><span class="step">02</span><h2>采集进度</h2></div><div class="task-controls"><span id="phase" class="status-pill">等待开始</span><button id="stop" type="button" class="stop-button" title="停止当前任务并关闭采集页面，保留已保存章节" hidden>停止</button></div></div>
-      <div id="task-empty" class="empty-state"><div class="empty-icon">▤</div><div><h3>你的下一本书，从这里出发</h3><p>查找并选择书籍后，采集进度会显示在这里。</p></div></div>
-      <div id="task-content" hidden><h3 id="task-title"></h3><p id="task-message"></p><div class="progress-track"><div id="progress-bar"></div></div><div class="progress-caption"><span id="progress-text"></span><button id="pause" type="button" class="text-button" hidden>暂停采集</button></div><div id="report-stats" class="stats" hidden></div><div class="task-actions"><button id="resume" type="button" class="secondary" hidden>继续采集</button><button id="open-folder" type="button" class="secondary" hidden>打开下载文件夹 ↗</button><button id="open-report" type="button" class="text-button" hidden>查看质量报告 ↗</button></div></div>
+      <div class="task-heading"><div class="section-title"><h2>采集进度</h2></div><div class="task-controls"><span id="phase" class="status-pill">等待开始</span><button id="stop" type="button" class="stop-button" title="停止当前任务并关闭采集页面，保留已保存章节" hidden>停止</button></div></div>
+      <div id="task-empty" class="empty-state"><span class="empty-icon" aria-hidden="true">↓</span><p>选择书籍后开始采集</p></div>
+      <div id="task-content" hidden><h3 id="task-title"></h3><p id="task-message"></p><div class="progress-track"><div id="progress-bar"></div></div><div class="progress-caption"><span id="progress-text"></span><button id="pause" type="button" class="text-button" hidden>暂停采集</button></div><div id="report-stats" class="stats" hidden></div><details id="task-description" class="description" hidden><summary>书籍简介 <span id="description-status"></span></summary><p id="description-text"></p></details><div class="task-actions"><button id="resume" type="button" class="secondary" hidden>继续采集</button><button id="open-folder" type="button" class="secondary" hidden>打开下载文件夹 ↗</button><button id="open-report" type="button" class="text-button" hidden>查看质量报告 ↗</button></div></div>
     </section>
-    <footer><span>自动检查缺章、重复、乱码等异常；已完成的章节支持续传。</span><span>不逐章调用 AI</span></footer>
-    <p class="fine-print">检查基于来源目录和文本规则，不能保证源站没有删文或段落错序。</p>
   </main>
   <dialog id="interruption-dialog" aria-labelledby="interruption-title" aria-describedby="interruption-summary">
     <h2 id="interruption-title">采集已中断</h2>

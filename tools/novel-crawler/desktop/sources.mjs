@@ -5,7 +5,7 @@ import {projectRoot, defaultStateDir, validateSpec} from '../core.mjs';
 import {readJson, atomicWrite} from '../storage.mjs';
 import {makeClient, httpUrl, decode} from '../http.mjs';
 import {browserProfile} from '../browser-session.mjs';
-import {selectValue} from '../adapters.mjs';
+import {selectValue, extractDescription} from '../adapters.mjs';
 import {checkIdentity, normalizedTitle} from '../quality.mjs';
 import {normalizedIdentity} from '../identity.mjs';
 
@@ -96,9 +96,9 @@ export function parseSearch(html, baseUrl, site) {
   return {results, next: next?.attr('href') ? httpUrl(next.attr('href'), baseUrl) : null};
 }
 
-export function specForBook({url, title, author}, sites = loadSites().sites) {
+export function specForBook({url, title, author, description}, sites = loadSites().sites) {
   const site = siteFor(url, sites), match = bookUrl(url, site);
-  return validateSpec(fillTemplate(site.spec, {...match.groups, title, author, sourceUrl: url}));
+  return validateSpec({...fillTemplate(site.spec, {...match.groups, title, author, sourceUrl: url}), ...(description ? {description} : {})});
 }
 
 export async function searchBooks({website, title, author = '', stateDir = defaultStateDir, sites = loadSites().sites, onStatus, shouldStop, signal}) {
@@ -143,12 +143,13 @@ export async function resolveBook({url, title, author, stateDir = defaultStateDi
     const $ = load(decode(response.body, response.contentType, site.spec.encoding));
     const actual = {title: selectValue($, site.book.metadata.title), author: selectValue($, site.book.metadata.author)};
     checkIdentity({title, author, identityNormalization: site.spec.identityNormalization}, actual);
+    Object.assign(actual, extractDescription($, site.book.metadata.description));
     if (reuseSaved) {
       const registry = readJson(path.join(stateDir, 'sources.json'), {sites: {}});
       const saved = Object.values(registry.sites[new URL(url).hostname]?.books || {}).filter(b => b.sourceUrl === url && b.verified && normalizedTitle(b.title) === normalizedTitle(title) && normalizedTitle(b.author) === normalizedTitle(author)).sort((a, b) => b.lastChecked.localeCompare(a.lastChecked))[0];
       if (saved && /^[a-f0-9]{20}$/.test(saved.jobId)) {
         const spec = readJson(path.join(stateDir, 'jobs', saved.jobId, 'spec.json'));
-        if (spec && spec.sourceUrl === url && normalizedTitle(spec.title) === normalizedTitle(title) && normalizedTitle(spec.author) === normalizedTitle(author)) return validateSpec(spec);
+        if (spec && spec.sourceUrl === url && normalizedTitle(spec.title) === normalizedTitle(title) && normalizedTitle(spec.author) === normalizedTitle(author)) return validateSpec({...spec, ...(actual.description ? {description: actual.description} : {})});
       }
     }
     return specForBook({url, ...actual}, sites);

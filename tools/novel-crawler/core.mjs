@@ -33,6 +33,7 @@ export function validateSpec(input) {
     if (spec.browser.resourceHosts !== undefined && (!Array.isArray(spec.browser.resourceHosts) || spec.browser.resourceHosts.some(host => typeof host !== 'string' || !/^[a-z0-9.-]+$/.test(host) || host.startsWith('.') || host.endsWith('.')))) throw Error('browser.resourceHosts 只能包含明确的小写资源域名');
   }
   if (!spec.metadata?.title || !spec.metadata?.author) throw Error('必须配置来源页面书名和作者提取规则');
+  if (spec.description !== undefined && (typeof spec.description !== 'string' || spec.description.length > 5000)) throw Error('简介须为不超过 5000 字符的文本');
   if (spec.kind === 'html' && (!(spec.catalog?.links || spec.catalog?.json) || !spec.chapter?.content || !spec.chapter?.title)) throw Error('HTML 来源需配置目录及章节选择器');
   if (spec.kind !== 'html' && !(spec.resource?.url || spec.resource?.link)) throw Error('文件来源需配置下载地址或链接选择器');
   spec.allowedHosts = [...new Set([new URL(spec.sourceUrl).hostname, ...(spec.allowedHosts || [])])];
@@ -46,7 +47,12 @@ export function jobId(spec) {
 }
 
 function extractionHash(spec) {
-  const {delayMs, retries, timeoutMs, searchUrl, ...extraction} = spec;
+  const {delayMs, retries, timeoutMs, searchUrl, description, ...extraction} = spec;
+  // Synopsis changes do not affect chapter identity, order or extraction.
+  if (extraction.metadata) {
+    const {description: descriptionRule, ...metadata} = extraction.metadata;
+    extraction.metadata = metadata;
+  }
   if (extraction.browser) {
     // Login waiting and subresource loading do not change source-text extraction.
     const {manualVerificationMs, manualLogin, manualCaptcha, resourceHosts, ...browser} = extraction.browser;
@@ -99,6 +105,7 @@ function reportMarkdown(report) {
     `| 相对来源目录完整 | ${report.completeAgainstSource ? '是' : '否'} |`,
     `| 严重问题 | ${report.errors} |`, `| 待核对警告 | ${report.warnings} |`,
     `| 编号等信息提示 | ${report.information} |`, '',
+    `简介：${report.description ? `${report.description.length} 字符${report.descriptionStatus === 'truncated' ? '（来源简介超过 5000 字符，已截取）' : report.descriptionStatus === 'retained' ? '（沿用已保存简介）' : ''}` : '未获取，导出时省略该字段'}。`, '',
     ...(report.paused ? ['任务已主动暂停；缺失项表示尚未继续采集，不能据此判定来源缺章。', ''] : []),
     report.limitation, '',
     '## 问题分类', '',
@@ -143,16 +150,21 @@ export async function acquire(input, options = {}) {
   return withLock(path.join(dir, 'job.lock'), async () => {
     const specFile = path.join(dir, 'spec.json'), previousSpec = readJson(specFile);
     if (previousSpec && extractionHash(previousSpec) !== extractionHash(spec) && fs.existsSync(chaptersDir) && fs.readdirSync(chaptersDir).length) throw Error(`提取规则发生变化，请使用新的 --state-dir 重新试采，避免混用旧正文：${dir}`);
+    if (!spec.description && previousSpec?.description) spec.description = previousSpec.description;
     atomicWrite(specFile, spec);
     const shouldStop = () => options.signal?.aborted || options.shouldStop?.();
     const client = options.client || makeClient({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser, onStatus: options.onStatus, shouldStop, signal: options.signal});
     const initialStats = {...client.stats};
     const started = Date.now(), chapters = [], failures = [];
-    let catalog = [], evidence, report, exportFile, paused = false, reusedExport = false;
+    let catalog = [], evidence, report, exportFile, descriptionStatus, paused = false, reusedExport = false;
     try {
       const source = spec.kind === 'html' ? await getCatalog(spec, client) : await getResource(spec, client, dir);
       catalog = source.catalog;
       evidence = source.evidence;
+      const description = source.actual?.description || spec.description || previousSpec?.description;
+      if (description) spec.description = description;
+      descriptionStatus = source.actual?.description ? source.actual.descriptionStatus : description ? 'retained' : source.actual?.descriptionStatus || 'missing';
+      atomicWrite(specFile, spec);
       const oldCatalog = readJson(path.join(dir, 'catalog.json'));
       if (oldCatalog && oldCatalog.some((c, i) => !catalog[i] || catalog[i].link !== c.link || catalog[i].title !== c.title)) throw Error('完整目录有删除、插入或改名，暂停续传以保护旧章节位置；需在新状态目录重新采集核对');
       if (spec.kind !== 'html') {
@@ -229,7 +241,7 @@ export async function acquire(input, options = {}) {
     } finally {
       if (!options.client) await client.close();
     }
-    const details = {...report, paused, reusedExport, title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, jobId: id, checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: Object.fromEntries(Object.entries(client.stats).map(([key, value]) => [key, value - initialStats[key]])), evidence, exportFile: exportFile || null};
+    const details = {...report, paused, reusedExport, description: spec.description, descriptionStatus, title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, jobId: id, checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: Object.fromEntries(Object.entries(client.stats).map(([key, value]) => [key, value - initialStats[key]])), evidence, exportFile: exportFile || null};
     atomicWrite(path.join(dir, `${mode}-report.json`), details);
     atomicWrite(path.join(dir, `${mode}-report.md`), reportMarkdown(details));
     atomicWrite(path.join(dir, 'history', `${Date.now()}-${mode}.json`), details);

@@ -15,7 +15,10 @@
   },
   "book": {
     "urlPattern": "^/read/(?<bookId>[0-9]+)/?$",
-    "metadata": {"title": "h1", "author": "h1 + p > a.bauthor"}
+    "metadata": {
+      "description": {"selector": "#intro", "remove": [".c-more"]},
+      "title": "h1", "author": "h1 + p > a.bauthor"
+    }
   },
   "spec": {
     "version": 1,
@@ -26,7 +29,10 @@
     "sourceUrl": "${sourceUrl}",
     "allowedHosts": ["ixdzs8.com"],
     "delayMs": 1200,
-    "metadata": {"title": "h1", "author": "h1 + p > a.bauthor"},
+    "metadata": {
+      "description": {"selector": "#intro", "remove": [".c-more"]},
+      "title": "h1", "author": "h1 + p > a.bauthor"
+    },
     "catalog": {
       "url": "https://ixdzs8.com/novel/clist/",
       "request": {"method": "POST", "form": {"bid": "${bookId}"}},
