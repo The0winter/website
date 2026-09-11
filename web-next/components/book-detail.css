@@ -2,6 +2,10 @@
 .book-catalog-overlay[data-open=true] { visibility:visible; opacity:1; pointer-events:auto; transition:opacity 200ms ease,visibility 0s; }
 .book-catalog-sheet { display:flex; flex-direction:column; width:100%; max-width:1024px; height:85dvh; overflow:hidden; background:white; border-radius:16px; box-shadow:-12px 0 40px #0002; transform:translateX(calc(100vw + 24px)); transition:transform 200ms cubic-bezier(.22,.7,.25,1); }
 .book-catalog-overlay[data-open=true] .book-catalog-sheet { transform:translateX(0); }
+/* Chapter entry already supplies an opaque loading page. Retire the catalog
+   underneath it immediately, including when Next reuses a cached route tree. */
+.book-catalog-overlay[data-chapter-entry=true] { visibility:hidden; opacity:0; pointer-events:none; transition:none; }
+.book-catalog-overlay[data-chapter-entry=true] .book-catalog-sheet { transform:translateX(calc(100vw + 24px)); transition:none; }
 @media(max-width:767px) {
   .book-catalog-overlay { padding:0; }
   .book-catalog-sheet { max-width:none; height:100dvh; border-radius:0; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }

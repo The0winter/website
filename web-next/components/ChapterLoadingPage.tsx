@@ -32,6 +32,12 @@ export default function ChapterLoadingPage() {
         const style = getComputedStyle(element);
         if (style.visibility !== 'visible' || Number(style.opacity) < .999) return null;
       }
+      // A closing catalog stops accepting pointer events before its dark
+      // backdrop stops painting. Reader geometry/hit testing alone misses it.
+      for (const overlay of document.querySelectorAll<HTMLElement>('.book-catalog-overlay')) {
+        const style = getComputedStyle(overlay), box = overlay.getBoundingClientRect();
+        if (box.width && box.height && style.visibility === 'visible' && Number(style.opacity) > 0) return null;
+      }
       const scroll = reader.querySelector('.reader-scroll-window');
       const columns = reader.querySelector<HTMLElement>('.reader-columns');
       const host = reader.closest('.reader-entry-content');

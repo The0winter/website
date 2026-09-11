@@ -6,7 +6,7 @@ import {Virtuoso, type VirtuosoHandle} from 'react-virtuoso';
 import Link from './PrefetchLink';
 import CatalogScrollbar from './CatalogScrollbar';
 import {formatChapterTitle} from '@/lib/catalog-title';
-import {beginChapterEntry} from '@/lib/chapter-entry';
+import {beginChapterEntry, currentChapterEntry, subscribeChapterEntry} from '@/lib/chapter-entry';
 import './book-detail.css';
 
 type CatalogChapter = {id: string; title: string; chapter_number: number};
@@ -25,6 +25,7 @@ const columnCount = () => innerWidth >= 1024 ? 3 : innerWidth >= 768 ? 2 : 1;
 
 export default function BookCatalogSheet({open, onClose, bookId, chapters, total, loading, error, onRetry, reversed = false, onToggleOrder, activeChapterId, activeChapterLabel = '正在阅读', onSelect, onPrefetch}: Props) {
   const columns = useSyncExternalStore(subscribeWidth, columnCount, () => 1);
+  const openingChapter = useSyncExternalStore(subscribeChapterEntry, () => Boolean(currentChapterEntry()?.href.startsWith(`/book/${bookId}/`)), () => false);
   const list = useRef<VirtuosoHandle>(null);
   const listId = useId();
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
@@ -66,7 +67,7 @@ export default function BookCatalogSheet({open, onClose, bookId, chapters, total
       if (previousFocus?.isConnected) previousFocus.focus({preventScroll: true});
     };
   }, [open, onClose]);
-  return <div className="book-catalog-overlay" data-open={open} aria-hidden={!open} inert={!open} onClick={onClose}>
+  return <div className="book-catalog-overlay" data-open={open} data-chapter-entry={openingChapter} aria-hidden={!open || openingChapter} inert={!open || openingChapter} onClick={onClose}>
     <div ref={panel} role="dialog" aria-modal="true" aria-label="全部目录" className="book-catalog-sheet" onClick={event => event.stopPropagation()}>
       <header className="book-catalog-header">
         <div><h2>全部目录</h2><p>共 {total ?? chapters.length} 章</p></div>

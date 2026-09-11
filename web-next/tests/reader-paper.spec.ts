@@ -9,7 +9,7 @@ for (const [theme, mode, width, pageWidth] of [
   ['dark', 'scroll', 390, 1000], ['cream', 'horizontal', 1440, 1000],
   ['cream', 'scroll', 768, 500],
 ] as const) {
-  test(`the paper stays pixel-identical as loading text becomes ${theme} ${mode} text at ${width}px`, async ({browser}) => {
+  test(`the paper stays pixel-identical as loading text becomes ${theme} ${mode} text at ${width}px`, async ({browser}, testInfo) => {
     const context = await browser.newContext({viewport: {width, height: 844}, isMobile: width < 768, hasTouch: true});
     const page = await context.newPage();
     try {
@@ -46,6 +46,13 @@ for (const [theme, mode, width, pageWidth] of [
       ];
       const before = [];
       for (const clip of clips) before.push(await page.screenshot({clip}));
+      const compare = async (actual: Buffer, expected: Buffer, label: string) => {
+        if (!actual.equals(expected)) {
+          await testInfo.attach(`${label}-before`, {body: expected, contentType: 'image/png'});
+          await testInfo.attach(`${label}-after`, {body: actual, contentType: 'image/png'});
+        }
+        expect(actual.equals(expected), label).toBe(true);
+      };
       const original = await loading.elementHandle();
       await hold.evaluate(element => (element as HTMLElement).remove());
       await expect(loading).toHaveAttribute('data-text-revealed', 'true');
@@ -54,11 +61,11 @@ for (const [theme, mode, width, pageWidth] of [
       await expect(page.locator('.reader-text-window')).toBeVisible();
       await expect(page.locator('.reader-page-surface')).toHaveCSS('background-color', await loading.locator('.chapter-loading-sheet').evaluate(element => getComputedStyle(element).backgroundColor));
       const textAtReveal = await page.locator('.reader-text-window').screenshot();
-      for (let index = 0; index < clips.length; index++) expect((await page.screenshot({clip: clips[index]})).equals(before[index]), `retained paper strip ${index}`).toBe(true);
+      for (let index = 0; index < clips.length; index++) await compare(await page.screenshot({clip: clips[index]}), before[index], `retained paper strip ${index}`);
       await page.evaluate(() => (window as unknown as {releasePaper: () => void}).releasePaper());
       await expect(loading).toHaveCount(0);
-      expect((await page.locator('.reader-text-window').screenshot()).equals(textAtReveal), 'text must not change antialiasing after its reveal').toBe(true);
-      for (let index = 0; index < clips.length; index++) expect((await page.screenshot({clip: clips[index]})).equals(before[index]), `final paper strip ${index}`).toBe(true);
+      await compare(await page.locator('.reader-text-window').screenshot(), textAtReveal, 'text must not change antialiasing after its reveal');
+      for (let index = 0; index < clips.length; index++) await compare(await page.screenshot({clip: clips[index]}), before[index], `final paper strip ${index}`);
       await page.keyboard.press('m');
       await expect(page.locator('.reader-tools')).toHaveAttribute('aria-hidden', 'false');
     } finally {await context.close();}
