@@ -20,9 +20,9 @@ function SearchForm({query}: {query: string}) {
     const next = draft.trim();
     router.push(next ? searchHref(next) : '/search');
   }
-  return <form className="search-form" role="search" onSubmit={submit}>
+  return <form className="search-form" role="search" autoComplete="off" onSubmit={submit}>
     <Search size={20} aria-hidden="true"/>
-    <input type="search" name="q" aria-label="搜索书名或作者" placeholder="搜索书名、作者" value={draft} onChange={event => setDraft(event.target.value)} maxLength={200}/>
+    <input type="search" name="q" aria-label="搜索书名或作者" placeholder="搜索书名、作者" value={draft} onChange={event => setDraft(event.target.value)} maxLength={100} autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false} enterKeyHint="search"/>
     {draft && <button className="search-clear" type="button" aria-label="清空搜索词" onClick={() => setDraft('')}><X size={17}/></button>}
     <button className="search-submit" type="submit">搜索</button>
   </form>;
@@ -83,11 +83,11 @@ function SearchContent() {
   return <div className="search-page"><div className="search-shell">
     <header className="search-header">
       <Link href="/" className="search-home"><ArrowLeft size={17}/>返回首页</Link>
-      <div className="search-intro"><span>九天书库</span><h1>搜索书籍</h1><p>从书名或作者开始，找到下一本想读的书。</p></div>
+      <h1 className="sr-only">搜索书籍</h1>
       <SearchForm key={query} query={query}/>
     </header>
     {!query ? <section className="search-empty"><BookOpen size={38}/><h2>好故事，等你发现</h2><p>输入书名或作者，开始搜索。</p></section> : <section className="search-body" aria-label="搜索结果" aria-busy={loading}>
-      <div className="search-summary"><h2>“{query}” 的搜索结果</h2><p aria-live="polite">{loading ? '正在查找相关书籍…' : error ? '搜索未完成' : total === null ? `第 ${page} 页 · 本页 ${books.length} 本` : `共 ${total} 本相关书籍`}</p></div>
+      <p className="search-summary" aria-live="polite">{loading ? '正在查找…' : error ? '搜索未完成' : total === null ? `第 ${page} 页 · 本页 ${books.length} 本` : `共 ${total} 本相关书籍`}</p>
       {loading ? <SearchSkeleton/> : error ? <div className="search-empty" role="alert"><Search size={32}/><h2>暂时没能完成搜索</h2><p>{error}</p><button onClick={() => setRetry(value => value + 1)}><RotateCcw size={16}/>重新搜索</button></div> : books.length === 0 ? <div className="search-empty"><BookOpen size={38}/><h2>{page > 1 ? '这一页没有更多书籍了' : '没有找到相关书籍'}</h2><p>{page > 1 ? '可以返回上一页，继续挑选。' : '试试更短的书名，或搜索作者的名字。'}</p></div> : <div className="search-results">
         {books.map(book => {
           const author = typeof book.author_id === 'object' && book.author_id?.username || book.author || '佚名';
@@ -98,7 +98,7 @@ function SearchContent() {
           </BookLink>;
         })}
       </div>}
-      {!loading && !error && (books.length > 0 || page > 1) && <nav className="search-pagination" aria-label="搜索结果分页">
+      {!loading && !error && (hasNext || page > 1) && <nav className="search-pagination" aria-label="搜索结果分页">
         <button disabled={page === 1} onClick={() => router.push(searchHref(query, page - 1))}><ArrowLeft size={16}/>上一页</button>
         <span aria-current="page">第 {page} 页{pages !== null && ` / 共 ${pages} 页`}</span>
         <button disabled={!hasNext} onClick={() => router.push(searchHref(query, page + 1))}>下一页<ArrowRight size={16}/></button>

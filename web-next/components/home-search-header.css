@@ -1,9 +1,3 @@
 .mh-topbar { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
 .mh-logo { display:flex; align-items:center; justify-content:center; flex:0 0 44px; height:44px; border-radius:6px; }
 .mh-logo img { width:40px; height:40px; object-fit:contain; }
-.mh-search { display:flex; align-items:center; flex:1; min-width:0; gap:8px; background:#fffaf7; border-radius:28px; padding:0 13px; height:44px; color:#b8b0a8; }
-.mh-search>svg,.mh-search button { flex-shrink:0; }
-.mh-search input { min-width:0; flex:1; font-size:14px; color:#433a33; outline:0; }
-.mh-search input::placeholder { color:#b1a9a1; }
-.mh-search button { color:#ce3b42; font-size:13px; min-height:44px; }
-.mh-search:focus-within { box-shadow:0 0 0 2px #ce3b4240; }

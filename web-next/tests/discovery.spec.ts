@@ -121,7 +121,7 @@ for (const width of [320, 390, 768, 1440]) test(`search and ranking omit the glo
   await expect(page).toHaveURL(/q=.*&page=2$/);
   await expect(page.locator('.search-results a')).toHaveCount(5);
   await expect(pagination.getByRole('button', {name: '下一页'})).toBeDisabled();
-  await expect(page.locator('.search-intro')).toBeInViewport();
+  await expect(page.getByRole('searchbox')).toBeInViewport();
   await page.reload();
   await expect(page.locator('.search-results a')).toHaveCount(5);
   await pagination.getByRole('button', {name: '上一页'}).click();
@@ -155,7 +155,7 @@ test('search supports empty input, empty results, retry and an exact full final 
   await page.getByRole('searchbox').fill('满页');
   await page.getByRole('button', {name: '搜索', exact: true}).click();
   await expect(page.locator('.search-results a')).toHaveCount(20);
-  await expect(page.getByRole('button', {name: '下一页'})).toBeDisabled();
+  await expect(page.getByRole('navigation', {name: '搜索结果分页'})).toHaveCount(0);
   await page.getByRole('button', {name: '清空搜索词'}).click();
   await page.getByRole('button', {name: '搜索', exact: true}).click();
   await expect(page).toHaveURL(`${base}/search`);
