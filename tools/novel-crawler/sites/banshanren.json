@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "id": "banshanren",
+  "name": "搬山人小说网",
+  "home": "https://www.banshanren.com/",
+  "hosts": ["www.banshanren.com", "banshanren.com"],
+  "search": {
+    "url": "https://www.banshanren.com/search/index?keyword=${query}",
+    "items": ".main_box > ul.novel_list > li.novel_li",
+    "title": ".title_box > a.title",
+    "author": {"selector": ".title_box > .info_box:nth-of-type(2)", "pattern": "^([^·]+)\\s*·"},
+    "link": ".title_box > a.title",
+    "maxPages": 1,
+    "readySelector": ".main_box > .search_tip"
+  },
+  "book": {
+    "urlPattern": "^/novel/(?<bookId>[a-zA-Z0-9_-]+)/?$",
+    "readySelector": ".novel_title_box > h1",
+    "metadata": {
+      "title": ".novel_title_box > h1",
+      "author": ".novel_title_box > .info_box:nth-of-type(2) > span.hl"
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-banshanren-v2",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": ["banshanren.com", "www.banshanren.com"],
+    "transport": "browser",
+    "browser": {"headless": false, "minimized": true, "responseMode": "source", "manualVerificationMs": 180000},
+    "identityNormalization": "chinese-simplified",
+    "delayMs": 2000,
+    "timeoutMs": 30000,
+    "metadata": {
+      "title": ".novel_title_box > h1",
+      "author": ".novel_title_box > .info_box:nth-of-type(2) > span.hl",
+      "readySelector": ".catalog_box .chapter_list a[href^='/novel/${bookId}/']"
+    },
+    "catalog": {
+      "url": "${sourceUrl}",
+      "links": ".catalog_box .chapter_list li:not(.volume_title_box) a[href^='/novel/${bookId}/']",
+      "readySelector": ".catalog_box .chapter_list a[href^='/novel/${bookId}/']"
+    },
+    "chapter": {
+      "title": ".chapter_content_box > h2",
+      "content": ".chapter_content_box",
+      "remove": ["span.z", "span.nz", ".chapter_navigation_box", ".finish_box", ".comment_box", "script"],
+      "rejectSelectors": [".chapter_content_box .limit_box"]
+    }
+  }
+}
