@@ -1,6 +1,6 @@
-.book-catalog-overlay { position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center; padding:24px; background:rgb(0 0 0 / 45%); visibility:hidden; opacity:0; pointer-events:none; transition:opacity 200ms ease,visibility 0s 200ms; }
-.book-catalog-overlay[data-open=true] { visibility:visible; opacity:1; pointer-events:auto; transition:opacity 200ms ease,visibility 0s; }
-.book-catalog-sheet { display:flex; flex-direction:column; width:100%; max-width:1024px; height:85dvh; overflow:hidden; background:white; border-radius:16px; box-shadow:-12px 0 40px #0002; transform:translateX(calc(100vw + 24px)); transition:transform 200ms cubic-bezier(.22,.7,.25,1); }
+.book-catalog-overlay { position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center; padding:24px; background:rgb(0 0 0 / 45%); visibility:hidden; opacity:0; pointer-events:none; transition:opacity 400ms ease,visibility 0s 400ms; }
+.book-catalog-overlay[data-open=true] { visibility:visible; opacity:1; pointer-events:auto; transition:opacity 400ms ease,visibility 0s; }
+.book-catalog-sheet { display:flex; flex-direction:column; width:100%; max-width:1024px; height:85dvh; overflow:hidden; background:white; border-radius:16px; box-shadow:-12px 0 40px #0002; transform:translateX(calc(100vw + 24px)); transition:transform 400ms cubic-bezier(.22,.7,.25,1); }
 .book-catalog-overlay[data-open=true] .book-catalog-sheet { transform:translateX(0); }
 /* Chapter entry already supplies an opaque loading page. Retire the catalog
    underneath it immediately, including when Next reuses a cached route tree. */
