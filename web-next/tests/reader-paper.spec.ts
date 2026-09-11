@@ -52,10 +52,12 @@ for (const [theme, mode, width, pageWidth] of [
       await expect(message).toBeHidden();
       expect(await original!.evaluate(element => element.isConnected)).toBe(true);
       await expect(page.locator('.reader-text-window')).toBeVisible();
-      await expect(page.locator('.reader-page-surface')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      await expect(page.locator('.reader-page-surface')).toHaveCSS('background-color', await loading.locator('.chapter-loading-sheet').evaluate(element => getComputedStyle(element).backgroundColor));
+      const textAtReveal = await page.locator('.reader-text-window').screenshot();
       for (let index = 0; index < clips.length; index++) expect((await page.screenshot({clip: clips[index]})).equals(before[index]), `retained paper strip ${index}`).toBe(true);
       await page.evaluate(() => (window as unknown as {releasePaper: () => void}).releasePaper());
       await expect(loading).toHaveCount(0);
+      expect((await page.locator('.reader-text-window').screenshot()).equals(textAtReveal), 'text must not change antialiasing after its reveal').toBe(true);
       for (let index = 0; index < clips.length; index++) expect((await page.screenshot({clip: clips[index]})).equals(before[index]), `final paper strip ${index}`).toBe(true);
       await page.keyboard.press('m');
       await expect(page.locator('.reader-tools')).toHaveAttribute('aria-hidden', 'false');

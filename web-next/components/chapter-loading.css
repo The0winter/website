@@ -11,9 +11,7 @@
 .chapter-loading-actions { display:flex; justify-content:center; gap:20px; margin-top:24px; }
 .chapter-loading-actions button { padding:8px 20px; border:1px solid currentColor; border-radius:6px; font-size:14px; }
 .reader-entry-content[data-entry-pending=true] .reader-pages-root .reader-scroll-window { overflow-y:hidden; }
-.chapter-loading-page[data-text-revealed=true] .chapter-loading-message { visibility:hidden; }
-/* Only ink moves above the retained loading paper. Never fade an entire page:
-   its transparent midpoint would expose the darker surface underneath. */
-.reader-entry-content[data-entry-revealing=true] { position:relative; z-index:10002; background:transparent!important; }
-.reader-entry-content[data-entry-revealing=true] :is(.reader-frame,.reader-page-window,.reader-page-surface) { background:transparent!important; border-color:transparent; }
+/* Switch between identical opaque paper surfaces in one paint. The reader
+   keeps its final stacking and antialiasing while the hidden cover is removed. */
+.chapter-loading-page[data-text-revealed=true] { visibility:hidden; }
 @media(min-width:1024px) { .chapter-loading-page { background:var(--entry-desk); } }
