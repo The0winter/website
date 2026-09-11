@@ -1,15 +1,18 @@
 import {cancelBookTransition, transitionBookPage} from './book-transition';
+import {cancelChapterEntry, currentChapterEntry} from './chapter-entry';
 
 type Route = {kind: 'home' | 'detail' | 'reader'; href: string; bookId?: string};
-type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean};
+type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean};
 type Router = {push: (href: string) => void; replace: (href: string) => void};
 const listeners = new Set<() => void>();
 let router: Router | undefined;
 let current: Entry | undefined;
 let currentPath = '';
 let pending: Entry | undefined;
-let catalogClosing = false;
+let overlayClosing = false;
 let catalogSelection: (() => void) | undefined;
+
+const overlay = (entry?: Entry) => entry?.catalog ? 'catalog' : entry?.settings ? 'settings' : undefined;
 
 function routeFor(href: string): Route | undefined {
   if (href === '/') return {kind: 'home', href};
@@ -39,7 +42,7 @@ export function syncBookRoute(path: string) {
   const previous = current;
   const previousPath = currentPath;
   currentPath = path;
-  if (!route) { current = undefined; pending = undefined; notify(); return; }
+  if (!route) { cancelChapterEntry(); current = undefined; pending = undefined; notify(); return; }
   if (pending?.href === path) { const entry = pending; pending = undefined; mark(entry); return; }
   const saved = stored();
   if (saved?.href === path) { current = saved; notify(); return; }
@@ -65,11 +68,17 @@ export function syncBookRoute(path: string) {
 
 function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, traversing = false) {
   if (!router) return;
+  if (currentChapterEntry()?.href !== entry.href) cancelChapterEntry();
   pending = entry;
   // A click may still be waiting for its route request; Back must then operate
   // on the page that is actually in history. A pop has already moved the slot.
   if (traversing) current = entry;
   window.dispatchEvent(new Event('book-navigation-leave'));
+  if (currentChapterEntry()?.href === entry.href) {
+    cancelBookTransition();
+    if (replace) router.replace(entry.href); else router.push(entry.href);
+    return;
+  }
   transitionBookPage(entry.href, direction, () => {
     if (replace) router!.replace(entry.href); else router!.push(entry.href);
   });
@@ -82,24 +91,24 @@ function onPopState(event: PopStateEvent) {
   // Forward from a book page may reopen login; leave that route to Next.
   if (/^\/(login|register)$/.test(location.pathname)) {
     if (pending) { cancelBookTransition(); pending = undefined; }
-    current = undefined; notify(); return;
+    cancelChapterEntry(); current = undefined; notify(); return;
   }
   const forward = target?.flow === from.flow && target.level > from.level;
-  if (from.catalog && target?.flow === from.flow && target.href === from.href && !target.catalog) {
+  if (overlay(from) && target?.flow === from.flow && target.href === from.href && !overlay(target)) {
     event.stopImmediatePropagation();
-    if (pending) { cancelBookTransition(); pending = undefined; router.replace(target.href); }
+    if (pending) { cancelBookTransition(); cancelChapterEntry(); pending = undefined; router.replace(target.href); }
     const select = catalogSelection;
-    catalogClosing = false; catalogSelection = undefined;
+    overlayClosing = false; catalogSelection = undefined;
     current = target; notify();
     select?.();
     return;
   }
-  catalogClosing = false; catalogSelection = undefined;
-  if (forward && target?.catalog && target.kind === from.kind && target.bookId === from.bookId) {
+  overlayClosing = false; catalogSelection = undefined;
+  if (forward && overlay(target) && target?.kind === from.kind && target.bookId === from.bookId) {
     event.stopImmediatePropagation();
     // A reader chapter can replace the slot underneath a closed catalog.
     // Forward should reopen that catalog on the current chapter as well.
-    current = {...from, catalog: true, level: from.level + 1};
+    current = {...from, catalog: target.catalog, settings: target.settings, level: from.level + 1};
     window.history.replaceState({bookNavigation: current}, '', current.href);
     notify(); return;
   }
@@ -152,21 +161,31 @@ export function replaceReaderChapter(href: string) {
 }
 
 export function openBookCatalog(bookId: string) {
-  if (!current || current.kind === 'home' || current.bookId !== bookId || current.catalog || pending) return;
+  if (!current || current.kind === 'home' || current.bookId !== bookId || overlay(current) || pending || currentChapterEntry()) return;
   const entry = {...current, catalog: true, level: current.level + 1};
   window.history.pushState({...window.history.state, bookNavigation: entry}, '', entry.href);
   current = entry; notify();
 }
 export function closeBookCatalog() {
-  if (current?.catalog && !catalogClosing) { catalogClosing = true; window.history.back(); }
+  if (current?.catalog && !overlayClosing) { overlayClosing = true; window.history.back(); }
 }
 // Consume the overlay slot before replacing the reader's chapter slot. Otherwise
 // Back would revisit the old chapter, or cancel an in-flight chapter request.
 export function selectReaderCatalogChapter(select: () => void) {
   if (!current?.catalog) { select(); return; }
-  if (catalogClosing) return;
+  if (overlayClosing) return;
   catalogSelection = select; closeBookCatalog();
 }
+export function openReaderSettings(bookId: string) {
+  if (current?.kind !== 'reader' || current.bookId !== bookId || overlay(current) || pending || currentChapterEntry()) return;
+  const entry = {...current, settings: true, level: current.level + 1};
+  window.history.pushState({...window.history.state, bookNavigation: entry}, '', entry.href);
+  current = entry; notify();
+}
+export function closeReaderSettings() {
+  if (current?.settings && !overlayClosing) { overlayClosing = true; window.history.back(); }
+}
+export const readerSettingsOpen = (bookId: string) => Boolean(current?.settings && current.bookId === bookId);
 export const bookCatalogOpen = (bookId: string) => Boolean(current?.catalog && current.bookId === bookId);
 export const serverCatalogClosed = () => false;
 export function subscribeBookNavigation(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }

@@ -7,8 +7,9 @@ import { useParams, usePathname, useRouter } from 'next/navigation';
 import Link from './PrefetchLink';
 import { currentPrefetchPolicy, serverPrefetchPolicy, subscribePrefetchPolicy } from '@/lib/book-prefetch';
 import { rememberChapter } from '@/lib/reading-session';
-import {replaceReaderChapter, openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation, selectReaderCatalogChapter} from '@/lib/book-navigation';
+import {replaceReaderChapter, openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation, selectReaderCatalogChapter, openReaderSettings, closeReaderSettings, readerSettingsOpen} from '@/lib/book-navigation';
 import BookCatalogSheet from './BookCatalogSheet';
+import {currentChapterEntry, failChapterEntry, serverChapterEntry, subscribeChapterEntry} from '@/lib/chapter-entry';
 import {readerChapterCache as chapterCache,loadReaderChapter,loadReaderCounts} from '@/lib/reader-chapters';
 import { 
   Settings, BookOpen, List, 
@@ -102,7 +103,9 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const nearEnd = useCallback(() => setNextButtonVisible(true), []);
   
   const showCatalog = useSyncExternalStore(subscribeBookNavigation, () => bookCatalogOpen(bookId), serverCatalogClosed);
-  const [showSettings, setShowSettings] = useState(false);
+  const showSettings = useSyncExternalStore(subscribeBookNavigation, () => readerSettingsOpen(bookId), serverCatalogClosed);
+  const chapterEntry = useSyncExternalStore(subscribeChapterEntry, currentChapterEntry, serverChapterEntry);
+  const [entryKey, setEntryKey] = useState(() => currentChapterEntry()?.token || '');
   const [catalogReversed, setCatalogReversed] = useState(true);
 
   // 导航栏显示状态 (移动端专用)
@@ -112,6 +115,26 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     if (open) { setShowNav(false); openBookCatalog(bookId); }
     else closeBookCatalog();
   };
+  const setShowSettings = (open: boolean) => {
+    if (open) { setShowNav(false); openReaderSettings(bookId); }
+    else closeReaderSettings();
+  };
+  useEffect(() => {
+    if (!showSettings) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const panel = document.querySelector<HTMLElement>('[data-reader-settings]');
+    const frame = requestAnimationFrame(() => panel?.querySelector<HTMLElement>('[aria-label="关闭阅读设置"]')?.focus({preventScroll: true}));
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeReaderSettings(); }
+      if (event.key !== 'Tab' || !panel) return;
+      const buttons = [...panel.querySelectorAll<HTMLElement>('button:not([disabled]),input')].filter(el => el.getBoundingClientRect().width > 0);
+      const first = buttons[0], last = buttons.at(-1);
+      if (event.shiftKey && document.activeElement === first) {event.preventDefault(); last?.focus();}
+      else if (!event.shiftKey && document.activeElement === last) {event.preventDefault(); first?.focus();}
+    };
+    document.addEventListener('keydown', keyboard);
+    return () => {cancelAnimationFrame(frame); document.removeEventListener('keydown', keyboard); if (previous?.isConnected) previous.focus({preventScroll: true});};
+  }, [showSettings]);
   const { theme, setTheme } = useReadingSettings();
 
   const [themeColor, setThemeColor] = useStoredState('reader_themeColor',settingsCache.themeColor,v=>['gray','cream','green','blue'].includes(String(v)));
@@ -210,14 +233,14 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
 
   useEffect(() => {
     let active=true;
-    navigationSequence.current++;
+    const sequence=++navigationSequence.current;
     const serverChapter=initialChapter?.id===chapterIdParam?initialChapter:null;
     if(serverChapter)chapterCache.set(serverChapter.id,serverChapter);
     if(initialBook?.id===bookId)bookCache.set(bookId,initialBook);
     void Promise.all([loadReaderChapter(bookId,chapterIdParam),bookCache.get(bookId) || booksApi.getById(bookId)]).then(([next,book])=>{
-      if(!active)return;
+      if(!active || sequence!==navigationSequence.current)return;
       setChapter(next);setBook(book);if(book)bookCache.set(bookId,book);setLoading(false);setNavigating(false);setNavigationError('');
-    }).catch(error=>{if(active){failedChapter.current=chapterIdParam;setNavigationError(error instanceof Error?error.message:'章节加载失败');setLoading(false);setNavigating(false);}});
+    }).catch(error=>{if(active && sequence===navigationSequence.current){failedChapter.current=chapterIdParam;setNavigationError(error instanceof Error?error.message:'章节加载失败');setLoading(false);setNavigating(false);}});
     return()=>{active=false;};
   },[bookId,chapterIdParam,initialBook,initialChapter]);
   useEffect(()=>{
@@ -232,7 +255,8 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     };
     window.addEventListener('popstate',restore);
     window.addEventListener('book-navigation-leave',invalidate);
-    return()=>{invalidate();window.removeEventListener('popstate',restore);window.removeEventListener('book-navigation-leave',invalidate);};
+    window.addEventListener('chapter-entry-start',invalidate);
+    return()=>{invalidate();window.removeEventListener('popstate',restore);window.removeEventListener('book-navigation-leave',invalidate);window.removeEventListener('chapter-entry-start',invalidate);};
   },[bookId]);
   useEffect(()=>{if(chapter && book)document.title=`${chapter.title} - ${book.title}`;},[chapter,book]);
 
@@ -248,11 +272,14 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
       }
     } catch (error) { console.error('书架操作失败', error); }
   };
-  const goToChapter=useCallback((targetChapterId:string)=>{
-    if(targetChapterId===chapter?.id)return;
+  const goToChapter=useCallback((targetChapterId:string,fromCatalog=false)=>{
+    const selected=currentChapterEntry();
+    if (!fromCatalog && selected) return;
+    if(targetChapterId===chapter?.id && !fromCatalog)return;
     const sequence=++navigationSequence.current;
     const enter=(next:Chapter)=>{
       if(sequence!==navigationSequence.current)return;
+      if(fromCatalog && selected) setEntryKey(selected.token);
       chapterCache.set(next.id,next);
       rememberChapter(bookId,next.id);
       setChapter(next);setNavigating(false);setNavigationError('');setShowNav(false);
@@ -265,7 +292,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     if(cached?.bookId===bookId){enter(cached);return;}
     setNavigating(true);setNavigationError('');
     void loadReaderChapter(bookId,targetChapterId).then(enter).catch(error=>{
-      if(sequence===navigationSequence.current){failedChapter.current=targetChapterId;setNavigating(false);setNavigationError(error instanceof Error?error.message:'章节加载失败，请重试');}
+      if(sequence===navigationSequence.current){failedChapter.current=targetChapterId;setNavigating(false);setNavigationError(error instanceof Error?error.message:'章节加载失败，请重试');if(fromCatalog)failChapterEntry(`/book/${bookId}/${targetChapterId}`,error instanceof Error?error.message:'章节加载失败，请重试');}
     });
   },[bookId,chapter?.id,adjacent]);
   const prefetchChapter=useCallback((id:string|null)=>{
@@ -321,7 +348,8 @@ if (loading) return (
 
   return (
     <div 
-      className="min-h-screen w-full transition-colors duration-300 flex flex-col items-center"
+      className="reader-entry-content min-h-screen w-full transition-colors duration-300 flex flex-col items-center"
+      data-reader-entry-key={entryKey} data-entry-pending={Boolean(chapterEntry)} inert={Boolean(chapterEntry)}
       data-reader-cache-chapters={chapterCache.size}
       data-reader-cache-books={bookCache.size}
       style={{ 
@@ -382,14 +410,14 @@ if (loading) return (
 
       <div className="relative w-full" onPointerDown={() => { if (showHint) setShowHint(false); }}>
         <ReadingSurface
-          key={turnMode==='scroll'?bookId:chapter.id} book={book} chapter={chapter} chapterIndex={currentChapterIndex} chapterTotal={catalogTotal}
+          key={`${turnMode==='scroll'?bookId:chapter.id}:${entryKey}`} book={book} chapter={chapter} chapterIndex={currentChapterIndex} chapterTotal={catalogTotal}
           previousChapter={adjacent.previous?.id===prevChapterId?adjacent.previous:chapterCache.get(prevChapterId || '')}
           nextChapter={adjacent.next?.id===nextChapterId?adjacent.next:chapterCache.get(nextChapterId || '')}
           fontFamily={fontFamilyValue} fontSize={fontSizeNum} lineHeight={lineHeight}
           paragraphGap={paraSpacingMap[paraSpacing] || '1rem'} theme={activeTheme}
           paper={themeColor === 'cream'} dark={isActuallyDark} pageWidth={pageWidth}
           previousId={prevChapterId} nextId={nextChapterId} navigating={isNavigating}
-          blocked={showCatalog || showSettings}
+          blocked={showCatalog || showSettings || Boolean(chapterEntry)}
           turnMode={turnMode} toolsVisible={showNav} onHideTools={hideTools}
           onChapter={goToChapter} onTools={() => { setShowHint(false); setShowNav(value => !value); }}
           onNearEnd={nearEnd}
@@ -436,7 +464,7 @@ if (loading) return (
         chapters={displayChapters} total={catalogTotal} loading={catalogLoading} error={catalogError}
         reversed={catalogReversed} onToggleOrder={() => setCatalogReversed(value => !value)}
         activeChapterId={chapter.id} onPrefetch={prefetchChapter}
-        onSelect={id => selectReaderCatalogChapter(() => goToChapter(id))}
+        onSelect={id => selectReaderCatalogChapter(() => goToChapter(id,true))}
         onRetry={() => { setCatalogLoading(true); setCatalogError(''); setCatalogRetry(value => value + 1); }}/>
 
       {navigationError && <div role="alert" className="reader-navigation-error">{navigationError}<button onClick={()=>goToChapter(failedChapter.current || chapterIdParam)}>重试</button><button onClick={()=>setNavigationError('')}>关闭</button></div>}
@@ -448,6 +476,7 @@ if (loading) return (
           {isDesktop ? (
             // ============ 桌面端大设置面板 (保留不变) ============
             <div 
+                role="dialog" aria-modal="true" aria-label="阅读设置" data-reader-settings
                 className="fixed top-20 z-50 w-[500px] max-h-[calc(100dvh-160px)] overflow-y-auto rounded-xl shadow-2xl border p-6 animate-in fade-in zoom-in-95"
                 style={{ 
                 right: `calc(50% - ${pageWidth / 2 + 15}px)`,
@@ -576,6 +605,7 @@ if (loading) return (
             </div>
           ) : (
             <div 
+            role="dialog" aria-modal="true" aria-label="阅读设置" data-reader-settings
             className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-[360px] max-h-[calc(100dvh-120px)] overflow-y-auto rounded-xl shadow-2xl border p-4 animate-in slide-in-from-bottom-5 fade-in duration-200"
             style={{ 
               backgroundColor: isActuallyDark ? 'rgba(40,40,40,0.95)' : 'rgba(255,255,255,0.95)',

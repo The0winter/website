@@ -119,6 +119,7 @@ for (const width of [320, 390, 768, 1440]) {
     await dialog.getByRole('link', {name: '第12章 山间来信', exact: true}).click();
     await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
     await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
+    await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
     await page.keyboard.press('m');
     await page.locator('.reader-tools:visible').getByRole('button', {name: '目录', exact: true}).click();
     await expect(dialog).toBeVisible();

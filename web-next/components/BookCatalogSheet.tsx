@@ -5,6 +5,7 @@ import {ArrowUpDown, X} from 'lucide-react';
 import {Virtuoso, type VirtuosoHandle} from 'react-virtuoso';
 import Link from './PrefetchLink';
 import {formatChapterTitle} from '@/lib/catalog-title';
+import {beginChapterEntry} from '@/lib/chapter-entry';
 import './book-detail.css';
 
 type CatalogChapter = {id: string; title: string; chapter_number: number};
@@ -78,7 +79,10 @@ export default function BookCatalogSheet({open, onClose, bookId, chapters, total
             {row.map(chapter => <Link key={chapter.id} href={`/book/${bookId}/${chapter.id}`} prefetchMode="intent"
               className="book-catalog-chapter" aria-current={chapter.id === activeChapterId ? 'location' : undefined}
               onMouseEnter={() => onPrefetch?.(chapter.id)} onFocus={() => onPrefetch?.(chapter.id)} onTouchStart={() => onPrefetch?.(chapter.id)}
-              onNavigate={onSelect ? event => {event.preventDefault(); onSelect(chapter.id);} : undefined}>
+              onNavigate={event => {
+                beginChapterEntry(`/book/${bookId}/${chapter.id}`, formatChapterTitle(chapter.title, chapter.chapter_number));
+                if (onSelect) {event.preventDefault(); onSelect(chapter.id);}
+              }}>
               <span>{formatChapterTitle(chapter.title, chapter.chapter_number)}</span>
             </Link>)}
           </div>}/>}

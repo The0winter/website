@@ -6,7 +6,7 @@ const detail = `${base}/book/${book}`, reader = `${detail}/${first}`;
 const idle = (page: Page) => expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
 const details = async (page: Page) => { await expect(page).toHaveURL(detail); await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page); };
 const home = async (page: Page) => { await expect(page).toHaveURL(`${base}/`); await idle(page); await expect(page.locator('.mobile-home')).toBeVisible(); };
-const ready = async (page: Page, id = first) => { await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-chapter', id); await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true'); await idle(page); };
+const ready = async (page: Page, id = first) => { await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-chapter', id); await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true'); await idle(page); await expect(page.locator('.chapter-loading-page')).toHaveCount(0); };
 
 test.beforeEach(async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
@@ -202,7 +202,7 @@ test('Back during a slow entry and repeated Back cannot resurrect a pending read
   delayedEntries = 0;
   await page.route(`**/book/${book}/00000000000000000000010c?_rsc=*`, async route => { delayedEntries++; await new Promise(resolve => setTimeout(resolve, 1200)); await route.continue(); });
   await page.getByRole('dialog').getByRole('link', {name: '第12章 山间来信', exact: true}).click();
-  await expect(page.locator('html')).toHaveAttribute('data-book-transition-phase', 'loading');
+  await expect(page.locator('.chapter-loading-page')).toBeVisible();
   await expect.poll(() => delayedEntries).toBeGreaterThan(0);
   await page.goBack(); await details(page); await expect(page.getByRole('dialog')).not.toBeVisible();
   await page.waitForTimeout(1400); await details(page);
