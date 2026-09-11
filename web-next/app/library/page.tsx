@@ -148,6 +148,9 @@ function Library() {
   const removalVersion = useRef({value: 0});
   const swipe = useRef<{id: number; x: number; y: number; horizontal: boolean} | null>(null);
   const suppressSwipeClick = useRef(false);
+  const content = useRef<HTMLDivElement>(null);
+  const tabs = useRef<HTMLDivElement>(null);
+  const previousTab = useRef(tab);
   const userId = user?.id;
   const query = {userId: userId || '', tab, sort, page};
   const result = useSyncExternalStore(subscribeLibrary, () => getLibrarySnapshot(query), serverLibrarySnapshot);
@@ -155,6 +158,33 @@ function Library() {
   const rows = result.rows || [];
   const searchString = search.toString();
   useLayoutEffect(() => {syncBookRoute('/library' + (searchString ? `?${searchString}` : ''));}, [searchString]);
+  useLayoutEffect(() => {
+    const tablist = tabs.current;
+    if (!tablist) return;
+    const align = () => {
+      const active = tablist.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (active) tablist.style.setProperty('--shelf-tab-offset', `${active.offsetLeft}px`);
+    };
+    align();
+    const observer = new ResizeObserver(align);
+    observer.observe(tablist);
+    return () => observer.disconnect();
+  }, [tab, userId, authLoading]);
+  useLayoutEffect(() => {
+    const changed = previousTab.current !== tab;
+    previousTab.current = tab;
+    const panel = content.current;
+    if (!changed || !panel || pathname !== '/library' || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // Animate only a tab change; refreshing data and sorting keep their position.
+    const animation = panel.animate([
+      {transform: `translateX(${tab === 'history' ? 28 : -28}px)`, opacity: .25},
+      {transform: 'translateX(0)', opacity: 1},
+    ], {duration: 260, easing: 'cubic-bezier(.22,.7,.25,1)'});
+    panel.dataset.switching = tab;
+    const clear = () => {delete panel.dataset.switching;};
+    animation.finished.then(clear, () => {});
+    return () => {animation.cancel(); clear();};
+  }, [tab, pathname]);
   useEffect(() => {setTheme('light');}, [setTheme]);
   useEffect(() => {if (!authLoading && !user) router.replace('/login');}, [authLoading, user, router]);
   useEffect(() => {
@@ -283,7 +313,7 @@ function Library() {
         onPointerCancel={() => {swipe.current = null;}} onLostPointerCapture={event => {if (event.target === event.currentTarget) swipe.current = null;}}
         onClickCapture={event => {if (suppressSwipeClick.current) {event.preventDefault(); event.stopPropagation(); suppressSwipeClick.current = false;}}}>
         <header className="shelf-toolbar">
-          <div className="shelf-tabs" role="tablist" aria-label="书架与浏览记录">
+          <div ref={tabs} className="shelf-tabs" role="tablist" aria-label="书架与浏览记录">
             {(['shelf', 'history'] as const).map(value => <button key={value} id={`tab-${value}`} role="tab" tabIndex={tab === value ? 0 : -1} aria-selected={tab === value} aria-controls="shelf-content" onClick={() => changeView(value, 1)} onKeyDown={event => {
               if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
               event.preventDefault();
@@ -296,7 +326,7 @@ function Library() {
             <label className="shelf-sort" title={sorts[sort]}><span>排序</span><ArrowUpDown size={13}/><select aria-label="书架排序" value={sort} onChange={event => {const value = event.target.value as Sort; setSort(value); changeView(tab, 1, value);}}>{Object.entries(sorts).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           </div>
         </header>
-        <div id="shelf-content" role="tabpanel" aria-labelledby={`tab-${tab}`} aria-busy={loading}>
+        <div ref={content} id="shelf-content" role="tabpanel" aria-labelledby={`tab-${tab}`} aria-busy={loading}>
           {result.error && result.rows !== null && <p className="shelf-refresh-error" role="alert">更新暂时失败，已保留上次的书架。<button onClick={() => void loadLibrary(query, true)}>重试</button></p>}
           {loading ? <div className="shelf-empty" role="status"><BookOpen size={32}/><p>正在整理你的书架…</p></div> : result.error && result.rows === null ? <div className="shelf-empty" role="alert"><p>{result.error}</p><button onClick={() => void loadLibrary(query, true)}>重新加载</button></div> : rows.length === 0 ? <div className="shelf-empty">
             <div className="shelf-empty-icon">{tab === 'shelf' ? <BookOpen size={32}/> : <History size={32}/>}</div>
