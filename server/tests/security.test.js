@@ -108,6 +108,25 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       assert.equal((await owner.write(url,'DELETE')).status,200);
       assert.equal((await owner.request(url)).data,null);
     });
+    await t.test('profile styles persist per account and accept only permitted values',async()=>{
+      const path = `/api/users/${a._id}`;
+      assert.equal((await other.write(path,'PATCH',{profileTheme:'sage'})).status,403);
+      assert.equal((await administrator.write(path,'PATCH',{profileTheme:'sage'})).status,403);
+      assert.equal((await owner.request(path,'PATCH',{profileTheme:'sage'})).status,403);
+      for (const profileTheme of ['apricot','sage','mist','rose']) {
+        const updated = await owner.write(path,'PATCH',{profileTheme});
+        assert.equal(updated.status,200);
+        assert.equal(updated.data.user.profileTheme,profileTheme);
+        assert.equal((await owner.request('/api/auth/session')).data.user.profileTheme,profileTheme);
+        assert.equal((await User.findById(a._id)).profileTheme,profileTheme);
+      }
+      for (const body of [{}, {profileTheme:'neon'}, {profileTheme:null}, {profileTheme:['sage']}, {profileTheme:'sage',role:'admin'}, {profileTheme:'sage',avatar:'https://example.test/image.png'}]) {
+        assert.equal((await owner.write(path,'PATCH',body)).status,400);
+      }
+      assert.equal((await User.findById(a._id)).profileTheme,'rose');
+      assert.equal((await User.findById(a._id)).role,'reader');
+      assert.equal((await other.request('/api/auth/session')).data.user.profileTheme,undefined);
+    });
     await t.test('media validates bytes, ownership and active references',async()=>{
       async function upload(bytes,type){
         const csrf=await owner.request('/api/auth/csrf');const form=new FormData();form.append('file',new Blob([bytes],{type}),'cover.png');
@@ -119,6 +138,9 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       const image=await upload(bytes,'image/png');assert.equal(image.status,201);
       assert.equal((await other.write('/api/upload/cover','DELETE',{url:image.data.url})).status,403);
       assert.equal((await owner.write(`/api/users/${a._id}`,'PATCH',{avatar:image.data.url})).status,200);
+      assert.equal((await User.findById(a._id)).profileTheme,'rose');
+      assert.equal((await owner.write(`/api/users/${a._id}`,'PATCH',{profileTheme:'sage'})).status,200);
+      assert.equal((await User.findById(a._id)).avatar,image.data.url);
       assert.equal((await owner.write('/api/upload/cover','DELETE',{url:image.data.url})).status,409);
       assert.equal((await owner.write(`/api/users/${a._id}`,'PATCH',{avatar:''})).status,200);
       assert.equal((await owner.write('/api/upload/cover','DELETE',{url:image.data.url})).status,200);

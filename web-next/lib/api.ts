@@ -1,6 +1,7 @@
 import { catalogPages, type CatalogOptions } from './request';
 import { safeFetch as fetch } from '@/lib/request';
 import { getApiBaseUrl } from '@/utils/api';
+import type {ProfileTheme} from './profile-themes';
 export const API_BASE_URL = getApiBaseUrl();
 
 export interface ForumPost {
@@ -64,6 +65,7 @@ export interface ForumComment {
 }
 
 export interface Profile {
+  profileTheme?: ProfileTheme;
   avatar?: string;
   id: string;
   username: string;
@@ -117,6 +119,7 @@ export interface Bookmark {
 }
 
 export interface AuthUser {
+  profileTheme?: ProfileTheme;
   _id?:string;
   id: string;
   email: string;
@@ -299,7 +302,7 @@ export const authApi = {
     return { success: true };
   },
 
-  updateUser: async (userId: string, data: { avatar?: string }) => {
+  updateUser: async (userId: string, data: { avatar?: string; profileTheme?: ProfileTheme }): Promise<{success?: boolean; user?: Profile; error?: string}> => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
     const res = await fetch(`${API_BASE_URL}/users/${userId}`, {
       method: 'PATCH',
@@ -309,7 +312,9 @@ export const authApi = {
       },
       body: JSON.stringify(data),
     });
-    return res.json();
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || '资料保存失败，请稍后重试');
+    return result;
   },
 };
 

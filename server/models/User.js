@@ -26,6 +26,7 @@ const UserSchema = new mongoose.Schema({
   statisticsVersion:Number,
   statisticsLegacy:mongoose.Schema.Types.Mixed,
   avatar: { type: String, default: '' },
+  profileTheme: { type: String, enum: ['apricot', 'sage', 'mist', 'rose'] },
   
   loginAttempts: { 
     type: Number, 

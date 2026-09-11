@@ -10,7 +10,7 @@ export const safeHtml = value => sanitizeHtml(typeof value === 'string' ? value 
   allowedTags: ['p','br','strong','b','em','i','u','s','blockquote','pre','code','ul','ol','li','h2','h3','a'],
   allowedAttributes: { a: ['href','title'] }, allowedSchemes: ['https','http','mailto'], allowProtocolRelative: false,
 });
-export const publicUser = u => ({ id: String(u._id), _id: String(u._id), username: u.username, avatar: u.avatar, role: u.role === 'admin' ? 'admin' : 'reader', created_at: u.created_at });
+export const publicUser = u => ({ id: String(u._id), _id: String(u._id), username: u.username, avatar: u.avatar, profileTheme: u.profileTheme, role: u.role === 'admin' ? 'admin' : 'reader', created_at: u.created_at });
 export const asyncRoute = fn => (req,res,next) => Promise.resolve(fn(req,res,next)).catch(next);
 export function security(app, config) {
   const secure = config.mode === 'production';

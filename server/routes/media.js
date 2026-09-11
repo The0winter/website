@@ -48,11 +48,21 @@ export function mediaRoutes(app,auth) {
   }));
   app.patch('/api/users/:userId',auth.authenticate,asyncRoute(async(req,res)=>{
     if (req.params.userId!==req.user.id) return res.status(403).json({error:'只能修改本人资料'});
-    if (Object.keys(req.body).some(k=>!['avatar'].includes(k)) || typeof req.body.avatar!=='string' || (req.body.avatar!==''&&!/^\/api\/media\/[a-f0-9]{24}$/.test(req.body.avatar))) return res.status(400).json({error:'头像必须来自本人上传'});
+    const keys = Object.keys(req.body);
+    if (!keys.length || keys.some(k=>!['avatar','profileTheme'].includes(k))) return res.status(400).json({error:'资料字段无效'});
+    const updates = {};
+    if (Object.hasOwn(req.body,'avatar')) {
+      if (typeof req.body.avatar!=='string' || (req.body.avatar!==''&&!/^\/api\/media\/[a-f0-9]{24}$/.test(req.body.avatar))) return res.status(400).json({error:'头像必须来自本人上传'});
+      updates.avatar = req.body.avatar;
+    }
+    if (Object.hasOwn(req.body,'profileTheme')) {
+      if (!['apricot','sage','mist','rose'].includes(req.body.profileTheme)) return res.status(400).json({error:'请选择有效的主页装扮'});
+      updates.profileTheme = req.body.profileTheme;
+    }
     let user;
     await mongoose.connection.transaction(async session=>{
       if(req.body.avatar){const asset=await Media.findOneAndUpdate({_id:req.body.avatar.split('/').pop(),owner:req.user.id,deleted:false},{$inc:{referenceVersion:1}},{session});if(!asset)throw Object.assign(new Error('头像必须来自本人上传'),{status:400});}
-      user=await User.findByIdAndUpdate(req.user.id,{$set:{avatar:req.body.avatar}},{new:true,runValidators:true,session});
+      user=await User.findByIdAndUpdate(req.user.id,{$set:updates},{new:true,runValidators:true,session});
     });
     res.json({success:true,user:publicUser(user)});
   }));

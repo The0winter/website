@@ -1,18 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import AccountLoading from '@/components/AccountLoading';
 import MobileBottomNav from '@/components/MobileBottomNav';
 import AdminModeNotice from '@/components/AdminModeNotice';
+import ProfileCoverArtwork from '@/components/ProfileCoverArtwork';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
   Mail, LogOut, BookOpen, PenTool, Shield, Lock,
-  X, CheckCircle2, AlertCircle, ChevronRight, Loader2, Camera
+  X, CheckCircle2, AlertCircle, ChevronRight, Loader2, Camera, Palette, Check
 } from 'lucide-react';
 import uploadImageToCloudinary from '@/lib/upload';
 import { authApi } from '@/lib/api';
+import {PROFILE_THEMES, resolveProfileTheme, type ProfileTheme} from '@/lib/profile-themes';
 import './profile.css';
 
 export default function ProfilePage() {
@@ -29,12 +31,44 @@ export default function ProfilePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [themeDraft, setThemeDraft] = useState<{userId: string; theme: ProfileTheme} | null>(null);
+  const [themeSaving, setThemeSaving] = useState(false);
+  const [themeError, setThemeError] = useState('');
+  const appearanceButton = useRef<HTMLButtonElement>(null);
+  const savedTheme = resolveProfileTheme(user?.id || '', user?.profileTheme);
+  const appearanceOpen = !!themeDraft && themeDraft.userId === user?.id;
+  const activeTheme = appearanceOpen ? themeDraft.theme : savedTheme;
+
+  const closeAppearance = () => {
+    if (themeSaving) return;
+    setThemeDraft(null);
+    setThemeError('');
+    appearanceButton.current?.focus();
+  };
+
+  const saveAppearance = async () => {
+    if (!user || themeSaving || avatarUploading) return;
+    setThemeSaving(true);
+    setThemeError('');
+    try {
+      const result = await authApi.updateUser(user.id, {profileTheme: activeTheme});
+      if (!result.success || result.user?.profileTheme !== activeTheme) throw new Error(result.error || '装扮保存失败，请重试');
+      setUser({...user, profileTheme: activeTheme});
+      setThemeDraft(null);
+      setToast({msg: '主页装扮已保存', type: 'success'});
+      appearanceButton.current?.focus();
+    } catch (error) {
+      setThemeError(error instanceof Error ? error.message : '装扮保存失败，请重试');
+    } finally {
+      setThemeSaving(false);
+    }
+  };
 
   // ================= 逻辑处理 =================
   
   // 📸 处理头像上传
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (avatarUploading) return;
+    if (avatarUploading || themeSaving) return;
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
@@ -142,7 +176,7 @@ return (
       {/* 全局 Toast (保持不变) */}
       {toast && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-top-4 w-[90%] max-w-sm text-center">
-          <div className={`px-4 py-3 rounded-xl shadow-sm border font-medium flex items-center justify-center gap-2 ${
+          <div role="status" data-profile-theme={activeTheme} className={`px-4 py-3 rounded-xl shadow-sm border font-medium flex items-center justify-center gap-2 ${
             toast.type === 'success' ? 'profile-toast-success' : 'profile-toast-error'
           }`}>
             {toast.type === 'success' ? <CheckCircle2 className="h-5 w-5"/> : <AlertCircle className="h-5 w-5"/>}
@@ -153,19 +187,25 @@ return (
 
       <div className="profile-shell max-w-2xl mx-auto">
         
-        <div className="profile-card overflow-hidden">
+        <div data-profile-theme={activeTheme} className="profile-card overflow-hidden">
 
             {/* ================= 顶部：个人信息区域 ================= */}
             <div className="relative group/card">
                 
-                <div className="profile-cover relative h-32 md:h-48 overflow-hidden" />
+                <div className="profile-cover relative overflow-hidden">
+                  <ProfileCoverArtwork theme={activeTheme}/>
+                  <button ref={appearanceButton} type="button" className="profile-appearance-trigger" aria-expanded={appearanceOpen} aria-controls="profile-appearance" disabled={themeSaving} onClick={() => {
+                    if (appearanceOpen) closeAppearance();
+                    else {setThemeDraft({userId: user.id, theme: savedTheme}); setThemeError('');}
+                  }}><Palette size={15}/>装扮主页</button>
+                </div>
                 
                 <div className="px-4 pb-4 md:px-8 md:pb-8 relative">
                     <div className="flex flex-col md:flex-row items-center md:items-end -mt-16 md:-mt-16 gap-4 md:gap-6 relative z-10">
                         
                         {/* 头像 */}
                         <div className="relative group/avatar shrink-0">
-                            <div className="profile-avatar h-24 w-24 md:h-32 md:w-32 rounded-full border-[5px] border-[var(--home-surface)] bg-[var(--home-surface)] shadow-md flex items-center justify-center text-3xl font-bold text-[var(--home-accent)] overflow-hidden relative z-10">
+                            <div className="profile-avatar h-24 w-24 md:h-32 md:w-32 rounded-full border-[5px] border-[var(--profile-surface)] bg-[var(--profile-surface)] shadow-md flex items-center justify-center text-3xl font-bold text-[var(--profile-accent)] overflow-hidden relative z-10">
                                 {avatarUploading && (
                                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
                                         <Loader2 className="h-8 w-8 text-white animate-spin" />
@@ -182,99 +222,122 @@ return (
                                         className="hidden" 
                                         accept="image/*" 
                                         onChange={handleAvatarUpload}
-                                        disabled={avatarUploading}
+                                        disabled={avatarUploading || themeSaving}
                                     />
                                     <Camera className="h-9 w-9 text-white opacity-0 group-hover/avatar:opacity-100 transition-all duration-300 drop-shadow-lg scale-90 group-hover/avatar:scale-100" />
                                 </label>
                             </div>
-                            <div className="profile-camera absolute bottom-0 right-0 md:hidden z-30 bg-[var(--home-surface)] text-[var(--home-accent)] rounded-full p-2 shadow-[0_2px_8px_rgba(0,0,0,0.1)] border border-[var(--home-border)] pointer-events-none">
+                            <div className="profile-camera absolute bottom-0 right-0 md:hidden z-30 bg-[var(--profile-surface)] text-[var(--profile-accent)] rounded-full p-2 shadow-[0_2px_8px_rgba(0,0,0,0.1)] border border-[var(--profile-border)] pointer-events-none">
                                 <Camera className="h-4 w-4" />
                             </div>
                         </div>
 
                         {/* 用户名等 */}
                         <div className="profile-identity flex-1 text-center md:text-left md:mb-4 space-y-1">
-                            <h1 className="text-2xl md:text-3xl font-bold text-[var(--home-text)] flex flex-col md:flex-row items-center gap-2 font-display tracking-tight">
+                            <h1 className="text-2xl md:text-3xl font-bold text-[var(--profile-text)] flex flex-col md:flex-row items-center gap-2 font-display tracking-tight">
                                 {user.username}
                                 <span className={`px-2.5 py-0.5 text-xs rounded-full font-medium border flex items-center gap-1 mt-1 md:mt-0 shadow-sm ${
                                     profile?.role === 'admin'
-                                        ? 'bg-[var(--home-accent-soft)] text-[var(--home-accent)] border-[var(--home-border)]'
-                                        : 'bg-[var(--home-soft)] text-[#96734c] border-[var(--home-border)]'
+                                        ? 'bg-[var(--profile-accent-soft)] text-[var(--profile-accent)] border-[var(--profile-border)]'
+                                        : 'bg-[var(--profile-soft)] text-[var(--profile-accent)] border-[var(--profile-border)]'
                                 }`}>
                                     {profile?.role === 'admin' ? <Shield className="h-3 w-3" /> : <PenTool className="h-3 w-3" />}
                                     {profile?.role === 'admin' ? '超级管理员' : '创作者'}
                                 </span>
                             </h1>
-                            <p className="text-[var(--home-muted)] text-sm flex items-center justify-center md:justify-start gap-1.5 font-medium">
-                                <Mail className="h-3.5 w-3.5 text-[var(--home-muted)]" /> {user.email}
+                            <p className="text-[var(--profile-muted)] text-sm flex items-center justify-center md:justify-start gap-1.5 font-medium">
+                                <Mail className="h-3.5 w-3.5 text-[var(--profile-muted)]" /> {user.email}
                             </p>
                         </div>
 
                         <div className="hidden md:block md:mb-6">
                             <button 
                                 onClick={handleLogout}
-                                className="group/btn flex items-center gap-2 px-5 py-2 text-[var(--home-muted)] bg-[var(--home-surface)] hover:bg-[var(--home-soft)] border border-[var(--home-border)] hover:border-[var(--home-border)] rounded-xl transition-all text-sm font-bold shadow-sm"
+                                className="group/btn flex items-center gap-2 px-5 py-2 text-[var(--profile-muted)] bg-[var(--profile-surface)] hover:bg-[var(--profile-soft)] border border-[var(--profile-border)] hover:border-[var(--profile-border)] rounded-xl transition-all text-sm font-bold shadow-sm"
                             >
-                                <LogOut className="h-4 w-4 text-[var(--home-muted)] group-hover/btn:text-[var(--home-text)] transition-colors" /> 退出
+                                <LogOut className="h-4 w-4 text-[var(--profile-muted)] group-hover/btn:text-[var(--profile-text)] transition-colors" /> 退出
                             </button>
                         </div>
                     </div>
                 </div>
             </div>
 
+            {appearanceOpen && <section id="profile-appearance" className="profile-appearance" aria-labelledby="profile-appearance-title" onKeyDown={event => {
+              if (event.key === 'Escape') {event.preventDefault(); closeAppearance();}
+            }}>
+              <div className="profile-appearance-heading">
+                <div><h2 id="profile-appearance-title">选一种喜欢的风格</h2><p>让这方小天地，更像你。</p></div>
+                <button type="button" aria-label="关闭装扮选择" onClick={closeAppearance} disabled={themeSaving}><X size={18}/></button>
+              </div>
+              <fieldset className="profile-theme-options" disabled={themeSaving}>
+                <legend className="sr-only">主页风格</legend>
+                {PROFILE_THEMES.map(theme => <label key={theme.id} className="profile-theme-option" data-profile-theme={theme.id}>
+                  <input type="radio" name="profile-theme" value={theme.id} checked={activeTheme === theme.id} onChange={() => {setThemeDraft({userId: user.id, theme: theme.id}); setThemeError('');}}/>
+                  <span className="profile-theme-sample"><ProfileCoverArtwork theme={theme.id}/><span className="profile-theme-check"><Check size={12}/></span></span>
+                  <span className="profile-theme-label"><strong>{theme.name}</strong><small>{theme.description}</small></span>
+                </label>)}
+              </fieldset>
+              {themeError && <p role="alert" className="profile-theme-error">{themeError}</p>}
+              <div className="profile-appearance-actions">
+                <span aria-live="polite">{themeSaving ? '正在保存…' : '正在预览，保存后生效'}</span>
+                <button type="button" onClick={closeAppearance} disabled={themeSaving}>取消</button>
+                <button type="button" className="profile-theme-save" disabled={themeSaving || avatarUploading} onClick={saveAppearance}>{themeSaving ? '保存中…' : '保存装扮'}</button>
+              </div>
+            </section>}
+
             {/* ================= 功能入口 ================= */}
             <div className="profile-shortcuts px-4 md:px-6 pb-2 grid grid-cols-2 gap-3 mt-4">
                 
-                <Link href="/library" className="group flex items-center p-3 sm:p-4 bg-[var(--home-soft)] hover:bg-[var(--home-accent-soft)] border border-[var(--home-border)] rounded-2xl transition">
+                <Link href="/library" className="group flex items-center p-3 sm:p-4 bg-[var(--profile-soft)] hover:bg-[var(--profile-accent-soft)] border border-[var(--profile-border)] rounded-2xl transition">
                     {/* 修改：手机端图标变小 (h-8 w-8)，右边距变小 (mr-2) */}
-                    <div className="h-8 w-8 sm:h-10 sm:w-10 bg-[var(--home-surface)] text-[var(--home-accent)] rounded-xl flex items-center justify-center shadow-sm border border-[var(--home-border)] mr-2 sm:mr-4 group-hover:scale-110 transition-transform shrink-0">
+                    <div className="h-8 w-8 sm:h-10 sm:w-10 bg-[var(--profile-surface)] text-[var(--profile-accent)] rounded-xl flex items-center justify-center shadow-sm border border-[var(--profile-border)] mr-2 sm:mr-4 group-hover:scale-110 transition-transform shrink-0">
                         <BookOpen className="h-4 w-4 sm:h-5 sm:w-5" />
                     </div>
                     <div className="flex-1 min-w-0"> {/* min-w-0 防止文字撑开布局 */}
-                        <h3 className="font-bold text-[var(--home-text)] text-sm truncate">我的书架</h3>
-                        <p className="text-xs text-[var(--home-muted)] truncate">阅读历史</p>
+                        <h3 className="font-bold text-[var(--profile-text)] text-sm truncate">我的书架</h3>
+                        <p className="text-xs text-[var(--profile-muted)] truncate">阅读历史</p>
                     </div>
                     {/* 修改：手机端隐藏箭头，节省空间 */}
-                    <ChevronRight className="h-4 w-4 text-[var(--home-muted)] group-hover:text-[var(--home-muted)] hidden sm:block shrink-0" />
+                    <ChevronRight className="h-4 w-4 text-[var(--profile-muted)] group-hover:text-[var(--profile-muted)] hidden sm:block shrink-0" />
                 </Link>
 
-                <Link href="/writer" className="group flex items-center p-3 sm:p-4 bg-[var(--home-soft)] hover:bg-[var(--home-accent-soft)] border border-[var(--home-border)] hover:border-[var(--home-border)] rounded-2xl transition">
-                    <div className="h-8 w-8 sm:h-10 sm:w-10 bg-[var(--home-surface)] text-[#a17d55] rounded-xl flex items-center justify-center shadow-sm border border-[var(--home-border)] mr-2 sm:mr-4 group-hover:scale-110 transition-transform shrink-0">
+                <Link href="/writer" className="group flex items-center p-3 sm:p-4 bg-[var(--profile-soft)] hover:bg-[var(--profile-accent-soft)] border border-[var(--profile-border)] hover:border-[var(--profile-border)] rounded-2xl transition">
+                    <div className="h-8 w-8 sm:h-10 sm:w-10 bg-[var(--profile-surface)] text-[var(--profile-accent)] rounded-xl flex items-center justify-center shadow-sm border border-[var(--profile-border)] mr-2 sm:mr-4 group-hover:scale-110 transition-transform shrink-0">
                         <PenTool className="h-4 w-4 sm:h-5 sm:w-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-[var(--home-text)] text-sm truncate">创作管理</h3>
-                        <p className="text-xs text-[var(--home-muted)] truncate">创作中心</p>
+                        <h3 className="font-bold text-[var(--profile-text)] text-sm truncate">创作管理</h3>
+                        <p className="text-xs text-[var(--profile-muted)] truncate">创作中心</p>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-[var(--home-muted)] group-hover:text-[var(--home-muted)] hidden sm:block shrink-0" />
+                    <ChevronRight className="h-4 w-4 text-[var(--profile-muted)] group-hover:text-[var(--profile-muted)] hidden sm:block shrink-0" />
                 </Link>
             </div>
 
-            {adminMode && <div className="px-6 pt-4 text-[var(--home-text)]"><AdminModeNotice/></div>}
+            {adminMode && <div className="px-6 pt-4 text-[var(--profile-text)]"><AdminModeNotice/></div>}
 
             {/* ================= 账户安全 (保持原样) ================= */}
             <div className="mt-2">
                 <div className="px-8 py-4 flex items-center gap-2 mt-4">
                     <Shield className="h-4 w-4 text-[#6a7d60]" />
-                    <h3 className="font-bold text-[var(--home-text)] text-sm">账户安全</h3>
+                    <h3 className="font-bold text-[var(--profile-text)] text-sm">账户安全</h3>
                 </div>
                 
-                <div className="divide-y divide-[var(--home-border)] border-t border-[var(--home-border)]">
+                <div className="divide-y divide-[var(--profile-border)] border-t border-[var(--profile-border)]">
                     <div 
                         onClick={() => setShowPasswordModal(true)}
-                        className="flex justify-between items-center px-8 py-4 hover:bg-[var(--home-soft)] transition cursor-pointer active:bg-[var(--home-soft)]"
+                        className="flex justify-between items-center px-8 py-4 hover:bg-[var(--profile-soft)] transition cursor-pointer active:bg-[var(--profile-soft)]"
                     >
                         <div>
-                            <div className="font-medium text-[var(--home-text)] text-sm">登录密码</div>
-                            <div className="text-xs text-[var(--home-muted)] mt-0.5">建议定期修改密码以保护账户安全</div>
+                            <div className="font-medium text-[var(--profile-text)] text-sm">登录密码</div>
+                            <div className="text-xs text-[var(--profile-muted)] mt-0.5">建议定期修改密码以保护账户安全</div>
                         </div>
-                        <ChevronRight className="h-4 w-4 text-[var(--home-muted)]" />
+                        <ChevronRight className="h-4 w-4 text-[var(--profile-muted)]" />
                     </div>
 
                     <div className="flex justify-between items-center px-8 py-4">
                         <div>
-                            <div className="font-medium text-[var(--home-text)] text-sm">绑定邮箱</div>
-                            <div className="text-xs text-[var(--home-muted)] mt-0.5">{user.email}</div>
+                            <div className="font-medium text-[var(--profile-text)] text-sm">绑定邮箱</div>
+                            <div className="text-xs text-[var(--profile-muted)] mt-0.5">{user.email}</div>
                         </div>
                         <span className="text-[#6a7d60] bg-[#edf1e8] px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1">
                             <CheckCircle2 className="h-3 w-3" /> 已验证
@@ -287,14 +350,14 @@ return (
             <div className="profile-logout md:hidden px-6 pb-6 pt-4">
                 <button 
                     onClick={handleLogout}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 text-[var(--home-muted)] bg-[var(--home-soft)] border border-[var(--home-border)] rounded-xl font-medium active:bg-[var(--home-soft)] transition-colors text-sm"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 text-[var(--profile-muted)] bg-[var(--profile-soft)] border border-[var(--profile-border)] rounded-xl font-medium active:bg-[var(--profile-soft)] transition-colors text-sm"
                 >
                     <LogOut className="h-4 w-4" /> 退出登录
                 </button>
             </div>
             
             {/* 版本号移到里面，避免被截断 */}
-            <p className="text-center text-[var(--home-muted)] text-xs py-6">v1.0.0</p>
+            <p className="text-center text-[var(--profile-muted)] text-xs py-6">v1.0.0</p>
 
         </div> {/* End of 大容器 */}
 
@@ -304,51 +367,51 @@ return (
 
       {/* ================= 修改密码 Modal (保持不变) ================= */}
       {showPasswordModal && (
-        <div role="dialog" aria-modal="true" aria-labelledby="password-title" className="profile-dialog fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
-            <div className="bg-[var(--home-surface)] w-full md:w-full md:max-w-md rounded-t-2xl md:rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 md:zoom-in-95 duration-200">
-                <div className="px-6 py-4 border-b border-[var(--home-border)] bg-[var(--home-soft)] flex justify-between items-center">
-                    <h3 id="password-title" className="text-lg font-bold text-[var(--home-text)] flex items-center gap-2">
-                        <Lock className="h-5 w-5 text-[var(--home-accent)]" /> 修改密码
+        <div role="dialog" aria-modal="true" aria-labelledby="password-title" data-profile-theme={activeTheme} className="profile-dialog fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
+            <div className="bg-[var(--profile-surface)] w-full md:w-full md:max-w-md rounded-t-2xl md:rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 md:zoom-in-95 duration-200">
+                <div className="px-6 py-4 border-b border-[var(--profile-border)] bg-[var(--profile-soft)] flex justify-between items-center">
+                    <h3 id="password-title" className="text-lg font-bold text-[var(--profile-text)] flex items-center gap-2">
+                        <Lock className="h-5 w-5 text-[var(--profile-accent)]" /> 修改密码
                     </h3>
-                    <button aria-label="关闭修改密码" onClick={() => setShowPasswordModal(false)} className="p-1 -mr-2 text-[var(--home-muted)] hover:text-[var(--home-text)] transition">
+                    <button aria-label="关闭修改密码" onClick={() => setShowPasswordModal(false)} className="p-1 -mr-2 text-[var(--profile-muted)] hover:text-[var(--profile-text)] transition">
                         <X className="h-6 w-6" />
                     </button>
                 </div>
                 
                 <form onSubmit={handleChangePassword} className="p-6 space-y-4">
                     <div>
-                        <label className="block text-sm font-bold text-[var(--home-text)] mb-1">旧密码</label>
+                        <label className="block text-sm font-bold text-[var(--profile-text)] mb-1">旧密码</label>
                         <input 
                             type="password" 
                             value={oldPassword}
                             onChange={(e) => setOldPassword(e.target.value)}
-                            className="w-full px-4 py-3 bg-[var(--home-soft)] border border-[var(--home-border)] rounded-xl focus:bg-[var(--home-surface)] focus:ring-2 focus:ring-[var(--home-accent)] outline-none text-[var(--home-text)] text-sm transition"
+                            className="w-full px-4 py-3 bg-[var(--profile-soft)] border border-[var(--profile-border)] rounded-xl focus:bg-[var(--profile-surface)] focus:ring-2 focus:ring-[var(--profile-accent)] outline-none text-[var(--profile-text)] text-sm transition"
                             placeholder="输入当前密码"
                             required
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-bold text-[var(--home-text)] mb-1">新密码</label>
+                        <label className="block text-sm font-bold text-[var(--profile-text)] mb-1">新密码</label>
                         <input 
                             type="password" 
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
-                            className="w-full px-4 py-3 bg-[var(--home-soft)] border border-[var(--home-border)] rounded-xl focus:bg-[var(--home-surface)] focus:ring-2 focus:ring-[var(--home-accent)] outline-none text-[var(--home-text)] text-sm transition"
+                            className="w-full px-4 py-3 bg-[var(--profile-soft)] border border-[var(--profile-border)] rounded-xl focus:bg-[var(--profile-surface)] focus:ring-2 focus:ring-[var(--profile-accent)] outline-none text-[var(--profile-text)] text-sm transition"
                             placeholder="设置新密码（至少8位）"
                             required
                             minLength={8}
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-bold text-[var(--home-text)] mb-1">确认新密码</label>
+                        <label className="block text-sm font-bold text-[var(--profile-text)] mb-1">确认新密码</label>
                         <input 
                             type="password" 
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            className={`w-full px-4 py-3 bg-[var(--home-soft)] border rounded-xl focus:bg-[var(--home-surface)] focus:ring-2 outline-none text-[var(--home-text)] text-sm transition ${
+                            className={`w-full px-4 py-3 bg-[var(--profile-soft)] border rounded-xl focus:bg-[var(--profile-surface)] focus:ring-2 outline-none text-[var(--profile-text)] text-sm transition ${
                                 confirmPassword && newPassword !== confirmPassword 
                                 ? 'border-red-300 focus:ring-red-500' 
-                                : 'border-[var(--home-border)] focus:ring-[var(--home-accent)]'
+                                : 'border-[var(--profile-border)] focus:ring-[var(--profile-accent)]'
                             }`}
                             placeholder="再次输入新密码"
                             required
@@ -363,7 +426,7 @@ return (
                         <button 
                             type="button" 
                             onClick={() => setShowPasswordModal(false)}
-                            className="flex-1 py-3 bg-[var(--home-soft)] text-[var(--home-text)] font-bold rounded-xl hover:bg-[var(--home-accent-soft)] transition active:scale-95"
+                            className="flex-1 py-3 bg-[var(--profile-soft)] text-[var(--profile-text)] font-bold rounded-xl hover:bg-[var(--profile-accent-soft)] transition active:scale-95"
                         >
                             取消
                         </button>
@@ -371,7 +434,7 @@ return (
                             type="submit" 
                             disabled={isSubmitting}
                             className={`flex-1 py-3 text-white font-bold rounded-xl shadow-sm transition flex items-center justify-center gap-2 active:scale-95
-                                bg-[var(--home-accent)] hover:brightness-95 disabled:opacity-50 disabled:cursor-not-allowed
+                                bg-[var(--profile-accent)] hover:brightness-95 disabled:opacity-50 disabled:cursor-not-allowed
                             `}
                         >
                             {isSubmitting ? '处理中...' : '确认修改'}
