@@ -7,13 +7,13 @@ import Link from './PrefetchLink';
 import ReadingEntryLink from './ReadingEntryLink';
 import RecordBookVisit from './RecordBookVisit';
 import BookCatalogSheet from './BookCatalogSheet';
-import {openDetailCatalog, closeDetailCatalog, detailCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
+import {formatChapterTitle} from '@/lib/catalog-title';
+import {openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import { useRouter } from 'next/navigation';
 import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, User as UserIcon, Pencil, X, ArrowUpDown, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import BookArticles from './BookArticles';
 import './book-detail.css';
 import { useAuth } from '@/contexts/AuthContext';
-import { Virtuoso } from 'react-virtuoso';
 
 // --- 组件：星星显示 ---
 const StarRating = ({ rating, size = 5, interactive = false, onRate }: { rating: number, size?: number, interactive?: boolean, onRate?: (r: number) => void }) => {
@@ -90,30 +90,6 @@ interface BookDetailClientProps {
   initialFirstChapterId?: string;
 }
 
-// --- 智能处理章节标题 ---
-const formatChapterTitle = (title: string, chapterNumber: number) => {
-  if (!title) return `第${chapterNumber}章`;
-
-  // 1. 去掉开头的数字和标点符号 (例如 "7.第7章" -> "第7章", "12、第12章" -> "第12章")
-  const cleanTitle = title.trim().replace(/^\d+[.、\s]+/, '');
-
-  // 2. 识别是否为感言、请假条等非正文 (你可以根据需要增删这里的关键词)
-  const isExtraContent = /(感言|同人|请假|通知|单章|说明|番外|新书|设定|总结|推书)/.test(cleanTitle);
-
-  // 3. 如果清洗后的标题本身就已经包含“第x章”或者以“第”开头，直接原样返回（最准确，不依赖外部排序）
-  if (cleanTitle.startsWith('第') || /第.+章/.test(cleanTitle)) {
-      return cleanTitle;
-  }
-
-  // 4. 如果是感言等非正文，直接返回，绝对不要强制加“第X章”
-  if (isExtraContent) {
-      return cleanTitle;
-  }
-
-  // 5. 兜底逻辑：既没有“第X章”也不是感言的正文，才强制加上章节号
-  return `第${chapterNumber}章 ${cleanTitle}`;
-};
-
 const coverTones = ['sage', 'slate', 'mauve', 'clay', 'olive'] as const;
 function coverTone(bookId: string) {
   // Keep each book's palette consistent across navigation, reloads and SSR.
@@ -141,8 +117,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   
   // 🔥 目录交互状态
   const [isReversed, setIsReversed] = useState(true); // 默认倒序 (最新章节在前)
-  const showAllChapters = useSyncExternalStore(subscribeBookNavigation, () => detailCatalogOpen(book.id), serverCatalogClosed);
-  const setShowAllChapters = (open: boolean) => open ? openDetailCatalog(book.id) : closeDetailCatalog();
+  const showAllChapters = useSyncExternalStore(subscribeBookNavigation, () => bookCatalogOpen(book.id), serverCatalogClosed);
+  const setShowAllChapters = (open: boolean) => open ? openBookCatalog(book.id) : closeBookCatalog();
   const toggleCatalogOrder = () => {
     setIsReversed(value => !value);
     if (!completeCatalog.current) {
@@ -227,17 +203,6 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   const previewChapters = useMemo(() => {
     return sortedChapters.slice(0, 30);
   }, [sortedChapters]);
-
-  // 弹窗内虚拟列表需要的行数据 (3列布局)
-  const modalRows = useMemo(() => {
-    const result = [];
-    const COLUMN_COUNT = 3; 
-    for (let i = 0; i < sortedChapters.length; i += COLUMN_COUNT) {
-      result.push(sortedChapters.slice(i, i + COLUMN_COUNT));
-    }
-    return result;
-  }, [sortedChapters]);
-
 
   useEffect(()=>{
     let active=true;
@@ -704,60 +669,10 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
         </div>
       </div>
 
-      <BookCatalogSheet open={showAllChapters} onClose={closeDetailCatalog}>
-                <div className="flex items-center justify-between p-4 md:p-5 border-b border-gray-100 bg-gray-50">
-                    <div>
-                        <h3 className="text-lg md:text-xl font-bold text-gray-900">全部目录</h3>
-                        <p className="text-xs md:text-sm text-gray-500 mt-1">共 {chapterTotal ?? chapters.length} 章</p>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                        <button 
-                            onClick={toggleCatalogOrder}
-                            className="flex items-center space-x-1 text-xs md:text-sm bg-white border px-3 py-1.5 rounded-md text-gray-700 hover:bg-gray-50 hover:border-blue-400 transition-colors"
-                        >
-                            <ArrowUpDown className="w-4 h-4" />
-                            <span>{isReversed ? '倒序' : '正序'}</span>
-                        </button>
-                        <button 
-                            onClick={() => setShowAllChapters(false)}
-                            aria-label="关闭目录"
-                            className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-500 hover:text-gray-800"
-                        >
-                            <X className="w-6 h-6" />
-                        </button>
-                    </div>
-                </div>
+      <BookCatalogSheet open={showAllChapters} onClose={closeBookCatalog} bookId={book.id}
+        chapters={sortedChapters} total={chapterTotal} loading={loadingChapters} error={chapterError}
+        reversed={isReversed} onToggleOrder={toggleCatalogOrder} onRetry={() => setCatalogRetry(value => value + 1)}/>
 
-                {chapterError && <p role="alert" className="p-3 text-sm text-red-600">{chapterError} <button onClick={() => setCatalogRetry(value => value + 1)} className="underline">重试</button></p>}
-                <div className="flex-1 bg-white p-2">
-                    <Virtuoso
-                        style={{ height: '100%' }}
-                        totalCount={modalRows.length}
-                        data={modalRows}
-                        itemContent={(index, rowChapters) => (
-                            <div className="px-3 pb-3">
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    {rowChapters.map((chapter) => (
-                                        <Link
-                                            key={chapter.id}
-                                            href={`/book/${book.id}/${chapter.id}`}
-                                            prefetchMode="intent"
-                                            className="group flex items-center p-3 bg-gray-50 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200 transition-all text-sm"
-                                        >
-                                            <span className="text-gray-700 truncate group-hover:text-blue-600 w-full font-medium">
-                                                {formatChapterTitle(chapter.title, chapter.chapter_number)}
-                                            </span>
-                                        </Link>
-                                    ))}
-                                    {[...Array(3 - rowChapters.length)].map((_, i) => (
-                                        <div key={`empty-${i}`} className="invisible" />
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    />
-                </div>
-      </BookCatalogSheet>
 
     </div>
   );

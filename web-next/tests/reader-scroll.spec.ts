@@ -33,6 +33,9 @@ for(const width of [320,390,1440]){
     const height=await view.evaluate(el=>el.clientHeight);
     await atBoundary(page,next,-height/2);
     await expect(section(page,next).locator('h1')).toBeVisible();
+    await expect(page.getByText(/加载下一章/)).toHaveCount(0);
+    const gap=await section(page,next).evaluate(el=>el.querySelector('h1')!.getBoundingClientRect().top-el.previousElementSibling!.querySelector('p:last-child')!.getBoundingClientRect().bottom);
+    expect(gap).toBeGreaterThanOrEqual(48); expect(gap).toBeLessThan(100);
     expect(await section(page,first).locator('p').last().evaluate(el=>el.getBoundingClientRect().bottom)).toBeGreaterThan(0);
     await page.screenshot({path:`../artifacts/reader-scroll-${base.includes('127.0.0.1')?'local':'live'}-boundary-${width}.png`});
     const top=await view.evaluate(el=>el.scrollTop);
@@ -152,11 +155,14 @@ test('a failed next chapter can retry without losing current text',async({page})
   await expect(root(page)).toHaveAttribute('data-reader-ready','true');
   await page.addStyleTag({content:'nextjs-portal{display:none!important}'});
   await page.waitForTimeout(400);
-  const load=page.getByRole('button',{name:'加载下一章',exact:true});await load.scrollIntoViewIfNeeded();await load.click();
+  await viewport(page).evaluate(el=>{el.scrollTop=el.scrollHeight;});
+  const top=await viewport(page).evaluate(el=>el.scrollTop);
   await expect(page.locator('.reader-navigation-error')).toBeVisible();
   await expect(section(page,first)).toHaveCount(1);
   failing=false;
   await page.getByRole('button',{name:'重试',exact:true}).click();
-  await expect(root(page)).not.toHaveAttribute('data-reader-chapter',first);
+  await expect(viewport(page).locator('[data-scroll-chapter]')).toHaveCount(2);
+  expect(await viewport(page).evaluate(el=>el.scrollTop)).toBe(top);
+  await expect(root(page)).toHaveAttribute('data-reader-chapter',first);
   await expect(page.locator('.reader-navigation-error')).toHaveCount(0);
 });

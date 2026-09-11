@@ -9,6 +9,23 @@
 @media(prefers-reduced-motion:reduce) {
   .book-catalog-overlay,.book-catalog-sheet { transition-duration:1ms; transition-delay:0s; }
 }
+.book-catalog-sheet { color:#30332f; font-family:Arial,"Microsoft YaHei",sans-serif; }
+.book-catalog-header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:20px; flex-shrink:0; border-bottom:1px solid #eeefeb; background:#f8f9f6; }
+.book-catalog-header h2 { font-size:20px; line-height:1.4; font-weight:700; }
+.book-catalog-header p { margin-top:4px; color:#777d73; font-size:13px; }
+.book-catalog-actions { display:flex; align-items:center; gap:12px; }
+.book-catalog-actions button { display:flex; align-items:center; justify-content:center; gap:6px; min-height:40px; min-width:40px; border-radius:8px; }
+.book-catalog-actions button:first-child { padding:6px 12px; border:1px solid #dee2d8; background:white; font-size:13px; }
+.book-catalog-actions button:hover { background:#edf1e8; }
+.book-catalog-body { flex:1; min-height:0; display:flex; flex-direction:column; padding:12px 8px 0; }
+.book-catalog-list { flex:1; min-height:0; overscroll-behavior:contain; }
+.book-catalog-row { display:grid; gap:10px; padding:0 8px 10px; }
+.book-catalog-chapter { display:flex; align-items:center; min-width:0; min-height:48px; padding:12px; border:1px solid transparent; border-radius:6px; background:#f7f8f5; font-size:14px; line-height:1.6; }
+.book-catalog-chapter span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.book-catalog-chapter:hover,.book-catalog-chapter[aria-current] { background:#eaf0e2; border-color:#cddbc0; color:#48643b; }
+.book-catalog-chapter[aria-current] { font-weight:700; }
+.book-catalog-message { padding:12px; font-size:14px; }
+.book-catalog-message button { text-decoration:underline; }
 .book-hero { --cover-glow:#657e73; --cover-mid:#415e53; --cover-base:#293f38; --cover-wash:#e4ede6; background:radial-gradient(ellipse at 8% 0,var(--cover-wash),transparent 72%),linear-gradient(125deg,#fffdf9,#faf9f6); }
 .book-hero[data-cover-tone=slate] { --cover-glow:#687f93; --cover-mid:#465e75; --cover-base:#2d4054; --cover-wash:#e5ebf1; }
 .book-hero[data-cover-tone=mauve] { --cover-glow:#857084; --cover-mid:#634f67; --cover-base:#403345; --cover-wash:#efe6ee; }

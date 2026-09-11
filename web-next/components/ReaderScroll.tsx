@@ -8,7 +8,7 @@ import type {ReaderPageProps} from './ReaderPages';
 import type {Chapter} from '@/lib/api';
 import {readerParagraphs} from '../../shared/reader-paragraphs.mjs';
 import {readerChapterTitle} from '@/lib/reader-layout';
-import {cachedReaderCounts,loadReaderCounts,rememberReaderCounts} from '@/lib/reader-chapters';
+import {cachedReaderCounts,loadReaderChapter,loadReaderCounts,rememberReaderCounts} from '@/lib/reader-chapters';
 import {useStoredState} from '@/lib/useStoredState';
 import {useAuth} from '@/contexts/AuthContext';
 import {READER_TURN_DURATION_MS} from './useReaderPageTurn';
@@ -47,6 +47,9 @@ export default function ReaderScroll(props:ReaderPageProps){
   const {onChapter,onNearEnd,navigating,chapter:activeChapter}=props;
   const {user}=useAuth(),userId=user?.id || 'guest';
   const viewport=useRef<HTMLDivElement>(null);
+  const continuation=useRef<HTMLDivElement>(null);
+  const [continuationError,setContinuationError]=useState('');
+  const [continuationRetry,setContinuationRetry]=useState(0);
   const [chapters,setChapters]=useState<Chapter[]>([props.chapter]);
   const [progress,setProgress]=useState<Progress>({id:props.chapter.id,fraction:0,page:0,total:1});
   const position=useRef(progress);
@@ -228,6 +231,25 @@ export default function ReaderScroll(props:ReaderPageProps){
   const percent=props.chapterTotal && props.chapterIndex>=0?Math.min(100,(props.chapterIndex+(progress.page+1)/progress.total)/props.chapterTotal*100).toFixed(1)+'%':'—';
   const style={'--reader-paper':props.theme.bg,'--reader-ink':props.theme.text,'--reader-panel':props.theme.panel,'--reader-width':`${props.pageWidth}px`,'--reader-paragraph-gap':props.paragraphGap} as CSSProperties;
   const last=chapters.at(-1)!;
+  const followingId=last.nextId || (last.id===props.chapter.id?props.nextId:null);
+  useEffect(()=>{
+    const view=viewport.current,end=continuation.current;
+    // The visible text approaching the buffer end demands up to two following
+    // chapters, including with data saving enabled, without changing scrollTop.
+    if(!view || !end || !followingId || blocked || chapters.length-chapters.findIndex(item=>item.id===progress.id)>2)return;
+    let active=true,requested=false;
+    const observer=new IntersectionObserver(entries=>{
+      if(requested || !entries.some(entry=>entry.isIntersecting))return;
+      requested=true;
+      void loadReaderChapter(props.book.id,followingId).then(next=>{
+        if(!active)return;
+        setContinuationError('');
+        setChapters(previous=>previous.some(item=>item.id===next.id)?previous:[...previous,next]);
+      }).catch(error=>{if(active)setContinuationError(error instanceof Error?error.message:'章节暂不可用，请重试');});
+    },{root:view,rootMargin:`0px 0px ${view.clientHeight}px 0px`});
+    observer.observe(end);
+    return()=>{active=false;observer.disconnect();};
+  },[followingId,props.book.id,chapters,progress.id,blocked,continuationRetry]);
 
   return <div className="reader-pages-root" data-dark={props.dark} data-mode="scroll" data-reader-ready={ready} data-reader-chapter={props.chapter.id} data-reader-previous={props.previousChapter?.id || ''} data-reader-next={props.nextChapter?.id || ''} style={style}>
     <section className="reader-frame" data-paper={props.paper && !props.dark} aria-label="章节阅读">
@@ -249,12 +271,13 @@ export default function ReaderScroll(props:ReaderPageProps){
         <div className="reader-page-surface">
           <div ref={viewport} className="reader-text-window reader-scroll-window" onScroll={onScroll} style={{fontFamily:props.fontFamily,fontSize:`${props.fontSize}px`,lineHeight:props.lineHeight}}>
             {chapters.map(chapter=><ScrollChapter key={chapter.id} chapter={chapter} user={userId} selected={menu?.chapter.id===chapter.id?menu.paragraph.key:undefined} updates={countUpdates[chapter.id]} onDiscussion={openDiscussion}/>)}
-            {(last.nextId || (last.id===props.chapter.id && props.nextId)) && <div className="reader-scroll-loading"><button disabled={props.navigating} onClick={()=>props.onChapter(last.nextId || props.nextId!)}>{props.navigating?'正在加载下一章…':'加载下一章'}</button></div>}
+            <div ref={continuation} className="reader-scroll-end" aria-hidden="true"/>
           </div>
           <footer className="reader-status-bottom"><div className="reader-progress" aria-label="阅读进度"><span data-reader-page>{progress.page+1}/{progress.total}</span><span>{percent}</span></div></footer>
         </div>
       </div>
     </section>
+    {continuationError && <div role="alert" className="reader-navigation-error">{continuationError}<button onClick={()=>{setContinuationError('');setContinuationRetry(value=>value+1);}}>重试</button><button onClick={()=>setContinuationError('')}>关闭</button></div>}
     {menu && <div className="paragraph-menu-backdrop" onPointerDown={()=>{heldMenu.current=false;}} onClickCapture={event=>{if(heldMenu.current){event.preventDefault();event.stopPropagation();}}} onClick={()=>{if(Date.now()>=suppressClickUntil.current)setMenu(null);}}><div ref={menuRef} role="menu" aria-label="段落操作" className="paragraph-menu" style={{left:menu.x,top:menu.y}} onClick={event=>event.stopPropagation()}><button role="menuitem" onClick={()=>{setDiscussion(menu);setMenu(null);}}><MessageCircle size={16}/>评论</button><button role="menuitem" onClick={()=>{const key=menu.paragraph.key;setMarks(previous=>previous.includes(key)?previous.filter(item=>item!==key):[...previous,key]);setMenu(null);}}><Highlighter size={16}/>{marks.includes(menu.paragraph.key)?'取消标记':'标记'}</button></div></div>}
     {discussion && <ParagraphComments key={`${discussion.chapter.id}:${discussion.paragraph.key}`} chapterId={discussion.chapter.id} paragraph={discussion.paragraph} onClose={closeDiscussion} onCount={(key,count)=>{const id=discussion.chapter.id;rememberReaderCounts(id,{...cachedReaderCounts(id),[key]:count});setCountUpdates(previous=>({...previous,[id]:{...previous[id],[key]:count}}));}}/>}
   </div>;

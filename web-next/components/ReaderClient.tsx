@@ -7,12 +7,13 @@ import { useParams, usePathname, useRouter } from 'next/navigation';
 import Link from './PrefetchLink';
 import { currentPrefetchPolicy, serverPrefetchPolicy, subscribePrefetchPolicy } from '@/lib/book-prefetch';
 import { rememberChapter } from '@/lib/reading-session';
-import {replaceReaderChapter} from '@/lib/book-navigation';
+import {replaceReaderChapter, openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation, selectReaderCatalogChapter} from '@/lib/book-navigation';
+import BookCatalogSheet from './BookCatalogSheet';
 import {readerChapterCache as chapterCache,loadReaderChapter,loadReaderCounts} from '@/lib/reader-chapters';
 import { 
   Settings, BookOpen, List, 
   Bookmark, BookmarkCheck, Moon, X, 
-  ArrowUpDown, Check, Sun, Info, Library,
+  Check, Sun, Info, Library,
 } from 'lucide-react';
 import { booksApi, chaptersApi, bookmarksApi, Book, Chapter } from '@/lib/api';
 import RecordBookVisit from './RecordBookVisit';
@@ -100,13 +101,17 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const [nextButtonVisible, setNextButtonVisible] = useState(false);
   const nearEnd = useCallback(() => setNextButtonVisible(true), []);
   
-  const [showCatalog, setShowCatalog] = useState(false);
+  const showCatalog = useSyncExternalStore(subscribeBookNavigation, () => bookCatalogOpen(bookId), serverCatalogClosed);
   const [showSettings, setShowSettings] = useState(false);
-  const [catalogReversed, setCatalogReversed] = useState(false);
+  const [catalogReversed, setCatalogReversed] = useState(true);
 
   // 导航栏显示状态 (移动端专用)
   const [mobileNav,setShowNav]=useState(false);
   const showNav=mobileNav;
+  const setShowCatalog = (open: boolean) => {
+    if (open) { setShowNav(false); openBookCatalog(bookId); }
+    else closeBookCatalog();
+  };
   const { theme, setTheme } = useReadingSettings();
 
   const [themeColor, setThemeColor] = useStoredState('reader_themeColor',settingsCache.themeColor,v=>['gray','cream','green','blue'].includes(String(v)));
@@ -181,14 +186,6 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     return ()=>{if(timer)clearTimeout(timer);document.removeEventListener('visibilitychange',schedule);};
   }, [bookId, chapterIdParam]);
   useEffect(() => { if (!bookId || !user) return; let active=true; bookmarksApi.check(user.id,bookId).then(value=>{if(active)setIsBookmarked(value);}).catch(()=>{});return ()=>{active=false;}; }, [bookId, user]);
-  useEffect(() => {
-    if (showCatalog) {
-      setTimeout(() => {
-        document.getElementById('active-chapter-anchor')?.scrollIntoView({ block: 'center', behavior: 'auto' });
-      }, 100);
-    }
-  }, [showCatalog]);
-
   // Load once per book, independently of chapter navigation and authentication.
   useEffect(() => {
     if (catalogRetry === 0 && cachedCatalog(bookId, catalogVersion)) return;
@@ -258,7 +255,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
       if(sequence!==navigationSequence.current)return;
       chapterCache.set(next.id,next);
       rememberChapter(bookId,next.id);
-      setChapter(next);setNavigating(false);setNavigationError('');setShowNav(false);setShowCatalog(false);
+      setChapter(next);setNavigating(false);setNavigationError('');setShowNav(false);
       // Chapter turns share one history entry. Native history integration keeps
       // the URL in sync without refetching the route; Back exits to book details.
       const href=`/book/${bookId}/${next.id}`;
@@ -435,88 +432,12 @@ if (loading) return (
       </div>
       </div>
 
-      {/* 5. 目录弹窗 (完美兼容版) */}
-      {showCatalog && (
-        <div 
-          className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => setShowCatalog(false)}
-        >
-          <div 
-            className={`
-               flex flex-col rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200
-               ${isDesktop 
-                  ? 'w-[960px] h-[80vh]'  /* 网页端：保持宽屏大尺寸 */
-                  : 'w-[90%] max-w-[320px] h-[70vh] rounded-2xl' /* 移动端：居中精致小卡片 */
-               }
-            `}
-            style={{ 
-              backgroundColor: isActuallyDark ? '#1f1f1f' : (isDesktop ? activeTheme.panel : '#fff'), 
-              color: activeTheme.text 
-            }} 
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="px-5 py-4 border-b flex justify-between items-center shrink-0 bg-black/5" style={{ borderColor: activeTheme.line }}>
-              <div className="flex items-baseline gap-2">
-                 <h2 className="text-lg font-bold">目录</h2>
-                 <span className="text-xs opacity-50">共 {catalogTotal ?? allChapters.length} 章</span>
-              </div>
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setCatalogReversed(!catalogReversed)} 
-                  className="px-3 py-1.5 text-xs font-medium rounded-full bg-black/5 hover:bg-black/10 transition-colors flex items-center gap-1 active:scale-95"
-                >
-                   <ArrowUpDown className="w-3 h-3"/> {catalogReversed ? '正序' : '倒序'}
-                </button>
-                <button aria-label="关闭目录" onClick={() => setShowCatalog(false)} className="p-1.5 hover:bg-black/10 rounded-full bg-black/5 active:scale-95">
-                  <X className="w-4 h-4 opacity-60"/>
-                </button>
-              </div>
-            </div>
-            
-            {/* List */}
-            <div role="region" aria-label="阅读目录" aria-busy={catalogLoading} className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-              {catalogLoading && allChapters.length === 0 && <p role="status" className="mb-3 text-sm opacity-60">加载目录…</p>}
-              {catalogError && <p role="alert" className="mb-3 text-sm text-red-600">{catalogError} <button onClick={() => { setCatalogLoading(true); setCatalogError(''); setCatalogRetry(value => value + 1); }} className="underline">重试</button></p>}
-              {!catalogLoading && !catalogError && !allChapters.length && <p className="text-sm opacity-60">暂无章节</p>}
-              <div className={`${isDesktop ? 'grid grid-cols-2 gap-x-12 gap-y-2' : 'flex flex-col gap-1'}`}>
-                {displayChapters.map(ch => {
-                  const isActive = ch.id === chapter.id;
-                  return (
-                    <button 
-                      key={ch.id} 
-                      id={isActive ? 'active-chapter-anchor' : undefined}
-                      onMouseEnter={() => prefetchChapter(ch.id)}
-                      onFocus={() => prefetchChapter(ch.id)}
-                      onTouchStart={() => prefetchChapter(ch.id)}
-                      onClick={() => { goToChapter(ch.id); setShowCatalog(false); }}
-                      className={`
-                        text-left transition-all flex items-center justify-between
-                        ${isDesktop 
-                            /* 网页端样式：保留原来的虚线风格，或者微调得整齐一点 */
-                            ? `py-3 px-2 text-base border-b border-dashed ${isActive ? 'font-bold' : 'hover:text-blue-600'}`
-                            /* 移动端样式：块状胶囊风格 */
-                            : `py-3 px-4 text-sm rounded-xl ${isActive ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-black/5'}`
-                        }
-                      `}
-                      style={{ 
-                         borderColor: isDesktop ? (isActuallyDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)') : undefined,
-                         color: isActive ? '#3b82f6' : activeTheme.text
-                      }} 
-                    >
-                      <span className="truncate w-full">
-                        {ch.title.startsWith('第') ? ch.title : `第${ch.chapter_number}章 ${ch.title}`}
-                      </span>
-                      {/* 移动端高亮时显示小圆点 */}
-                      {!isDesktop && isActive && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 ml-2"></div>}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <BookCatalogSheet open={showCatalog} onClose={closeBookCatalog} bookId={bookId}
+        chapters={displayChapters} total={catalogTotal} loading={catalogLoading} error={catalogError}
+        reversed={catalogReversed} onToggleOrder={() => setCatalogReversed(value => !value)}
+        activeChapterId={chapter.id} onPrefetch={prefetchChapter}
+        onSelect={id => selectReaderCatalogChapter(() => goToChapter(id))}
+        onRetry={() => { setCatalogLoading(true); setCatalogError(''); setCatalogRetry(value => value + 1); }}/>
 
       {navigationError && <div role="alert" className="reader-navigation-error">{navigationError}<button onClick={()=>goToChapter(failedChapter.current || chapterIdParam)}>重试</button><button onClick={()=>setNavigationError('')}>关闭</button></div>}
       {/* 6. 设置弹窗 */}
