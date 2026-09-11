@@ -370,7 +370,7 @@ test('changing pacing and manual verification options preserves existing chapter
   const spec = {...specFor(f.base), browser: {responseMode: 'source'}};
   const first = await acquire(spec, {...f.options, mode: 'probe'});
   assert.equal(first.structuralPass, true);
-  const updated = {...spec, delayMs: 300, browser: {...spec.browser, manualVerificationMs: 180000, resourceHosts: ['cdn.example'], manualLogin: {selector: '.login-required', timeoutMs: 600000}}};
+  const updated = {...spec, delayMs: 300, browser: {...spec.browser, manualVerificationMs: 180000, resourceHosts: ['cdn.example'], manualCaptcha: {selector: '.captcha-required', timeoutMs: 600000}, manualLogin: {selector: '.login-required', timeoutMs: 600000}}};
   assert.equal(localBookState(updated, f.options).state, 'partial');
   const second = await acquire(updated, {...f.options, mode: 'probe'});
   assert.equal(second.structuralPass, true, JSON.stringify(second.failures));

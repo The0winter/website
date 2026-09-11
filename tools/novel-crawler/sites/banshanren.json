@@ -36,6 +36,11 @@
       "responseMode": "source",
       "manualVerificationMs": 180000,
       "resourceHosts": ["cdn.banshanren.com"],
+      "manualCaptcha": {
+        "selector": ".chapter_content_box .limit_box [onclick='toggleCode()']",
+        "openSelector": ".chapter_content_box .limit_box [onclick='toggleCode()']",
+        "timeoutMs": 600000
+      },
       "manualLogin": {
         "selector": ".chapter_content_box .limit_box [onclick='toggleLogin()']",
         "openSelector": ".chapter_content_box .limit_box [onclick='toggleLogin()']",

@@ -3,6 +3,15 @@ const token = location.hash.slice(1) || sessionStorage.getItem('desktop-token');
 if (token) sessionStorage.setItem('desktop-token', token);
 history.replaceState(null, '', '/');
 let data, selectedUrl = '', initialized = false, pollRunning = false, active = false, resultsKey = '', sitesKey = '';
+let diagnosticKey = '', interruptionKey = '';
+const diagnostics = document.createElement('div');
+diagnostics.id = 'task-diagnostics';
+$('report-stats').after(diagnostics);
+const attention = document.createElement('div');
+attention.id = 'manual-attention'; attention.className = 'attention-box'; attention.hidden = true;
+const attentionText = document.createElement('p'), showBrowser = document.createElement('button');
+showBrowser.id = 'show-browser'; showBrowser.type = 'button'; showBrowser.className = 'secondary'; showBrowser.textContent = '显示采集窗口 ↗';
+attention.append(attentionText, showBrowser); diagnostics.before(attention);
 const phases = {idle: '等待开始', search: '查找中', ready: '等待选择', resolving: '读取目录', probe: '抽样检查', download: '正在下载', pausing: '正在暂停', paused: '已暂停', stopping: '正在停止', stopped: '已停止', probed: '试采通过', complete: '已完成', error: '采集中断'};
 const working = phase => ['search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(phase);
 async function api(action, body) {
@@ -12,6 +21,49 @@ async function api(action, body) {
   return result;
 }
 function feedback(message = '') { $('feedback').textContent = message; $('feedback').hidden = !message; }
+function failureNode(failure) {
+  const item = document.createElement('div'); item.className = 'failure-item';
+  const title = document.createElement('strong'), reason = document.createElement('p'), next = document.createElement('p');
+  title.textContent = failure.chapter ? `目录第 ${failure.chapter} 项 · ${failure.title || '未命名章节'}` : '任务中断原因';
+  reason.textContent = failure.error;
+  next.className = 'next-step'; next.textContent = `下一步：${failure.nextStep || '请核对来源页面，或将质量报告交给 Codex 排查。'}`;
+  item.append(title, reason, next);
+  try {
+    const url = new URL(failure.url || failure.link);
+    if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) {
+      const link = document.createElement('a'); link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
+      link.textContent = '查看失败来源页 ↗'; item.append(link);
+    }
+  } catch {}
+  return item;
+}
+function renderDiagnostics(task) {
+  const waiting = active && ['login', 'verification'].includes(task.action);
+  attention.hidden = !waiting;
+  const seconds = task.actionDeadline ? Math.max(0, Math.ceil((task.actionDeadline - Date.now()) / 1000)) : null;
+  attentionText.textContent = waiting ? `需要你操作：${task.action === 'login' ? '请在采集窗口手动登录' : '请在采集窗口手动完成验证码'}。完成后自动继续，已保存章节保留。${seconds === null ? '' : `剩余等待 ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒。`}` : '';
+  showBrowser.hidden = !task.canShowBrowser;
+  const failures = task.report?.failures?.length ? task.report.failures : task.failure ? [task.failure] : task.phase === 'error' ? [{error: task.message}] : [];
+  const visible = !active && failures.length && !['ready', 'idle'].includes(task.phase);
+  diagnostics.hidden = !visible;
+  const key = JSON.stringify([visible, failures]);
+  if (key !== diagnosticKey) {
+    diagnosticKey = key;
+    diagnostics.replaceChildren();
+    if (visible) {
+      const heading = document.createElement('h4'); heading.textContent = `失败详情（${failures.length} 项）`;
+      diagnostics.append(heading, ...failures.slice(0, 20).map(failureNode));
+      if (failures.length > 20) { const more = document.createElement('p'); more.textContent = '其余失败项见质量报告。'; diagnostics.append(more); }
+    }
+  }
+  if (task.phase !== 'error') { interruptionKey = ''; if ($('interruption-dialog').open) $('interruption-dialog').close(); return; }
+  const errorKey = JSON.stringify([task.title, task.report?.checkedAt, task.message, failures]);
+  if (errorKey === interruptionKey) return;
+  interruptionKey = errorKey;
+  $('interruption-summary').textContent = task.report ? `已保留 ${task.report.downloaded} / ${task.report.expected} 章，本次没有生成完整书籍。失败详情会保留在进度区。` : task.message;
+  $('interruption-detail').replaceChildren(...failures.slice(0, 1).map(failureNode));
+  if (!$('interruption-dialog').open) $('interruption-dialog').showModal();
+}
 function adapterStatus() {
   let host;
   try { host = new URL($('website').value.includes('://') ? $('website').value : `https://${$('website').value}`).hostname; } catch {}
@@ -82,7 +134,7 @@ function render() {
   $('task-title').textContent = task.title ? `《${task.title}》${task.author ? ` · ${task.author}` : ''}` : '采集任务';
   $('task-message').textContent = task.message;
   const report = task.report;
-  const progress = !active && report ? {downloaded: report.downloaded, total: report.expected, failed: report.errors, mode: task.progress?.mode} : task.progress;
+  const progress = !active && report ? {downloaded: report.downloaded, total: report.expected, failed: report.failures?.filter(item => item.chapter).length || 0, mode: report.mode || task.progress?.mode} : task.progress;
   const percent = progress?.total ? Math.min(100, progress.downloaded / progress.total * 100) : task.phase === 'complete' || task.phase === 'probed' ? 100 : 0;
   $('progress-bar').style.width = `${percent}%`;
   $('progress-bar').className = active && !progress?.total ? 'indeterminate' : '';
@@ -92,6 +144,7 @@ function render() {
   $('pause').textContent = task.phase === 'pausing' ? '正在保存…' : '暂停采集';
   $('report-stats').hidden = !report;
   if (report) $('report-stats').replaceChildren(...[[`${report.downloaded} / ${report.expected}`, '已采集章节'], [report.errors, '检测到的错误'], [report.warnings, '待核对警告']].map(([number, label]) => { const div = document.createElement('div'), strong = document.createElement('strong'); strong.textContent = number; div.append(strong, label); return div; }));
+  renderDiagnostics(task);
   $('open-folder').hidden = !report?.exportFile;
   $('open-report').hidden = !report?.jobId;
   $('resume').hidden = !['paused', 'stopped', 'probed', 'error'].includes(task.phase) || !task.sourceUrl;
@@ -134,6 +187,8 @@ $('probe-only').addEventListener('change', () => { if (data) render(); });
 $('start').onclick = async () => { feedback(); $('start').disabled = true; try { await api('start', {url: selectedUrl, probeOnly: $('probe-only').checked}); } catch (error) { feedback(error.message); } await poll(); };
 $('pause').onclick = async () => { try { await api('pause', {}); } catch (error) { feedback(error.message); } await poll(); };
 $('stop').onclick = async () => { $('stop').disabled = true; try { await api('stop', {}); } catch (error) { feedback(error.message); } await poll(); };
+showBrowser.onclick = async () => { showBrowser.disabled = true; try { await api('show-browser', {}); } catch (error) { feedback(error.message); } finally { showBrowser.disabled = false; } };
+$('dismiss-interruption').onclick = () => { $('interruption-dialog').close(); $('task-diagnostics').scrollIntoView({block: 'nearest'}); };
 $('resume').onclick = async () => { if (data.task.title) $('title').value = data.task.title; if (data.task.author) $('author').value = data.task.author; if (data.task.sourceUrl) $('website').value = data.task.sourceUrl; $('probe-only').checked = false; await search(); $('results-panel').scrollIntoView({behavior: 'smooth', block: 'nearest'}); };
 for (const id of ['folder-nav', 'open-folder', 'open-report']) $(id).onclick = async () => { try { await api('open', {kind: id === 'open-report' ? 'report' : 'folder'}); } catch (error) { feedback(error.message); } };
 document.querySelector('.brand').onclick = event => event.preventDefault();

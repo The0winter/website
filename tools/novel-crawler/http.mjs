@@ -4,6 +4,7 @@ import axios from 'axios';
 import iconv from 'iconv-lite';
 import {load} from 'cheerio';
 import {hash, atomicWrite, readJson} from './storage.mjs';
+import {rejectedPage} from './diagnostics.mjs';
 
 export function httpUrl(value, base) {
   const url = new URL(value, base);
@@ -25,8 +26,15 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal}) {
   const hosts = new Set(allowedHosts.map(h => h.toLowerCase()));
   const resourceHosts = new Set(browserOptions.resourceHosts || []);
-  const login = browserOptions.manualLogin;
-  const needsLogin = (body, contentType) => !!login && load(decode(body, contentType))(login.selector).length > 0;
+  const actions = [
+    {...browserOptions.manualCaptcha, kind: 'verification', label: '验证码', configured: !!browserOptions.manualCaptcha},
+    {...browserOptions.manualLogin, kind: 'login', label: '登录', configured: !!browserOptions.manualLogin},
+  ].filter(action => action.configured);
+  const requiredAction = (body, contentType) => {
+    if (!actions.length) return null;
+    const $ = load(decode(body, contentType));
+    return actions.find(action => $(action.selector).length);
+  };
   // Also space out search, detail lookup and a new worker's first request.
   let lastRequest = Date.now();
   const stats = {requests: 0, cacheHits: 0, retries: 0, bytes: 0};
@@ -49,6 +57,10 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
       await cdp.send('Browser.setWindowBounds', {windowId, bounds: {windowState: state}});
       if (state === 'normal') await page.bringToFront();
     } finally { await cdp.detach(); }
+  }
+  async function showBrowser() {
+    if (!manualAction || !browser?.connected || page?.isClosed()) throw Error('当前没有等待操作的采集窗口');
+    await windowState('normal');
   }
   async function ensureBrowser() {
     stopped();
@@ -97,16 +109,21 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
     if (!hosts.has(new URL(url).hostname.toLowerCase())) throw Error(`地址不在该来源配置的域名范围内：${url}`);
     return url;
   }
-  async function get(input, {fresh = false, request, render = false, readySelector} = {}) {
+  async function get(input, {fresh = false, request, render = false, readySelector, rejectSelectors = []} = {}) {
     stopped();
+    const rejectedSelector = (body, contentType) => {
+      if (!rejectSelectors.length) return null;
+      const $ = load(decode(body, contentType));
+      return rejectSelectors.find(selector => $(selector).length);
+    };
     const original = assertUrl(input), key = hash({url: original, request, render, browser: render ? browserOptions : undefined});
     const metaPath = path.join(cacheDir, key + '.json'), bodyPath = path.join(cacheDir, key + '.bin');
     const cached = readJson(metaPath);
     if (!fresh && !refresh && cached && Date.now() - Date.parse(cached.fetchedAt) < ttlMs && fs.existsSync(bodyPath)) {
       assertUrl(cached.url);
       const body = fs.readFileSync(bodyPath);
-      // Old restricted responses must not keep a resumed job from reaching login.
-      if (hash(body) === cached.hash && !needsLogin(body, cached.contentType)) { stats.cacheHits++; return {...cached, body}; }
+      // Never replay cached login, CAPTCHA or unsupported restriction pages.
+      if (hash(body) === cached.hash && !requiredAction(body, cached.contentType) && !rejectedSelector(body, cached.contentType)) { stats.cacheHits++; return {...cached, body}; }
     }
     if (render) {
       if (request) throw Error('浏览器模式只支持网页导航');
@@ -128,7 +145,7 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
             if (!limit) throw Object.assign(Error('网站要求人机验证，采集已停止；请使用支持手动验证的浏览器来源配置。'), {stopSource: true});
             manualAction = true;
             await windowState('normal');
-            onStatus?.({kind: 'verification', message: `网站要求人机验证：请在弹出的采集浏览器中手动完成，完成后自动继续。最多等待 ${Math.round(limit / 60000 * 10) / 10} 分钟。`});
+            onStatus?.({kind: 'verification', url: original, deadline: Date.now() + limit, message: `网站要求人机验证：请在弹出的采集浏览器中手动完成，完成后自动继续。最多等待 ${Math.round(limit / 60000 * 10) / 10} 分钟。`});
             const deadline = Date.now() + limit;
             while (true) {
               stopped();
@@ -162,13 +179,17 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
             }
           }
           if (!documentResponse || documentResponse.status() !== 200) throw Error(`浏览器未取得有效页面（HTTP ${documentResponse?.status() || '未知'}）；如需人工验证，请在普通浏览器中核实网站是否可用`);
-          if (login && needsLogin(Buffer.from(await documentResponse.buffer()), documentResponse.headers()['content-type'])) {
+          let action = actions.length ? requiredAction(Buffer.from(await documentResponse.buffer()), documentResponse.headers()['content-type']) : null;
+          // Login may lead to a site CAPTCHA (or vice versa). Handle each fresh
+          // restriction in this same browser without accepting an intermediate preview.
+          const actionDeadline = Date.now() + Math.max(0, ...actions.map(item => item.timeoutMs));
+          while (action) {
             manualAction = true;
             await windowState('normal');
-            if (login.openSelector) {
-              const links = await page.$$(login.openSelector);
+            if (action.openSelector) {
+              const links = await page.$$(action.openSelector);
               try {
-                // Open the site's form only. Credentials and submission stay with the user.
+                // Open the form only; never solve or submit login/CAPTCHA challenges.
                 if (links.length === 1) await links[0].click();
               } catch {
                 stopped();
@@ -176,36 +197,43 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
                 // Keep the visible browser available if the site's button moved or hid.
               } finally { await Promise.all(links.map(link => link.dispose())); }
             }
-            onStatus?.({kind: 'login', message: `网站需要登录：采集浏览器已显示，请在该窗口手动登录；如有验证码请自行完成。登录后返回并刷新当前章节，程序会自动继续。最多等待 ${Math.round(login.timeoutMs / 60000 * 10) / 10} 分钟。`});
-            const deadline = Date.now() + login.timeoutMs;
+            const deadline = Math.min(actionDeadline, Date.now() + action.timeoutMs);
+            const instruction = action.kind === 'login' ? '网站需要登录：请在该窗口手动登录；如有验证码请自行完成' : '网站提示访问异常，需要输入验证码：请在该窗口手动完成验证';
+            onStatus?.({kind: action.kind, url: original, deadline, message: `${instruction}。采集浏览器已显示，完成后返回并刷新当前章节，程序会自动继续。最多等待 ${Math.round((deadline - Date.now()) / 60000 * 10) / 10} 分钟。`});
             let checkedResponse = documentResponse;
             while (true) {
               stopped();
               if (page.isClosed()) throw windowClosed();
               assertUrl(page.url());
-              if (Date.now() >= deadline) throw Object.assign(Error('等待手动登录超时，已结束本次采集；已保存章节保留，继续采集时会重新显示登录窗口。'), {stopSource: true});
+              if (Date.now() >= deadline) throw Object.assign(Error(`等待手动${action.label}超时，已结束本次采集；已保存章节保留，继续采集时会重新显示${action.label}窗口。`), {stopSource: true, code: action.kind === 'login' ? 'login-timeout' : 'verification-timeout', url: original});
               // Require a fresh, successful response for this exact chapter. Hiding an
               // overlay or visiting a login-success page cannot turn a preview into prose.
               if (documentResponse !== checkedResponse && page.url() === original && documentResponse?.status() === 200) {
                 checkedResponse = documentResponse;
                 const body = Buffer.from(await checkedResponse.buffer());
-                if (!needsLogin(body, checkedResponse.headers()['content-type'])) {
+                const nextAction = requiredAction(body, checkedResponse.headers()['content-type']);
+                if (!nextAction || nextAction.kind !== action.kind) {
                   if (readySelector) await page.waitForSelector(readySelector, {timeout: Math.min(timeoutMs, Math.max(1, deadline - Date.now()))});
+                  action = nextAction;
                   break;
                 }
               }
               await wait(200);
             }
-            lastRequest = Date.now();
-            manualAction = false;
-            if (browserOptions.minimized) await windowState('minimized');
-            onStatus?.({kind: 'active', message: '登录已完成，正在继续采集；已保存章节会自动跳过。'});
+            if (!action) {
+              lastRequest = Date.now();
+              manualAction = false;
+              if (browserOptions.minimized) await windowState('minimized');
+              onStatus?.({kind: 'active', message: '人工操作已完成，正在继续采集；已保存章节会自动跳过。'});
+            }
           }
           const sourceMode = browserOptions.responseMode === 'source';
           const url = assertUrl(page.url());
           // Some sites translate their DOM after load. Source mode preserves the server's
           // stable titles and prose while using a normal browser for the HTTP request.
           const body = sourceMode ? Buffer.from(await documentResponse.buffer()) : Buffer.from(await page.content());
+          const rejected = rejectedSelector(body, sourceMode ? documentResponse.headers()['content-type'] : 'text/html; charset=utf-8');
+          if (rejected) throw rejectedPage(rejected, original);
           if (body.length > maxBytes) throw Error('渲染页面超过大小限制');
           stats.bytes += body.length;
           const meta = {url, original, fetchedAt: new Date().toISOString(), hash: hash(body), contentType: sourceMode ? documentResponse.headers()['content-type'] || 'text/html; charset=utf-8' : 'text/html; charset=utf-8', bytes: body.length, rendered: !sourceMode, browserFetched: true};
@@ -259,6 +287,8 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
       }
       if (response.status !== 200) throw Object.assign(Error(`HTTP ${response.status}：${url}`), {stopSource: response.status === 429});
       const body = Buffer.from(response.data);
+      const rejected = rejectedSelector(body, response.headers['content-type']);
+      if (rejected) throw rejectedPage(rejected, url);
       stats.bytes += body.length;
       const meta = {url, original, fetchedAt: new Date().toISOString(), hash: hash(body), contentType: response.headers['content-type'] || '', bytes: body.length};
       atomicWrite(bodyPath, body);
@@ -267,5 +297,5 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
     }
     throw Error('重定向次数超过限制');
   }
-  return {get, assertUrl, stats, close: async () => { signal?.removeEventListener('abort', abort); await closeBrowser(); }};
+  return {get, assertUrl, stats, showBrowser, close: async () => { signal?.removeEventListener('abort', abort); await closeBrowser(); }};
 }

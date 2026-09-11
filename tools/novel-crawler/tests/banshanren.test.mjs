@@ -42,7 +42,7 @@ test('banshanren uses bare identity fields and book-specific catalogs, removes c
     assert.deepEqual(requests,[url,link(1)]);
     await assert.rejects(getCatalog({...spec,author:'另一作者'},client),/身份不匹配/);
     pages.set(link(1),'<div class="chapter_content_box"><h2>第1章 开始</h2><p>不完整的合成片段</p><div class="limit_box">阅读限制</div></div>');
-    await assert.rejects(getChapter(spec,catalog[0],new Set(),client),/验证标记/);
+    await assert.rejects(getChapter(spec,catalog[0],new Set(),client), error => error.code === 'page-restricted' && error.stopSource && error.selector === '.chapter_content_box .limit_box' && /下一步|核对/.test(error.nextStep));
   }
   assert.throws(()=>specForBook({url:site.home+'novel/alpha/101',title:'测试书',author:'甲作者'},[site]),/不是章节/);
 });

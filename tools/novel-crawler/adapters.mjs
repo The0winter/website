@@ -5,6 +5,7 @@ import {load} from 'cheerio';
 import {decode, httpUrl} from './http.mjs';
 import {atomicWrite} from './storage.mjs';
 import {checkIdentity, normalizedTitle} from './quality.mjs';
+import {rejectedPage} from './diagnostics.mjs';
 
 export function selectValue($, rule) {
   if (!rule) throw Error('缺少提取规则');
@@ -119,10 +120,11 @@ export async function getChapter(spec, chapter, catalogLinks, client) {
     if (seen.size >= (config.maxPages || 20)) throw Error('章节分页超过上限');
     if (url !== chapter.link && catalogLinks.has(url)) throw Error('章节下一页指向另一章，拒绝拼接');
     seen.add(url);
-    const response = await client.get(url, {render: (config.transport || spec.transport) === 'browser', readySelector: config.content});
+    const response = await client.get(url, {render: (config.transport || spec.transport) === 'browser', readySelector: config.content, rejectSelectors: config.rejectSelectors});
     if (response.url !== url) throw Error('章节页面发生跳转，拒绝错配正文');
     const $ = load(decode(response.body, response.contentType, spec.encoding));
-    if (config.rejectSelectors && $(config.rejectSelectors.join(',')).length) throw Error('页面含需额外适配的混淆、订阅或验证标记');
+    const rejected = config.rejectSelectors?.find(selector => $(selector).length);
+    if (rejected) throw rejectedPage(rejected, url);
     const heading = selectValue($, config.title);
     if (!title) title = heading;
     else if (normalizedTitle(heading) !== normalizedTitle(title)) throw Error('同章分页标题不一致，需要调整分页标题规则');

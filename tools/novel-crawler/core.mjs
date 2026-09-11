@@ -7,6 +7,7 @@ import {getCatalog, getChapter, getResource} from './adapters.mjs';
 import {chapterQuality, qualityReport, sampleCatalog, normalizedTitle} from './quality.mjs';
 import {formatChapterForExport} from './titles.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
+import {failureDetails} from './diagnostics.mjs';
 
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const defaultStateDir = path.join(projectRoot, '.novel-crawler');
@@ -23,10 +24,10 @@ export function validateSpec(input) {
     for (const key of ['headless', 'minimized']) if (spec.browser[key] !== undefined && typeof spec.browser[key] !== 'boolean') throw Error(`browser.${key} 必须为布尔值`);
     if (spec.browser.responseMode !== undefined && !['dom', 'source'].includes(spec.browser.responseMode)) throw Error('browser.responseMode 只支持 dom 或 source');
     if (spec.browser.manualVerificationMs !== undefined && (!Number.isInteger(spec.browser.manualVerificationMs) || spec.browser.manualVerificationMs < 1000 || spec.browser.manualVerificationMs > 600000)) throw Error('browser.manualVerificationMs 必须在 1000–600000 毫秒之间');
-    if (spec.browser.manualLogin) {
-      const login = spec.browser.manualLogin;
-      if (typeof login.selector !== 'string' || !login.selector.trim() || (login.openSelector !== undefined && (typeof login.openSelector !== 'string' || !login.openSelector.trim()))) throw Error('browser.manualLogin 需要有效的登录标记选择器');
-      if (!Number.isInteger(login.timeoutMs) || login.timeoutMs < 1000 || login.timeoutMs > 600000) throw Error('browser.manualLogin.timeoutMs 必须在 1000–600000 毫秒之间');
+    for (const key of ['manualLogin', 'manualCaptcha']) if (spec.browser[key]) {
+      const action = spec.browser[key];
+      if (typeof action.selector !== 'string' || !action.selector.trim() || (action.openSelector !== undefined && (typeof action.openSelector !== 'string' || !action.openSelector.trim()))) throw Error(`browser.${key} 需要有效的人工操作标记选择器`);
+      if (!Number.isInteger(action.timeoutMs) || action.timeoutMs < 1000 || action.timeoutMs > 600000) throw Error(`browser.${key}.timeoutMs 必须在 1000–600000 毫秒之间`);
     }
     if (spec.browser.resourceHosts !== undefined && (!Array.isArray(spec.browser.resourceHosts) || spec.browser.resourceHosts.some(host => typeof host !== 'string' || !/^[a-z0-9.-]+$/.test(host) || host.startsWith('.') || host.endsWith('.')))) throw Error('browser.resourceHosts 只能包含明确的小写资源域名');
   }
@@ -47,7 +48,7 @@ function extractionHash(spec) {
   const {delayMs, retries, timeoutMs, searchUrl, ...extraction} = spec;
   if (extraction.browser) {
     // Login waiting and subresource loading do not change source-text extraction.
-    const {manualVerificationMs, manualLogin, resourceHosts, ...browser} = extraction.browser;
+    const {manualVerificationMs, manualLogin, manualCaptcha, resourceHosts, ...browser} = extraction.browser;
     extraction.browser = browser;
   }
   return hash(extraction);
@@ -102,7 +103,7 @@ function reportMarkdown(report) {
     '## 问题分类', '',
     ...(counts.size ? [...counts].map(([code, count]) => `- ${code}：${count}`) : ['未发现已检测类别的问题。']), '',
     '编号差异保留目录标题和正文原标题；短章不删除，相似正文不自动合并。警告不等于已经确认有错误。', '',
-    ...(report.failures.length ? ['## 失败', '', ...report.failures.slice(0, 20).map(item => `- ${item.chapter ? `第 ${item.chapter} 项：` : ''}${literal(item.error)}`), ''] : []),
+    ...(report.failures.length ? ['## 失败与处理方法', '', ...report.failures.slice(0, 20).flatMap(item => [`- ${item.chapter ? `第 ${item.chapter} 项 ${literal(item.title || '')}：` : ''}${literal(item.error)}`, ...(item.url || item.link ? [`  来源：${literal(item.url || item.link)}`] : []), `  下一步：${literal(item.nextStep || failureDetails(item).nextStep)}`]), ''] : []),
     report.exportFile ? `输出文件：[${literal(path.basename(report.exportFile))}](<${report.exportFile.replaceAll('\\', '/')}>)` : '本次没有生成完整导出文件，已取得的内容保留在任务检查点中。', '',
     '完整问题清单、来源响应哈希及缺失项见同目录的 JSON 报告。', '',
   ].join('\n');
@@ -190,7 +191,7 @@ export async function acquire(input, options = {}) {
           consecutiveFailures = 0;
         } catch (error) {
           if (shouldStop()) { paused = true; break; }
-          failures.push({chapter: entry.chapter_number, title: entry.title, link: entry.link, error: error.message});
+          failures.push(failureDetails(error, {chapter: entry.chapter_number, title: entry.title, link: entry.link}));
           // Three consecutive failing pages usually mean the source has stopped serving us.
           if (error.stopSource || ++consecutiveFailures >= 3) break;
         }
@@ -220,7 +221,7 @@ export async function acquire(input, options = {}) {
     } catch (error) {
       exportFile = null;
       if (shouldStop()) paused = true;
-      else failures.push({error: error.message});
+      else failures.push(failureDetails(error));
       report = qualityReport(catalog, chapters, failures, mode);
       report.structuralPass = false;
       report.completeAgainstSource = false;

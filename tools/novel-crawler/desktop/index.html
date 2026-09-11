@@ -34,6 +34,12 @@
     <footer><span>自动检查缺章、重复、乱码等异常；已完成的章节支持续传。</span><span>不逐章调用 AI</span></footer>
     <p class="fine-print">检查基于来源目录和文本规则，不能保证源站没有删文或段落错序。</p>
   </main>
+  <dialog id="interruption-dialog" aria-labelledby="interruption-title" aria-describedby="interruption-summary">
+    <h2 id="interruption-title">采集已中断</h2>
+    <p id="interruption-summary"></p>
+    <div id="interruption-detail"></div>
+    <button id="dismiss-interruption" type="button" class="primary">知道了，查看进度</button>
+  </dialog>
   <script src="/app.js" type="module"></script>
 </body>
 </html>

@@ -166,7 +166,7 @@ test('69shuba uses book-specific full catalogs, source order and clean single-ch
     assert.deepEqual(requests, [sourceUrl, spec.catalog.url, link(1)]);
     await assert.rejects(getCatalog({...spec, author: '另一作者'}, client), /身份不匹配/);
     pages.set(link(1), '<div id="cfts"></div><div class="txtnav"><h1>验证</h1>暂不可读</div>');
-    await assert.rejects(getChapter(spec, catalog[0], new Set(), client), /验证标记/);
+    await assert.rejects(getChapter(spec, catalog[0], new Set(), client), error => error.code === 'page-restricted' && error.selector === '#cfts');
   }
   const app = await createDesktop({stateDir});
   try {
