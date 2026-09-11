@@ -81,7 +81,7 @@ test('a pointer-inert catalog backdrop still blocks the loading-to-text handoff'
   await expect(page.locator('.reader-pages-root')).toHaveAttribute('data-reader-ready', 'true');
   await page.waitForTimeout(300);
   await expect(page.locator('.chapter-loading-page')).toBeVisible();
-  await hold.evaluate(element => element.remove());
+  await hold.evaluate(element => element.parentNode?.removeChild(element));
   await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
   await expect(page.locator('.reader-text-window')).toBeVisible();
 });

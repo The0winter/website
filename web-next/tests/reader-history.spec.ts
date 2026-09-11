@@ -126,8 +126,11 @@ for (const width of [320, 390, 768, 1440]) {
     await expect(dialog).toBeVisible();
     await expect(dialog.locator('.book-catalog-chapter').first()).toBeVisible();
     expect(await snapshot()).toEqual(detailLayout);
-    await dialog.getByRole('button', {name: '倒序', exact: true}).click();
-    await expect(dialog.getByRole('button', {name: '正序', exact: true})).toBeVisible();
+    await expect(dialog.getByRole('button', {name: /正序|倒序/})).toHaveCount(0);
+    await expect(dialog.getByRole('heading', {name: '隔离测试：山海行记'})).toBeVisible();
+    expect(await dialog.locator('.book-catalog-header').evaluate(el => el.getBoundingClientRect().height)).toBeLessThanOrEqual(56);
+    await expect(dialog.locator('.book-catalog-chapter').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(dialog.locator('.book-catalog-chapter').first()).toHaveCSS('border-radius', '0px');
     await expect(dialog.locator('[aria-current="location"]')).toBeVisible();
     await page.addStyleTag({content: 'nextjs-portal{display:none!important}'});
     await page.screenshot({path: `../artifacts/catalog-unified-${width}.png`});
@@ -136,7 +139,7 @@ for (const width of [320, 390, 768, 1440]) {
   });
 }
 
-test('a long catalog retries, stays virtualized, and locates the active chapter after sorting', async ({page}) => {
+test('a long catalog retries, stays virtualized, and preserves ascending order', async ({page}) => {
   const rows = Array.from({length: 1238}, (_, index) => ({
     id: index < 12 ? (0x101 + index).toString(16).padStart(24, '0') : (0x1000 + index).toString(16).padStart(24, '0'),
     bookId: book, title: `第${index + 1}章 目录验证`, chapter_number: index + 1,
@@ -157,7 +160,7 @@ test('a long catalog retries, stays virtualized, and locates the active chapter 
   await expect(dialog.getByRole('region')).toHaveAttribute('aria-busy', 'false');
   await expect(dialog.locator('[aria-current="location"]')).toBeVisible();
   expect(await dialog.locator('.book-catalog-chapter').count()).toBeLessThan(60);
-  await dialog.getByRole('button', {name: '倒序', exact: true}).click();
+  await expect(dialog.getByRole('button', {name: /正序|倒序/})).toHaveCount(0);
   await expect(dialog.locator('.book-catalog-chapter').first().locator('span').first()).toHaveText('第1章 目录验证');
   await dialog.locator('.book-catalog-list').evaluate(el => {el.scrollTop = el.scrollHeight;});
   await expect(dialog.getByRole('link', {name: '第1238章 目录验证', exact: true})).toBeVisible();

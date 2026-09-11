@@ -675,7 +675,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
         </div>
       </div>
 
-      <BookCatalogSheet open={showAllChapters} onClose={closeBookCatalog} bookId={book.id}
+      <BookCatalogSheet open={showAllChapters} onClose={closeBookCatalog} bookId={book.id} bookTitle={book.title}
         activeChapterId={recentChapterId ?? undefined} activeChapterLabel="上次读到"
         chapters={sortedChapters} total={chapterTotal} loading={loadingChapters} error={chapterError}
         onRetry={() => setCatalogRetry(value => value + 1)}/>

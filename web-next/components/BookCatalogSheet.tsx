@@ -1,8 +1,8 @@
 'use client';
 
-import {useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore} from 'react';
-import {ArrowUpDown, X} from 'lucide-react';
-import {Virtuoso, type VirtuosoHandle} from 'react-virtuoso';
+import {useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore} from 'react';
+import {ArrowLeft} from 'lucide-react';
+import {Virtuoso} from 'react-virtuoso';
 import Link from './PrefetchLink';
 import CatalogScrollbar from './CatalogScrollbar';
 import {formatChapterTitle} from '@/lib/catalog-title';
@@ -11,9 +11,9 @@ import './book-detail.css';
 
 type CatalogChapter = {id: string; title: string; chapter_number: number};
 type Props = {
-  open: boolean; onClose: () => void; bookId: string; chapters: CatalogChapter[];
+  open: boolean; onClose: () => void; bookId: string; bookTitle: string; chapters: CatalogChapter[];
   total: number | null; loading: boolean; error: string; onRetry: () => void;
-  reversed?: boolean; onToggleOrder?: () => void; activeChapterId?: string;
+  activeChapterId?: string;
   activeChapterLabel?: string;
   onSelect?: (id: string) => void; onPrefetch?: (id: string) => void;
 };
@@ -23,28 +23,9 @@ const subscribeWidth = (notify: () => void) => {
 };
 const columnCount = () => innerWidth >= 1024 ? 3 : innerWidth >= 768 ? 2 : 1;
 
-export default function BookCatalogSheet({open, onClose, bookId, chapters, total, loading, error, onRetry, reversed = false, onToggleOrder, activeChapterId, activeChapterLabel = '正在阅读', onSelect, onPrefetch}: Props) {
+export default function BookCatalogSheet({open, onClose, bookTitle, ...props}: Props) {
   const columns = useSyncExternalStore(subscribeWidth, columnCount, () => 1);
-  const openingChapter = useSyncExternalStore(subscribeChapterEntry, () => Boolean(currentChapterEntry()?.href.startsWith(`/book/${bookId}/`)), () => false);
-  const list = useRef<VirtuosoHandle>(null);
-  const listId = useId();
-  const [scroller, setScroller] = useState<HTMLElement | null>(null);
-  const [listHeight, setListHeight] = useState(0);
-  const scrollerRef = useCallback((element: HTMLElement | Window | null) => setScroller(element instanceof HTMLElement ? element : null), []);
-  const rows = useMemo(() => {
-    const result: CatalogChapter[][] = [];
-    for (let index = 0; index < chapters.length; index += columns) result.push(chapters.slice(index, index + columns));
-    return result;
-  }, [chapters, columns]);
-  const activeIndex = chapters.findIndex(chapter => chapter.id === activeChapterId);
-  const activeRow = Math.max(0, Math.floor(activeIndex / columns));
-  useEffect(() => {
-    if (!open) return;
-    // Virtuoso must receive the new row count before locating a chapter in a
-    // later batch, especially when descending order moves it towards the end.
-    const frame = requestAnimationFrame(() => list.current?.scrollToIndex({index: activeRow, align: activeIndex >= 0 ? 'center' : 'start'}));
-    return () => cancelAnimationFrame(frame);
-  }, [open, activeRow, activeIndex, reversed]);
+  const openingChapter = useSyncExternalStore(subscribeChapterEntry, () => Boolean(currentChapterEntry()?.href.startsWith(`/book/${props.bookId}/`)), () => false);
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -55,7 +36,7 @@ export default function BookCatalogSheet({open, onClose, bookId, chapters, total
     const keyboard = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); onClose(); }
       if (event.key !== 'Tab' || !panel.current) return;
-      const items = [...panel.current.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),[tabindex="0"]')].filter(element => element.getBoundingClientRect().width > 0);
+      const items = [...panel.current.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),[tabindex="0"]')].filter(element => !element.closest('[inert]') && element.getBoundingClientRect().width > 0);
       const first = items[0], last = items[items.length - 1];
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
@@ -70,17 +51,55 @@ export default function BookCatalogSheet({open, onClose, bookId, chapters, total
   return <div className="book-catalog-overlay" data-open={open} data-chapter-entry={openingChapter} aria-hidden={!open || openingChapter} inert={!open || openingChapter} onClick={onClose}>
     <div ref={panel} role="dialog" aria-modal="true" aria-label="全部目录" className="book-catalog-sheet" onClick={event => event.stopPropagation()}>
       <header className="book-catalog-header">
-        <div><h2>全部目录</h2><p>共 {total ?? chapters.length} 章</p></div>
-        <div className="book-catalog-actions">
-          {onToggleOrder && <button className="book-catalog-order" onClick={onToggleOrder} aria-label={reversed ? '倒序' : '正序'}><ArrowUpDown size={16}/><span>{reversed ? '倒序' : '正序'}</span></button>}
-          <button onClick={onClose} aria-label="关闭目录"><X size={24}/></button>
-        </div>
+        <button className="book-catalog-back" onClick={onClose} aria-label="关闭目录"><ArrowLeft size={22}/></button>
+        <h2 title={bookTitle}>{bookTitle}</h2><p>共 {props.total ?? props.chapters.length} 章</p>
       </header>
-      <div role="region" aria-label="阅读目录" aria-busy={loading} className="book-catalog-body">
-        {loading && !chapters.length && <p role="status" className="book-catalog-message">加载目录…</p>}
+      {open && <CatalogContents key={`${props.bookId}:${columns}:${props.activeChapterId ?? ''}`} {...props} columns={columns}/>}
+    </div>
+  </div>;
+}
+
+function CatalogContents({bookId, chapters, loading, error, onRetry, activeChapterId, activeChapterLabel = '正在阅读', onSelect, onPrefetch, columns}: Omit<Props, 'open' | 'onClose' | 'bookTitle'> & {columns: number}) {
+  const listId = useId();
+  const [scroller, setScroller] = useState<HTMLElement | null>(null);
+  const [listHeight, setListHeight] = useState(0);
+  const [ready, setReady] = useState(false);
+  const scrollerRef = useCallback((element: HTMLElement | Window | null) => setScroller(element instanceof HTMLElement ? element : null), []);
+  const rows = useMemo(() => {
+    const result: CatalogChapter[][] = [];
+    for (let index = 0; index < chapters.length; index += columns) result.push(chapters.slice(index, index + columns));
+    return result;
+  }, [chapters, columns]);
+  const activeIndex = chapters.findIndex(chapter => chapter.id === activeChapterId);
+  const activeRow = Math.max(0, Math.floor(activeIndex / columns));
+  // Do not mount a list at chapter one while the remembered chapter is still
+  // in flight. A deleted/stale chapter falls back to the start once loading ends.
+  const waitingForChapter = Boolean(activeChapterId && activeIndex < 0 && (loading || error));
+  const showList = rows.length > 0 && !waitingForChapter;
+  useLayoutEffect(() => {
+    if (!scroller || !showList || ready) return;
+    let frame = 0, stableFrames = 0, previousTop = -1, previousHeight = -1;
+    const revealWhenLocated = () => {
+      const target = scroller.querySelector<HTMLElement>(activeIndex >= 0 ? '[aria-current="location"]' : '.book-catalog-chapter');
+      const viewport = scroller.getBoundingClientRect(), item = target?.closest('.book-catalog-row')?.getBoundingClientRect();
+      const maximum = scroller.scrollHeight - scroller.clientHeight;
+      const desiredTop = item ? Math.max(0, Math.min(maximum, scroller.scrollTop + item.top - viewport.top - (viewport.height - item.height) / 2)) : -1;
+      const located = item && listHeight > 0 && viewport.height > 0 && item.bottom > viewport.top && item.top < viewport.bottom
+        && (activeIndex < 0 || Math.abs(desiredTop - scroller.scrollTop) < 2)
+        && (activeRow === 0 || scroller.scrollTop + viewport.height >= activeRow * item.height);
+      stableFrames = located && scroller.scrollTop === previousTop && scroller.scrollHeight === previousHeight ? stableFrames + 1 : 0;
+      previousTop = scroller.scrollTop; previousHeight = scroller.scrollHeight;
+      if (stableFrames >= 2) setReady(true);
+      else frame = requestAnimationFrame(revealWhenLocated);
+    };
+    frame = requestAnimationFrame(revealWhenLocated);
+    return () => cancelAnimationFrame(frame);
+  }, [scroller, showList, ready, activeIndex, activeRow, listHeight]);
+  return <div role="region" aria-label="阅读目录" aria-busy={loading || (showList && !ready)} className="book-catalog-body">
+        {!error && (waitingForChapter || (loading && !chapters.length) || (showList && !ready)) && <p role="status" className="book-catalog-message book-catalog-loading">加载目录…</p>}
         {error && <p role="alert" className="book-catalog-message">{error} <button onClick={onRetry}>重试</button></p>}
         {!loading && !error && !chapters.length && <p className="book-catalog-message">暂无章节</p>}
-        {open && rows.length > 0 && <div className="book-catalog-scroll-area"><Virtuoso ref={list} id={listId} scrollerRef={scrollerRef} totalListHeightChanged={setListHeight} className="book-catalog-list" style={{height: '100%'}} data={rows}
+        {showList && <div className="book-catalog-scroll-area" data-ready={ready} aria-hidden={!ready} inert={!ready}><Virtuoso id={listId} scrollerRef={scrollerRef} totalListHeightChanged={setListHeight} className="book-catalog-list" style={{height: '100%'}} data={rows}
           initialTopMostItemIndex={{index: activeRow, align: activeIndex >= 0 ? 'center' : 'start'}}
           itemContent={(_, row) => <div className="book-catalog-row" style={{gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`}}>
             {row.map(chapter => <Link key={chapter.id} href={`/book/${bookId}/${chapter.id}`} prefetchMode="intent"
@@ -95,7 +114,5 @@ export default function BookCatalogSheet({open, onClose, bookId, chapters, total
               {chapter.id === activeChapterId && <span aria-hidden="true" className="book-catalog-progress">{activeChapterLabel}</span>}
             </Link>)}
           </div>}/><CatalogScrollbar scroller={scroller} contentHeight={listHeight} controls={listId}/></div>}
-      </div>
-    </div>
-  </div>;
+      </div>;
 }

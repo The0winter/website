@@ -107,7 +107,6 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const chapterEntry = useSyncExternalStore(subscribeChapterEntry, currentChapterEntry, serverChapterEntry);
   const entryLocked = Boolean(chapterEntry && !chapterEntry.releasing);
   const [entryKey, setEntryKey] = useState(() => currentChapterEntry()?.token || '');
-  const [catalogReversed, setCatalogReversed] = useState(true);
 
   // 导航栏显示状态 (移动端专用)
   const [mobileNav,setShowNav]=useState(false);
@@ -329,7 +328,6 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     serif: '"Songti SC", "SimSun", serif',
     kai: '"Kaiti SC", "KaiTi", serif',
   }[fontFamily];
-  const displayChapters = catalogReversed ? [...allChapters].reverse() : allChapters;
   const ReadingSurface=turnMode==='scroll'?ReaderScroll:ReaderPages;
 
 if (loading) return (
@@ -461,9 +459,8 @@ if (loading) return (
       </div>
       </div>
 
-      <BookCatalogSheet open={showCatalog} onClose={closeBookCatalog} bookId={bookId}
-        chapters={displayChapters} total={catalogTotal} loading={catalogLoading} error={catalogError}
-        reversed={catalogReversed} onToggleOrder={() => setCatalogReversed(value => !value)}
+      <BookCatalogSheet open={showCatalog} onClose={closeBookCatalog} bookId={bookId} bookTitle={book.title}
+        chapters={allChapters} total={catalogTotal} loading={catalogLoading} error={catalogError}
         activeChapterId={chapter.id} onPrefetch={prefetchChapter}
         onSelect={id => selectReaderCatalogChapter(() => goToChapter(id,true))}
         onRetry={() => { setCatalogLoading(true); setCatalogError(''); setCatalogRetry(value => value + 1); }}/>

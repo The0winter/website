@@ -26,9 +26,11 @@ test.beforeEach(async({page})=>{
   await page.route('**/*',route=>['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname)?route.continue():route.abort());
 });
 
-test('detail catalog locates remembered progress after older chapter batches arrive',async({page})=>{
-  await page.setViewportSize({width:390,height:844});
+for (const origin of ['detail', 'reader']) for (const width of [390, 1440]) test(`${origin} catalog reveals remembered progress without flashing chapter one at ${width}px`,async({page, context})=>{
+  await page.setViewportSize({width,height:844});
   await page.addInitScript(({book,chapter})=>localStorage.setItem('reader-recent-chapters:v1',JSON.stringify([[book,chapter]])),{book:String(bookId),chapter:String(chapterIds[999])});
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Emulation.setCPUThrottlingRate', {rate: 4});
   let release!:()=>void;
   const gate=new Promise<void>(resolve=>{release=resolve;});
   await page.route(`**/api/books/${bookId}/chapters*`,async route=>{
@@ -36,19 +38,74 @@ test('detail catalog locates remembered progress after older chapter batches arr
     await route.continue();
   });
   try{
-    await page.goto(`${base}/book/${bookId}`);
-    await page.getByRole('button',{name:/^目录 /}).click();
+    await page.goto(`${base}/book/${bookId}${origin === 'reader' ? `/${chapterIds[999]}` : ''}`);
+    const open = async () => {
+      if (origin === 'detail') await page.getByRole('button',{name:width < 768 ? /^目录 / : /^查看完整目录/}).click();
+      else {
+        await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
+        await page.keyboard.press('m');
+        await page.locator('.reader-tools:visible').getByRole('button',{name:'目录',exact:true}).click();
+      }
+    };
+    await page.evaluate(() => {
+      const state = {running: true, frames: [] as {currentVisible: boolean; top: number}[]};
+      Object.assign(window, {catalogOpening: state});
+      const sample = () => {
+        const area = document.querySelector('.book-catalog-overlay[data-open=true] .book-catalog-scroll-area');
+        if (area && getComputedStyle(area).opacity !== '0') {
+          const list = area.querySelector('.book-catalog-list')!, current = area.querySelector('[aria-current="location"]');
+          const viewport = list.getBoundingClientRect(), item = current?.getBoundingClientRect();
+          state.frames.push({currentVisible: Boolean(item && item.top >= viewport.top && item.bottom <= viewport.bottom), top: list.scrollTop});
+        }
+        if (state.running) requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+    await open();
     const dialog=page.getByRole('dialog',{name:'全部目录'});
     await expect(dialog.locator('[aria-current="location"]')).toHaveCount(0);
+    await expect(dialog.getByRole('status')).toHaveText('加载目录…');
+    await expect(dialog.locator('.book-catalog-chapter')).toHaveCount(0);
     release();
     const current=dialog.locator('[aria-current="location"]');
-    await expect(current).toHaveText('第1000章 目录验证上次读到');
+    await expect(current).toHaveText(`第1000章 目录验证${origin === 'detail' ? '上次读到' : '正在阅读'}`);
+    await expect(dialog.locator('.book-catalog-scroll-area')).toHaveAttribute('data-ready', 'true');
     await expect(current).toBeInViewport();
+    await expect.poll(() => page.evaluate(() => (window as unknown as {catalogOpening: {frames: unknown[]}}).catalogOpening.frames.length)).toBeGreaterThan(8);
+    const frames = await page.evaluate(() => {
+      const state = (window as unknown as {catalogOpening: {running: boolean; frames: {currentVisible: boolean; top: number}[]}}).catalogOpening;
+      state.running = false; return state.frames;
+    });
+    expect(frames.every(frame => frame.currentVisible)).toBe(true);
+    expect(Math.max(...frames.map(frame => frame.top)) - Math.min(...frames.map(frame => frame.top))).toBeLessThan(2);
     await expect(dialog.getByRole('button',{name:/正序|倒序/})).toHaveCount(0);
     await dialog.getByRole('button',{name:'关闭目录'}).click();
-    await page.getByRole('button',{name:/^目录 /}).click();
+    await open();
+    await expect(dialog.locator('.book-catalog-scroll-area')).toHaveAttribute('data-ready', 'true');
+    await expect(current).toBeInViewport();
+    await page.setViewportSize({width: width === 390 ? 1440 : 390, height: 844});
+    await expect(dialog.locator('.book-catalog-scroll-area')).toHaveAttribute('data-ready', 'true');
     await expect(current).toBeInViewport();
   }finally{release();}
+});
+
+test('a stale remembered chapter falls back to the first row after a failed catalog load is retried', async ({page}) => {
+  await page.setViewportSize({width: 390, height: 844});
+  await page.addInitScript(book => localStorage.setItem('reader-recent-chapters:v1', JSON.stringify([[book, 'deleted-chapter']])), String(bookId));
+  let fail = true;
+  await page.route(`**/api/books/${bookId}/chapters*`, route => {
+    if (fail && Number(new URL(route.request().url()).searchParams.get('page')) > 1) return route.fulfill({status: 503, json: {error: 'controlled failure'}});
+    return route.continue();
+  });
+  await page.goto(`${base}/book/${bookId}`);
+  await page.getByRole('button', {name: /^目录 /}).click();
+  const dialog = page.getByRole('dialog', {name: '全部目录'});
+  await expect(dialog.getByRole('alert')).toBeVisible();
+  await expect(dialog.locator('.book-catalog-chapter')).toHaveCount(0);
+  fail = false; await dialog.getByRole('button', {name: '重试'}).click();
+  await expect(dialog.getByRole('region')).toHaveAttribute('aria-busy', 'false');
+  await expect(dialog.getByRole('link', {name: '第1章 目录验证', exact: true})).toBeInViewport();
+  await expect(dialog.getByRole('status')).toHaveCount(0);
 });
 
 test('book statistics are complete in the first HTML and stable across hydration, paging and opening the catalog',async({browser})=>{
