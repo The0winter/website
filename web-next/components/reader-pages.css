@@ -1,7 +1,8 @@
+@import "./reader-paper.css";
+
 .reader-pages-root { --reader-muted:#968263; --reader-mark:#c3942740; color:var(--reader-ink); width:100%; }
 .reader-pages-root[data-dark=true] { --reader-muted:#999084; --reader-mark:#b798404a; }
-.reader-frame { height:100vh; height:100dvh; width:100%; max-width:var(--reader-width); margin:auto; display:flex; flex-direction:column; background-color:var(--reader-paper); position:relative; }
-.reader-frame[data-paper=true] { background-image:radial-gradient(ellipse at 25% 10%,#fff6da26,transparent 65%),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23836533' opacity='.045' filter='url(%23n)' d='M0 0h180v180H0z'/%3E%3C/svg%3E"); }
+.reader-frame { height:100vh; height:100dvh; width:100%; max-width:var(--reader-width); margin:auto; display:flex; flex-direction:column; position:relative; }
 .reader-status-top { position:absolute; z-index:45; top:0; left:0; right:0; display:flex; align-items:center; min-height:62px; padding:calc(12px + env(safe-area-inset-top)) 20px 12px; color:var(--reader-ink); background:var(--reader-paper); box-shadow:0 3px 15px #352a1812; font:13px/1.5 Arial,"Microsoft YaHei",sans-serif; transform:translateY(-110%); opacity:0; visibility:hidden; transition:transform .24s ease,opacity .2s ease,visibility .24s; }
 .reader-status-top[data-open=true] { transform:translateY(0); opacity:1; visibility:visible; }
 .reader-return { display:flex; align-items:center; min-width:0; gap:3px; min-height:32px; color:inherit; text-decoration:none; }
@@ -77,7 +78,6 @@
 .paragraph-sheet button:disabled { opacity:.4; }
 .paragraph-login { text-align:center; padding:18px; border-top:1px solid #91806a25; color:#c53f36; }
 @media(min-width:1024px) {
-  .reader-frame { border-left:1px solid #91806a25; border-right:1px solid #91806a25; }
   .reader-status-top { padding:16px 48px; }
   .reader-text-window { margin:32px 48px 0; }
   .reader-status-bottom { padding-left:48px; padding-right:48px; }

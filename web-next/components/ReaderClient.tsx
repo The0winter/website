@@ -349,8 +349,8 @@ if (loading) return (
 
   return (
     <div 
-      className="reader-entry-content min-h-screen w-full transition-colors duration-300 flex flex-col items-center"
-      data-reader-entry-key={entryKey} data-entry-pending={entryLocked} inert={entryLocked}
+      className="reader-entry-content min-h-screen w-full flex flex-col items-center"
+      data-reader-entry-key={entryKey} data-entry-pending={entryLocked} data-entry-revealing={Boolean(chapterEntry?.revealing)} inert={Boolean(chapterEntry)}
       data-reader-cache-chapters={chapterCache.size}
       data-reader-cache-books={bookCache.size}
       style={{ 

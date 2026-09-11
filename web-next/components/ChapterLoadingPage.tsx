@@ -2,7 +2,7 @@
 
 import {useEffect, useRef, useSyncExternalStore, type CSSProperties} from 'react';
 import {flushSync} from 'react-dom';
-import {beginChapterEntry, currentChapterEntry, failChapterEntry, finishChapterEntry, prepareChapterReveal, serverChapterEntry, subscribeChapterEntry} from '@/lib/chapter-entry';
+import {beginChapterEntry, currentChapterEntry, failChapterEntry, finishChapterEntry, prepareChapterReveal, showChapterText, serverChapterEntry, subscribeChapterEntry} from '@/lib/chapter-entry';
 import './chapter-loading.css';
 
 export default function ChapterLoadingPage() {
@@ -46,12 +46,13 @@ export default function ChapterLoadingPage() {
       stableFrames = layout && layout === previousLayout ? stableFrames + 1 : 0;
       previousLayout = layout || '';
       if (stableFrames >= 2) {
-        if (currentChapterEntry()?.releasing) {
+        if (currentChapterEntry()?.revealing) {
           flushSync(() => finishChapterEntry(target.token)); return;
         }
         // Unlock scrolling and commit the final reader layout while the same
         // opaque loading page remains above it. Then verify actual paint frames.
-        flushSync(() => prepareChapterReveal(target.token));
+        if (currentChapterEntry()?.releasing) flushSync(() => showChapterText(target.token));
+        else flushSync(() => prepareChapterReveal(target.token));
         stableFrames = 0; previousLayout = '';
       }
       frame = requestAnimationFrame(reveal);
@@ -90,9 +91,9 @@ export default function ChapterLoadingPage() {
     };
   }, [token]);
   if (!entry) return null;
-  const style = {'--entry-paper': entry.paper, '--entry-ink': entry.ink, '--entry-desk': entry.desk, '--entry-width': entry.width} as CSSProperties;
-  return <div ref={panel} tabIndex={-1} aria-busy={!entry.error} aria-label={`正在打开章节：${entry.title}`} className="chapter-loading-page" style={style} data-chapter-loading={entry.chapterId} data-loading-visible="true">
-    <div className="chapter-loading-sheet">
+  const style = {'--reader-paper': entry.paper, '--entry-ink': entry.ink, '--entry-desk': entry.desk, '--entry-width': entry.width} as CSSProperties;
+  return <div ref={panel} tabIndex={-1} aria-busy={!entry.error} aria-label={`正在打开章节：${entry.title}`} className="chapter-loading-page" style={style} data-chapter-loading={entry.chapterId} data-loading-visible="true" data-text-revealed={Boolean(entry.revealing)}>
+    <div className="chapter-loading-sheet" data-paper={entry.textured}>
       <div role={entry.error ? 'alert' : 'status'} aria-live="polite" className="chapter-loading-message">
         <h2>{entry.title}</h2><p>{entry.error || '正在加载'}</p>
         {entry.error && <div className="chapter-loading-actions"><button onClick={() => {beginChapterEntry(entry.href, entry.title); window.location.replace(entry.href);}}>重试</button><button onClick={() => window.history.back()}>返回</button></div>}

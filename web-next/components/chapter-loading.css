@@ -1,9 +1,19 @@
-.chapter-loading-page { position:fixed; inset:0; z-index:10001; background:var(--entry-desk); color:var(--entry-ink); touch-action:none; overflow:hidden; }
-.chapter-loading-sheet { display:flex; align-items:center; justify-content:center; height:100%; max-width:var(--entry-width); margin:auto; padding:calc(32px + env(safe-area-inset-top)) 24px calc(32px + env(safe-area-inset-bottom)); background:var(--entry-paper); }
-.chapter-loading-message { max-width:100%; text-align:center; font-family:"PingFang SC","Microsoft YaHei",sans-serif; overflow-wrap:anywhere; }
+@import "./reader-paper.css";
+/* Loading and reading share one paper finish. */
+
+.chapter-loading-page { position:fixed; inset:0; z-index:10001; background:var(--reader-paper); color:var(--entry-ink); touch-action:none; overflow:hidden; }
+.chapter-loading-sheet { position:relative; display:flex; align-items:center; justify-content:center; height:100%; max-width:var(--entry-width); margin:auto; padding:calc(32px + env(safe-area-inset-top)) 24px calc(32px + env(safe-area-inset-bottom)); }
+/* Match the reader's inner page surface, including its border inset. */
+.chapter-loading-sheet::before { content:""; position:absolute; inset:0; background:inherit; }
+.chapter-loading-message { position:relative; max-width:100%; text-align:center; font-family:"PingFang SC","Microsoft YaHei",sans-serif; overflow-wrap:anywhere; }
 .chapter-loading-message h2 { font-size:clamp(20px,4vw,28px); line-height:1.6; font-weight:600; }
 .chapter-loading-message p { margin-top:14px; font-size:15px; line-height:1.8; opacity:.65; }
 .chapter-loading-actions { display:flex; justify-content:center; gap:20px; margin-top:24px; }
 .chapter-loading-actions button { padding:8px 20px; border:1px solid currentColor; border-radius:6px; font-size:14px; }
 .reader-entry-content[data-entry-pending=true] .reader-pages-root .reader-scroll-window { overflow-y:hidden; }
-@media(max-width:767px) { .chapter-loading-sheet { max-width:none; } }
+.chapter-loading-page[data-text-revealed=true] .chapter-loading-message { visibility:hidden; }
+/* Only ink moves above the retained loading paper. Never fade an entire page:
+   its transparent midpoint would expose the darker surface underneath. */
+.reader-entry-content[data-entry-revealing=true] { position:relative; z-index:10002; background:transparent!important; }
+.reader-entry-content[data-entry-revealing=true] :is(.reader-frame,.reader-page-window,.reader-page-surface) { background:transparent!important; border-color:transparent; }
+@media(min-width:1024px) { .chapter-loading-page { background:var(--entry-desk); } }

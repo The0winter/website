@@ -2,7 +2,7 @@ import {flushSync} from 'react-dom';
 
 type ChapterEntry = {
   token: string; href: string; chapterId: string; title: string; error?: string;
-  paper: string; ink: string; desk: string; width: string; releasing?: boolean;
+  paper: string; ink: string; desk: string; width: string; textured: boolean; releasing?: boolean; revealing?: boolean;
 };
 const listeners = new Set<() => void>();
 let entry: ChapterEntry | null = null;
@@ -32,7 +32,8 @@ export function beginChapterEntry(href: string, title: string) {
   const [paper, ink, desk] = colors[theme] || colors.cream;
   const style = reader ? getComputedStyle(reader) : null;
   entry = {token: crypto.randomUUID(), href, chapterId, title, paper: style?.getPropertyValue('--reader-paper') || paper,
-    ink: style?.getPropertyValue('--reader-ink') || ink, desk, width: style?.getPropertyValue('--reader-width') || `${width}px`};
+    ink: style?.getPropertyValue('--reader-ink') || ink, desk, width: style?.getPropertyValue('--reader-width') || `${width}px`,
+    textured: reader ? reader.querySelector('.reader-frame')?.getAttribute('data-paper') === 'true' : theme === 'cream'};
   // Cancel older chapter requests before the catalog's asynchronous history pop.
   window.dispatchEvent(new Event('chapter-entry-start'));
   // Paint the opaque reading paper before Next can replace the source route.
@@ -40,7 +41,7 @@ export function beginChapterEntry(href: string, title: string) {
   return entry;
 }
 export function failChapterEntry(href: string, error: string) {
-  if (entry?.href === href) { entry = {...entry, error}; notify(); }
+  if (entry?.href === href) { entry = {...entry, error, revealing: false}; notify(); }
 }
 export function cancelChapterEntry() {
   if (!entry) return;
@@ -51,5 +52,9 @@ export function cancelChapterEntry() {
 // Removing both in one commit can expose scroll restoration or a fresh layout.
 export function prepareChapterReveal(token: string) {
   if (entry?.token === token && !entry.releasing) {entry = {...entry, releasing: true}; notify();}
+}
+// Show the actual text over the existing paper before removing the loading layer.
+export function showChapterText(token: string) {
+  if (entry?.token === token && entry.releasing) {entry = {...entry, revealing: true}; notify();}
 }
 export function finishChapterEntry(token: string) { if (entry?.token === token) cancelChapterEntry(); }

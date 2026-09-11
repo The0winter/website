@@ -1,0 +1,5 @@
+.reader-frame,.chapter-loading-sheet { background-color:var(--reader-paper); }
+.reader-frame[data-paper=true],.chapter-loading-sheet[data-paper=true] { background-image:radial-gradient(ellipse at 25% 10%,#fff6da26,transparent 65%),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23836533' opacity='.045' filter='url(%23n)' d='M0 0h180v180H0z'/%3E%3C/svg%3E"); }
+@media(min-width:1024px) {
+  .reader-frame,.chapter-loading-sheet { border-left:1px solid #91806a25; border-right:1px solid #91806a25; }
+}

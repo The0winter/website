@@ -55,6 +55,7 @@ export function freezeBookPage(className = 'book-transition-snapshot') {
     }
   });
   clone.querySelectorAll('script,iframe,.book-transition-snapshot,.chapter-entry-snapshot,.chapter-loading-page').forEach(element => element.remove());
+  clone.querySelectorAll('[data-entry-revealing]').forEach(element => element.removeAttribute('data-entry-revealing'));
   clone.style.margin = '0';
   clone.style.position = 'relative';
   clone.style.top = `${-window.scrollY}px`;
