@@ -68,6 +68,9 @@ function adapterStatus() {
   let host;
   try { host = new URL($('website').value.includes('://') ? $('website').value : `https://${$('website').value}`).hostname; } catch {}
   const found = data?.sites.find(site => site.hosts.includes(host));
+  $('login-memory').hidden = !found?.remembersLogin;
+  $('clear-login').disabled = active;
+  $('clear-login').title = found ? `清除${found.name}在拾页中的登录信息，下次重新登录；已保存章节保留` : '';
   $('adapter-status').textContent = found ? '✓ 已适配' : host ? '待适配' : '输入网址';
   $('adapter-status').className = `input-tag ${found ? 'supported' : host ? 'unsupported' : ''}`;
   $('form-note').textContent = found || !host ? '下次打开时，会保留上次使用的网站。' : '把网址发给 Codex，即可继续适配这个来源。';
@@ -119,7 +122,7 @@ function render() {
   renderSettings(); adapterStatus();
   const task = data.task;
   active = working(task.phase);
-  for (const id of ['website', 'title', 'author', 'search', 'probe-only']) $(id).disabled = active;
+  for (const id of ['website', 'title', 'author', 'search', 'probe-only', 'clear-login']) $(id).disabled = active;
   for (const button of document.querySelectorAll('.site-choice')) button.disabled = active;
   $('search').textContent = task.phase === 'search' ? '正在查找…' : '查找书籍 →';
   const actionLabel = active && {login: '等待登录', verification: '等待验证'}[task.action];
@@ -183,6 +186,13 @@ async function search(event) {
 $('search-form').addEventListener('submit', search);
 $('website').addEventListener('input', adapterStatus);
 $('website').addEventListener('change', remember);
+$('clear-login').onclick = async () => {
+  if (active) return;
+  $('clear-login').disabled = true;
+  try { const result = await api('clear-login', {website: $('website').value}); feedback(result.message); }
+  catch (error) { feedback(error.message); }
+  finally { $('clear-login').disabled = active; }
+};
 $('probe-only').addEventListener('change', () => { if (data) render(); });
 $('start').onclick = async () => { feedback(); $('start').disabled = true; try { await api('start', {url: selectedUrl, probeOnly: $('probe-only').checked}); } catch (error) { feedback(error.message); } await poll(); };
 $('pause').onclick = async () => { try { await api('pause', {}); } catch (error) { feedback(error.message); } await poll(); };

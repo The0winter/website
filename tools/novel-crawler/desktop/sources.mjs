@@ -4,6 +4,7 @@ import {load} from 'cheerio';
 import {projectRoot, defaultStateDir, validateSpec} from '../core.mjs';
 import {readJson, atomicWrite} from '../storage.mjs';
 import {makeClient, httpUrl, decode} from '../http.mjs';
+import {browserProfile} from '../browser-session.mjs';
 import {selectValue} from '../adapters.mjs';
 import {checkIdentity, normalizedTitle} from '../quality.mjs';
 import {normalizedIdentity} from '../identity.mjs';
@@ -60,7 +61,7 @@ export function fillTemplate(value, context) {
 }
 
 function makeSiteClient(site, stateDir, controls = {}) {
-  return makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: [...new Set([...site.hosts, ...(site.spec.allowedHosts || [])])], delayMs: site.spec.delayMs, timeoutMs: site.spec.timeoutMs, browser: site.spec.browser, ...controls});
+  return makeClient({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, site.home), allowedHosts: [...new Set([...site.hosts, ...(site.spec.allowedHosts || [])])], delayMs: site.spec.delayMs, timeoutMs: site.spec.timeoutMs, browser: site.spec.browser, ...controls});
 }
 
 function siteFor(website, sites) {

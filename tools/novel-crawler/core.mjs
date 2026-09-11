@@ -8,6 +8,7 @@ import {chapterQuality, qualityReport, sampleCatalog, normalizedTitle} from './q
 import {formatChapterForExport} from './titles.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
 import {failureDetails} from './diagnostics.mjs';
+import {browserProfile} from './browser-session.mjs';
 
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const defaultStateDir = path.join(projectRoot, '.novel-crawler');
@@ -144,7 +145,7 @@ export async function acquire(input, options = {}) {
     if (previousSpec && extractionHash(previousSpec) !== extractionHash(spec) && fs.existsSync(chaptersDir) && fs.readdirSync(chaptersDir).length) throw Error(`提取规则发生变化，请使用新的 --state-dir 重新试采，避免混用旧正文：${dir}`);
     atomicWrite(specFile, spec);
     const shouldStop = () => options.signal?.aborted || options.shouldStop?.();
-    const client = options.client || makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser, onStatus: options.onStatus, shouldStop, signal: options.signal});
+    const client = options.client || makeClient({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser, onStatus: options.onStatus, shouldStop, signal: options.signal});
     const initialStats = {...client.stats};
     const started = Date.now(), chapters = [], failures = [];
     let catalog = [], evidence, report, exportFile, paused = false, reusedExport = false;

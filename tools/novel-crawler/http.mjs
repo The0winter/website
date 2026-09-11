@@ -5,6 +5,7 @@ import iconv from 'iconv-lite';
 import {load} from 'cheerio';
 import {hash, atomicWrite, readJson} from './storage.mjs';
 import {rejectedPage} from './diagnostics.mjs';
+import {lockBrowserProfile, sessionCookies} from './browser-session.mjs';
 
 export function httpUrl(value, base) {
   const url = new URL(value, base);
@@ -23,7 +24,7 @@ export function decode(bytes, contentType = '', encoding) {
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal}) {
+export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, retries = 2, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal}) {
   const hosts = new Set(allowedHosts.map(h => h.toLowerCase()));
   const resourceHosts = new Set(browserOptions.resourceHosts || []);
   const actions = [
@@ -38,14 +39,26 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
   // Also space out search, detail lookup and a new worker's first request.
   let lastRequest = Date.now();
   const stats = {requests: 0, cacheHits: 0, retries: 0, bytes: 0};
-  let browser, page, closingBrowser, manualAction = false;
+  let browser, page, closingBrowser, launchPromise, releaseProfile, sessionReady = false, manualAction = false;
+  const savedCookies = profileDir ? sessionCookies(profileDir, [...hosts, ...resourceHosts]) : null;
   const stopped = () => {
     if (signal?.aborted || shouldStop?.()) throw Object.assign(Error(`任务已${signal?.aborted ? '停止' : '暂停'}，已完成的章节保留。`), {stopSource: true});
   };
   const windowClosed = () => Object.assign(Error('采集浏览器已关闭，任务已停止；已保存的章节可以继续采集。'), {stopSource: true});
   async function closeBrowser() {
     if (closingBrowser) return closingBrowser;
-    if (browser?.connected) { closingBrowser = browser.close(); await closingBrowser; }
+    closingBrowser = (async () => {
+      try {
+        // Stopping during launch must still wait for Chromium to close and flush
+        // its profile before another task can open the same site's login state.
+        if (launchPromise) await launchPromise.catch(() => {});
+        if (browser?.connected) {
+          try { if (sessionReady) await savedCookies?.save(browser.defaultBrowserContext()); }
+          finally { await browser.close(); }
+        }
+      } finally { releaseProfile?.(); releaseProfile = null; }
+    })();
+    return closingBrowser;
   }
   const abort = () => { void closeBrowser().catch(() => {}); };
   signal?.addEventListener('abort', abort, {once: true});
@@ -73,7 +86,14 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
     const candidates = [process.env.NOVEL_CRAWLER_BROWSER, ...(browserOptions.headless === false ? [...installed, puppeteer.executablePath()] : [puppeteer.executablePath(), ...installed])].filter(Boolean);
     const executablePath = candidates.find(file => fs.existsSync(file));
     if (!executablePath) throw Error('未找到浏览器；用 NOVEL_CRAWLER_BROWSER 指定 Chrome/Edge');
-    browser = await puppeteer.launch({headless: browserOptions.headless ?? true, executablePath, args: browserOptions.minimized ? ['--start-minimized'] : []});
+    stopped();
+    if (profileDir) releaseProfile = lockBrowserProfile(profileDir);
+    launchPromise = puppeteer.launch({headless: browserOptions.headless ?? true, executablePath, ...(profileDir ? {userDataDir: profileDir} : {}), args: browserOptions.minimized ? ['--start-minimized'] : []}).then(instance => { browser = instance; return instance; });
+    try { await launchPromise; }
+    catch (error) { releaseProfile?.(); releaseProfile = null; throw error; }
+    stopped();
+    await savedCookies?.restore(browser.defaultBrowserContext());
+    sessionReady = true;
     stopped();
     const pages = await browser.pages();
     page = pages[0] || await browser.newPage();
@@ -234,6 +254,7 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
           const body = sourceMode ? Buffer.from(await documentResponse.buffer()) : Buffer.from(await page.content());
           const rejected = rejectedSelector(body, sourceMode ? documentResponse.headers()['content-type'] : 'text/html; charset=utf-8');
           if (rejected) throw rejectedPage(rejected, original);
+          await savedCookies?.save(browser.defaultBrowserContext());
           if (body.length > maxBytes) throw Error('渲染页面超过大小限制');
           stats.bytes += body.length;
           const meta = {url, original, fetchedAt: new Date().toISOString(), hash: hash(body), contentType: sourceMode ? documentResponse.headers()['content-type'] || 'text/html; charset=utf-8' : 'text/html; charset=utf-8', bytes: body.length, rendered: !sourceMode, browserFetched: true};

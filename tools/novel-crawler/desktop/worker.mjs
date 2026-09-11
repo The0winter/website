@@ -2,6 +2,7 @@ import {acquire, validateSpec} from '../core.mjs';
 import path from 'node:path';
 import {makeClient} from '../http.mjs';
 import {failureDetails} from '../diagnostics.mjs';
+import {browserProfile} from '../browser-session.mjs';
 
 let paused = false, started = false, stopped = false, client;
 const controller = new AbortController();
@@ -19,7 +20,7 @@ process.on('message', async message => {
   try {
     const options = {stateDir: message.stateDir, outputDir: message.outputDir, signal: controller.signal, shouldStop: () => paused, onProgress: progress => send({type: 'progress', ...progress}), onStatus: status => send({type: 'status', ...status})};
     const spec = validateSpec(message.spec);
-    client = makeClient({cacheDir: path.join(message.stateDir, 'cache'), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, browser: spec.browser, onStatus: options.onStatus, shouldStop: options.shouldStop, signal: controller.signal});
+    client = makeClient({cacheDir: path.join(message.stateDir, 'cache'), profileDir: browserProfile(message.stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, browser: spec.browser, onStatus: options.onStatus, shouldStop: options.shouldStop, signal: controller.signal});
     options.client = client;
     send({type: 'phase', phase: 'probe'});
     let report = await acquire(spec, {...options, mode: 'probe'});
@@ -27,8 +28,14 @@ process.on('message', async message => {
       send({type: 'phase', phase: 'download'});
       report = await acquire(spec, {...options, mode: 'download'});
     }
+    // Flush login state and release the source profile before another task starts.
+    await client.close(); client = null;
     send({type: 'done', report, paused: paused || report.paused, stopped});
   } catch (error) { send({type: 'error', error: error.message, failure: failureDetails(error)}); }
-  finally { await client?.close(); process.disconnect(); }
+  finally {
+    try { await client?.close(); }
+    catch (error) { send({type: 'error', error: error.message, failure: failureDetails(error)}); }
+    process.disconnect();
+  }
 });
 process.on('disconnect', () => { paused = true; controller.abort(); });

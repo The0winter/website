@@ -6,8 +6,9 @@ import {randomBytes} from 'node:crypto';
 import {fork, spawn} from 'node:child_process';
 import {defaultStateDir, projectRoot, localBookState} from '../core.mjs';
 import {readJson, atomicWrite} from '../storage.mjs';
-import {loadSites, readSettings, rememberWebsite, searchBooks, resolveBook, specForBook} from './sources.mjs';
+import {loadSites, readSettings, rememberWebsite, searchBooks, resolveBook, specForBook, normalizeWebsite} from './sources.mjs';
 import {failureDetails} from '../diagnostics.mjs';
+import {clearBrowserSession} from '../browser-session.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const publicFiles = {'/': ['index.html', 'text/html'], '/app.css': ['app.css', 'text/css'], '/app.js': ['app.js', 'text/javascript'], '/icon.svg': ['icon.svg', 'image/svg+xml']};
@@ -65,7 +66,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
       if (req.headers['x-desktop-token'] !== token || (req.headers.origin && req.headers.origin !== `http://${expectedHost}`)) return respond(403, {error: '窗口已过期，请重新打开程序'});
       if (pathname === '/api/state' && req.method === 'GET') {
         const loaded = sites();
-        return respond(200, {settings: readSettings(stateDir), sites: loaded.sites.map(({id, name, home, hosts}) => ({id, name, home, hosts})), adapterErrors: loaded.errors, task: {...task, canShowBrowser: !!worker?.connected && busy(task) && ['login', 'verification'].includes(task.action)}, candidates, outputDir});
+        return respond(200, {settings: readSettings(stateDir), sites: loaded.sites.map(({id, name, home, hosts, spec, search, book}) => ({id, name, home, hosts, remembersLogin: [spec.transport, search?.transport, book?.transport].includes('browser')})), adapterErrors: loaded.errors, task: {...task, canShowBrowser: !!worker?.connected && busy(task) && ['login', 'verification'].includes(task.action)}, candidates, outputDir});
       }
       if (req.method !== 'POST') return respond(405, {error: '请求方式无效'});
       let raw = '';
@@ -74,6 +75,14 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
       if (closing) return respond(409, {error: '程序正在退出'});
       if (pathname === '/api/focus') { await onFocus(); return respond(200, {ok: true}); }
       if (pathname === '/api/remember') return respond(200, rememberWebsite(stateDir, input.website));
+      if (pathname === '/api/clear-login') {
+        if (busy(task) || worker || operation) return respond(409, {error: '请先停止当前任务，等待采集窗口关闭后再清除登录'});
+        const host = new URL(normalizeWebsite(input.website)).hostname;
+        const site = sites().sites.find(item => item.hosts.includes(host));
+        if (!site) throw Error('请先选择一个已适配的网站');
+        clearBrowserSession(stateDir, site.home);
+        return respond(200, {message: `已清除${site.name}在拾页中的登录状态，需要登录时会重新提示；已保存章节保留。`});
+      }
       if (pathname === '/api/search') {
         if (busy(task) || worker) return respond(409, {error: '请先停止当前任务，等待进度保存完成'});
         stopRequested = false;
