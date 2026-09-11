@@ -5,7 +5,6 @@ import MobileBottomNav from '@/components/MobileBottomNav';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image'; // 🔥 新增：用于显示网站标志
-import { useAuth } from '@/contexts/AuthContext'; // 🔥 新增：用于获取用户登录状态
 import {
   Feather,
   HelpCircle,
@@ -18,9 +17,10 @@ import {
   Sun,
   ThumbsUp,
   Type,
-  User // 🔥 新增：引入默认用户头像图标
 } from 'lucide-react';
 import { forumApi, ForumPost } from '@/lib/api';
+import '@/components/home-search-header.css';
+import './forum.css';
 
 type ThemeMode = 'light' | 'dark';
 type FeedTab = 'recommend' | 'hot' | 'follow';
@@ -78,7 +78,6 @@ function formatCount(value: number) {
 }
 
 export default function ForumPage() {
-  const { user } = useAuth(); // 🔥 新增：获取当前用户
   const [searchQuery, setSearchQuery] = useState(''); // 🔥 新增：搜索框状态
   
   const [activeTab, setActiveTab] = useState<FeedTab>('recommend');
@@ -353,57 +352,38 @@ export default function ForumPage() {
 
 return (
     <div data-forum-theme={themeMode} className={`forum-page min-h-screen ${currentTheme.bg} pb-24 md:pb-12 font-sans transition-colors duration-300`}>
-      <div
-        className={`sticky top-0 z-40 border-b backdrop-blur-md ${currentTheme.border} ${themeMode === 'light' ? 'bg-white/90' : 'bg-[#121417]/90'}`}
-      >
-        <div className="max-w-[1040px] mx-auto px-4">
-          <div className="h-14 flex items-center justify-between gap-3 md:gap-6">
-            
-            {/* 1. 左侧：网站 Logo + 返回主页链接 + 论坛标题 */}
-            <div className="flex items-center shrink-0">
-              <Link href="/" className="flex items-center transition-opacity hover:opacity-80" title="返回主站">
-                <Image src="/icon.png" alt="Logo" width={28} height={28} className="w-7 h-7 object-contain" priority />
-                <span className={`ml-2 text-lg font-black tracking-tighter ${currentTheme.textMain} hidden sm:block`}>九天</span>
-              </Link>
-              <div className={`mx-3 h-4 w-px ${themeMode === 'light' ? 'bg-gray-300' : 'bg-[#30353c]'} hidden sm:block`}></div>
-            </div>
-
-            {/* 2. 中间：带提示字样的搜索框 */}
-            <div className="flex-1 max-w-xl">
-              <form onSubmit={(e) => { e.preventDefault(); /* TODO: 此处可添加论坛专属搜索逻辑 */ }} className="relative w-full">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="搜索你想看的问题..."
-                  className={`w-full pl-9 pr-4 py-1.5 md:py-2 rounded-full text-[13px] md:text-sm border transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                    themeMode === 'light'
-                      ? 'bg-gray-100 border-transparent focus:bg-white text-gray-900 placeholder-gray-500'
-                      : 'bg-[#1f242b] border-[#343a42] text-[#f4f6f8] placeholder-[#7f8791] focus:border-[#edf1f4]'
-                  }`}
-                />
-                <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${themeMode === 'light' ? 'text-gray-500' : 'text-[#7f8791]'}`} />
-              </form>
-            </div>
-
-            {/* 3. 右侧：设置保留 + 个人主页头像入口 */}
-            <div className="relative flex items-center gap-2 md:gap-4 shrink-0" ref={settingsRef}>
+      <div className="forum-masthead">
+        <header className="mh-topbar">
+          <Link href="/" className="mh-logo" aria-label="九天小说首页"><Image src="/icon.png" alt="九天小说" width={40} height={40} sizes="40px" priority/></Link>
+          <form className="mh-search" role="search" onSubmit={event => event.preventDefault()}>
+            <Search size={19}/><input aria-label="搜索你想看的问题或文章" placeholder="搜索你想看的问题或文章" value={searchQuery} onChange={event => setSearchQuery(event.target.value)}/>
+          </form>
+        </header>
+      </div>
+      <div className={`forum-feed-toolbar ${currentTheme.card} ${currentTheme.border}`}>
+          {/* 移动端: 选项卡均分宽度; PC端(md): 恢复靠左排布 */}
+          <nav aria-label="论坛内容分类" className="-mb-px flex flex-1 min-w-0 justify-around md:justify-start items-center md:gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {TABS.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex-1 md:flex-none flex justify-center items-center shrink-0 px-3 sm:px-4 h-11 border-b-2 text-[15px] font-semibold transition-colors ${isActive ? currentTheme.tabActive : currentTheme.tabIdle}`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </nav>
+            <div className="forum-feed-settings relative flex items-center shrink-0" ref={settingsRef}>
               <button
                 onClick={() => setShowSettings((prev) => !prev)}
-                className={`p-2 transition-colors rounded-full ${showSettings ? (themeMode === 'light' ? 'bg-gray-100 text-gray-900' : 'bg-[#2f353d] text-white') : currentTheme.icon}`}
+                className={`min-h-11 min-w-11 flex items-center justify-center transition-colors rounded-full ${showSettings ? (themeMode === 'light' ? 'bg-gray-100 text-gray-900' : 'bg-[#2f353d] text-white') : currentTheme.icon}`}
                 title="阅读设置"
               >
                 <Settings className="w-5 h-5" />
               </button>
-
-              {/* 个人头像链接 */}
-              <Link href={user ? "/profile" : "/login"} className="shrink-0">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center overflow-hidden transition-transform hover:scale-105 ${
-                  themeMode === 'light' ? 'bg-gray-100 border border-gray-200' : 'bg-[#2c323a] border border-[#343a42]'
-                }`}>
-                   <User className={`h-4 w-4 ${themeMode === 'light' ? 'text-gray-500' : 'text-[#7f8791]'}`} />
-                </div>
-              </Link>
 
               {showSettings && (
                  <div className={`absolute right-0 top-12 w-64 p-4 rounded-xl border shadow-xl z-50 ${currentTheme.panel}`}>
@@ -452,24 +432,6 @@ return (
                 </div>
               )}
             </div>
-          </div>
-
-          {/* 移动端: 选项卡均分宽度; PC端(md): 恢复靠左排布 */}
-          <nav className="-mb-px flex w-full justify-around md:justify-start items-center md:gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {TABS.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 md:flex-none flex justify-center items-center shrink-0 px-3 sm:px-4 h-11 border-b-2 text-[15px] font-semibold transition-colors ${isActive ? currentTheme.tabActive : currentTheme.tabIdle}`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
       </div>
 
       {/* 移动端: px-0 满屏, mt-1 缩短间隙; PC端(md): 恢复内边距和外边距 */}
