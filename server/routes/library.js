@@ -65,10 +65,11 @@ export function libraryRoutes(app, auth) {
     const bookIds = rows.filter(row => row.book && !row.book.deletedAt).map(row => row.book._id);
     const chapterIds = rows.map(row => row.history?.chapterId).filter(Boolean);
     const [latest, progress] = await Promise.all([
-      Chapter.aggregate([{$match: {bookId: {$in: bookIds}, deletedAt: null}}, {$sort: {bookId: 1, chapter_number: -1}}, {$group: {_id: '$bookId', title: {$first: '$title'}}}]).option({maxTimeMS: 5000}),
+      Chapter.aggregate([{$match: {bookId: {$in: bookIds}, deletedAt: null}}, {$sort: {bookId: 1, chapter_number: -1}}, {$group: {_id: '$bookId', title: {$first: '$title'}, firstChapterId: {$last: '$_id'}}}]).option({maxTimeMS: 5000}),
       Chapter.find({_id: {$in: chapterIds}, deletedAt: null}).select('_id title').maxTimeMS(3000).lean(),
     ]);
     const latestByBook = new Map(latest.map(row => [String(row._id), row.title]));
+    const firstByBook = new Map(latest.map(row => [String(row._id), String(row.firstChapterId)]));
     const progressById = new Map(progress.map(row => [String(row._id), row.title]));
     res.set('Cache-Control', 'no-store').set('X-Total-Count', String(total)).json(rows.map(row => ({
       bookId: String(row.bookId),
@@ -77,6 +78,7 @@ export function libraryRoutes(app, auth) {
       lastVisitedAt: row.history?.lastVisitedAt,
       chapterId: progressById.has(String(row.history?.chapterId)) ? String(row.history.chapterId) : null,
       chapterTitle: progressById.get(String(row.history?.chapterId)),
+      firstChapterId: firstByBook.get(String(row.bookId)) || null,
       latestChapterTitle: latestByBook.get(String(row.bookId)),
     })));
   }));

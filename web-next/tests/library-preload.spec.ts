@@ -76,8 +76,6 @@ for (const tab of ['shelf', 'history']) {
     await expect(page.locator('.shelf-row h2')).toHaveText('第二页的书');
     const source = page.url();
     await page.locator('.shelf-book').click();
-    await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);
-    await page.getByRole('link', {name: '立即阅读', exact: true}).click();
     await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true'); await idle(page);
     await page.goBack(); await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);
     await page.reload(); await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);

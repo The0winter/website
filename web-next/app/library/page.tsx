@@ -5,6 +5,7 @@ import {usePathname, useRouter, useSearchParams} from 'next/navigation';
 import Link from 'next/link';
 import {ArrowUpDown, BookOpen, Check, ChevronRight, History, MoreHorizontal, Trash2} from 'lucide-react';
 import BookLink from '@/components/BookLink';
+import PrefetchLink from '@/components/PrefetchLink';
 import HomeSearchHeader from '@/components/HomeSearchHeader';
 import MobileBottomNav from '@/components/MobileBottomNav';
 import AccountLoading from '@/components/AccountLoading';
@@ -15,6 +16,7 @@ import {safeFetch} from '@/lib/request';
 import {getLibrarySnapshot, loadLibrary, removeLibraryEntries, serverLibrarySnapshot, subscribeLibrary, type LibraryEntry as Entry, type LibrarySort as Sort, type LibraryTab as Tab} from '@/lib/library-cache';
 import {syncBookRoute} from '@/lib/book-navigation';
 import {formatRelativeUpdate} from '@/lib/relative-update';
+import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import type {Book} from '@/lib/api';
 import './library.css';
 
@@ -41,6 +43,9 @@ function ShelfRow({entry, tab, managing, selected, menuOpen, onMenu, onManage, o
   onMenu: (open: boolean) => void; onManage: () => void; onSelect: () => void; onRemove: () => void;
 }) {
   const title = entry.book?.title || '作品暂不可用';
+  const recentChapter = useSyncExternalStore(subscribeReadingSession, () => lastReadChapter(entry.bookId), serverLastReadChapter);
+  const readingChapter = recentChapter || entry.chapterId || entry.firstChapterId;
+  const [readingError, setReadingError] = useState('');
   const press = useRef<{timer: ReturnType<typeof setTimeout>; x: number; y: number} | null>(null);
   const suppressClick = useRef(false);
   const menu = useRef<HTMLDivElement>(null);
@@ -76,20 +81,22 @@ function ShelfRow({entry, tab, managing, selected, menuOpen, onMenu, onManage, o
     <div className="shelf-selection" aria-hidden={!managing}>
       <button type="button" role="checkbox" className="shelf-select" aria-checked={selected} aria-label={`选择：${title}`} tabIndex={managing ? 0 : -1} disabled={!managing} onClick={onSelect}><span>{selected && <Check size={14} strokeWidth={3}/>}</span></button>
     </div>
-    <BookLink href={`/book/${entry.bookId}`} className="shelf-book" aria-label={title} aria-disabled={!entry.book && !managing} tabIndex={managing ? -1 : 0}
+    <PrefetchLink href={readingChapter ? `/book/${entry.bookId}/${readingChapter}` : `/book/${entry.bookId}`} pendingLabel="正在打开章节…" className="shelf-book" aria-label={title} aria-disabled={!entry.book && !managing} tabIndex={managing ? -1 : 0}
       onPointerDown={startPress} onPointerUp={cancelPress} onPointerCancel={cancelPress} onPointerLeave={cancelPress}
       onPointerMove={event => {if (press.current && Math.hypot(event.clientX - press.current.x, event.clientY - press.current.y) > 10) {suppressClick.current = true; cancelPress();}}}
       onContextMenu={event => event.preventDefault()} onDragStart={event => event.preventDefault()}
       onClick={event => {
         if (managing) {event.preventDefault(); onSelect();}
         else if (!entry.book) event.preventDefault();
+        else if (!readingChapter) {event.preventDefault(); setReadingError('暂无可读章节');}
       }}>
       <Cover book={entry.book}/>
       <div className="shelf-info"><h2>{title}</h2>
         <p>{entry.book ? `${entry.book.author || '未知作者'} · ${['完结', 'completed'].includes(entry.book.status || '') ? '完结' : '连载'}` : '原记录已保留，可稍后重试或移除'}</p>
         {entry.book && <><p className="shelf-progress">{entry.chapterTitle ? `读至 · ${entry.chapterTitle}` : tab === 'history' ? '已浏览 · 还未开始阅读' : '还未开始阅读'}</p><p className="shelf-update">{formatRelativeUpdate(entry.book.lastUpdated)}{entry.latestChapterTitle ? ` · ${entry.latestChapterTitle}` : ''}</p></>}
+        {readingError && <p role="status">{readingError}</p>}
       </div>
-    </BookLink>
+    </PrefetchLink>
     {!managing && <div className="shelf-more">
       <button ref={menuButton} className="shelf-more-button" aria-label={`更多：${title}`} aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuOpen ? `shelf-menu-${entry.bookId}` : undefined} onClick={event => {
         const navTop = event.currentTarget.closest('.library-page')?.querySelector('.mh-bottom')?.getBoundingClientRect().top;

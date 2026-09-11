@@ -42,6 +42,9 @@ test('library: durable progress, global sorting, pagination and private manageme
     await Bookmark.insertMany(books.map(book => ({user_id: user._id, bookId: book._id})));
     const chapter = await Chapter.create({bookId: books[0]._id, title: 'Read chapter', content: 'Private body should not appear in shelf', chapter_number: 1});
     await Chapter.create({bookId: books[0]._id, title: 'Latest chapter', content: 'More body', chapter_number: 2});
+    await Chapter.create({bookId: books[0]._id, title: 'Deleted opening', content: 'Not readable', chapter_number: 0, deletedAt: new Date()});
+    await Chapter.create({bookId: books[1]._id, title: 'Unread latest', content: 'Unread body', chapter_number: 7});
+    const unreadFirst = await Chapter.create({bookId: books[1]._id, title: 'Unread opening', content: 'Unread body', chapter_number: 2});
     const body = {bookId: String(books[0]._id), chapterId: String(chapter._id)};
     assert.equal((await request(root + '/history', 'POST', body, false)).status, 403);
     assert.equal((await request('/api/users/000000000000000000000001/library')).status, 403);
@@ -55,21 +58,26 @@ test('library: durable progress, global sorting, pagination and private manageme
     assert.equal(shelf.status, 200); assert.equal(shelf.headers.get('x-total-count'), '25');
     assert.equal(shelf.data.length, 20); assert.equal(shelf.data[0].bookId, body.bookId);
     assert.equal(shelf.data[0].chapterTitle, 'Read chapter'); assert.equal(shelf.data[0].latestChapterTitle, 'Latest chapter');
+    assert.equal(shelf.data[0].firstChapterId, String(chapter._id));
     assert.equal(JSON.stringify(shelf.data).includes('Private body'), false);
     const updated = await request(root + '/library?sort=updated');
     assert.equal(updated.data[0].bookId, String(books[24]._id));
+    assert.equal(updated.data[0].firstChapterId, null);
     const second = await request(root + '/library?sort=updated&page=2');
     assert.equal(second.data.length, 5); assert.equal(second.data[4].bookId, body.bookId);
     assert.equal((await request(root + '/library?sort=read')).data[0].bookId, body.bookId);
     // A new chapter update can move an unread book ahead of the recently read book.
     await Book.updateOne({_id: books[1]._id}, {$set: {lastUpdated: new Date(Date.now() + 1000)}});
     assert.equal((await request(root + '/library')).data[0].bookId, String(books[1]._id));
+    assert.equal((await request(root + '/library')).data[0].firstChapterId, String(unreadFirst._id));
+    assert.equal((await request(root + '/library')).data[0].chapterId, null);
     assert.equal((await request(root + '/library?sort=read')).data[0].bookId, body.bookId);
     assert.equal((await request(root + '/library?sort=invalid')).status, 400);
     assert.equal((await request(root + '/library?page=0')).status, 400);
     await Book.updateOne({_id: books[1]._id}, {$set: {deletedAt: new Date()}});
     const unavailable = (await request(root + '/library')).data[0];
     assert.equal(unavailable.book, null); assert.equal(unavailable.bookId, String(books[1]._id));
+    assert.equal(unavailable.firstChapterId, null);
     assert.equal((await request(root + '/library?tab=history')).data[0].chapterId, body.chapterId);
     await request(root + '/bookmarks/' + body.bookId, 'DELETE');
     assert.equal((await request(root + '/library?tab=history')).data.length, 1);

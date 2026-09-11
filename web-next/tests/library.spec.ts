@@ -127,9 +127,6 @@ test('real history survives reload, resumes the chapter and shelf removal preser
   await page.reload();
   await expect(page.locator('.shelf-continue')).toHaveCount(0);
   await page.locator('.shelf-book').click();
-  await expect(page.locator('.book-detail:visible')).toBeVisible();
-  await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
-  await page.locator('.read-now:visible').click();
   await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-chapter', '000000000000000000000103');
   await page.goto(base + '/library');
   await page.getByRole('button', {name: '管理', exact: true}).click();

@@ -3,7 +3,7 @@ import {safeFetch} from './request';
 
 export type LibraryTab = 'shelf' | 'history';
 export type LibrarySort = 'combined' | 'read' | 'updated';
-export type LibraryEntry = {bookId: string; book: Book | null; lastReadAt?: string; lastVisitedAt?: string; chapterId?: string; chapterTitle?: string; latestChapterTitle?: string};
+export type LibraryEntry = {bookId: string; book: Book | null; lastReadAt?: string; lastVisitedAt?: string; chapterId?: string; firstChapterId?: string | null; chapterTitle?: string; latestChapterTitle?: string};
 export type LibraryQuery = {userId: string; tab: LibraryTab; sort: LibrarySort; page: number};
 type Snapshot = {rows: LibraryEntry[] | null; total: number; error: string; updatedAt: number};
 type Record = {snapshot: Snapshot; pending?: Promise<void>; controller?: AbortController};

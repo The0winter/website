@@ -2,7 +2,7 @@
 import { safeFetch as fetch, catalogPages, type CatalogPage } from '@/lib/request';
 
 
-import { useState, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useState, useEffect, useMemo, useRef, useSyncExternalStore, useId } from 'react';
 import Link from './PrefetchLink';
 import ReadingEntryLink from './ReadingEntryLink';
 import RecordBookVisit from './RecordBookVisit';
@@ -99,6 +99,36 @@ function coverTone(bookId: string) {
   return coverTones[hash % coverTones.length];
 }
 
+function BookDescription({description}: {description: string}) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const text = useRef<HTMLDivElement>(null);
+  const id = useId();
+  useEffect(() => {
+    const element = text.current;
+    if (!element) return;
+    let active = true, frame = 0;
+    const measure = () => {
+      if (!active || !element.clientWidth) return;
+      // Compare to the collapsed four-line height even while expanded.
+      const lineHeight = parseFloat(getComputedStyle(element).lineHeight);
+      setOverflowing(element.scrollHeight > lineHeight * 4 + 1);
+    };
+    const schedule = () => {cancelAnimationFrame(frame); frame = requestAnimationFrame(measure);};
+    const observer = new ResizeObserver(schedule);
+    observer.observe(element);
+    void document.fonts.ready.then(schedule);
+    schedule();
+    return () => {active = false; observer.disconnect(); cancelAnimationFrame(frame);};
+  }, [description]);
+  return <div className="relative">
+    <div ref={text} id={id} className={`book-description text-gray-600 leading-relaxed text-sm whitespace-pre-wrap ${!expanded ? 'line-clamp-4' : ''}`}>{description || '暂无简介'}</div>
+    {overflowing && <button aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)} className="flex w-full mt-1.5 items-center justify-center text-blue-500 bg-blue-50/50 rounded py-1 text-xs font-medium active:bg-blue-100 transition-colors">
+      {expanded ? <><ChevronUp className="w-3 h-3 mr-1"/> 收起简介</> : <><ChevronDown className="w-3 h-3 mr-1"/> 展开简介</>}
+    </button>}
+  </div>;
+}
+
 export default function BookDetailClient({ initialBookData, initialCatalog, initialFirstChapterId }: BookDetailClientProps) {
   const { user } = useAuth(); 
   const router = useRouter();
@@ -131,9 +161,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
     }
   };
 
-  // 🔥 简介展开状态 (新增)
   const [communityTab, setCommunityTab] = useState<'reviews' | 'articles'>('reviews');
-  const [isDescExpanded, setIsDescExpanded] = useState(false);
 
   // --- 评论相关状态 ---
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -439,21 +467,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
             {/* 🔥 新增：手机端专属作品简介 (紧贴封面下方，支持折叠) */}
             <div className="book-intro md:hidden mt-4 pt-3 border-t border-gray-100">
-                <div className="relative">
-                    <div className={`text-gray-600 leading-relaxed text-sm whitespace-pre-wrap transition-all duration-300 ${!isDescExpanded ? 'line-clamp-4' : ''}`}>
-                        {book.description || '暂无简介'}
-                    </div>
-                    <button 
-                        onClick={() => setIsDescExpanded(!isDescExpanded)}
-                        className={`${!book.description || book.description === '暂无简介' ? 'hidden' : 'flex'} w-full mt-1.5 items-center justify-center text-blue-500 bg-blue-50/50 rounded py-1 text-xs font-medium active:bg-blue-100 transition-colors`}
-                    >
-                        {isDescExpanded ? (
-                            <><ChevronUp className="w-3 h-3 mr-1"/> 收起简介</>
-                        ) : (
-                            <><ChevronDown className="w-3 h-3 mr-1"/> 展开简介</>
-                        )}
-                    </button>
-                </div>
+                <BookDescription description={book.description}/>
             </div>
         </div>
 
