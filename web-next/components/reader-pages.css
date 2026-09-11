@@ -47,7 +47,6 @@
 .reader-mode-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
 .reader-mode-options button { min-height:38px; padding:6px 3px; font-size:12px; border:1px solid #91806a30; border-radius:7px; background:#91806a08; white-space:nowrap; }
 .reader-mode-options button[aria-pressed=true] { color:#b74435; border-color:#c65b4b; background:#c65b4b0d; }
-.reader-mode-setting p { opacity:.55; font-size:11px; line-height:1.6; margin-top:8px; }
 .reader-notice { position:absolute; bottom:65px; left:50%; transform:translateX(-50%); max-width:90%; padding:8px 14px; border-radius:8px; background:#302b25dc; color:#fff9eb; font:12px/1.6 sans-serif; text-align:center; pointer-events:none; }
 .paragraph-menu-backdrop { position:fixed; inset:0; z-index:75; }
 .paragraph-menu { position:fixed; display:flex; gap:1px; padding:5px; border-radius:9px; background:#302b25; color:#fff9eb; box-shadow:0 5px 20px #0003; }

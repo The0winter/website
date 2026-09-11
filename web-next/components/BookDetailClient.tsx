@@ -8,6 +8,7 @@ import ReadingEntryLink from './ReadingEntryLink';
 import RecordBookVisit from './RecordBookVisit';
 import BookCatalogSheet from './BookCatalogSheet';
 import {formatChapterTitle} from '@/lib/catalog-title';
+import {beginChapterEntry} from '@/lib/chapter-entry';
 import {openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import { useRouter } from 'next/navigation';
 import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, User as UserIcon, Pencil, X, ArrowUpDown, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
@@ -612,6 +613,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                             key={chapter.id}
                             href={`/book/${book.id}/${chapter.id}`}
                             prefetchMode="intent"
+                            onNavigate={() => beginChapterEntry(`/book/${book.id}/${chapter.id}`, formatChapterTitle(chapter.title, chapter.chapter_number))}
                             className={`group items-center p-2 bg-gray-50 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200 transition-all text-xs md:text-sm ${index >= 8 ? 'hidden md:flex' : 'flex'}`}
                         >
                             <span className="text-gray-700 truncate group-hover:text-blue-600 w-full">

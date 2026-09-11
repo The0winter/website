@@ -1,12 +1,13 @@
 'use client';
 
-import {useEffect, useRef, useSyncExternalStore, type CSSProperties} from 'react';
+import {useEffect, useRef, useState, useSyncExternalStore, type CSSProperties} from 'react';
 import {beginChapterEntry, currentChapterEntry, failChapterEntry, finishChapterEntry, serverChapterEntry, subscribeChapterEntry} from '@/lib/chapter-entry';
 import './chapter-loading.css';
 
 export default function ChapterLoadingPage() {
   const entry = useSyncExternalStore(subscribeChapterEntry, currentChapterEntry, serverChapterEntry);
   const token = entry?.token;
+  const [loadingToken, setLoadingToken] = useState('');
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (entry?.error) panel.current?.querySelector('button')?.focus({preventScroll: true});
@@ -15,9 +16,14 @@ export default function ChapterLoadingPage() {
     const target = currentChapterEntry();
     if (!target || target.token !== token) return;
     panel.current?.focus({preventScroll: true});
-    let frame = 0, settle = 0, inputAt = 0, disposed = false;
+    let frame = 0, settle = 0, inputAt = -Infinity, disposed = false;
     const pointers = new Set<number>();
     const ready = () => Boolean(document.querySelector(`[data-reader-entry-key="${target.token}"] [data-reader-chapter="${target.chapterId}"][data-reader-ready="true"]`));
+    // Keep a fast details -> reader navigation direct. Only a genuinely pending
+    // chapter needs a separate loading screen; gesture locking starts at once.
+    const loadingDelay = target.deferLoading ? window.setTimeout(() => {
+      if (!ready()) setLoadingToken(target.token);
+    }, 200) : undefined;
     const reveal = () => {
       window.clearTimeout(settle); cancelAnimationFrame(frame);
       if (disposed || !ready() || currentChapterEntry()?.error || pointers.size) return;
@@ -58,7 +64,7 @@ export default function ChapterLoadingPage() {
     const timeout = window.setTimeout(() => {if (!ready()) failChapterEntry(target.href, '章节暂时未能加载，请重试');}, 20000);
     reveal();
     return () => {
-      disposed = true; observer.disconnect(); window.clearTimeout(timeout); window.clearTimeout(settle); cancelAnimationFrame(frame);
+      disposed = true; observer.disconnect(); window.clearTimeout(timeout); window.clearTimeout(loadingDelay); window.clearTimeout(settle); cancelAnimationFrame(frame);
       window.removeEventListener('pointerdown', down, true); window.removeEventListener('pointerup', up, true); window.removeEventListener('pointercancel', up, true);
       window.removeEventListener('blur', releasePointers);
       window.removeEventListener('wheel', blockScroll, true); window.removeEventListener('touchmove', blockScroll, true); window.removeEventListener('keydown', keyboard, true);
@@ -66,7 +72,8 @@ export default function ChapterLoadingPage() {
   }, [token]);
   if (!entry) return null;
   const style = {'--entry-paper': entry.paper, '--entry-ink': entry.ink, '--entry-desk': entry.desk, '--entry-width': entry.width} as CSSProperties;
-  return <div ref={panel} tabIndex={-1} className="chapter-loading-page" style={style} data-chapter-loading={entry.chapterId}>
+  const visible = !entry.deferLoading || loadingToken === entry.token || Boolean(entry.error);
+  return <div ref={panel} tabIndex={-1} className="chapter-loading-page" style={style} data-chapter-loading={entry.chapterId} data-loading-visible={visible}>
     <div className="chapter-loading-sheet">
       <div role={entry.error ? 'alert' : 'status'} aria-live="polite" className="chapter-loading-message">
         <h2>{entry.title}</h2><p>{entry.error || '正在加载'}</p>

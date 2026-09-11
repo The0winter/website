@@ -1,4 +1,6 @@
 .chapter-loading-page { position:fixed; inset:0; z-index:10001; background:var(--entry-desk); color:var(--entry-ink); touch-action:none; overflow:hidden; }
+.chapter-loading-page[data-loading-visible=false] { background:transparent; }
+.chapter-loading-page[data-loading-visible=false] .chapter-loading-sheet { visibility:hidden; }
 .chapter-loading-sheet { display:flex; align-items:center; justify-content:center; height:100%; max-width:var(--entry-width); margin:auto; padding:calc(32px + env(safe-area-inset-top)) 24px calc(32px + env(safe-area-inset-bottom)); background:var(--entry-paper); }
 .chapter-loading-message { max-width:100%; text-align:center; font-family:"PingFang SC","Microsoft YaHei",sans-serif; overflow-wrap:anywhere; }
 .chapter-loading-message h2 { font-size:clamp(20px,4vw,28px); line-height:1.6; font-weight:600; }

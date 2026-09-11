@@ -1,2 +1,2 @@
 html[data-book-transition] { overflow-x: clip; }
-.book-transition-snapshot { position: fixed; inset: 0; z-index: 10000; overflow: hidden; background: #fffdf9; pointer-events: auto; contain: paint; box-shadow: -16px 0 40px #0002; }
+.book-transition-snapshot,.chapter-entry-snapshot { position: fixed; inset: 0; z-index: 10000; overflow: hidden; background: #fffdf9; pointer-events: auto; contain: paint; box-shadow: -16px 0 40px #0002; }

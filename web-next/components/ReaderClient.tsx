@@ -31,7 +31,7 @@ const turnModes=[
   {value:'vertical',label:'上下翻页',hint:'上下滑动或点击上下区域翻页，点击中央打开菜单'},
 ] as const;
 function ReaderModeSetting({value,onChange}:{value:ReaderTurnMode;onChange:(value:ReaderTurnMode)=>void}){
-  return <fieldset className="reader-mode-setting"><legend>翻页方式</legend><div className="reader-mode-options">{turnModes.map(mode=><button key={mode.value} type="button" aria-pressed={value===mode.value} onClick={()=>onChange(mode.value)}>{mode.label}</button>)}</div><p>{turnModes.find(mode=>mode.value===value)?.hint}</p></fieldset>;
+  return <fieldset className="reader-mode-setting"><legend>翻页方式</legend><div className="reader-mode-options">{turnModes.map(mode=><button key={mode.value} type="button" aria-pressed={value===mode.value} onClick={()=>onChange(mode.value)}>{mode.label}</button>)}</div></fieldset>;
 }
 
 let bgCleanupTimer: NodeJS.Timeout | null = null;
@@ -116,7 +116,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     else closeBookCatalog();
   };
   const setShowSettings = (open: boolean) => {
-    if (open) { setShowNav(false); openReaderSettings(bookId); }
+    if (open) { setShowNav(true); openReaderSettings(bookId); }
     else closeReaderSettings();
   };
   useEffect(() => {
@@ -471,7 +471,7 @@ if (loading) return (
       {/* 6. 设置弹窗 */}
       {showSettings && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setShowSettings(false)} />
+          <div data-reader-settings-backdrop className="fixed inset-0 z-40" onClick={() => { setShowSettings(false); setShowNav(false); }} />
           
           {isDesktop ? (
             // ============ 桌面端大设置面板 (保留不变) ============

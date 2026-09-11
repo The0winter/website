@@ -25,9 +25,9 @@ function waitForPage(href: string, signal: AbortSignal) {
 
 // Keep the current screen visible while Next renders and the reader measures
 // its pages. A closed shadow root isolates duplicate IDs and reader controls.
-function freezePage() {
+export function freezeBookPage(className = 'book-transition-snapshot') {
   const overlay = document.createElement('div');
-  overlay.className = 'book-transition-snapshot';
+  overlay.className = className;
   overlay.setAttribute('aria-hidden', 'true');
   overlay.inert = true;
   const shadow = overlay.attachShadow({mode: 'closed'});
@@ -48,7 +48,7 @@ function freezePage() {
       Object.assign(copy.style, {position: 'fixed', top: `${box.top}px`, left: `${box.left}px`, width: `${box.width}px`, height: `${box.height}px`, bottom: 'auto', right: 'auto', margin: '0'});
     }
   });
-  clone.querySelectorAll('script,iframe,.book-transition-snapshot').forEach(element => element.remove());
+  clone.querySelectorAll('script,iframe,.book-transition-snapshot,.chapter-entry-snapshot,.chapter-loading-page').forEach(element => element.remove());
   clone.style.margin = '0';
   clone.style.position = 'relative';
   clone.style.top = `${-window.scrollY}px`;
@@ -83,13 +83,13 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     if (!controller.signal.aborted) root.dataset.bookTransitionPhase = 'animating';
   };
-  const snapshot = freezePage();
+  const snapshot = freezeBookPage();
   let incoming: HTMLElement | undefined;
   let animation: Animation | undefined;
   skip = () => { animation?.cancel(); incoming?.remove(); snapshot.remove(); };
   void update().then(async () => {
     if (!reduced && !controller.signal.aborted) {
-      incoming = direction === 'enter' ? freezePage() : undefined;
+      incoming = direction === 'enter' ? freezeBookPage() : undefined;
       const moving = incoming ?? snapshot;
       moving.dataset.motion = direction;
       animation = moving.animate(direction === 'exit'

@@ -119,10 +119,15 @@ for (const [mode, width] of [['scroll', 390], ['horizontal', 390], ['vertical', 
     await page.goto(reader); await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
     const settings = page.getByRole('dialog', {name: '阅读设置'});
     const initialPage = await root(page).locator('[data-reader-page]').innerText();
+    await page.keyboard.press('m');
     for (let index = 0; index < 3; index++) {
-      await page.keyboard.press('m'); await page.locator('.reader-tools:visible').getByRole('button', {name: '设置', exact: true}).click();
-      await expect(settings).toBeVisible(); await page.goBack();
+      await page.locator('.reader-tools:visible').getByRole('button', {name: '设置', exact: true}).click();
+      await expect(settings).toBeVisible();
+      await expect(page.locator('.reader-tools')).toHaveAttribute('aria-hidden', 'false');
+      await expect(page.locator('.reader-status-top')).toHaveAttribute('data-open', 'true');
+      await page.goBack();
       await expect(settings).toHaveCount(0); await expect(page).toHaveURL(reader);
+      await expect(page.locator('.reader-tools')).toHaveAttribute('aria-hidden', 'false');
       await expect(root(page).locator('[data-reader-page]')).toHaveText(initialPage);
     }
     await page.goForward(); await expect(settings).toBeVisible();
