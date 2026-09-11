@@ -1,5 +1,4 @@
 'use client';
-import {useStoredState} from '@/lib/useStoredState';
 import MobileBottomNav from '@/components/MobileBottomNav';
 
 import { useEffect, useRef, useState } from 'react';
@@ -9,23 +8,16 @@ import {
   Feather,
   HelpCircle,
   MessageCircle,
-  Moon,
   Plus,
   Scroll,
   Search,
-  Settings,
-  Sun,
   ThumbsUp,
-  Type,
 } from 'lucide-react';
 import { forumApi, ForumPost } from '@/lib/api';
 import '@/components/home-search-header.css';
 import './forum.css';
 
-type ThemeMode = 'light' | 'dark';
 type FeedTab = 'recommend' | 'hot' | 'follow';
-
-const READER_SETTINGS_KEY = 'forum_reader_settings_v1';
 
 const TABS: Array<{ id: FeedTab; label: string }> = [
   { id: 'follow', label: '关注' },
@@ -41,34 +33,18 @@ const HOT_TOPICS = [
   '长期写作如何避免表达同质化？'
 ];
 
-const THEMES = {
-  light: {
-    bg: 'bg-[#f5f6f7]',
-    card: 'bg-white',
-    textMain: 'text-[#1f2329]',
-    textSub: 'text-[#646a73]',
-    border: 'border-[#e6e8eb]',
-    icon: 'text-[#8a8f98] hover:text-[#1f2329]',
-    panel: 'bg-white/95 border-[#e1e4e8] text-[#1f2329]',
-    tabActive: 'text-[#111827] border-[#111827]',
-    tabIdle: 'text-[#7a8088] border-transparent hover:text-[#1f2329]',
-    chipBg: 'bg-[#f2f4f6]',
-    chipHover: 'hover:bg-[#ebedf0]'
-  },
-  dark: {
-    bg: 'bg-[#121417]',
-    card: 'bg-[#1c2026]',
-    textMain: 'text-[#f4f6f8]',
-    textSub: 'text-[#9ea4ad]',
-    border: 'border-[#30353c]',
-    icon: 'text-[#7f8791] hover:text-[#edf1f4]',
-    panel: 'bg-[#1f242b]/95 border-[#343a42] text-[#f4f6f8]',
-    tabActive: 'text-[#edf1f4] border-[#edf1f4]',
-    tabIdle: 'text-[#8d949d] border-transparent hover:text-[#edf1f4]',
-    chipBg: 'bg-[#2a3038]',
-    chipHover: 'hover:bg-[#323942]'
-  }
+const currentTheme = {
+  bg: 'bg-[var(--home-background)]',
+  card: 'bg-[var(--home-surface)]',
+  textMain: 'text-[var(--home-text)]',
+  textSub: 'text-[var(--home-muted)]',
+  border: 'border-[var(--home-border)]',
+  tabActive: 'text-[var(--home-accent)] border-[var(--home-accent)]',
+  tabIdle: 'text-[var(--home-muted)] border-transparent hover:text-[var(--home-text)]',
+  chipBg: 'bg-[var(--home-soft)]',
+  chipHover: 'hover:bg-[var(--home-accent-soft)]',
 };
+const fontSize = 16;
 
 function formatCount(value: number) {
   if (!value) return '0';
@@ -88,15 +64,6 @@ export default function ForumPage() {
     follow: true, recommend: true, hot: true
   });
   const initializedRef = useRef(false);
-
-  // ====== 基础设置状态 ======
-  const [preferences,setPreferences]=useStoredState(READER_SETTINGS_KEY,{themeMode:'light' as ThemeMode,fontSize:16},value=>!!value&&typeof value==='object'&&'themeMode' in value&&['light','dark'].includes(String(value.themeMode))&&'fontSize' in value&&typeof value.fontSize==='number'&&value.fontSize>=14&&value.fontSize<=24);
-  const {themeMode,fontSize}=preferences;
-  const setThemeMode=(value:ThemeMode)=>setPreferences(old=>({...old,themeMode:value}));
-  const setFontSize=(value:number|((previous:number)=>number))=>setPreferences(old=>({...old,fontSize:typeof value==='function'?value(old.fontSize):value}));
-  const [showSettings, setShowSettings] = useState(false);
-  const settingsRef = useRef<HTMLDivElement>(null);
-  const currentTheme = THEMES[themeMode];
 
   // ====== 滑动轮播专属状态 ======
   const activeIndex = TABS.findIndex(t => t.id === activeTab);
@@ -119,17 +86,6 @@ export default function ForumPage() {
         setLoadingState(prev => ({ ...prev, [tab.id]: false }));
       });
     });
-  }, []);
-
-  // 2. 点击外部关闭设置面板
-  useEffect(() => {
-    const onClickOutside = (event: MouseEvent) => {
-      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
-        setShowSettings(false);
-      }
-    };
-    document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
   }, []);
 
   // ====== 移动端滑动事件处理 ======
@@ -220,7 +176,7 @@ export default function ForumPage() {
             >
               <Link href={`/forum/question/${realId}`} className="block">
                 <h2
-                  className={`font-bold leading-[1.42] tracking-tight ${currentTheme.textMain} hover:text-blue-600 transition-colors`}
+                  className={`font-bold leading-[1.42] tracking-tight ${currentTheme.textMain} hover:text-[var(--home-accent)] transition-colors`}
                   style={{ fontSize: `${fontSize + 4}px` }}
                 >
                   {post.title}
@@ -228,7 +184,7 @@ export default function ForumPage() {
               </Link>
 
               <div className="mt-3 flex items-center gap-2">
-                <div className={`w-7 h-7 rounded-full overflow-hidden flex items-center justify-center ${themeMode === 'light' ? 'bg-gray-100' : 'bg-[#2c323a]'}`}>
+                <div className={`w-7 h-7 rounded-full overflow-hidden flex items-center justify-center bg-[var(--home-soft)]`}>
                   {topReply?.author?.avatar ? (
                     <img src={topReply.author.avatar} alt="avatar" className="w-full h-full object-cover" />
                   ) : (
@@ -242,7 +198,7 @@ export default function ForumPage() {
 
               <Link href={answerLink} className="block">
                 <p
-                  className={`mt-2 leading-[1.65] line-clamp-2 md:line-clamp-3 ${currentTheme.textSub} hover:text-gray-700 transition-colors`}
+                  className={`mt-2 leading-[1.65] line-clamp-2 md:line-clamp-3 ${currentTheme.textSub} hover:text-[var(--home-text)] transition-colors`}
                   style={{ fontSize: `${fontSize}px` }}
                 >
                   {excerpt}
@@ -293,12 +249,12 @@ export default function ForumPage() {
           const heat = topReply?.votes ?? post.votes ?? 0;
           const excerpt = topReply?.content || '这个问题还没有回答，点击查看并参与讨论。';
           
-          // 排名样式：前三名使用红/橙/黄，其余使用普通颜色
+          // 前三名使用主题强调色和柔和暖色。
           const rank = index + 1;
           const rankColor = 
-            rank === 1 ? 'text-[#ff5a5a]' : 
-            rank === 2 ? 'text-[#ff9607]' : 
-            rank === 3 ? 'text-[#ffc832]' : 
+            rank === 1 ? 'text-[var(--home-accent)]' :
+            rank === 2 ? 'text-[#b38358]' :
+            rank === 3 ? 'text-[#ae946f]' :
             currentTheme.textSub;
 
           return (
@@ -315,7 +271,7 @@ export default function ForumPage() {
               <div className="flex-1 min-w-0 flex flex-col justify-between">
                 <Link href={`/forum/question/${realId}`} className="block">
                   <h2
-                    className={`font-bold leading-snug tracking-tight ${currentTheme.textMain} hover:text-blue-600 transition-colors line-clamp-2`}
+                    className={`font-bold leading-snug tracking-tight ${currentTheme.textMain} hover:text-[var(--home-accent)] transition-colors line-clamp-2`}
                     style={{ fontSize: `${fontSize + 2}px` }}
                   >
                     {post.title}
@@ -324,7 +280,7 @@ export default function ForumPage() {
 
                 <Link href={answerLink} className="block mt-1.5 md:mt-2">
                   <p
-                    className={`leading-relaxed line-clamp-1 md:line-clamp-2 ${currentTheme.textSub} hover:text-gray-700 transition-colors`}
+                    className={`leading-relaxed line-clamp-1 md:line-clamp-2 ${currentTheme.textSub} hover:text-[var(--home-text)] transition-colors`}
                     style={{ fontSize: `${fontSize - 1}px` }}
                   >
                     {excerpt}
@@ -335,10 +291,10 @@ export default function ForumPage() {
                 <div className={`mt-2.5 flex items-center gap-4 text-[13px] ${currentTheme.textSub}`}>
                   <span className="inline-flex items-center gap-1 font-medium">
                     {/* 热度火焰小图标 */}
-                    <svg className="w-3.5 h-3.5 text-red-500 fill-current" viewBox="0 0 24 24"><path d="M17.5 12.5c0 2.8-2.2 5.5-5.5 5.5s-5.5-2.7-5.5-5.5c0-2.8 5.5-8.5 5.5-8.5s5.5 5.7 5.5 8.5z" /></svg>
+                    <svg className="w-3.5 h-3.5 text-[var(--home-accent)] fill-current" viewBox="0 0 24 24"><path d="M17.5 12.5c0 2.8-2.2 5.5-5.5 5.5s-5.5-2.7-5.5-5.5c0-2.8 5.5-8.5 5.5-8.5s5.5 5.7 5.5 8.5z" /></svg>
                     {formatCount(heat)} 热度
                   </span>
-                  <button className="hover:text-gray-500 transition-colors flex items-center gap-1">
+                  <button className="hover:text-[var(--home-accent)] transition-colors flex items-center gap-1">
                     分享
                   </button>
                 </div>
@@ -351,7 +307,7 @@ export default function ForumPage() {
   };
 
 return (
-    <div data-forum-theme={themeMode} className={`forum-page min-h-screen ${currentTheme.bg} pb-24 md:pb-12 font-sans transition-colors duration-300`}>
+    <div data-forum-theme="home" className={`forum-page min-h-screen ${currentTheme.bg} pb-24 md:pb-12 font-sans transition-colors duration-300`}>
       <div className="forum-masthead">
         <header className="mh-topbar">
           <Link href="/" className="mh-logo" aria-label="九天小说首页"><Image src="/icon.png" alt="九天小说" width={40} height={40} sizes="40px" priority/></Link>
@@ -376,62 +332,6 @@ return (
               );
             })}
           </nav>
-            <div className="forum-feed-settings relative flex items-center shrink-0" ref={settingsRef}>
-              <button
-                onClick={() => setShowSettings((prev) => !prev)}
-                className={`min-h-11 min-w-11 flex items-center justify-center transition-colors rounded-full ${showSettings ? (themeMode === 'light' ? 'bg-gray-100 text-gray-900' : 'bg-[#2f353d] text-white') : currentTheme.icon}`}
-                title="阅读设置"
-              >
-                <Settings className="w-5 h-5" />
-              </button>
-
-              {showSettings && (
-                 <div className={`absolute right-0 top-12 w-64 p-4 rounded-xl border shadow-xl z-50 ${currentTheme.panel}`}>
-                  <div className="mb-4">
-                    <div className="text-xs font-bold opacity-70 mb-2 px-1">主题</div>
-                    <div className={`flex p-1 rounded-lg ${themeMode === 'light' ? 'bg-gray-100' : 'bg-white/10'}`}>
-                      <button
-                        onClick={() => setThemeMode('light')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium ${themeMode === 'light' ? 'bg-white text-black shadow-sm' : 'text-gray-400 hover:text-gray-200'}`}
-                      >
-                        <Sun className="w-4 h-4" /> 浅色
-                      </button>
-                      <button
-                        onClick={() => setThemeMode('dark')}
-                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium ${themeMode === 'dark' ? 'bg-[#333] text-white shadow-sm' : 'text-gray-400 hover:text-gray-200'}`}
-                      >
-                        <Moon className="w-4 h-4" /> 深色
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between items-center mb-2 px-1">
-                      <span className="text-xs font-bold opacity-70">字号</span>
-                      <span className="text-xs opacity-70">{fontSize}px</span>
-                    </div>
-                    <div className={`flex items-center justify-between p-2 rounded-lg ${themeMode === 'light' ? 'bg-gray-100' : 'bg-white/10'}`}>
-                      <button onClick={() => setFontSize((prev) => Math.max(14, prev - 1))} className="p-1 rounded hover:bg-black/10">
-                        <Type className="w-3 h-3" />
-                      </button>
-                      <div className="flex gap-1">
-                        {[14, 16, 18, 20, 22].map((size) => (
-                          <button
-                            key={size}
-                            onClick={() => setFontSize(size)}
-                            className={`h-2 w-2 rounded-full ${fontSize >= size ? (themeMode === 'light' ? 'bg-black' : 'bg-white') : 'bg-gray-400/40'}`}
-                            aria-label={`字号 ${size}`}
-                          />
-                        ))}
-                      </div>
-                      <button onClick={() => setFontSize((prev) => Math.min(24, prev + 1))} className="p-1 rounded hover:bg-black/10">
-                        <Type className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
       </div>
 
       {/* 移动端: px-0 满屏, mt-1 缩短间隙; PC端(md): 恢复内边距和外边距 */}
@@ -472,22 +372,22 @@ return (
                 href="/forum/create?type=question"
                 className={`flex flex-col items-center justify-center gap-2 py-4 rounded-xl transition-colors group cursor-pointer ${currentTheme.chipBg} ${currentTheme.chipHover}`}
               >
-                <HelpCircle className="w-5 h-5 text-gray-600 group-hover:text-gray-900" />
-                <span className="text-xs text-gray-600 font-medium">提问</span>
+                <HelpCircle className="w-5 h-5 text-[var(--home-muted)] group-hover:text-[var(--home-accent)]" />
+                <span className="text-xs text-[var(--home-muted)] font-medium">提问</span>
               </Link>
 
               <Link
                 href="/forum/create?type=article"
                 className={`flex flex-col items-center justify-center gap-2 py-4 rounded-xl transition-colors group cursor-pointer ${currentTheme.chipBg} ${currentTheme.chipHover}`}
               >
-                <Scroll className="w-5 h-5 text-gray-600 group-hover:text-gray-900" />
-                <span className="text-xs text-gray-600 font-medium">文章</span>
+                <Scroll className="w-5 h-5 text-[var(--home-muted)] group-hover:text-[var(--home-accent)]" />
+                <span className="text-xs text-[var(--home-muted)] font-medium">文章</span>
               </Link>
             </div>
 
             <Link
               href="/forum/create?type=article"
-              className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 bg-gray-900 text-white text-sm rounded-xl hover:bg-black transition-all shadow-md hover:shadow-lg"
+              className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 bg-[var(--home-accent)] text-white text-sm rounded-xl hover:brightness-95 transition-all shadow-sm"
             >
               <Feather className="w-3.5 h-3.5" /> 开始创作
             </Link>
@@ -498,10 +398,10 @@ return (
             <ul className="flex flex-col gap-3">
               {HOT_TOPICS.map((topic, index) => (
                 <li key={topic} className="flex items-start gap-3 cursor-pointer group">
-                  <span className={`text-[15px] font-bold w-4 text-center leading-5 ${index < 3 ? 'text-gray-900' : 'text-gray-300'}`}>
+                  <span className={`text-[15px] font-bold w-4 text-center leading-5 ${index < 3 ? 'text-[var(--home-accent)]' : 'text-[var(--home-muted)]'}`}>
                     {index + 1}
                   </span>
-                  <span className="text-[14px] text-gray-700 leading-snug group-hover:text-blue-600 group-hover:underline line-clamp-2">
+                  <span className="text-[14px] text-[var(--home-muted)] leading-snug group-hover:text-[var(--home-accent)] group-hover:underline line-clamp-2">
                     {topic}
                   </span>
                 </li>
@@ -513,7 +413,7 @@ return (
 
       <Link
         href="/forum/create?type=question"
-        className="forum-publish md:hidden fixed right-4 z-40 inline-flex items-center gap-2 rounded-full px-4 py-3 bg-[#1677ff] text-white shadow-lg shadow-blue-500/30"
+        className="forum-publish md:hidden fixed right-4 z-40 inline-flex items-center gap-2 rounded-full px-4 py-3 bg-[var(--home-accent)] text-white shadow-[0_4px_14px_var(--home-accent-soft)]"
       >
         <Plus className="w-5 h-5" />
         <span className="text-sm font-semibold">发布</span>

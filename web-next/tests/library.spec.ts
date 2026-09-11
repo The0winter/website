@@ -62,9 +62,8 @@ for (const width of [320, 390, 768, 1440]) {
       expect(Math.round(bar.y + bar.height)).toBe(844); expect(publish.y + publish.height).toBeLessThan(bar.y);
       await expect(page.locator('footer[data-site-chrome]')).toBeHidden();
       await page.screenshot({path: info.outputPath('forum.png')});
-      await page.getByRole('button', {name: '阅读设置'}).click();
-      await page.getByRole('button', {name: '深色', exact: true}).click();
-      await expect(nav).toHaveCSS('background-color', 'rgba(28, 32, 38, 0.96)');
+      await expect(page.getByRole('button', {name: '阅读设置'})).toHaveCount(0);
+      await expect(page.locator('.forum-page')).toHaveAttribute('data-forum-theme', 'home');
     } else await expect(page.getByRole('navigation', {name: '移动端主导航'})).toBeHidden();
   });
 }

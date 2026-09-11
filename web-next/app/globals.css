@@ -9,6 +9,8 @@
   --home-muted: #68717d;
   --home-border: #e4e7eb;
   --home-accent: #2563eb;
+  --home-soft: #f5f6f8;
+  --home-accent-soft: #e9effd;
 }
 
 @media (max-width: 767px) {
@@ -19,6 +21,8 @@
     --home-muted: #85786e;
     --home-border: #e8ddd3;
     --home-accent: #ce3b42;
+    --home-soft: #f7f0eb;
+    --home-accent-soft: #fae7e5;
   }
 }
 

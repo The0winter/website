@@ -1,11 +1,8 @@
-.forum-page[data-forum-theme=light] { background:var(--home-background); }
+.forum-page { background:var(--home-background); color:var(--home-text); }
 .forum-masthead { max-width:1040px; margin:auto; padding:28px 16px 0; }
 .forum-masthead .mh-topbar { max-width:680px; margin-bottom:24px; }
 .forum-masthead .mh-search { background:var(--home-surface); }
 .forum-feed-toolbar { display:flex; align-items:center; gap:8px; position:relative; z-index:40; max-width:1008px; margin:0 auto; padding:0 8px; border-bottom-width:1px; border-radius:14px 14px 0 0; }
-.forum-page[data-forum-theme=dark] .mh-search { background:#1f242b; color:#9ea4ad; }
-.forum-page[data-forum-theme=dark] .mh-search input { color:#f4f6f8; }
-.forum-page[data-forum-theme=dark] .mh-search input::placeholder { color:#9ea4ad; }
 @media (max-width:767px) {
   .forum-masthead { padding:18px 12px 0; }
   .forum-masthead .mh-topbar { margin-bottom:16px; }

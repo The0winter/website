@@ -8,11 +8,12 @@ import AdminModeNotice from '@/components/AdminModeNotice';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
-  User, Mail, LogOut, BookOpen, PenTool, Shield, Lock, 
-  X, CheckCircle2, AlertCircle, ChevronRight, Upload, Loader2, Camera 
+  Mail, LogOut, BookOpen, PenTool, Shield, Lock,
+  X, CheckCircle2, AlertCircle, ChevronRight, Loader2, Camera
 } from 'lucide-react';
 import uploadImageToCloudinary from '@/lib/upload';
 import { authApi } from '@/lib/api';
+import './profile.css';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -111,7 +112,7 @@ export default function ProfilePage() {
         } else {
             setToast({ msg: res.error || '修改失败', type: 'error' });
         }
-    } catch (err) {
+    } catch {
         setToast({ msg: '网络错误，请稍后重试', type: 'error' });
     } finally {
         setIsSubmitting(false);
@@ -136,13 +137,13 @@ export default function ProfilePage() {
   if (loading || !user) return <AccountLoading checking={loading} />;
 
 return (
-    <div className="profile-page min-h-screen bg-gray-50 font-sans">
+    <div className="profile-page min-h-screen font-sans">
       
       {/* 全局 Toast (保持不变) */}
       {toast && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-top-4 w-[90%] max-w-sm text-center">
-          <div className={`px-4 py-3 rounded-xl shadow-xl text-white font-medium flex items-center justify-center gap-2 ${
-            toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+          <div className={`px-4 py-3 rounded-xl shadow-sm border font-medium flex items-center justify-center gap-2 ${
+            toast.type === 'success' ? 'profile-toast-success' : 'profile-toast-error'
           }`}>
             {toast.type === 'success' ? <CheckCircle2 className="h-5 w-5"/> : <AlertCircle className="h-5 w-5"/>}
             {toast.msg}
@@ -150,34 +151,21 @@ return (
         </div>
       )}
 
-      {/* 主内容区域：
-          1. 移除了 py-6 px-4 等所有内边距，确保内容贴边。
-          2. 保留 max-w-2xl mx-auto 确保在大屏上居中。
-      */}
-      <div className="max-w-2xl mx-auto">
+      <div className="profile-shell max-w-2xl mx-auto">
         
-        {/* 核心大框：
-            1. 新增 min-h-screen：强制高度至少占满整个屏幕，实现“上下贯通”。
-            2. 移除 rounded-3xl：既已贯通，去掉圆角更自然（也符合“顶到边界”的视觉）。
-            3. 保留 shadow-xl 和 bg-white。
-        */}
-        <div className="bg-white min-h-screen shadow-xl overflow-hidden border-x border-gray-100">
+        <div className="profile-card overflow-hidden">
 
             {/* ================= 顶部：个人信息区域 ================= */}
             <div className="relative group/card">
                 
-                {/* 这里的代码完全保持原样，没有任何功能改动 */}
-                <div className="relative h-32 md:h-48 bg-gradient-to-b from-blue-100 to-white overflow-hidden">
-                    <div className="absolute top-0 right-0 -mt-8 -mr-8 h-48 w-48 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
-                    <div className="absolute bottom-0 left-0 -mb-8 -ml-8 h-48 w-48 bg-indigo-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse delay-1000"></div>
-                </div>
+                <div className="profile-cover relative h-32 md:h-48 overflow-hidden" />
                 
                 <div className="px-4 pb-4 md:px-8 md:pb-8 relative">
                     <div className="flex flex-col md:flex-row items-center md:items-end -mt-16 md:-mt-16 gap-4 md:gap-6 relative z-10">
                         
                         {/* 头像 */}
                         <div className="relative group/avatar shrink-0">
-                            <div className="h-24 w-24 md:h-32 md:w-32 rounded-full border-[5px] border-white bg-white shadow-md flex items-center justify-center text-3xl font-bold text-indigo-600 overflow-hidden relative z-10">
+                            <div className="profile-avatar h-24 w-24 md:h-32 md:w-32 rounded-full border-[5px] border-[var(--home-surface)] bg-[var(--home-surface)] shadow-md flex items-center justify-center text-3xl font-bold text-[var(--home-accent)] overflow-hidden relative z-10">
                                 {avatarUploading && (
                                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-20">
                                         <Loader2 className="h-8 w-8 text-white animate-spin" />
@@ -199,35 +187,35 @@ return (
                                     <Camera className="h-9 w-9 text-white opacity-0 group-hover/avatar:opacity-100 transition-all duration-300 drop-shadow-lg scale-90 group-hover/avatar:scale-100" />
                                 </label>
                             </div>
-                            <div className="absolute bottom-0 right-0 md:hidden z-30 bg-white text-blue-600 rounded-full p-2 shadow-[0_2px_8px_rgba(0,0,0,0.1)] border border-gray-50 pointer-events-none">
+                            <div className="profile-camera absolute bottom-0 right-0 md:hidden z-30 bg-[var(--home-surface)] text-[var(--home-accent)] rounded-full p-2 shadow-[0_2px_8px_rgba(0,0,0,0.1)] border border-[var(--home-border)] pointer-events-none">
                                 <Camera className="h-4 w-4" />
                             </div>
                         </div>
 
                         {/* 用户名等 */}
-                        <div className="flex-1 text-center md:text-left md:mb-4 space-y-1">
-                            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex flex-col md:flex-row items-center gap-2 font-display tracking-tight">
+                        <div className="profile-identity flex-1 text-center md:text-left md:mb-4 space-y-1">
+                            <h1 className="text-2xl md:text-3xl font-bold text-[var(--home-text)] flex flex-col md:flex-row items-center gap-2 font-display tracking-tight">
                                 {user.username}
                                 <span className={`px-2.5 py-0.5 text-xs rounded-full font-medium border flex items-center gap-1 mt-1 md:mt-0 shadow-sm ${
                                     profile?.role === 'admin'
-                                        ? 'bg-purple-50 text-purple-700 border-purple-100'
-                                        : 'bg-amber-50 text-amber-700 border-amber-100'
+                                        ? 'bg-[var(--home-accent-soft)] text-[var(--home-accent)] border-[var(--home-border)]'
+                                        : 'bg-[var(--home-soft)] text-[#96734c] border-[var(--home-border)]'
                                 }`}>
                                     {profile?.role === 'admin' ? <Shield className="h-3 w-3" /> : <PenTool className="h-3 w-3" />}
                                     {profile?.role === 'admin' ? '超级管理员' : '创作者'}
                                 </span>
                             </h1>
-                            <p className="text-gray-500 text-sm flex items-center justify-center md:justify-start gap-1.5 font-medium">
-                                <Mail className="h-3.5 w-3.5 text-gray-400" /> {user.email}
+                            <p className="text-[var(--home-muted)] text-sm flex items-center justify-center md:justify-start gap-1.5 font-medium">
+                                <Mail className="h-3.5 w-3.5 text-[var(--home-muted)]" /> {user.email}
                             </p>
                         </div>
 
                         <div className="hidden md:block md:mb-6">
                             <button 
                                 onClick={handleLogout}
-                                className="group/btn flex items-center gap-2 px-5 py-2 text-gray-500 bg-white/50 hover:bg-gray-50 border border-gray-200 hover:border-gray-300 rounded-xl transition-all text-sm font-bold shadow-sm"
+                                className="group/btn flex items-center gap-2 px-5 py-2 text-[var(--home-muted)] bg-[var(--home-surface)] hover:bg-[var(--home-soft)] border border-[var(--home-border)] hover:border-[var(--home-border)] rounded-xl transition-all text-sm font-bold shadow-sm"
                             >
-                                <LogOut className="h-4 w-4 text-gray-400 group-hover/btn:text-gray-600 transition-colors" /> 退出
+                                <LogOut className="h-4 w-4 text-[var(--home-muted)] group-hover/btn:text-[var(--home-text)] transition-colors" /> 退出
                             </button>
                         </div>
                     </div>
@@ -235,61 +223,60 @@ return (
             </div>
 
             {/* ================= 功能入口 ================= */}
-            {/* 修改：grid-cols-2 强制两列，gap-3 减小间距 */}
-            <div className="px-6 pb-2 grid grid-cols-2 gap-3 mt-4">
+            <div className="profile-shortcuts px-4 md:px-6 pb-2 grid grid-cols-2 gap-3 mt-4">
                 
-                <Link href="/library" className="group flex items-center p-3 sm:p-4 bg-slate-50/50 hover:bg-slate-100 border border-slate-100 rounded-2xl transition">
+                <Link href="/library" className="group flex items-center p-3 sm:p-4 bg-[var(--home-soft)] hover:bg-[var(--home-accent-soft)] border border-[var(--home-border)] rounded-2xl transition">
                     {/* 修改：手机端图标变小 (h-8 w-8)，右边距变小 (mr-2) */}
-                    <div className="h-8 w-8 sm:h-10 sm:w-10 bg-white text-blue-600 rounded-xl flex items-center justify-center shadow-sm border border-slate-100 mr-2 sm:mr-4 group-hover:scale-110 transition-transform shrink-0">
+                    <div className="h-8 w-8 sm:h-10 sm:w-10 bg-[var(--home-surface)] text-[var(--home-accent)] rounded-xl flex items-center justify-center shadow-sm border border-[var(--home-border)] mr-2 sm:mr-4 group-hover:scale-110 transition-transform shrink-0">
                         <BookOpen className="h-4 w-4 sm:h-5 sm:w-5" />
                     </div>
                     <div className="flex-1 min-w-0"> {/* min-w-0 防止文字撑开布局 */}
-                        <h3 className="font-bold text-slate-900 text-sm truncate">我的书架</h3>
-                        <p className="text-xs text-slate-500 truncate">阅读历史</p>
+                        <h3 className="font-bold text-[var(--home-text)] text-sm truncate">我的书架</h3>
+                        <p className="text-xs text-[var(--home-muted)] truncate">阅读历史</p>
                     </div>
                     {/* 修改：手机端隐藏箭头，节省空间 */}
-                    <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-slate-400 hidden sm:block shrink-0" />
+                    <ChevronRight className="h-4 w-4 text-[var(--home-muted)] group-hover:text-[var(--home-muted)] hidden sm:block shrink-0" />
                 </Link>
 
-                <Link href="/writer" className="group flex items-center p-3 sm:p-4 bg-slate-50/50 hover:bg-amber-50/50 border border-slate-100 hover:border-amber-100 rounded-2xl transition">
-                    <div className="h-8 w-8 sm:h-10 sm:w-10 bg-white text-amber-600 rounded-xl flex items-center justify-center shadow-sm border border-slate-100 mr-2 sm:mr-4 group-hover:scale-110 transition-transform shrink-0">
+                <Link href="/writer" className="group flex items-center p-3 sm:p-4 bg-[var(--home-soft)] hover:bg-[var(--home-accent-soft)] border border-[var(--home-border)] hover:border-[var(--home-border)] rounded-2xl transition">
+                    <div className="h-8 w-8 sm:h-10 sm:w-10 bg-[var(--home-surface)] text-[#a17d55] rounded-xl flex items-center justify-center shadow-sm border border-[var(--home-border)] mr-2 sm:mr-4 group-hover:scale-110 transition-transform shrink-0">
                         <PenTool className="h-4 w-4 sm:h-5 sm:w-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-slate-900 text-sm truncate">创作管理</h3>
-                        <p className="text-xs text-slate-500 truncate">创作中心</p>
+                        <h3 className="font-bold text-[var(--home-text)] text-sm truncate">创作管理</h3>
+                        <p className="text-xs text-[var(--home-muted)] truncate">创作中心</p>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-amber-400 hidden sm:block shrink-0" />
+                    <ChevronRight className="h-4 w-4 text-[var(--home-muted)] group-hover:text-[var(--home-muted)] hidden sm:block shrink-0" />
                 </Link>
             </div>
 
-            {adminMode && <div className="px-6 pt-4 text-gray-900"><AdminModeNotice/></div>}
+            {adminMode && <div className="px-6 pt-4 text-[var(--home-text)]"><AdminModeNotice/></div>}
 
             {/* ================= 账户安全 (保持原样) ================= */}
             <div className="mt-2">
                 <div className="px-8 py-4 flex items-center gap-2 mt-4">
-                    <Shield className="h-4 w-4 text-green-600" />
-                    <h3 className="font-bold text-gray-900 text-sm">账户安全</h3>
+                    <Shield className="h-4 w-4 text-[#6a7d60]" />
+                    <h3 className="font-bold text-[var(--home-text)] text-sm">账户安全</h3>
                 </div>
                 
-                <div className="divide-y divide-gray-50 border-t border-gray-50">
+                <div className="divide-y divide-[var(--home-border)] border-t border-[var(--home-border)]">
                     <div 
                         onClick={() => setShowPasswordModal(true)}
-                        className="flex justify-between items-center px-8 py-4 hover:bg-gray-50 transition cursor-pointer active:bg-gray-100"
+                        className="flex justify-between items-center px-8 py-4 hover:bg-[var(--home-soft)] transition cursor-pointer active:bg-[var(--home-soft)]"
                     >
                         <div>
-                            <div className="font-medium text-gray-700 text-sm">登录密码</div>
-                            <div className="text-xs text-gray-400 mt-0.5">建议定期修改密码以保护账户安全</div>
+                            <div className="font-medium text-[var(--home-text)] text-sm">登录密码</div>
+                            <div className="text-xs text-[var(--home-muted)] mt-0.5">建议定期修改密码以保护账户安全</div>
                         </div>
-                        <ChevronRight className="h-4 w-4 text-gray-300" />
+                        <ChevronRight className="h-4 w-4 text-[var(--home-muted)]" />
                     </div>
 
                     <div className="flex justify-between items-center px-8 py-4">
                         <div>
-                            <div className="font-medium text-gray-700 text-sm">绑定邮箱</div>
-                            <div className="text-xs text-gray-400 mt-0.5">{user.email}</div>
+                            <div className="font-medium text-[var(--home-text)] text-sm">绑定邮箱</div>
+                            <div className="text-xs text-[var(--home-muted)] mt-0.5">{user.email}</div>
                         </div>
-                        <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1">
+                        <span className="text-[#6a7d60] bg-[#edf1e8] px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1">
                             <CheckCircle2 className="h-3 w-3" /> 已验证
                         </span>
                     </div>
@@ -297,17 +284,17 @@ return (
             </div>
 
             {/* 移动端退出按钮 */}
-            <div className="md:hidden px-6 pb-6 pt-4">
+            <div className="profile-logout md:hidden px-6 pb-6 pt-4">
                 <button 
                     onClick={handleLogout}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 text-gray-500 bg-gray-50 border border-gray-100 rounded-xl font-medium active:bg-gray-100 transition-colors text-sm"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 text-[var(--home-muted)] bg-[var(--home-soft)] border border-[var(--home-border)] rounded-xl font-medium active:bg-[var(--home-soft)] transition-colors text-sm"
                 >
                     <LogOut className="h-4 w-4" /> 退出登录
                 </button>
             </div>
             
             {/* 版本号移到里面，避免被截断 */}
-            <p className="text-center text-gray-300 text-xs py-6">v1.0.0</p>
+            <p className="text-center text-[var(--home-muted)] text-xs py-6">v1.0.0</p>
 
         </div> {/* End of 大容器 */}
 
@@ -317,51 +304,51 @@ return (
 
       {/* ================= 修改密码 Modal (保持不变) ================= */}
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
-            <div className="bg-white w-full md:w-full md:max-w-md rounded-t-2xl md:rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 md:zoom-in-95 duration-200">
-                <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                        <Lock className="h-5 w-5 text-blue-600" /> 修改密码
+        <div role="dialog" aria-modal="true" aria-labelledby="password-title" className="profile-dialog fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
+            <div className="bg-[var(--home-surface)] w-full md:w-full md:max-w-md rounded-t-2xl md:rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 md:zoom-in-95 duration-200">
+                <div className="px-6 py-4 border-b border-[var(--home-border)] bg-[var(--home-soft)] flex justify-between items-center">
+                    <h3 id="password-title" className="text-lg font-bold text-[var(--home-text)] flex items-center gap-2">
+                        <Lock className="h-5 w-5 text-[var(--home-accent)]" /> 修改密码
                     </h3>
-                    <button onClick={() => setShowPasswordModal(false)} className="p-1 -mr-2 text-gray-400 hover:text-gray-600 transition">
+                    <button aria-label="关闭修改密码" onClick={() => setShowPasswordModal(false)} className="p-1 -mr-2 text-[var(--home-muted)] hover:text-[var(--home-text)] transition">
                         <X className="h-6 w-6" />
                     </button>
                 </div>
                 
                 <form onSubmit={handleChangePassword} className="p-6 space-y-4">
                     <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">旧密码</label>
+                        <label className="block text-sm font-bold text-[var(--home-text)] mb-1">旧密码</label>
                         <input 
                             type="password" 
                             value={oldPassword}
                             onChange={(e) => setOldPassword(e.target.value)}
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 text-sm transition"
+                            className="w-full px-4 py-3 bg-[var(--home-soft)] border border-[var(--home-border)] rounded-xl focus:bg-[var(--home-surface)] focus:ring-2 focus:ring-[var(--home-accent)] outline-none text-[var(--home-text)] text-sm transition"
                             placeholder="输入当前密码"
                             required
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">新密码</label>
+                        <label className="block text-sm font-bold text-[var(--home-text)] mb-1">新密码</label>
                         <input 
                             type="password" 
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 text-sm transition"
+                            className="w-full px-4 py-3 bg-[var(--home-soft)] border border-[var(--home-border)] rounded-xl focus:bg-[var(--home-surface)] focus:ring-2 focus:ring-[var(--home-accent)] outline-none text-[var(--home-text)] text-sm transition"
                             placeholder="设置新密码（至少8位）"
                             required
                             minLength={8}
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-1">确认新密码</label>
+                        <label className="block text-sm font-bold text-[var(--home-text)] mb-1">确认新密码</label>
                         <input 
                             type="password" 
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:bg-white focus:ring-2 outline-none text-gray-900 text-sm transition ${
+                            className={`w-full px-4 py-3 bg-[var(--home-soft)] border rounded-xl focus:bg-[var(--home-surface)] focus:ring-2 outline-none text-[var(--home-text)] text-sm transition ${
                                 confirmPassword && newPassword !== confirmPassword 
                                 ? 'border-red-300 focus:ring-red-500' 
-                                : 'border-gray-200 focus:ring-blue-500'
+                                : 'border-[var(--home-border)] focus:ring-[var(--home-accent)]'
                             }`}
                             placeholder="再次输入新密码"
                             required
@@ -376,15 +363,15 @@ return (
                         <button 
                             type="button" 
                             onClick={() => setShowPasswordModal(false)}
-                            className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition active:scale-95"
+                            className="flex-1 py-3 bg-[var(--home-soft)] text-[var(--home-text)] font-bold rounded-xl hover:bg-[var(--home-accent-soft)] transition active:scale-95"
                         >
                             取消
                         </button>
                         <button 
                             type="submit" 
                             disabled={isSubmitting}
-                            className={`flex-1 py-3 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2 active:scale-95
-                                ${isSubmitting ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 hover:shadow-blue-500/30'}
+                            className={`flex-1 py-3 text-white font-bold rounded-xl shadow-sm transition flex items-center justify-center gap-2 active:scale-95
+                                bg-[var(--home-accent)] hover:brightness-95 disabled:opacity-50 disabled:cursor-not-allowed
                             `}
                         >
                             {isSubmitting ? '处理中...' : '确认修改'}
