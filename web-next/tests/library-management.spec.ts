@@ -113,6 +113,20 @@ test('management button starts empty; back, Escape and switching tabs clear sele
   await page.goBack(); await expect(page).toHaveURL(base + '/forum');
 });
 
+test('a menu near the bottom opens above the navigation and remains clickable', async ({page}, info) => {
+  await page.setViewportSize({width: 390, height: 600});
+  const deleted = await setup(page);
+  await page.locator('.shelf-more-button').last().click();
+  const menu = (await page.getByRole('menu').boundingBox())!;
+  const nav = (await page.getByRole('navigation', {name: '移动端主导航'}).boundingBox())!;
+  expect(menu.y).toBeGreaterThanOrEqual(0);
+  expect(menu.y + menu.height).toBeLessThan(nav.y);
+  await page.screenshot({path: info.outputPath('menu-above.png')});
+  await page.getByRole('menuitem', {name: '删除', exact: true}).click();
+  await expect(page.getByRole('dialog')).toContainText('《第三本书》');
+  expect(deleted).toEqual([]);
+});
+
 test('single item deletion via the menu confirms first and handles a failed refresh', async ({page}) => {
   const deleted = await setup(page, {failRefresh: true});
   await page.getByRole('button', {name: '更多：山海行记'}).click();

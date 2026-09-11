@@ -33,6 +33,7 @@
 .shelf-more-button { display:flex; align-items:center; justify-content:center; width:44px; height:44px; color:var(--home-muted); border-radius:10px; }
 .shelf-more-button:hover,.shelf-more-button[aria-expanded=true] { background:var(--home-background); color:var(--home-text); }
 .shelf-menu { position:absolute; right:0; top:42px; width:128px; padding:5px; background:var(--home-surface); border:1px solid var(--home-border); border-radius:12px; box-shadow:0 8px 28px #241a1526; }
+.shelf-menu[data-above=true] { top:auto; bottom:42px; }
 .shelf-menu [role=menuitem] { display:flex; align-items:center; gap:12px; width:100%; min-height:44px; padding:0 14px; border-radius:7px; font-size:14px; }
 .shelf-menu [role=menuitem]:hover,.shelf-menu [role=menuitem]:focus-visible { background:var(--home-background); outline:none; }
 .shelf-menu-delete { color:#bf3b46; }

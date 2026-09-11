@@ -45,6 +45,7 @@ function ShelfRow({entry, tab, managing, selected, menuOpen, onMenu, onManage, o
   const suppressClick = useRef(false);
   const menu = useRef<HTMLDivElement>(null);
   const menuButton = useRef<HTMLButtonElement>(null);
+  const [menuAbove, setMenuAbove] = useState(false);
   function cancelPress() {if (press.current) clearTimeout(press.current.timer); press.current = null;}
   useEffect(() => {
     window.addEventListener('scroll', cancelPress, true);
@@ -90,8 +91,13 @@ function ShelfRow({entry, tab, managing, selected, menuOpen, onMenu, onManage, o
       </div>
     </BookLink>
     {!managing && <div className="shelf-more">
-      <button ref={menuButton} className="shelf-more-button" aria-label={`更多：${title}`} aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuOpen ? `shelf-menu-${entry.bookId}` : undefined} onClick={() => onMenu(!menuOpen)}><MoreHorizontal size={20}/></button>
-      {menuOpen && <div ref={menu} id={`shelf-menu-${entry.bookId}`} className="shelf-menu" role="menu" aria-label={`${title}的操作`} onBlur={event => {if (!event.currentTarget.contains(event.relatedTarget as Node) && event.relatedTarget !== menuButton.current) onMenu(false);}} onKeyDown={event => {
+      <button ref={menuButton} className="shelf-more-button" aria-label={`更多：${title}`} aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuOpen ? `shelf-menu-${entry.bookId}` : undefined} onClick={event => {
+        const navTop = event.currentTarget.closest('.library-page')?.querySelector('.mh-bottom')?.getBoundingClientRect().top;
+        const bottom = Math.min(window.innerHeight, navTop || window.innerHeight);
+        setMenuAbove(event.currentTarget.getBoundingClientRect().bottom + 112 > bottom);
+        onMenu(!menuOpen);
+      }}><MoreHorizontal size={20}/></button>
+      {menuOpen && <div ref={menu} id={`shelf-menu-${entry.bookId}`} className="shelf-menu" data-above={menuAbove} role="menu" aria-label={`${title}的操作`} onBlur={event => {if (!event.currentTarget.contains(event.relatedTarget as Node) && event.relatedTarget !== menuButton.current) onMenu(false);}} onKeyDown={event => {
         if (event.key === 'Escape') {event.preventDefault(); event.stopPropagation(); onMenu(false); menuButton.current?.focus();}
         if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
           event.preventDefault(); const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)'));
