@@ -10,6 +10,9 @@ export default function BookNavigation() {
   const router = useRouter();
   const pathname = usePathname();
   useEffect(() => installBookNavigation(router), [router]);
-  useLayoutEffect(() => { syncBookRoute(pathname); }, [pathname]);
+  useLayoutEffect(() => {
+    const search = new URLSearchParams(location.search).toString();
+    syncBookRoute(pathname + (search ? `?${search}` : ''));
+  }, [pathname]);
   return <ChapterLoadingPage/>;
 }

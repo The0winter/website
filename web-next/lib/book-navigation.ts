@@ -1,8 +1,8 @@
 import {cancelBookTransition, transitionBookPage} from './book-transition';
 import {cancelChapterEntry, currentChapterEntry} from './chapter-entry';
 
-type Route = {kind: 'home' | 'detail' | 'reader'; href: string; bookId?: string};
-type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; restoreSession?: string};
+type Route = {kind: 'home' | 'author' | 'detail' | 'reader'; href: string; bookId?: string};
+type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; restoreSession?: string; homeBrowse?: boolean};
 type Router = {push: (href: string) => void; replace: (href: string) => void};
 const listeners = new Set<() => void>();
 let router: Router | undefined;
@@ -17,7 +17,8 @@ const session = () => documentSession ??= crypto.randomUUID();
 const overlay = (entry?: Entry) => entry?.catalog ? 'catalog' : entry?.settings ? 'settings' : undefined;
 
 function routeFor(href: string): Route | undefined {
-  if (href === '/') return {kind: 'home', href};
+  if (href === '/' || href.startsWith('/?')) return {kind: 'home', href};
+  if (/^\/author\/[^/?#]+(?:\?[^#]*)?$/.test(href)) return {kind: 'author', href};
   const match = /^\/book\/([^/?#]+)(?:\/([^/?#]+))?$/.exec(href);
   if (match) return {kind: match[2] ? 'reader' : 'detail', href, bookId: match[1]};
 }
@@ -26,7 +27,7 @@ function stored(state = window.history.state): Entry | undefined {
   return entry?.version === 2 ? entry : undefined;
 }
 function entryFor(route: Route, flow = crypto.randomUUID()): Entry {
-  return {...route, version: 2, flow, level: route.kind === 'home' ? 0 : route.kind === 'detail' ? 1 : 2};
+  return {...route, version: 2, flow, level: route.kind === 'detail' ? 1 : route.kind === 'reader' ? 2 : 0};
 }
 function notify() { listeners.forEach(listener => listener()); }
 function mark(entry: Entry) {
@@ -36,6 +37,7 @@ function mark(entry: Entry) {
   entry = {...entry, restoreSession: entry.kind === 'reader' ? undefined : session()};
   const state = {...window.history.state};
   delete state.readerBook; delete state.readerReturn; delete state.catalogOpen;
+  state.homeBrowse = entry.kind === 'home' && Boolean(entry.homeBrowse);
   // Preserve Next's route tree when only annotating the current history slot.
   window.history.replaceState({...state, bookNavigation: entry}, '', entry.href);
   current = entry;
@@ -43,7 +45,8 @@ function mark(entry: Entry) {
 }
 
 export function syncBookRoute(path: string) {
-  if (path !== location.pathname) return;
+  const search = new URLSearchParams(location.search).toString();
+  if (path !== location.pathname + (search ? `?${search}` : '')) return;
   const route = routeFor(path);
   const previous = current;
   const previousPath = currentPath;
@@ -52,9 +55,11 @@ export function syncBookRoute(path: string) {
   if (pending?.href === path) { const entry = pending; pending = undefined; mark(entry); return; }
   const saved = stored();
   if (saved?.href === path) { mark(saved); return; }
-  if (route.kind === 'home') { mark(entryFor(route)); return; }
-  // A normal home -> details link already has the correct predecessor.
-  if (route.kind === 'detail' && previous?.kind === 'home' && previousPath === '/') {
+  if (route.kind === 'home' || route.kind === 'author') {
+    mark({...entryFor(route), homeBrowse: route.kind === 'home' && Boolean(window.history.state?.homeBrowse)}); return;
+  }
+  // Browse views and author pages keep their actual list as the predecessor.
+  if (route.kind === 'detail' && (previous?.kind === 'home' || previous?.kind === 'author') && previousPath === previous.href) {
     mark(entryFor(route, previous.flow)); return;
   }
   // Direct links, old reader history and entry from search/library all receive
@@ -96,8 +101,8 @@ function onPopState(event: PopStateEvent) {
   const from = current;
   const target = stored(event.state);
   if (!from || !router) return;
-  // Forward from a book page may reopen login; leave that route to Next.
-  if (/^\/(login|register)$/.test(location.pathname)) {
+  // Forward may reopen a separate author visit or login; leave that to Next.
+  if (/^\/(login|register)$/.test(location.pathname) || target?.kind === 'author' && target.flow !== from.flow) {
     if (pending) { cancelBookTransition(); pending = undefined; }
     cancelChapterEntry(); current = undefined; notify(); return;
   }
@@ -120,11 +125,12 @@ function onPopState(event: PopStateEvent) {
     window.history.replaceState({bookNavigation: current}, '', current.href);
     notify(); return;
   }
-  if (from.kind === 'home' && !forward) {
+  if ((from.kind === 'home' || from.kind === 'author') && !forward) {
     if (pending) { cancelBookTransition(); pending = undefined; }
     return;
   }
-  const destination = forward && target ? target : from.kind === 'reader'
+  const predecessor = target?.flow === from.flow && (from.kind === 'reader' && target.kind === 'detail' && target.bookId === from.bookId || from.kind === 'detail' && (target.kind === 'home' || target.kind === 'author'));
+  const destination = (forward || predecessor) && target ? target : from.kind === 'reader'
     ? entryFor({kind: 'detail', href: `/book/${from.bookId}`, bookId: from.bookId}, from.flow)
     : entryFor({kind: 'home', href: '/'}, from.flow);
   const restore = target?.href === destination.href && target.restoreSession === session() && Boolean(event.state?.__NA);
@@ -151,7 +157,7 @@ export function navigateBookLink(href: string) {
   if (current.kind === 'reader' && target.kind === 'detail' && current.bookId === target.bookId || current.kind === 'detail' && target.kind === 'home') {
     window.history.back(); return true;
   }
-  if (current.kind === 'home' && target.kind === 'detail') {
+  if ((current.kind === 'home' || current.kind === 'author') && target.kind === 'detail') {
     navigate(entryFor(target, current.flow), 'enter', false); return true;
   }
   if (current.kind === 'detail' && target.kind === 'reader' && current.bookId === target.bookId) {

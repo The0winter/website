@@ -311,8 +311,8 @@ return (
       <div className="forum-masthead">
         <header className="mh-topbar">
           <Link href="/" className="mh-logo" aria-label="九天小说首页"><Image src="/icon.png" alt="九天小说" width={40} height={40} sizes="40px" priority/></Link>
-          <form className="mh-search" role="search" onSubmit={event => event.preventDefault()}>
-            <Search size={19}/><input aria-label="搜索你想看的问题或文章" placeholder="搜索你想看的问题或文章" value={searchQuery} onChange={event => setSearchQuery(event.target.value)}/>
+          <form className="forum-search" role="search" onSubmit={event => event.preventDefault()}>
+            <Search size={19} aria-hidden="true"/><input type="search" aria-label="搜索你想看的问题或文章" placeholder="搜索问题或文章" value={searchQuery} onChange={event => setSearchQuery(event.target.value)}/>
           </form>
         </header>
       </div>

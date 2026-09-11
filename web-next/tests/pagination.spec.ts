@@ -25,7 +25,7 @@ test('category and author pages reach works beyond the first database page',asyn
     await category.getByRole('button',{name:'上一页',exact:true}).click();
     await expect(category.locator('h4')).toHaveCount(20);
     await page.goto(base+'/author/000000000000000000000001');
-    await expect(page.getByText('All Works (26)',{exact:false})).toBeVisible();
+    await expect(page.getByRole('heading',{name:/全部作品\s*（26）/})).toBeVisible();
     await page.getByRole('button',{name:'下一页',exact:true}).click();
     await expect(page.getByText('第 2 页',{exact:true})).toBeVisible();
     await expect(page.getByRole('button',{name:'下一页',exact:true})).toBeDisabled();

@@ -1,11 +1,14 @@
 .forum-page { background:var(--home-background); color:var(--home-text); }
 .forum-masthead { max-width:1040px; margin:auto; padding:28px 16px 0; }
 .forum-masthead .mh-topbar { max-width:680px; margin-bottom:24px; }
-.forum-masthead .mh-search { background:var(--home-surface); }
+.forum-search { display:flex; align-items:center; flex:1; min-width:0; gap:8px; height:44px; padding:0 14px; border:1px solid var(--home-border); border-radius:24px; background:var(--home-surface); }
+.forum-search:focus-within { border-color:var(--home-accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--home-accent) 12%,transparent); }
+.forum-search svg { flex-shrink:0; color:var(--home-muted); }
+.forum-search input { flex:1; width:100%; min-width:0; height:100%; border:0; outline:0; background:transparent; color:var(--home-text); font-size:16px; }
+.forum-search input::placeholder { color:var(--home-muted); }
 .forum-feed-toolbar { display:flex; align-items:center; gap:8px; position:relative; z-index:40; max-width:1008px; margin:0 auto; padding:0 8px; border-bottom-width:1px; border-radius:14px 14px 0 0; }
 @media (max-width:767px) {
   .forum-masthead { padding:18px 12px 0; }
   .forum-masthead .mh-topbar { margin-bottom:16px; }
   .forum-feed-toolbar { margin:0; }
-  .forum-masthead .mh-search input { font-size:13px; }
 }
