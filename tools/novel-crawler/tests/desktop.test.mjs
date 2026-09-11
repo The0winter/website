@@ -100,8 +100,29 @@ test('a search redirect to book details is matched by title and author instead o
   const site = {id: 'fixture', name: '测试来源', home: 'https://books.example/', hosts: ['books.example', '127.0.0.1'], search: {url: base + '/search/${query}', items: '.results'}, book: {urlPattern: '^/book/[0-9]+\\.html$', metadata: {title: 'h1', author: 'b'}}, spec: {delayMs: 1}};
   const options = {website: 'https://books.example/', stateDir: temp(t), sites: [site], title: '神的模仿犯'};
   assert.deepEqual(await searchBooks(options), [{title: '神的模仿犯', author: '青衫取醉', url: base + '/book/84267.html', site: '测试来源'}]);
+  assert.deepEqual(await searchBooks({...options, title: '模仿'}), await searchBooks(options));
   assert.deepEqual(await searchBooks({...options, author: '另一个作者'}), []);
   assert.deepEqual(await searchBooks({...options, title: '其他作品'}), []);
+});
+
+test('keyword searches retain partial titles, rank exact titles first, and keep author filtering strict', async t => {
+  const source = loadSites().sites.find(site => site.id === 'banshanren');
+  const card = (id, title, author) => `<li class="novel_li"><div class="title_box"><a class="title" href="/novel/${id}">${title}</a><div class="info_box">推荐度</div><div class="info_box">${author} · 连载中 · 4章</div></div></li>`;
+  const rows = [['story', '小城故事', '甲作者'], ['exact', '小城', '乙作者'], ['other', '别册小城记', '丙作者'], ['story', '小城故事', '甲作者'], ['classic', '紅樓夢', '曹雪芹'], ['unrelated', '山间故事', '甲作者']];
+  const server = http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.end(`<div class="main_box"><div class="search_tip"></div><ul class="novel_list">${rows.map(row => card(...row)).join('')}</ul></div>`);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const site = {...source, hosts: [...source.hosts, '127.0.0.1'], search: {...source.search, url: `http://127.0.0.1:${server.address().port}/search?keyword=\${query}`}, spec: {...source.spec, transport: 'http', delayMs: 1}};
+  const options = {website: site.home, title: '小城', stateDir: temp(t), sites: [site]};
+  assert.deepEqual((await searchBooks(options)).map(book => [book.title, book.author]), [['小城', '乙作者'], ['小城故事', '甲作者'], ['别册小城记', '丙作者']]);
+  assert.deepEqual((await searchBooks({...options, author: '甲作者'})).map(book => book.title), ['小城故事']);
+  assert.deepEqual(await searchBooks({...options, author: '甲作'}), []);
+  assert.deepEqual(await searchBooks({...options, title: '不存在'}), []);
+  assert.deepEqual((await searchBooks({...options, title: '《红 楼》'})).map(book => book.title), ['紅樓夢']);
+  await assert.rejects(searchBooks({...options, title: '《》'}), /有效的书名或关键词/);
 });
 
 test('shudugu details adapter handles variable book IDs and chapter pages without following the next chapter', async t => {
@@ -394,8 +415,8 @@ test('window searches, selects, downloads through worker, and shows result witho
       onStatus({kind: 'login', message: '合成测试：请在采集窗口手动登录。'});
       await new Promise(resolve => signal.addEventListener('abort', resolve, {once: true}));
     }
-    return title === book.title ? [book] : [];
-  }, prepareBook: async () => spec, open: target => { opened.push(target); return {verified: true, foreground: true}; }});
+    return book.title.includes(title) ? [book] : [];
+  }, prepareBook: async selected => { assert.equal(selected.title, book.title); assert.equal(selected.author, book.author); return spec; }, open: target => { opened.push(target); return {verified: true, foreground: true}; }});
   const executablePath = ['C:/Program Files/Google/Chrome/Application/chrome.exe', puppeteer.executablePath()].find(file => fs.existsSync(file));
   const browser = await puppeteer.launch({headless: true, executablePath});
   try {
@@ -422,7 +443,7 @@ test('window searches, selects, downloads through worker, and shows result witho
     assert.equal(await page.$eval('.site-choice', el => el.dataset.host), 'history-29.example');
     await page.click('.site-choice[data-host="ixdzs8.com"]');
     await page.waitForFunction(() => document.querySelector('.site-choice').dataset.host === 'ixdzs8.com');
-    await page.type('#title', spec.title);
+    await page.type('#title', '测试');
     await page.click('#search');
     await page.waitForSelector('.book-result');
     assert.match(await page.$eval('.book-result', el => el.textContent), /测试作者/);

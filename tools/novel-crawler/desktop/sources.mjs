@@ -104,7 +104,11 @@ export function specForBook({url, title, author, description}, sites = loadSites
 export async function searchBooks({website, title, author = '', stateDir = defaultStateDir, sites = loadSites().sites, onStatus, shouldStop, signal}) {
   website = normalizeWebsite(website);
   if (typeof title !== 'string' || !title.trim() || title.length > 200 || typeof author !== 'string' || author.length > 200) throw Error('请输入书名，书名和作者各不超过 200 字');
-  const site = siteFor(website, sites), client = makeSiteClient(site, stateDir, {onStatus, shouldStop, signal});
+  const site = siteFor(website, sites);
+  const normalize = value => normalizedIdentity(value, site.spec.identityNormalization);
+  const query = normalize(title), requestedAuthor = normalize(author);
+  if (!query) throw Error('请输入有效的书名或关键词');
+  const client = makeSiteClient(site, stateDir, {onStatus, shouldStop, signal});
   try {
     if (new URL(website).pathname !== '/') {
       bookUrl(website, site);
@@ -123,8 +127,9 @@ export async function searchBooks({website, title, author = '', stateDir = defau
       seen.add(url);
       const response = await client.get(url, {fresh: true, render: (site.search.transport || site.spec.transport) === 'browser', readySelector: site.search.readySelector});
       const parsed = parseSearch(decode(response.body, response.contentType, site.spec.encoding), response.url, site);
-      const normalize = value => normalizedIdentity(value, site.spec.identityNormalization);
-      const matches = parsed.results.filter(b => normalize(b.title) === normalize(title) && (!author.trim() || normalize(b.author) === normalize(author)));
+      // Search accepts title fragments; collection still verifies the selected book's full identity.
+      const matches = parsed.results.filter(b => normalize(b.title).includes(query) && (!author.trim() || normalize(b.author) === requestedAuthor));
+      matches.sort((a, b) => Number(normalize(b.title) === query) - Number(normalize(a.title) === query));
       if (matches.length) return [...new Map(matches.map(b => [b.url, b])).values()];
       url = parsed.next;
     }
