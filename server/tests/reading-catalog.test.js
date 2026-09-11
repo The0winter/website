@@ -46,6 +46,7 @@ test('catalog pages and full-book statistics stay complete, bounded and metadata
     const window = await windowResponse.json();
     assert.equal(windowResponse.status, 200);
     assert.equal(window.total, 404); assert.equal(window.activeIndex, 348);
+    assert.deepEqual(window.volumes, [{id: all[0].id, title: '正文', start: 0, count: 404}]);
     assert.equal(window.rows[window.activeIndex - window.offset].id, anchor.id);
     assert.deepEqual(window.rows.map(row => row.id), all.slice(window.offset, window.offset + window.rows.length).map(row => row.id));
     for (const row of window.rows) assert.deepEqual(Object.keys(row).sort(), ['chapter_number','id','title']);
@@ -54,11 +55,19 @@ test('catalog pages and full-book statistics stay complete, bounded and metadata
     assert.equal((await fetch(windowUrl + '?limit=2049')).status, 400);
     assert.equal((await fetch(windowUrl + '?offset=-1')).status, 400);
     assert.equal((await fetch(windowUrl + '?anchor=invalid')).status, 400);
+    await Chapter.updateOne({bookId: book._id, chapter_number: 1}, {$set: {title: '第一卷 起点 第1章 开始'}});
+    await Chapter.updateOne({bookId: book._id, chapter_number: 101}, {$set: {title: '第二卷 远行 第1章 开始'}});
+    await Chapter.updateOne({bookId: book._id, chapter_number: 301}, {$set: {title: '第三卷 番外 第1章 重逢'}});
     await Book.updateOne({_id: book._id}, {$inc: {writeVersion: 1}});
     const stale = await fetch(windowUrl + '?version=' + window.version);
     assert.equal(stale.status, 409); assert.equal((await stale.json()).rows, undefined);
     const missingAnchor = await (await fetch(windowUrl + `?anchor=${new mongoose.Types.ObjectId()}&limit=128`)).json();
     assert.equal(missingAnchor.activeIndex, null); assert.equal(missingAnchor.offset, 0);
+    const grouped = await (await fetch(windowUrl + `?anchor=${anchor.id}&limit=1`)).json();
+    assert.deepEqual(grouped.volumes.map(({title,start,count}) => ({title,start,count})), [
+      {title:'第一卷 起点',start:0,count:100}, {title:'第二卷 远行',start:100,count:199}, {title:'第三卷 番外',start:299,count:105},
+    ]);
+    assert.equal(grouped.rows.length,1); assert.equal(grouped.rows[0].id,anchor.id);
     const statisticsUrl=url.replace('/chapters','/statistics');
     // Include metadata-only R2 chapters and legacy chapters without a count.
     await Chapter.collection.updateOne({bookId:book._id,chapter_number:405},{$unset:{content:''},$set:{contentKey:`chapters/sha256/${'a'.repeat(64)}.txt`}});

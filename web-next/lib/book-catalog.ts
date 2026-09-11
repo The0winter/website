@@ -1,12 +1,15 @@
 import {safeFetch} from './request';
+import {buildCatalogVolumes} from '../../shared/catalog-volumes.mjs';
 
 export type CatalogChapter = {id: string; title: string; chapter_number: number};
 export type CatalogSeed = {rows: CatalogChapter[]; total: number | null};
+export type CatalogVolume = {id: string; title: string; start: number; count: number};
 export type CatalogSnapshot = {
   rows: ReadonlyMap<number, CatalogChapter>; indices: ReadonlyMap<string, number>;
   total: number | null; version?: string; generation: number; resolved: ReadonlySet<string>; error: string;
+  volumes?: readonly CatalogVolume[];
 };
-type WindowData = {rows: CatalogChapter[]; offset: number; total: number; version: string; activeIndex: number | null};
+type WindowData = {rows: CatalogChapter[]; offset: number; total: number; version: string; activeIndex: number | null; volumes?: CatalogVolume[]};
 type Job = {offset: number; limit: number; anchor?: string; background: boolean};
 export type CatalogNetwork = {saveData?: boolean; effectiveType?: string; downlink?: number};
 
@@ -36,7 +39,8 @@ export class BookCatalog {
     this.snapshot = {...empty(), version};
     if (seed?.total !== null && seed?.total !== undefined) {
       const rows = new Map(seed.rows.map((row, index) => [index, row]));
-      this.snapshot = {...this.snapshot, rows, indices: new Map(seed.rows.map((row, index) => [row.id, index])), total: seed.total};
+      this.snapshot = {...this.snapshot, rows, indices: new Map(seed.rows.map((row, index) => [row.id, index])), total: seed.total,
+        volumes: seed.rows.length === seed.total ? buildCatalogVolumes(seed.rows) : undefined};
       this.validatedAt = Date.now();
     }
   }
@@ -65,7 +69,7 @@ export class BookCatalog {
   }
   private locate(anchor?: string) {
     const {indices, resolved, total, rows} = this.snapshot;
-    if (anchor ? indices.has(anchor) || resolved.has(anchor) : total !== null && (rows.has(0) || total === 0)) return;
+    if (this.snapshot.volumes && (anchor ? indices.has(anchor) || resolved.has(anchor) : total !== null && (rows.has(0) || total === 0))) return;
     this.enqueue({anchor, offset: 0, limit: catalogStrategy(total, this.network).initial, background: false});
   }
   ensureRange = (start: number, end: number) => {
@@ -124,6 +128,14 @@ export class BookCatalog {
       if (epoch !== this.epoch || controller.signal.aborted) return;
       if (!Array.isArray(data.rows) || !Number.isSafeInteger(data.total) || data.total < 0 || !Number.isSafeInteger(data.offset) || data.offset < 0 || data.offset + data.rows.length > data.total || data.rows.some(row => !row.id || typeof row.title !== 'string' || !Number.isFinite(row.chapter_number))) throw Error('目录数据无效，请重试');
       if (this.snapshot.version !== undefined && this.snapshot.version !== data.version) throw Error('目录版本不一致，请重试');
+      const volumes = data.volumes ?? (data.offset === 0 && data.rows.length === data.total ? buildCatalogVolumes(data.rows) : [{id: 'body', title: '正文', start: 0, count: data.total}]);
+      let covered = 0;
+      const volumeIds = new Set<string>();
+      for (const volume of volumes) {
+        if (!volume.id || volumeIds.has(volume.id) || typeof volume.title !== 'string' || !volume.title.trim() || volume.start !== covered || !Number.isSafeInteger(volume.count) || volume.count < 1) throw Error('分卷数据无效，请重试');
+        covered += volume.count; volumeIds.add(volume.id);
+      }
+      if (covered !== data.total) throw Error('分卷数据不完整，请重试');
       const rows = new Map(this.snapshot.rows), indices = new Map(this.snapshot.indices), resolved = new Set(this.snapshot.resolved);
       for (let i = 0; i < data.rows.length; i++) {rows.set(data.offset + i, data.rows[i]); indices.set(data.rows[i].id, data.offset + i);}
       if (job.anchor && data.activeIndex === null && !indices.has(job.anchor)) resolved.add(job.anchor);
@@ -133,7 +145,9 @@ export class BookCatalog {
         for (const index of farthest.slice(0, rows.size - 20000)) {indices.delete(rows.get(index)!.id); rows.delete(index);}
       }
       this.validatedAt = Date.now(); this.revisions = 0;
-      this.publish({rows, indices, resolved, total: data.total, version: data.version, generation: this.epoch, error: ''});
+      const previousVolumes = this.snapshot.volumes;
+      const sameVolumes = previousVolumes?.length === volumes.length && previousVolumes.every((volume, i) => volume.id === volumes[i].id && volume.title === volumes[i].title && volume.start === volumes[i].start && volume.count === volumes[i].count);
+      this.publish({rows, indices, resolved, total: data.total, version: data.version, generation: this.epoch, error: '', volumes: sameVolumes ? previousVolumes : volumes});
     } catch (error) {
       if (epoch !== this.epoch || controller.signal.aborted) return;
       this.failed = job; this.publish({...this.snapshot, error: error instanceof Error ? error.message : '目录暂不可用，请重试'});

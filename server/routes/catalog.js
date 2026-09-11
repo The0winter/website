@@ -2,6 +2,7 @@ import Book from '../models/Book.js';
 import Chapter from '../models/Chapter.js';
 import {asyncRoute} from '../security.js';
 import {fail} from '../services/content.js';
+import {catalogVolumes} from '../services/catalog-volumes.js';
 
 const number = (value, fallback, min, max) => {
   const parsed = value === undefined ? fallback : Number(value);
@@ -45,10 +46,11 @@ export function catalogRoutes(app) {
       chapters = await rows(filter, limit, 1, offset);
       if (target) activeIndex = offset + chapters.findIndex(chapter => String(chapter._id) === anchor);
     }
-    // Do not label rows with a version that changed while this window was read.
+    const volumes = await catalogVolumes(bookId, revision, total);
+    // Do not label rows or volume boundaries with a version that changed while read.
     const current = await Book.findOne({_id: bookId, deletedAt: null}).select('writeVersion').maxTimeMS(3000).lean();
     if (!current) fail(404, '作品不可用');
     if (versionOf(current) !== revision) return res.status(409).json({error: '目录已更新', version: versionOf(current)});
-    res.json({offset, total, activeIndex, version: revision, rows: chapters.map(chapter => ({id: String(chapter._id), title: chapter.title, chapter_number: chapter.chapter_number}))});
+    res.json({offset, total, activeIndex, version: revision, volumes, rows: chapters.map(chapter => ({id: String(chapter._id), title: chapter.title, chapter_number: chapter.chapter_number}))});
   }));
 }
