@@ -26,86 +26,111 @@ test.beforeEach(async({page})=>{
   await page.route('**/*',route=>['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname)?route.continue():route.abort());
 });
 
-for (const origin of ['detail', 'reader']) for (const width of [390, 1440]) test(`${origin} catalog reveals remembered progress without flashing chapter one at ${width}px`,async({page, context})=>{
-  await page.setViewportSize({width,height:844});
-  await page.addInitScript(({book,chapter})=>localStorage.setItem('reader-recent-chapters:v1',JSON.stringify([[book,chapter]])),{book:String(bookId),chapter:String(chapterIds[999])});
-  const cdp = await context.newCDPSession(page);
-  await cdp.send('Emulation.setCPUThrottlingRate', {rate: 4});
-  let release!:()=>void;
-  const gate=new Promise<void>(resolve=>{release=resolve;});
-  await page.route(`**/api/books/${bookId}/chapters*`,async route=>{
-    if(Number(new URL(route.request().url()).searchParams.get('page'))>1)await gate;
+for (const origin of ['detail', 'reader']) for (const width of [390, 1440]) test(`${origin} opens directly at chapter 1000 while earlier windows are blocked at ${width}px`, async ({page, context}) => {
+  await page.setViewportSize({width, height: 844});
+  await page.addInitScript(({book, chapter}) => {
+    localStorage.setItem('reader-recent-chapters:v1', JSON.stringify([[book, chapter]]));
+    localStorage.setItem('has-seen-reading-hint', 'true');
+  }, {book: String(bookId), chapter: String(chapterIds[999])});
+  const cdp = await context.newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', {rate: 4});
+  let targetRelease!: () => void, backgroundRelease!: () => void;
+  const targetGate = new Promise<void>(resolve => {targetRelease = resolve;}), backgroundGate = new Promise<void>(resolve => {backgroundRelease = resolve;});
+  const requests: URL[] = [];
+  await page.route(`**/api/books/${bookId}/catalog*`, async route => {
+    const url = new URL(route.request().url()); requests.push(url);
+    if (url.searchParams.has('anchor')) await targetGate;
+    else if (url.searchParams.get('offset') === '0') await backgroundGate;
     await route.continue();
   });
-  try{
+  try {
     await page.goto(`${base}/book/${bookId}${origin === 'reader' ? `/${chapterIds[999]}` : ''}`);
     const open = async () => {
-      if (origin === 'detail') await page.getByRole('button',{name:width < 768 ? /^目录 / : /^查看完整目录/}).click();
+      if (origin === 'detail') await page.getByRole('button', {name: width < 768 ? /^目录 / : /^查看完整目录/}).click();
       else {
         await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
-        await page.keyboard.press('m');
-        await page.locator('.reader-tools:visible').getByRole('button',{name:'目录',exact:true}).click();
+        await page.keyboard.press('m'); await page.locator('.reader-tools:visible').getByRole('button', {name: '目录', exact: true}).click();
       }
     };
+    await open(); const dialog = page.getByRole('dialog', {name: '全部目录'});
+    await expect(dialog.getByRole('status')).toHaveText('加载目录…');
+    await expect(dialog.locator('.book-catalog-chapter')).toHaveCount(0);
     await page.evaluate(() => {
-      const state = {running: true, frames: [] as {currentVisible: boolean; top: number}[]};
-      Object.assign(window, {catalogOpening: state});
+      const state = {running: true, frames: [] as {current: boolean; top: number}[]}; Object.assign(window, {windowFrames: state});
       const sample = () => {
         const area = document.querySelector('.book-catalog-overlay[data-open=true] .book-catalog-scroll-area');
         if (area && getComputedStyle(area).opacity !== '0') {
-          const list = area.querySelector('.book-catalog-list')!, current = area.querySelector('[aria-current="location"]');
-          const viewport = list.getBoundingClientRect(), item = current?.getBoundingClientRect();
-          state.frames.push({currentVisible: Boolean(item && item.top >= viewport.top && item.bottom <= viewport.bottom), top: list.scrollTop});
+          const list = area.querySelector('.book-catalog-list')!, target = area.querySelector('[aria-current]');
+          const viewport = list.getBoundingClientRect(), item = target?.getBoundingClientRect();
+          state.frames.push({current: Boolean(item && item.top >= viewport.top && item.bottom <= viewport.bottom), top: list.scrollTop});
         }
         if (state.running) requestAnimationFrame(sample);
-      };
-      requestAnimationFrame(sample);
+      }; requestAnimationFrame(sample);
     });
-    await open();
-    const dialog=page.getByRole('dialog',{name:'全部目录'});
-    await expect(dialog.locator('[aria-current="location"]')).toHaveCount(0);
-    await expect(dialog.getByRole('status')).toHaveText('加载目录…');
-    await expect(dialog.locator('.book-catalog-chapter')).toHaveCount(0);
-    release();
-    const current=dialog.locator('[aria-current="location"]');
-    await expect(current).toHaveText(`第1000章 目录验证${origin === 'detail' ? '上次读到' : '正在阅读'}`);
+    targetRelease();
+    const current = dialog.locator('[aria-current="location"]');
     await expect(dialog.locator('.book-catalog-scroll-area')).toHaveAttribute('data-ready', 'true');
+    await expect(current).toHaveAttribute('href', `/book/${bookId}/${chapterIds[999]}`);
     await expect(current).toBeInViewport();
-    await expect.poll(() => page.evaluate(() => (window as unknown as {catalogOpening: {frames: unknown[]}}).catalogOpening.frames.length)).toBeGreaterThan(8);
-    const frames = await page.evaluate(() => {
-      const state = (window as unknown as {catalogOpening: {running: boolean; frames: {currentVisible: boolean; top: number}[]}}).catalogOpening;
-      state.running = false; return state.frames;
-    });
-    expect(frames.every(frame => frame.currentVisible)).toBe(true);
+    await expect.poll(() => page.evaluate(() => (window as unknown as {windowFrames: {frames: unknown[]}}).windowFrames.frames.length)).toBeGreaterThan(8);
+    const frames = await page.evaluate(() => {const state = (window as unknown as {windowFrames: {running: boolean; frames: {current: boolean; top: number}[]}}).windowFrames; state.running = false; return state.frames;});
+    expect(frames.every(frame => frame.current)).toBe(true);
     expect(Math.max(...frames.map(frame => frame.top)) - Math.min(...frames.map(frame => frame.top))).toBeLessThan(2);
-    await expect(dialog.getByRole('button',{name:/正序|倒序/})).toHaveCount(0);
-    await dialog.getByRole('button',{name:'关闭目录'}).click();
-    await open();
+    expect(requests[0].searchParams.get('anchor')).toBe(String(chapterIds[999]));
+    expect(Number(requests[0].searchParams.get('limit'))).toBe(128);
+    // Dragging to an unloaded tail uses the other request slot while the prefix remains blocked.
+    await dialog.getByRole('scrollbar').focus(); await page.keyboard.press('End');
+    await expect(dialog.getByRole('link', {name: '第1238章 目录验证', exact: true})).toBeInViewport();
+    expect(await dialog.locator('.book-catalog-chapter').count()).toBeLessThan(80);
+    await dialog.getByRole('button', {name: '关闭目录'}).click(); await open();
     await expect(dialog.locator('.book-catalog-scroll-area')).toHaveAttribute('data-ready', 'true');
     await expect(current).toBeInViewport();
-    await page.setViewportSize({width: width === 390 ? 1440 : 390, height: 844});
-    await expect(dialog.locator('.book-catalog-scroll-area')).toHaveAttribute('data-ready', 'true');
-    await expect(current).toBeInViewport();
-  }finally{release();}
+    backgroundRelease();
+    await dialog.locator(`a[href="/book/${bookId}/${chapterIds[1000]}"]`).click();
+    await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[1000]}`);
+    await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
+    await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
+    await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
+    await page.keyboard.press('m'); await page.locator('.reader-tools:visible').getByRole('button', {name: '目录', exact: true}).click();
+    await expect(dialog.locator('[aria-current]')).toHaveAttribute('href', `/book/${bookId}/${chapterIds[1000]}`);
+    expect(requests.filter(url => url.searchParams.has('anchor'))).toHaveLength(1);
+  } finally {targetRelease(); backgroundRelease();}
 });
 
-test('a stale remembered chapter falls back to the first row after a failed catalog load is retried', async ({page}) => {
+test('a missing remembered chapter retries and falls back after the server resolves it', async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
-  await page.addInitScript(book => localStorage.setItem('reader-recent-chapters:v1', JSON.stringify([[book, 'deleted-chapter']])), String(bookId));
+  await page.addInitScript(({book, id}) => localStorage.setItem('reader-recent-chapters:v1', JSON.stringify([[book, id]])), {book: String(bookId), id: String(new mongoose.Types.ObjectId())});
   let fail = true;
-  await page.route(`**/api/books/${bookId}/chapters*`, route => {
-    if (fail && Number(new URL(route.request().url()).searchParams.get('page')) > 1) return route.fulfill({status: 503, json: {error: 'controlled failure'}});
-    return route.continue();
-  });
-  await page.goto(`${base}/book/${bookId}`);
-  await page.getByRole('button', {name: /^目录 /}).click();
+  await page.route(`**/api/books/${bookId}/catalog*`, route => fail ? route.fulfill({status: 503, json: {error: 'controlled failure'}}) : route.continue());
+  await page.goto(`${base}/book/${bookId}`); await page.getByRole('button', {name: /^目录 /}).click();
   const dialog = page.getByRole('dialog', {name: '全部目录'});
-  await expect(dialog.getByRole('alert')).toBeVisible();
-  await expect(dialog.locator('.book-catalog-chapter')).toHaveCount(0);
+  await expect(dialog.getByRole('alert')).toBeVisible(); await expect(dialog.locator('.book-catalog-chapter')).toHaveCount(0);
   fail = false; await dialog.getByRole('button', {name: '重试'}).click();
-  await expect(dialog.getByRole('region')).toHaveAttribute('aria-busy', 'false');
   await expect(dialog.getByRole('link', {name: '第1章 目录验证', exact: true})).toBeInViewport();
-  await expect(dialog.getByRole('status')).toHaveCount(0);
+  await expect(dialog.getByRole('region')).toHaveAttribute('aria-busy', 'false');
+});
+
+test('publication changes invalidate sparse positions without mixing old and new rows', async ({page}) => {
+  await page.setViewportSize({width: 390, height: 844});
+  await page.addInitScript(({book, chapter}) => {
+    localStorage.setItem('reader-recent-chapters:v1', JSON.stringify([[book, chapter]]));
+    Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}});
+  }, {book: String(bookId), chapter: String(chapterIds[999])});
+  await page.goto(`${base}/book/${bookId}`); await page.getByRole('button', {name: /^目录 /}).click();
+  const dialog = page.getByRole('dialog', {name: '全部目录'});
+  await expect(dialog.locator('[aria-current]')).toBeInViewport();
+  await database.collection('chapters').updateOne({_id: chapterIds[0]}, {$set: {deletedAt: new Date()}});
+  await database.collection('books').updateOne({_id: bookId}, {$inc: {writeVersion: 1}});
+  try {
+    await dialog.locator('.book-catalog-list').evaluate(el => {el.scrollTop = el.scrollHeight * .2;});
+    await expect(dialog.locator('.book-catalog-header')).toContainText('共 1237 章');
+    await expect(dialog.locator('[aria-current]')).toBeInViewport();
+    await dialog.getByRole('scrollbar').focus(); await page.keyboard.press('Home');
+    await expect(dialog.getByRole('link', {name: '第2章 目录验证', exact: true})).toHaveAttribute('href', `/book/${bookId}/${chapterIds[1]}`);
+    await expect(dialog.getByRole('link', {name: '第1章 目录验证', exact: true})).toHaveCount(0);
+  } finally {
+    await database.collection('chapters').updateOne({_id: chapterIds[0]}, {$set: {deletedAt: null}});
+    await database.collection('books').updateOne({_id: bookId}, {$inc: {writeVersion: 1}});
+  }
 });
 
 test('book statistics are complete in the first HTML and stable across hydration, paging and opening the catalog',async({browser})=>{
@@ -131,9 +156,9 @@ test('book statistics are complete in the first HTML and stable across hydration
       expect(html).toContain('3.71万字');
       const updatedLabel=formatRelativeUpdate('2026-09-09T18:30:00Z');
       expect(html).toContain(updatedLabel);
-      const words=page.getByText('连载中 | 3.71万字',{exact:true});
+      const words=page.getByText('连载中 | 3.71万字',{exact:true}).filter({visible:true});
       const date=page.getByText(updatedLabel,{exact:false}).filter({visible:true});
-      await expect(page.getByRole('region',{name:'章节目录'})).toHaveAttribute('aria-busy','true');
+      await expect(page.getByRole('region',{name:'章节目录'})).toHaveAttribute('aria-busy','false');
       await expect(words).toBeVisible();
       await expect(date).toHaveCount(1);
       release();
@@ -145,40 +170,6 @@ test('book statistics are complete in the first HTML and stable across hydration
       expect(hydrationErrors).toEqual([]);
     }finally{release();await context.close();}
   }
-});
-
-test('detail keeps recent updates outside an ascending catalog as later pages arrive',async({page})=>{
-  await page.setViewportSize({width:1440,height:900});
-  const requested:number[]=[];
-  let release!:()=>void;
-  const gate=new Promise<void>(resolve=>{release=resolve;});
-  await page.route(`**/api/books/${bookId}/chapters*`,async route=>{
-    const url=new URL(route.request().url());
-    expect(url.searchParams.get('order')).toBe('asc');
-    requested.push(Number(url.searchParams.get('page')));
-    if(Number(url.searchParams.get('page'))>1)await gate;
-    await route.continue();
-  });
-  try{
-    await page.goto(`${base}/book/${bookId}`);
-    const latest=page.locator('.book-catalog').getByRole('link',{name:'第1238章 目录验证',exact:true});
-    await expect(latest).toBeVisible();
-    await expect(page.getByRole('link',{name:'开始阅读',exact:true}).filter({visible:true})).toHaveAttribute('href',`/book/${bookId}/${chapterIds[0]}`);
-    await page.getByRole('button',{name:'查看完整目录 (1238章)'}).click();
-    const dialog=page.getByRole('dialog',{name:'全部目录'});
-    const first=dialog.getByRole('link',{name:'第1章 目录验证',exact:true});
-    await expect(first).toBeVisible();
-    await expect(dialog.getByRole('button',{name:/正序|倒序/})).toHaveCount(0);
-    await expect.poll(()=>requested.length).toBe(4);
-    const position=await first.boundingBox();
-    release();
-    await expect(dialog.getByRole('region')).toHaveAttribute('aria-busy','false');
-    expect(await first.boundingBox()).toEqual(position);
-    expect(requested.slice().sort((a,b)=>a-b)).toEqual([1,2,3,4,5,6,7]);
-    await page.unroute(`**/api/books/${bookId}/chapters*`);
-    await first.click();
-    await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[0]}`);
-  }finally{release();}
 });
 
 for(const width of [320,390,768,1440]){
@@ -231,61 +222,3 @@ for(const width of [320,390,768,1440]){
     await context.close();
   });
 }
-
-test('reader shows the first batch, surfaces errors, retries, and keeps its catalog across chapter changes',async({page})=>{
-  const requested:number[]=[];
-  let fail=true;
-  await page.route(`**/api/books/${bookId}/chapters*`,async route=>{
-    const pageNumber=Number(new URL(route.request().url()).searchParams.get('page'));
-    requested.push(pageNumber);
-    if(fail&&pageNumber>1){await route.fulfill({status:503,json:{error:'controlled catalog failure'}});return;}
-    await route.continue();
-  });
-  await page.goto(`${base}/book/${bookId}/${chapterIds[0]}`);
-  await page.getByRole('button',{name:'目录',exact:true}).click();
-  await expect(page.getByRole('button',{name:'第1章 目录验证',exact:true})).toBeVisible();
-  await expect(page.getByRole('alert').filter({hasText:'目录暂不可用'})).toBeVisible();
-  fail=false;
-  await page.getByRole('button',{name:'重试',exact:true}).click();
-  await expect(page.getByRole('button',{name:'第1238章 目录验证',exact:true})).toBeAttached();
-  await expect(page.getByRole('region',{name:'阅读目录'})).toHaveAttribute('aria-busy','false');
-  await expect(page.getByText(/已加载|继续加载中/)).toHaveCount(0);
-  const requestsAfterLoad=requested.length;
-  await page.getByRole('button',{name:'第1章 目录验证',exact:true}).click();
-  await page.getByRole('button',{name:'下一章',exact:true}).click();
-  await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[1]}`);
-  await expect(page.getByRole('heading',{name:'第2章 目录验证',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'目录',exact:true}).click();
-  await expect(page.getByRole('button',{name:'第1238章 目录验证',exact:true})).toBeAttached();
-  expect(requested.length).toBe(requestsAfterLoad);
-  // A publication changes writeVersion, so a subsequent chapter must refresh.
-  const addedId=new mongoose.Types.ObjectId();
-  await database.collection('chapters').insertOne({_id:addedId,bookId,title:'第1239章 新章节',chapter_number:1239,content:'合成新章节',deletedAt:null});
-  await database.collection('books').updateOne({_id:bookId},{$inc:{writeVersion:1}});
-  try{
-    await page.getByRole('button',{name:'第3章 目录验证',exact:true}).click();
-    await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[2]}`);
-    await page.getByRole('button',{name:'目录',exact:true}).click();
-    await expect(page.getByRole('button',{name:'第1239章 新章节',exact:true})).toBeAttached();
-    expect(requested.length).toBeGreaterThan(requestsAfterLoad);
-  }finally{
-    await database.collection('chapters').deleteOne({_id:addedId});
-    await database.collection('books').updateOne({_id:bookId},{$inc:{writeVersion:1}});
-  }
-});
-
-test('a deep chapter never navigates to chapter one while later catalog pages are pending',async({page})=>{
-  let release!:()=>void;
-  const gate=new Promise<void>(resolve=>{release=resolve;});
-  await page.route(`**/api/books/${bookId}/chapters*`,async route=>{
-    if(Number(new URL(route.request().url()).searchParams.get('page'))>1)await gate;
-    await route.continue();
-  });
-  try{
-    await page.goto(`${base}/book/${bookId}/${chapterIds[999]}`);
-    await expect(page.getByRole('button',{name:'下一章',exact:true})).toBeEnabled();
-    await page.getByRole('button',{name:'下一章',exact:true}).click();
-    await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[1000]}`);
-    await expect(page.getByRole('heading',{name:'第1001章 目录验证',exact:true})).toBeVisible();
-  }finally{release();}
-});

@@ -40,6 +40,25 @@ test('catalog pages and full-book statistics stay complete, bounded and metadata
     assert.deepEqual(await (await fetch(url+'?limit=200&page=4')).json(),[]);
     assert.equal((await fetch(url+'?limit=201')).status,400);
     assert.equal((await fetch(url+'?page=0')).status,400);
+    const windowUrl = url.replace('/chapters', '/catalog');
+    const anchor = all.find(row => row.chapter_number === 350);
+    const windowResponse = await fetch(windowUrl + `?anchor=${anchor.id}&limit=128`);
+    const window = await windowResponse.json();
+    assert.equal(windowResponse.status, 200);
+    assert.equal(window.total, 404); assert.equal(window.activeIndex, 348);
+    assert.equal(window.rows[window.activeIndex - window.offset].id, anchor.id);
+    assert.deepEqual(window.rows.map(row => row.id), all.slice(window.offset, window.offset + window.rows.length).map(row => row.id));
+    for (const row of window.rows) assert.deepEqual(Object.keys(row).sort(), ['chapter_number','id','title']);
+    const bulk = await (await fetch(windowUrl + '?offset=0&limit=2048')).json();
+    assert.equal(bulk.rows.length, 404);
+    assert.equal((await fetch(windowUrl + '?limit=2049')).status, 400);
+    assert.equal((await fetch(windowUrl + '?offset=-1')).status, 400);
+    assert.equal((await fetch(windowUrl + '?anchor=invalid')).status, 400);
+    await Book.updateOne({_id: book._id}, {$inc: {writeVersion: 1}});
+    const stale = await fetch(windowUrl + '?version=' + window.version);
+    assert.equal(stale.status, 409); assert.equal((await stale.json()).rows, undefined);
+    const missingAnchor = await (await fetch(windowUrl + `?anchor=${new mongoose.Types.ObjectId()}&limit=128`)).json();
+    assert.equal(missingAnchor.activeIndex, null); assert.equal(missingAnchor.offset, 0);
     const statisticsUrl=url.replace('/chapters','/statistics');
     // Include metadata-only R2 chapters and legacy chapters without a count.
     await Chapter.collection.updateOne({bookId:book._id,chapter_number:405},{$unset:{content:''},$set:{contentKey:`chapters/sha256/${'a'.repeat(64)}.txt`}});
@@ -59,10 +78,12 @@ test('catalog pages and full-book statistics stay complete, bounded and metadata
     assert.equal((await fetch(statisticsUrl.replace(String(book._id),String(new mongoose.Types.ObjectId())))).status,404);
     await Book.updateOne({_id:book._id},{$set:{deletedAt:new Date()}});
     assert.equal((await fetch(url)).status,404);
+    assert.equal((await fetch(windowUrl)).status,404);
     assert.equal((await fetch(statisticsUrl)).status,404);
     const empty=await Book.create({title:'Empty catalog'});
     const emptyResponse=await fetch(url.replace(String(book._id),String(empty._id)));
     assert.equal(emptyResponse.headers.get('X-Total-Count'),'0');assert.deepEqual(await emptyResponse.json(),[]);
+    assert.equal((await (await fetch(windowUrl.replace(String(book._id), String(empty._id)))).json()).total, 0);
     assert.deepEqual(await (await fetch(statisticsUrl.replace(String(book._id),String(empty._id)))).json(),{totalWords:0});
   }finally{
     if(server)await new Promise(resolve=>server.close(resolve));

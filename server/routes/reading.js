@@ -1,6 +1,7 @@
 import Author from '../models/Author.js';
 import {libraryRoutes} from './library.js';
 import {paragraphCommentRoutes} from './paragraph-comments.js';
+import {catalogRoutes} from './catalog.js';
 import User from '../models/User.js';
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
@@ -21,6 +22,7 @@ const formatted=doc=>({...doc,id:String(doc._id)});
 export function readingRoutes(app,auth) {
   libraryRoutes(app,auth);
   paragraphCommentRoutes(app,auth);
+  catalogRoutes(app);
   app.get('/api/authors/:id',asyncRoute(async(req,res)=>{
     const profile=await Author.findById(req.params.id).lean();
     if(profile)return res.json({id:String(profile._id),username:profile.name,avatar:'',created_at:profile.createdAt});

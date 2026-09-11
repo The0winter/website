@@ -145,11 +145,11 @@ test('a long catalog retries, stays virtualized, and preserves ascending order',
     bookId: book, title: `第${index + 1}章 目录验证`, chapter_number: index + 1,
   }));
   let failing = true;
-  await page.route(`**/api/books/${book}/chapters*`, route => {
+  await page.route(`**/api/books/${book}/catalog*`, route => {
     const params = new URL(route.request().url()).searchParams;
-    const number = Number(params.get('page') || 1), limit = Number(params.get('limit') || 200);
-    if (failing && number > 1) return route.fulfill({status: 503, json: {error: 'controlled failure'}});
-    return route.fulfill({headers: {'X-Total-Count': String(rows.length)}, json: rows.slice((number - 1) * limit, number * limit)});
+    const offset = Number(params.get('offset') || 0), limit = Number(params.get('limit') || 128);
+    if (failing && offset > 0) return route.fulfill({status: 503, json: {error: 'controlled failure'}});
+    return route.fulfill({json: {offset, total: rows.length, version: '0', activeIndex: 0, rows: rows.slice(offset, offset + limit)}});
   });
   await page.goto(reader); await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
   await page.keyboard.press('m');

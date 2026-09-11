@@ -9,6 +9,7 @@ import { currentPrefetchPolicy, serverPrefetchPolicy, subscribePrefetchPolicy } 
 import { rememberChapter } from '@/lib/reading-session';
 import {replaceReaderChapter, openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation, selectReaderCatalogChapter, openReaderSettings, closeReaderSettings, readerSettingsOpen} from '@/lib/book-navigation';
 import BookCatalogSheet from './BookCatalogSheet';
+import {useBookCatalog} from '@/lib/useBookCatalog';
 import {currentChapterEntry, failChapterEntry, serverChapterEntry, subscribeChapterEntry} from '@/lib/chapter-entry';
 import {readerChapterCache as chapterCache,loadReaderChapter,loadReaderCounts} from '@/lib/reader-chapters';
 import { 
@@ -16,7 +17,7 @@ import {
   Bookmark, BookmarkCheck, Moon, X, 
   Check, Sun, Info, Library,
 } from 'lucide-react';
-import { booksApi, chaptersApi, bookmarksApi, Book, Chapter } from '@/lib/api';
+import { booksApi, bookmarksApi, Book, Chapter } from '@/lib/api';
 import RecordBookVisit from './RecordBookVisit';
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,11 +44,6 @@ class BoundedMap<K,V> extends Map<K,V> {
 }
 // 🔥 [新增] 全局书籍缓存池 (防止切换章节时书名/封面闪烁)
 const bookCache = new BoundedMap<string, Book>(3);
-const catalogCache = new BoundedMap<string, {rows:Chapter[];version:number|string;expiresAt:number}>(3);
-function cachedCatalog(bookId:string, version:number|string|undefined) {
-  const cached=catalogCache.get(bookId);
-  return cached && cached.version===version && cached.expiresAt>Date.now() ? cached.rows : undefined;
-}
 const settingsCache = {
   themeColor: 'cream' as 'gray' | 'cream' | 'green' | 'blue',
   fontFamily: 'sans' as 'sans' | 'serif' | 'kai',
@@ -76,14 +72,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   
   const bookId = params.id as string;
   const chapterIdParam = pathname?.split('/')[3] || params.chapterId as string;
-  const catalogVersion = initialBook?.writeVersion ?? initialBook?.updatedAt;
-  const initialCatalog = cachedCatalog(bookId, catalogVersion);
   const { user } = useAuth();
-  const [allChapters, setAllChapters] = useState<Chapter[]>(initialCatalog ?? []);
-  const [catalogTotal, setCatalogTotal] = useState<number | null>(initialCatalog?.length ?? null);
-  const [catalogLoading, setCatalogLoading] = useState(!initialCatalog);
-  const [catalogError, setCatalogError] = useState('');
-  const [catalogRetry, setCatalogRetry] = useState(0);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [book, setBook] = useState<Book | null>(initialBook || null);
   const [chapter, setChapter] = useState<Chapter | null>(initialChapter || null);
@@ -103,6 +92,8 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const nearEnd = useCallback(() => setNextButtonVisible(true), []);
   
   const showCatalog = useSyncExternalStore(subscribeBookNavigation, () => bookCatalogOpen(bookId), serverCatalogClosed);
+  const catalog = useBookCatalog(bookId, book?.writeVersion, chapter?.id ?? chapterIdParam, showCatalog);
+  const catalogTotal = catalog.snapshot.total;
   const showSettings = useSyncExternalStore(subscribeBookNavigation, () => readerSettingsOpen(bookId), serverCatalogClosed);
   const chapterEntry = useSyncExternalStore(subscribeChapterEntry, currentChapterEntry, serverChapterEntry);
   const entryLocked = Boolean(chapterEntry && !chapterEntry.releasing);
@@ -209,28 +200,6 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     return ()=>{if(timer)clearTimeout(timer);document.removeEventListener('visibilitychange',schedule);};
   }, [bookId, chapterIdParam]);
   useEffect(() => { if (!bookId || !user) return; let active=true; bookmarksApi.check(user.id,bookId).then(value=>{if(active)setIsBookmarked(value);}).catch(()=>{});return ()=>{active=false;}; }, [bookId, user]);
-  // Load once per book, independently of chapter navigation and authentication.
-  useEffect(() => {
-    if (catalogRetry === 0 && cachedCatalog(bookId, catalogVersion)) return;
-    let active = true;
-    chaptersApi.getByBookId(bookId, {
-      onProgress: (rows, total) => {
-        if (active) { setAllChapters(rows); setCatalogTotal(total); }
-      },
-    }).then(rows => {
-      if (active) {
-        setCatalogTotal(rows.length);
-        // Chapter routes can remount. Reuse only a complete, recent, unchanged book.
-        if (catalogVersion !== undefined && rows.length <= 10000) catalogCache.set(bookId, {rows, version:catalogVersion, expiresAt:Date.now()+60000});
-      }
-    }).catch(error => {
-      if (active) setCatalogError(error instanceof Error ? error.message : '目录暂不可用，请重试');
-    }).finally(() => {
-      if (active) setCatalogLoading(false);
-    });
-    return () => { active = false; };
-  }, [bookId, catalogVersion, catalogRetry]);
-
   useEffect(() => {
     let active=true;
     const sequence=++navigationSequence.current;
@@ -298,9 +267,9 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const prefetchChapter=useCallback((id:string|null)=>{
     if(id && id!==chapter?.id && currentPrefetchPolicy()!=='paused')void loadReaderChapter(bookId,id).catch(()=>{});
   },[bookId,chapter?.id]);
-  const currentChapterIndex = allChapters.findIndex((ch) => ch.id === chapter?.id);
-  const prevChapterId = currentChapterIndex > 0 ? allChapters[currentChapterIndex - 1].id : chapter?.previousId ?? null;
-  const nextChapterId = currentChapterIndex >= 0 && currentChapterIndex < allChapters.length - 1 ? allChapters[currentChapterIndex + 1].id : chapter?.nextId ?? null;
+  const currentChapterIndex = catalog.snapshot.indices.get(chapter?.id ?? '') ?? -1;
+  const prevChapterId = chapter?.previousId ?? null;
+  const nextChapterId = chapter?.nextId ?? null;
 
   useEffect(() => {
     if (chapter?.id === chapterIdParam && chapter.bookId === bookId && pathname === `/book/${bookId}/${chapter.id}`) rememberChapter(bookId, chapter.id);
@@ -460,10 +429,10 @@ if (loading) return (
       </div>
 
       <BookCatalogSheet open={showCatalog} onClose={closeBookCatalog} bookId={bookId} bookTitle={book.title}
-        chapters={allChapters} total={catalogTotal} loading={catalogLoading} error={catalogError}
+        catalog={catalog.snapshot} onRange={catalog.ensureRange}
         activeChapterId={chapter.id} onPrefetch={prefetchChapter}
         onSelect={id => selectReaderCatalogChapter(() => goToChapter(id,true))}
-        onRetry={() => { setCatalogLoading(true); setCatalogError(''); setCatalogRetry(value => value + 1); }}/>
+        onRetry={catalog.retry}/>
 
       {navigationError && <div role="alert" className="reader-navigation-error">{navigationError}<button onClick={()=>goToChapter(failedChapter.current || chapterIdParam)}>重试</button><button onClick={()=>setNavigationError('')}>关闭</button></div>}
       {/* 6. 设置弹窗 */}

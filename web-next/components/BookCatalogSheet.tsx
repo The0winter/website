@@ -1,18 +1,18 @@
 'use client';
 
-import {useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore} from 'react';
+import {useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore} from 'react';
 import {ArrowLeft} from 'lucide-react';
 import {Virtuoso} from 'react-virtuoso';
 import Link from './PrefetchLink';
 import CatalogScrollbar from './CatalogScrollbar';
 import {formatChapterTitle} from '@/lib/catalog-title';
 import {beginChapterEntry, currentChapterEntry, subscribeChapterEntry} from '@/lib/chapter-entry';
+import type {CatalogSnapshot} from '@/lib/book-catalog';
 import './book-detail.css';
 
-type CatalogChapter = {id: string; title: string; chapter_number: number};
 type Props = {
-  open: boolean; onClose: () => void; bookId: string; bookTitle: string; chapters: CatalogChapter[];
-  total: number | null; loading: boolean; error: string; onRetry: () => void;
+  open: boolean; onClose: () => void; bookId: string; bookTitle: string; catalog: CatalogSnapshot;
+  onRange: (start: number, end: number) => void; onRetry: () => void;
   activeChapterId?: string;
   activeChapterLabel?: string;
   onSelect?: (id: string) => void; onPrefetch?: (id: string) => void;
@@ -52,30 +52,27 @@ export default function BookCatalogSheet({open, onClose, bookTitle, ...props}: P
     <div ref={panel} role="dialog" aria-modal="true" aria-label="全部目录" className="book-catalog-sheet" onClick={event => event.stopPropagation()}>
       <header className="book-catalog-header">
         <button className="book-catalog-back" onClick={onClose} aria-label="关闭目录"><ArrowLeft size={22}/></button>
-        <h2 title={bookTitle}>{bookTitle}</h2><p>共 {props.total ?? props.chapters.length} 章</p>
+        <h2 title={bookTitle}>{bookTitle}</h2><p>{props.catalog.total === null ? '加载中…' : `共 ${props.catalog.total} 章`}</p>
       </header>
-      {open && <CatalogContents key={`${props.bookId}:${columns}:${props.activeChapterId ?? ''}`} {...props} columns={columns}/>}
+      {open && <CatalogContents key={`${props.bookId}:${columns}:${props.activeChapterId ?? ''}:${props.catalog.generation}`} {...props} columns={columns}/>}
     </div>
   </div>;
 }
 
-function CatalogContents({bookId, chapters, loading, error, onRetry, activeChapterId, activeChapterLabel = '正在阅读', onSelect, onPrefetch, columns}: Omit<Props, 'open' | 'onClose' | 'bookTitle'> & {columns: number}) {
+function CatalogContents({bookId, catalog, onRange, onRetry, activeChapterId, activeChapterLabel = '正在阅读', onSelect, onPrefetch, columns}: Omit<Props, 'open' | 'onClose' | 'bookTitle'> & {columns: number}) {
   const listId = useId();
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
   const [listHeight, setListHeight] = useState(0);
   const [ready, setReady] = useState(false);
   const scrollerRef = useCallback((element: HTMLElement | Window | null) => setScroller(element instanceof HTMLElement ? element : null), []);
-  const rows = useMemo(() => {
-    const result: CatalogChapter[][] = [];
-    for (let index = 0; index < chapters.length; index += columns) result.push(chapters.slice(index, index + columns));
-    return result;
-  }, [chapters, columns]);
-  const activeIndex = chapters.findIndex(chapter => chapter.id === activeChapterId);
+  const {rows, total, error} = catalog;
+  const activeIndex = catalog.indices.get(activeChapterId ?? '') ?? -1;
   const activeRow = Math.max(0, Math.floor(activeIndex / columns));
   // Do not mount a list at chapter one while the remembered chapter is still
   // in flight. A deleted/stale chapter falls back to the start once loading ends.
-  const waitingForChapter = Boolean(activeChapterId && activeIndex < 0 && (loading || error));
-  const showList = rows.length > 0 && !waitingForChapter;
+  const waitingForChapter = !ready && (activeChapterId ? activeIndex < 0 && !catalog.resolved.has(activeChapterId) : total === null || (total > 0 && !rows.has(0)));
+  const showList = total !== null && total > 0 && !waitingForChapter;
+  const rangeChanged = useCallback(({startIndex, endIndex}: {startIndex: number; endIndex: number}) => onRange(startIndex * columns, (endIndex + 1) * columns - 1), [onRange, columns]);
   useLayoutEffect(() => {
     if (!scroller || !showList || ready) return;
     let frame = 0, stableFrames = 0, previousTop = -1, previousHeight = -1;
@@ -95,14 +92,17 @@ function CatalogContents({bookId, chapters, loading, error, onRetry, activeChapt
     frame = requestAnimationFrame(revealWhenLocated);
     return () => cancelAnimationFrame(frame);
   }, [scroller, showList, ready, activeIndex, activeRow, listHeight]);
-  return <div role="region" aria-label="阅读目录" aria-busy={loading || (showList && !ready)} className="book-catalog-body">
-        {!error && (waitingForChapter || (loading && !chapters.length) || (showList && !ready)) && <p role="status" className="book-catalog-message book-catalog-loading">加载目录…</p>}
+  return <div role="region" aria-label="阅读目录" aria-busy={waitingForChapter || (showList && !ready)} className="book-catalog-body">
+        {!error && (waitingForChapter || (showList && !ready)) && <p role="status" className="book-catalog-message book-catalog-loading">加载目录…</p>}
         {error && <p role="alert" className="book-catalog-message">{error} <button onClick={onRetry}>重试</button></p>}
-        {!loading && !error && !chapters.length && <p className="book-catalog-message">暂无章节</p>}
-        {showList && <div className="book-catalog-scroll-area" data-ready={ready} aria-hidden={!ready} inert={!ready}><Virtuoso id={listId} scrollerRef={scrollerRef} totalListHeightChanged={setListHeight} className="book-catalog-list" style={{height: '100%'}} data={rows}
+        {total === 0 && !error && <p className="book-catalog-message">暂无章节</p>}
+        {showList && <div className="book-catalog-scroll-area" data-ready={ready} aria-hidden={!ready} inert={!ready}><Virtuoso id={listId} scrollerRef={scrollerRef} totalListHeightChanged={setListHeight} className="book-catalog-list" style={{height: '100%'}} totalCount={Math.ceil(total / columns)} rangeChanged={rangeChanged}
           initialTopMostItemIndex={{index: activeRow, align: activeIndex >= 0 ? 'center' : 'start'}}
-          itemContent={(_, row) => <div className="book-catalog-row" style={{gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`}}>
-            {row.map(chapter => <Link key={chapter.id} href={`/book/${bookId}/${chapter.id}`} prefetchMode="intent"
+          itemContent={rowIndex => <div className="book-catalog-row" style={{gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`}}>
+            {Array.from({length: Math.min(columns, total - rowIndex * columns)}, (_, column) => {
+              const index = rowIndex * columns + column, chapter = rows.get(index);
+              if (!chapter) return <span key={index} className="book-catalog-placeholder" aria-label="章节加载中"/>;
+              return <Link key={chapter.id} href={`/book/${bookId}/${chapter.id}`} prefetchMode="intent"
               className="book-catalog-chapter" aria-current={chapter.id === activeChapterId ? 'location' : undefined}
               aria-description={chapter.id === activeChapterId ? activeChapterLabel : undefined}
               onMouseEnter={() => onPrefetch?.(chapter.id)} onFocus={() => onPrefetch?.(chapter.id)} onTouchStart={() => onPrefetch?.(chapter.id)}
@@ -112,7 +112,7 @@ function CatalogContents({bookId, chapters, loading, error, onRetry, activeChapt
               }}>
               <span>{formatChapterTitle(chapter.title, chapter.chapter_number)}</span>
               {chapter.id === activeChapterId && <span aria-hidden="true" className="book-catalog-progress">{activeChapterLabel}</span>}
-            </Link>)}
+            </Link>;})}
           </div>}/><CatalogScrollbar scroller={scroller} contentHeight={listHeight} controls={listId}/></div>}
       </div>;
 }

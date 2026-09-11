@@ -34,6 +34,8 @@
 .book-catalog-scrollbar:focus-visible { outline:2px solid #526f40; outline-offset:-3px; }
 .book-catalog-row { display:grid; column-gap:20px; padding:0 8px 4px; }
 .book-catalog-chapter { display:flex; align-items:center; min-width:0; min-height:44px; padding:8px 4px; border:0; border-radius:0; background:transparent; font-size:1rem; line-height:1.75; }
+.book-catalog-placeholder { display:block; min-height:44px; padding:8px 4px; font-size:1rem; line-height:1.75; }
+.book-catalog-placeholder::before { content:'\00a0'; display:block; width:70%; background:linear-gradient(transparent 30%,#f2f3ef 30%,#f2f3ef 70%,transparent 70%); }
 .book-catalog-chapter span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .book-catalog-chapter:hover { background:#f7f8f5; color:#48643b; }
 .book-catalog-chapter:focus-visible { outline:2px solid #526f40; outline-offset:-2px; }

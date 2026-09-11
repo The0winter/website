@@ -1,6 +1,6 @@
 'use client';
 import BookCover from '@/components/BookCover';
-import { safeFetch as fetch, catalogPages, type CatalogPage } from '@/lib/request';
+import { safeFetch as fetch, type CatalogPage } from '@/lib/request';
 
 
 import { useState, useEffect, useMemo, useRef, useSyncExternalStore, useId } from 'react';
@@ -8,6 +8,7 @@ import Link from './PrefetchLink';
 import ReadingEntryLink from './ReadingEntryLink';
 import RecordBookVisit from './RecordBookVisit';
 import BookCatalogSheet from './BookCatalogSheet';
+import {useBookCatalog} from '@/lib/useBookCatalog';
 import {formatChapterTitle} from '@/lib/catalog-title';
 import {beginChapterEntry} from '@/lib/chapter-entry';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
@@ -46,6 +47,7 @@ const StarRating = ({ rating, size = 5, interactive = false, onRate }: { rating:
 
 // --- 类型定义 ---
 interface Book {
+  writeVersion?: number;
   id: string;
   title: string;
   description: string;
@@ -140,18 +142,19 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // --- 章节相关状态 ---
-  const [chapters, setChapters] = useState<Chapter[]>(initialCatalog?.rows ?? []);
-  const [loadingChapters, setLoadingChapters] = useState(!initialCatalog?.rows.length);
-  const [chapterTotal, setChapterTotal] = useState<number | null>(initialCatalog?.total ?? null);
-  const [chapterError, setChapterError] = useState('');
-  const [catalogRetry, setCatalogRetry] = useState(0);
-  const [firstChapterId, setFirstChapterId] = useState(initialFirstChapterId ?? null);
-  const completeCatalog = useRef<Chapter[] | null>(null);
-  
   // 🔥 目录交互状态
   const showAllChapters = useSyncExternalStore(subscribeBookNavigation, () => bookCatalogOpen(book.id), serverCatalogClosed);
   const setShowAllChapters = (open: boolean) => open ? openBookCatalog(book.id) : closeBookCatalog();
+
+  const catalog = useBookCatalog(book.id, book.writeVersion, recentChapterId ?? undefined, showAllChapters, initialCatalog);
+  const chapterTotal = catalog.snapshot.total;
+  const loadingChapters = chapterTotal === null;
+  const chapterError = catalog.snapshot.error;
+  const chapters = useMemo(() => [...catalog.snapshot.rows.values()].sort((a, b) => a.chapter_number - b.chapter_number), [catalog.snapshot.rows]);
+  const firstChapterId = catalog.snapshot.rows.get(0)?.id ?? initialFirstChapterId ?? null;
+  useEffect(() => {
+    if (!firstChapterId && chapterTotal) catalog.ensureRange(0, 0);
+  }, [firstChapterId, chapterTotal, catalog.ensureRange]);
 
   const [communityTab, setCommunityTab] = useState<'reviews' | 'articles'>('reviews');
 
@@ -189,44 +192,11 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
   }, [user, book.id]);
 
-  useEffect(() => {
-    if (completeCatalog.current && catalogRetry === 0) return;
-    let active = true;
-    const controller = new AbortController();
-    setLoadingChapters(true);
-    setChapterError('');
-    catalogPages<Chapter>(`/api/books/${book.id}/chapters?order=asc`, {
-      initialPage: catalogRetry === 0 ? initialCatalog : undefined,
-      signal: controller.signal,
-      onProgress: (rows, total) => {
-        if (active) { setChapters(rows); setChapterTotal(total); }
-      },
-    }).then(rows => {
-      if (active) {
-        completeCatalog.current = rows;
-        setChapterTotal(rows.length);
-        setFirstChapterId(rows.length ? rows.reduce((first, row) => row.chapter_number < first.chapter_number ? row : first).id : null);
-      }
-    }).catch(error => {
-      if (active) setChapterError(error instanceof Error ? error.message : '目录暂不可用，请重试');
-    }).finally(() => {
-      if (active) setLoadingChapters(false);
-    });
-    return () => { active = false; controller.abort(); };
-  }, [book.id, initialCatalog, catalogRetry]);
-
-  // --- 逻辑：章节排序与切片 ---
-  const sortedChapters = useMemo(() => {
-    const list = [...chapters];
-    list.sort((a, b) => a.chapter_number - b.chapter_number);
-    return list;
-  }, [chapters]);
-
   // 页面预览显示的章节 (电脑端显示30章，手机端显示8章)
   const previewChapters = useMemo(() => {
     // The detail preview keeps recent updates while the full catalog reads forward.
-    return bookData.chapters.length ? bookData.chapters : sortedChapters.slice(-30).reverse();
-  }, [bookData.chapters, sortedChapters]);
+    return bookData.chapters.length ? bookData.chapters : chapters.slice(-30).reverse();
+  }, [bookData.chapters, chapters]);
 
   useEffect(()=>{
     let active=true;
@@ -599,7 +569,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                 </h2>
             </div>
 
-            {chapterError && <p role="alert" className="mb-3 text-sm text-red-600">{chapterError} <button onClick={() => setCatalogRetry(value => value + 1)} className="underline">重试</button></p>}
+            {chapterError && <p role="alert" className="mb-3 text-sm text-red-600">{chapterError} <button onClick={catalog.retry} className="underline">重试</button></p>}
             {loadingChapters && chapters.length === 0 ? (
                <div className="py-6 md:py-10 text-center text-gray-500 flex flex-col items-center">
                   <Loader2 className="w-6 h-6 md:w-8 md:h-8 animate-spin mb-2 text-blue-500" />
@@ -677,8 +647,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
       <BookCatalogSheet open={showAllChapters} onClose={closeBookCatalog} bookId={book.id} bookTitle={book.title}
         activeChapterId={recentChapterId ?? undefined} activeChapterLabel="上次读到"
-        chapters={sortedChapters} total={chapterTotal} loading={loadingChapters} error={chapterError}
-        onRetry={() => setCatalogRetry(value => value + 1)}/>
+        catalog={catalog.snapshot} onRange={catalog.ensureRange}
+        onRetry={catalog.retry}/>
 
 
     </div>
