@@ -74,31 +74,35 @@ function CatalogContents(props: ContentsProps) {
 }
 
 type VolumeProps = ContentsProps & {volumes: readonly CatalogVolume[]; activeIndex: number};
-type View = {expanded: ReadonlySet<string>; targetVolume?: string; focusVolume?: string; revision: number};
+type View = {expanded: ReadonlySet<string>; targetVolume?: string; focusVolume?: string};
 function VolumeCatalog(props: VolumeProps) {
   const {volumes, activeIndex} = props;
   const [view, setView] = useState<View>(() => {
     const initial = volumes.find(volume => activeIndex >= volume.start && activeIndex < volume.start + volume.count)
       ?? volumes.find(volume => volume.title === '正文') ?? volumes[0];
-    return {expanded: new Set([initial.id]), targetVolume: activeIndex < 0 ? initial.id : undefined, revision: 0};
+    return {expanded: new Set([initial.id]), targetVolume: activeIndex < 0 ? initial.id : undefined};
   });
   const toggle = (id: string) => setView(previous => {
     const expanded = new Set(previous.expanded);
     if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
-    return {expanded, targetVolume: id, focusVolume: id, revision: previous.revision + 1};
+    return {...previous, expanded, focusVolume: id};
   });
-  const collapse = () => setView(previous => ({expanded: new Set(), targetVolume: volumes[0].id, focusVolume: volumes[0].id, revision: previous.revision + 1}));
-  return <CatalogVolumeRows key={view.revision} {...props} view={view} onToggle={toggle} onCollapse={collapse}/>;
+  // Folding only changes the visible rows; retain the scroller and its ready state.
+  return <CatalogVolumeRows {...props} view={view} onToggle={toggle}/>;
 }
 
-function CatalogVolumeRows({bookId, catalog, onRange, onRetry, activeChapterId, activeChapterLabel = '正在阅读', onSelect, onPrefetch, columns, volumes, activeIndex, view, onToggle, onCollapse}: VolumeProps & {view: View; onToggle: (id: string) => void; onCollapse: () => void}) {
+function CatalogVolumeRows({bookId, catalog, onRange, onRetry, activeChapterId, activeChapterLabel = '正在阅读', onSelect, onPrefetch, columns, volumes, activeIndex, view, onToggle}: VolumeProps & {view: View; onToggle: (id: string) => void}) {
   const listId = useId();
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
   const [listHeight, setListHeight] = useState(0);
   const [ready, setReady] = useState(false);
   const scrollerRef = useCallback((element: HTMLElement | Window | null) => setScroller(element instanceof HTMLElement ? element : null), []);
   const layout = useMemo(() => catalogLayout(volumes, view.expanded, columns), [volumes, view.expanded, columns]);
-  const targetRow = view.targetVolume ? layout.groups.find(group => group.volume.id === view.targetVolume)?.header ?? 0 : layout.chapter(activeIndex);
+  const [initialLocation] = useState(() => ({index: view.targetVolume ? layout.groups.find(group => group.volume.id === view.targetVolume)?.header ?? 0 : layout.chapter(activeIndex), align: view.targetVolume ? 'start' as const : 'center' as const}));
+  const itemKey = useCallback((rowIndex: number) => {
+    const {group, chapterStart} = layout.at(rowIndex);
+    return chapterStart === null ? `volume:${group.volume.id}` : `chapter:${chapterStart}`;
+  }, [layout]);
   const rangeChanged = useCallback(({startIndex, endIndex}: {startIndex: number; endIndex: number}) => {
     for (const group of layout.groups) {
       const start = Math.max(startIndex, group.header + 1), end = Math.min(endIndex, group.header + group.rows);
@@ -134,14 +138,13 @@ function CatalogVolumeRows({bookId, catalog, onRange, onRetry, activeChapterId, 
       target?.focus({preventScroll: true});
     });
     return () => cancelAnimationFrame(frame);
-  }, [ready, scroller, view.focusVolume]);
+  }, [ready, scroller, view.focusVolume, view.expanded]);
   return <div role="region" aria-label="阅读目录" aria-busy={!ready} className="book-catalog-body">
-    <div className="book-catalog-volume-tools"><span>共 {volumes.length} 卷</span><button onClick={onCollapse} disabled={!view.expanded.size}>收起全部</button></div>
     {!ready && !catalog.error && <p role="status" className="book-catalog-message book-catalog-loading">加载目录…</p>}
     {catalog.error && <p role="alert" className="book-catalog-message">{catalog.error} <button onClick={onRetry}>重试</button></p>}
     <div className="book-catalog-scroll-area" data-ready={ready} aria-hidden={!ready} inert={!ready}>
       <Virtuoso id={listId} scrollerRef={scrollerRef} totalListHeightChanged={setListHeight} className="book-catalog-list" style={{height: '100%'}} totalCount={layout.total} rangeChanged={rangeChanged}
-        defaultItemHeight={52} initialTopMostItemIndex={{index: targetRow, align: view.targetVolume ? 'start' : 'center'}}
+        defaultItemHeight={48} initialTopMostItemIndex={initialLocation} computeItemKey={itemKey}
         itemContent={rowIndex => {
           const {group, chapterStart} = layout.at(rowIndex), {volume} = group;
           if (chapterStart === null) return <h3 className="book-catalog-volume-heading"><button type="button" data-volume-id={volume.id} className="book-catalog-volume-toggle" aria-expanded={view.expanded.has(volume.id)} aria-controls={listId} onClick={() => onToggle(volume.id)}>

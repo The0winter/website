@@ -42,11 +42,13 @@ for(const width of [390,1440])for(const scenario of ['first-detail','saved-detai
   await page.goto(`${base}/book/${book}${scenario==='reader'?'/'+active:''}`);
   await open(page,scenario==='reader'?'reader':'detail',width);
   const dialog=page.getByRole('dialog',{name:'全部目录'});
-  await expect(dialog.locator('.book-catalog-volume-tools')).toContainText('共 3 卷');
+  await expect(dialog.locator('.book-catalog-volume-tools')).toHaveCount(0);
+  await expect(dialog.getByRole('button',{name:'收起全部',exact:true})).toHaveCount(0);
   if(active)await expect(dialog.locator('[aria-current="location"]')).toHaveAttribute('href',`/book/${book}/${active}`);
   else await expect(dialog.getByRole('button',{name:new RegExp(labels[0].replace(/[（）]/g,'.'))})).toHaveAttribute('aria-expanded','true');
   if(active)await expect(dialog.locator('[aria-current="location"]')).toBeInViewport();
-  await dialog.getByRole('button',{name:'收起全部',exact:true}).click();
+  await dialog.locator('.book-catalog-list').evaluate(element=>{element.scrollTop=0;});
+  await dialog.locator('.book-catalog-volume-toggle[aria-expanded=true]').click();
   await expect(dialog.locator('.book-catalog-scroll-area')).toHaveAttribute('data-ready','true');
   const headers=dialog.locator('.book-catalog-volume-toggle');
   await expect(headers).toHaveCount(3);
@@ -92,4 +94,66 @@ test('without reading progress the body is preferred, while extras remain indepe
   await extras.click();await expect(extras).toHaveAttribute('aria-expanded','true');await expect(body).toHaveAttribute('aria-expanded','true');
   await expect(dialog.getByRole('link',{name:'番外一 重逢',exact:true})).toBeVisible();
   await extras.click();await expect(extras).toHaveAttribute('aria-expanded','false');await expect(body).toHaveAttribute('aria-expanded','true');
+});
+
+for(const width of [320,390,768,1440])test(`folding stays visible and reuses cached rows even with a pending volume at ${width}px`,async({page,context},testInfo)=>{
+  await page.setViewportSize({width,height:844});
+  await page.addInitScript(()=>Object.defineProperty(navigator,'connection',{configurable:true,value:Object.assign(new EventTarget(),{saveData:true,effectiveType:'2g'})}));
+  const cdp=await context.newCDPSession(page);await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
+  const requests:string[]=[];
+  let release!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  await page.route(`**/api/books/${book}/catalog*`,async route=>{
+    const url=new URL(route.request().url());requests.push(url.search);
+    if(Number(url.searchParams.get('offset'))>0)await gate;
+    await route.continue();
+  });
+  try{
+    await page.goto(`${base}/book/${book}`);await open(page,'detail',width);
+    const dialog=page.getByRole('dialog',{name:'全部目录'}),area=dialog.locator('.book-catalog-scroll-area');
+    const scroller=await dialog.locator('.book-catalog-list').elementHandle();
+    await area.evaluate(element=>{
+      const region=element.closest('[aria-busy]')!;
+      const trace={interruptions:0};
+      const observer=new MutationObserver(()=>{
+        if(!element.isConnected||region.getAttribute('aria-busy')!=='false'||element.getAttribute('data-ready')!=='true'||region.querySelector('[role=status]'))trace.interruptions++;
+      });
+      observer.observe(region.parentElement!,{childList:true,attributes:true,subtree:true});
+      Object.assign(window,{foldTrace:{trace,observer}});
+    });
+    await dialog.locator('.book-catalog-volume-toggle[aria-expanded=true]').click();
+    const last=dialog.getByRole('button',{name:/第三卷 番外篇/});
+    const top=(await last.boundingBox())!.y;
+    await last.click();await expect(last).toHaveAttribute('aria-expanded','true');
+    await expect(dialog.locator('.book-catalog-placeholder').first()).toBeVisible();
+    await expect(dialog.getByRole('status')).toHaveCount(0);
+    await expect(dialog.getByRole('region',{name:'阅读目录'})).toHaveAttribute('aria-busy','false');
+    expect(Math.abs((await last.boundingBox())!.y-top)).toBeLessThan(2);
+    await last.click();await expect(last).toHaveAttribute('aria-expanded','false');
+    await expect(dialog.locator('.book-catalog-placeholder')).toHaveCount(0);
+    await last.click();await expect(dialog.locator('.book-catalog-placeholder').first()).toBeVisible();
+    release();
+    const start=dialog.locator(`a[href="/book/${book}/${ids[332]}"]`);
+    await expect(start).toBeInViewport();
+    await expect(dialog.locator('.book-catalog-placeholder')).toHaveCount(0);
+    const requestCount=requests.length;
+    // Once loaded, even rapid repeated folding must keep this same scroller
+    // visible, preserve the header position, and issue no catalog requests.
+    for(let repeat=0;repeat<5;repeat++){
+      await last.click();await expect(last).toHaveAttribute('aria-expanded','false');
+      await last.click();await expect(start).toBeInViewport();
+      expect(Math.abs((await last.boundingBox())!.y-top)).toBeLessThan(2);
+    }
+    await last.focus();await page.keyboard.press('Enter');await expect(last).toHaveAttribute('aria-expanded','false');
+    await page.keyboard.press('Space');await expect(last).toHaveAttribute('aria-expanded','true');
+    await expect(last).toBeFocused();await expect(start).toBeInViewport();
+    expect(requests).toHaveLength(requestCount);
+    expect(await scroller!.evaluate(element=>element.isConnected)).toBe(true);
+    const interruptions=await page.evaluate(()=>{
+      const {trace,observer}=(window as unknown as {foldTrace:{trace:{interruptions:number};observer:MutationObserver}}).foldTrace;
+      observer.disconnect();return trace.interruptions;
+    });
+    expect(interruptions).toBe(0);
+    await page.screenshot({path:testInfo.outputPath('expanded-without-reloading.png')});
+  }finally{release();}
 });
