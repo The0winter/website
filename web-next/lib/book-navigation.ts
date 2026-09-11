@@ -2,7 +2,7 @@ import {cancelBookTransition, transitionBookPage} from './book-transition';
 import {cancelChapterEntry, currentChapterEntry} from './chapter-entry';
 
 type Route = {kind: 'home' | 'detail' | 'reader'; href: string; bookId?: string};
-type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean};
+type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; restoreSession?: string};
 type Router = {push: (href: string) => void; replace: (href: string) => void};
 const listeners = new Set<() => void>();
 let router: Router | undefined;
@@ -11,6 +11,8 @@ let currentPath = '';
 let pending: Entry | undefined;
 let overlayClosing = false;
 let catalogSelection: (() => void) | undefined;
+let documentSession: string | undefined;
+const session = () => documentSession ??= crypto.randomUUID();
 
 const overlay = (entry?: Entry) => entry?.catalog ? 'catalog' : entry?.settings ? 'settings' : undefined;
 
@@ -28,6 +30,10 @@ function entryFor(route: Route, flow = crypto.randomUUID()): Entry {
 }
 function notify() { listeners.forEach(listener => listener()); }
 function mark(entry: Entry) {
+  // Only real, rendered home/detail slots have a matching Next route tree.
+  // Synthetic predecessors and client-replaced reader chapters must still load
+  // their route normally. A reload also starts a fresh in-memory router cache.
+  entry = {...entry, restoreSession: entry.kind === 'reader' ? undefined : session()};
   const state = {...window.history.state};
   delete state.readerBook; delete state.readerReturn; delete state.catalogOpen;
   // Preserve Next's route tree when only annotating the current history slot.
@@ -45,7 +51,7 @@ export function syncBookRoute(path: string) {
   if (!route) { cancelChapterEntry(); current = undefined; pending = undefined; notify(); return; }
   if (pending?.href === path) { const entry = pending; pending = undefined; mark(entry); return; }
   const saved = stored();
-  if (saved?.href === path) { current = saved; notify(); return; }
+  if (saved?.href === path) { mark(saved); return; }
   if (route.kind === 'home') { mark(entryFor(route)); return; }
   // A normal home -> details link already has the correct predecessor.
   if (route.kind === 'detail' && previous?.kind === 'home' && previousPath === '/') {
@@ -63,10 +69,10 @@ export function syncBookRoute(path: string) {
     window.history.pushState({...state, bookNavigation: reader}, '', path);
     current = reader;
   } else current = detail;
-  notify();
+  mark(current);
 }
 
-function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, traversing = false) {
+function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, traversing = false, restore = false) {
   if (!router) return;
   if (currentChapterEntry()?.href !== entry.href) cancelChapterEntry();
   pending = entry;
@@ -80,7 +86,9 @@ function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, t
     return;
   }
   transitionBookPage(entry.href, direction, () => {
-    if (replace) router!.replace(entry.href); else router!.push(entry.href);
+    // Let Next's popstate listener restore the visited route and scroll position.
+    // Replacing the URL here would refetch the page.
+    if (!restore) { if (replace) router!.replace(entry.href); else router!.push(entry.href); }
   });
 }
 
@@ -116,11 +124,12 @@ function onPopState(event: PopStateEvent) {
     if (pending) { cancelBookTransition(); pending = undefined; }
     return;
   }
-  event.stopImmediatePropagation();
   const destination = forward && target ? target : from.kind === 'reader'
     ? entryFor({kind: 'detail', href: `/book/${from.bookId}`, bookId: from.bookId}, from.flow)
     : entryFor({kind: 'home', href: '/'}, from.flow);
-  navigate(destination, forward ? 'enter' : 'exit', true, true);
+  const restore = target?.href === destination.href && target.restoreSession === session() && Boolean(event.state?.__NA);
+  if (!restore) event.stopImmediatePropagation();
+  navigate(restore ? target! : destination, forward ? 'enter' : 'exit', true, true, restore);
 }
 
 export function installBookNavigation(value: Router) {

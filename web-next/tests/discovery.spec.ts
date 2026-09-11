@@ -22,7 +22,7 @@ async function catalog(page: Page, width = 390) {
 for (const width of [390, 1440]) test(`details remember and locate the last read chapter after reload at ${width}px`, async ({page, context}) => {
   await page.setViewportSize({width, height: 844});
   await page.goto(reader);
-  await expect(page.locator('.reader-pages-root')).toHaveAttribute('data-reader-ready', 'true');
+  await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
   await page.goto(detail);
   await expect(page.getByRole('link', {name: '继续阅读', exact: true})).toHaveAttribute('href', `/book/${book}/${chapter}`);
   let dialog = await catalog(page, width);

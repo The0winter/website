@@ -61,8 +61,8 @@ for (const width of [320, 390, 768, 1440]) {
     const box = (await reader.boundingBox())!;
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await page.getByRole('button', { name: '设置', exact: true }).first().click();
-    await expect(page.locator('[data-admin-mode]')).toBeVisible();
-    await expect(page.locator('[data-admin-mode]')).toContainText('阅读免广告');
+    await expect(page.getByRole('dialog', {name: '阅读设置'})).toBeVisible();
+    await expect(page.getByRole('button', {name: '左右翻页', exact: true})).toBeVisible();
     await expect(page.locator('iframe[title="广告"]')).toHaveCount(0);
     await page.getByRole('button', { name: '关闭阅读设置' }).click();
     await page.keyboard.press('Control+ArrowRight');

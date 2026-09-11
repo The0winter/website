@@ -95,7 +95,7 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
       animation = moving.animate(direction === 'exit'
         ? [{transform: 'translateX(0)'}, {transform: 'translateX(100%)'}]
         : [{transform: 'translateX(100%)'}, {transform: 'translateX(0)'}],
-      {duration: 320, easing: 'cubic-bezier(.22,.7,.25,1)', fill: 'forwards'});
+      {duration: direction === 'exit' ? 180 : 240, easing: 'cubic-bezier(.22,.7,.25,1)', fill: 'forwards'});
       await animation.finished.catch(() => {});
     }
   }).finally(() => { incoming?.remove(); snapshot.remove(); cleanup(); });
