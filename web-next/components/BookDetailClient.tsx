@@ -9,6 +9,7 @@ import RecordBookVisit from './RecordBookVisit';
 import BookCatalogSheet from './BookCatalogSheet';
 import {formatChapterTitle} from '@/lib/catalog-title';
 import {beginChapterEntry} from '@/lib/chapter-entry';
+import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import { useRouter } from 'next/navigation';
 import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, User as UserIcon, Pencil, X, ArrowUpDown, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
@@ -103,6 +104,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   const router = useRouter();
   const [bookData,setBookData] = useState(initialBookData);
   const book = bookData.book;
+  const recentChapterId = useSyncExternalStore(subscribeReadingSession, () => lastReadChapter(book.id), serverLastReadChapter);
   
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -613,6 +615,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                             key={chapter.id}
                             href={`/book/${book.id}/${chapter.id}`}
                             prefetchMode="intent"
+                            aria-current={chapter.id === recentChapterId ? 'location' : undefined}
+                            aria-description={chapter.id === recentChapterId ? '上次读到' : undefined}
                             onNavigate={() => beginChapterEntry(`/book/${book.id}/${chapter.id}`, formatChapterTitle(chapter.title, chapter.chapter_number))}
                             className={`group items-center p-2 bg-gray-50 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200 transition-all text-xs md:text-sm ${index >= 8 ? 'hidden md:flex' : 'flex'}`}
                         >
@@ -672,6 +676,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
       </div>
 
       <BookCatalogSheet open={showAllChapters} onClose={closeBookCatalog} bookId={book.id}
+        activeChapterId={recentChapterId ?? undefined} activeChapterLabel="上次读到"
         chapters={sortedChapters} total={chapterTotal} loading={loadingChapters} error={chapterError}
         reversed={isReversed} onToggleOrder={toggleCatalogOrder} onRetry={() => setCatalogRetry(value => value + 1)}/>
 

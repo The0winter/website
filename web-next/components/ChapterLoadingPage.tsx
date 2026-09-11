@@ -1,6 +1,7 @@
 'use client';
 
 import {useEffect, useRef, useState, useSyncExternalStore, type CSSProperties} from 'react';
+import {flushSync} from 'react-dom';
 import {beginChapterEntry, currentChapterEntry, failChapterEntry, finishChapterEntry, serverChapterEntry, subscribeChapterEntry} from '@/lib/chapter-entry';
 import './chapter-loading.css';
 
@@ -18,7 +19,17 @@ export default function ChapterLoadingPage() {
     panel.current?.focus({preventScroll: true});
     let frame = 0, settle = 0, inputAt = -Infinity, disposed = false;
     const pointers = new Set<number>();
-    const ready = () => Boolean(document.querySelector(`[data-reader-entry-key="${target.token}"] [data-reader-chapter="${target.chapterId}"][data-reader-ready="true"]`));
+    const ready = () => {
+      if (location.pathname !== target.href) return false;
+      const reader = document.querySelector<HTMLElement>(`[data-reader-entry-key="${target.token}"] [data-reader-chapter="${target.chapterId}"][data-reader-ready="true"]`);
+      const sheet = reader?.querySelector<HTMLElement>('.reader-frame');
+      if (!reader || !sheet) return false;
+      const bounds = sheet.getBoundingClientRect();
+      // Suspense can retain a measured reader in a hidden tree, and Next can
+      // still be restoring the route's scroll position after that measurement.
+      return bounds.width > 0 && bounds.height > 0 && Math.abs(bounds.top) < 1
+        && getComputedStyle(reader).visibility === 'visible';
+    };
     // Keep a fast details -> reader navigation direct. Only a genuinely pending
     // chapter needs a separate loading screen; gesture locking starts at once.
     const loadingDelay = target.deferLoading ? window.setTimeout(() => {
@@ -26,11 +37,13 @@ export default function ChapterLoadingPage() {
     }, 200) : undefined;
     const reveal = () => {
       window.clearTimeout(settle); cancelAnimationFrame(frame);
-      if (disposed || !ready() || currentChapterEntry()?.error || pointers.size) return;
+      if (disposed || currentChapterEntry()?.error || pointers.size) return;
+      // Scroll restoration and CSS visibility can settle without a DOM mutation.
+      if (!ready()) { frame = requestAnimationFrame(reveal); return; }
       const quiet = Math.max(0, 140 - (performance.now() - inputAt));
       settle = window.setTimeout(() => {
         frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => {
-          if (!disposed && !pointers.size && ready() && performance.now() - inputAt >= 140) finishChapterEntry(target.token);
+          if (!disposed && !pointers.size && ready() && performance.now() - inputAt >= 140) flushSync(() => finishChapterEntry(target.token));
           else reveal();
         }); });
       }, quiet);

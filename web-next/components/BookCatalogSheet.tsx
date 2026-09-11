@@ -13,6 +13,7 @@ type Props = {
   open: boolean; onClose: () => void; bookId: string; chapters: CatalogChapter[];
   total: number | null; loading: boolean; error: string; onRetry: () => void;
   reversed: boolean; onToggleOrder: () => void; activeChapterId?: string;
+  activeChapterLabel?: string;
   onSelect?: (id: string) => void; onPrefetch?: (id: string) => void;
 };
 const subscribeWidth = (notify: () => void) => {
@@ -21,7 +22,7 @@ const subscribeWidth = (notify: () => void) => {
 };
 const columnCount = () => innerWidth >= 1024 ? 3 : innerWidth >= 768 ? 2 : 1;
 
-export default function BookCatalogSheet({open, onClose, bookId, chapters, total, loading, error, onRetry, reversed, onToggleOrder, activeChapterId, onSelect, onPrefetch}: Props) {
+export default function BookCatalogSheet({open, onClose, bookId, chapters, total, loading, error, onRetry, reversed, onToggleOrder, activeChapterId, activeChapterLabel = '正在阅读', onSelect, onPrefetch}: Props) {
   const columns = useSyncExternalStore(subscribeWidth, columnCount, () => 1);
   const list = useRef<VirtuosoHandle>(null);
   const rows = useMemo(() => {
@@ -78,12 +79,14 @@ export default function BookCatalogSheet({open, onClose, bookId, chapters, total
           itemContent={(_, row) => <div className="book-catalog-row" style={{gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`}}>
             {row.map(chapter => <Link key={chapter.id} href={`/book/${bookId}/${chapter.id}`} prefetchMode="intent"
               className="book-catalog-chapter" aria-current={chapter.id === activeChapterId ? 'location' : undefined}
+              aria-description={chapter.id === activeChapterId ? activeChapterLabel : undefined}
               onMouseEnter={() => onPrefetch?.(chapter.id)} onFocus={() => onPrefetch?.(chapter.id)} onTouchStart={() => onPrefetch?.(chapter.id)}
               onNavigate={event => {
                 beginChapterEntry(`/book/${bookId}/${chapter.id}`, formatChapterTitle(chapter.title, chapter.chapter_number));
                 if (onSelect) {event.preventDefault(); onSelect(chapter.id);}
               }}>
               <span>{formatChapterTitle(chapter.title, chapter.chapter_number)}</span>
+              {chapter.id === activeChapterId && <span aria-hidden="true" className="book-catalog-progress">{activeChapterLabel}</span>}
             </Link>)}
           </div>}/>}
       </div>

@@ -89,7 +89,7 @@ for (const origin of ['direct details', 'search', 'direct reader', 'legacy reade
 test('Back cancels a slow home-to-detail animation when returning to another page', async ({page}) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}}));
   await page.goto(`${base}/search`);
-  await page.locator('[data-site-chrome] a[href="/"]:visible').click(); await home(page);
+  await page.getByRole('link', {name: '返回首页', exact: true}).click(); await home(page);
   let requested = false;
   await page.route(`**/book/${book}?_rsc=*`, async route => {
     requested = true;

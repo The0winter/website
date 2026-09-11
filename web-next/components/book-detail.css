@@ -23,7 +23,11 @@
 .book-catalog-chapter { display:flex; align-items:center; min-width:0; min-height:48px; padding:12px; border:1px solid transparent; border-radius:6px; background:#f7f8f5; font-size:14px; line-height:1.6; }
 .book-catalog-chapter span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .book-catalog-chapter:hover,.book-catalog-chapter[aria-current] { background:#eaf0e2; border-color:#cddbc0; color:#48643b; }
-.book-catalog-chapter[aria-current] { font-weight:700; }
+.book-catalog-chapter[aria-current] { font-weight:700; color:#c63d45; background:#fff0ee; border-color:#efc5c2; }
+.book-catalog-chapter>span:first-child { flex:1; min-width:0; }
+.book-catalog-progress { flex-shrink:0; margin-left:10px; padding:2px 6px; border-radius:4px; background:#c63d4512; font-size:11px; font-weight:500; }
+.book-catalog a[aria-current] { color:#c63d45; background:#fff0ee; border-color:#efc5c2; }
+.book-catalog a[aria-current]>span { color:inherit; }
 .book-catalog-message { padding:12px; font-size:14px; }
 .book-catalog-message button { text-decoration:underline; }
 .book-hero { --cover-glow:#657e73; --cover-mid:#415e53; --cover-base:#293f38; --cover-wash:#e4ede6; background:radial-gradient(ellipse at 8% 0,var(--cover-wash),transparent 72%),linear-gradient(125deg,#fffdf9,#faf9f6); }

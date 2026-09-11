@@ -25,6 +25,29 @@ test.beforeEach(async({page})=>{
   await page.route('**/*',route=>['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname)?route.continue():route.abort());
 });
 
+test('detail catalog locates remembered progress after older chapter batches arrive',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.addInitScript(({book,chapter})=>localStorage.setItem('reader-recent-chapters:v1',JSON.stringify([[book,chapter]])),{book:String(bookId),chapter:String(chapterIds[99])});
+  let release!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  await page.route(`**/api/books/${bookId}/chapters*`,async route=>{
+    if(Number(new URL(route.request().url()).searchParams.get('page'))>1)await gate;
+    await route.continue();
+  });
+  try{
+    await page.goto(`${base}/book/${bookId}`);
+    await page.getByRole('button',{name:/^目录 /}).click();
+    const dialog=page.getByRole('dialog',{name:'全部目录'});
+    await expect(dialog.locator('[aria-current="location"]')).toHaveCount(0);
+    release();
+    const current=dialog.locator('[aria-current="location"]');
+    await expect(current).toHaveText('第100章 目录验证上次读到');
+    await expect(current).toBeInViewport();
+    await dialog.getByRole('button',{name:'倒序',exact:true}).click();
+    await expect(current).toBeInViewport();
+  }finally{release();}
+});
+
 test('book statistics are complete in the first HTML and stable across hydration, paging and sorting',async({browser})=>{
   // Both clients disagree with the server's default locale and with the site's date timezone.
   for(const settings of [

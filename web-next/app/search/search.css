@@ -1,0 +1,73 @@
+.search-page { --search-bg:#f6f1eb; --search-surface:#fffdf9; --search-text:#342d27; --search-muted:#8b7d70; --search-line:#e8dfd5; --search-accent:#c73c45; min-height:100svh; background:var(--search-bg); color:var(--search-text); font-family:Arial,"Microsoft YaHei",sans-serif; padding:28px 24px 48px; }
+.search-shell { max-width:1100px; margin:auto; }
+.search-header { max-width:760px; margin:0 auto 38px; }
+.search-home { display:inline-flex; align-items:center; gap:7px; min-height:36px; color:var(--search-muted); font-size:13px; }
+.search-home:hover { color:var(--search-accent); }
+.search-intro { margin:24px 0; }
+.search-intro>span { font-size:12px; letter-spacing:3px; color:var(--search-muted); }
+.search-intro h1 { font-size:32px; line-height:1.4; font-weight:700; margin:8px 0; }
+.search-intro p { font-size:14px; line-height:1.7; color:var(--search-muted); }
+.search-form { display:flex; align-items:center; gap:12px; padding:7px 8px 7px 18px; border:1px solid var(--search-line); border-radius:14px; background:var(--search-surface); box-shadow:0 8px 22px #77604405; color:var(--search-muted); }
+.search-form:focus-within { border-color:#d7a3a0; box-shadow:0 0 0 3px #c73c4510; }
+.search-form>svg,.search-form button { flex-shrink:0; }
+.search-form input { min-width:0; width:100%; flex:1; font:inherit; font-size:15px; color:var(--search-text); background:transparent; outline:none; }
+.search-form input::placeholder { color:#ab9e91; }
+.search-form input::-webkit-search-cancel-button { display:none; }
+.search-clear { display:grid; place-items:center; width:28px; height:40px; }
+.search-submit { min-height:42px; padding:0 24px; border-radius:9px; background:var(--search-accent); color:white; font-size:14px; font-weight:600; }
+.search-summary { display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:0 2px 17px; border-bottom:1px solid var(--search-line); margin-bottom:20px; }
+.search-summary h2 { min-width:0; font-size:18px; line-height:1.6; font-weight:600; overflow-wrap:anywhere; }
+.search-summary p { flex-shrink:0; font-size:12px; color:var(--search-muted); }
+.search-results { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.search-book { display:flex; align-items:flex-start; gap:18px; min-width:0; border:1px solid var(--search-line); background:var(--search-surface); border-radius:12px; padding:20px; transition:border-color .16s,box-shadow .16s; }
+a.search-book:hover { border-color:#d9b5a6; box-shadow:0 5px 16px #6b52440a; }
+.search-cover { flex:0 0 84px; height:116px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:9px; color:#897463; background:linear-gradient(135deg,#e8dccb,#f0e7dc); border-radius:5px; overflow:hidden; box-shadow:2px 3px 7px #60493613; }
+.search-cover img { width:calc(100% + 18px); max-width:none; height:calc(100% + 18px); object-fit:cover; flex-shrink:0; }
+.search-cover span { font:12px/1.5 "Songti SC",SimSun,serif; text-align:center; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+.search-book-info { flex:1; min-width:0; }
+.search-book-info h3 { font-size:18px; line-height:1.5; font-weight:600; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+a.search-book:hover h3 { color:var(--search-accent); }
+.search-author { display:flex; align-items:center; gap:5px; color:var(--search-muted); font-size:12px; margin-top:6px; }
+.search-author svg { flex-shrink:0; }
+.search-author span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.search-description { color:#7b7065; font-size:13px; line-height:1.8; margin:10px 0; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; overflow-wrap:anywhere; }
+.search-book-meta { display:flex; flex-wrap:wrap; gap:6px; }
+.search-book-meta span { font-size:10px; line-height:1.7; padding:2px 7px; border-radius:4px; color:var(--search-muted); background:#f4efe8; }
+.search-book-meta span.is-complete { color:#6d8163; background:#edf1e8; }
+.search-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; min-height:320px; padding:40px 18px; color:var(--search-muted); }
+.search-empty>svg { color:#b6a18b; margin-bottom:18px; stroke-width:1.4; }
+.search-empty h2 { font-size:18px; font-weight:600; color:var(--search-text); margin-bottom:10px; }
+.search-empty p { font-size:13px; line-height:1.8; }
+.search-empty button { display:inline-flex; align-items:center; gap:7px; min-height:40px; padding:0 18px; margin-top:20px; color:var(--search-accent); border:1px solid #ddbbb4; border-radius:8px; }
+.search-pagination { display:flex; align-items:center; justify-content:center; gap:24px; padding-top:28px; margin-top:12px; }
+.search-pagination button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:42px; padding:0 20px; border:1px solid var(--search-line); border-radius:9px; background:var(--search-surface); font-size:13px; }
+.search-pagination button:not(:disabled):hover { border-color:var(--search-accent); color:var(--search-accent); }
+.search-pagination button:disabled { opacity:.35; cursor:default; }
+.search-pagination>span { color:var(--search-muted); font-size:12px; white-space:nowrap; }
+.search-skeleton .search-book { min-height:170px; }
+.search-skeleton i { display:block; height:12px; border-radius:4px; background:var(--search-line); margin:8px 0 16px; }
+.search-skeleton i:nth-child(2) { width:50%; }
+.search-skeleton i:last-child { height:35px; }
+.search-page :focus-visible { outline:2px solid var(--search-accent); outline-offset:4px; }
+.search-page input:focus-visible { outline:none; }
+@media(max-width:767px) {
+  .search-page { padding:14px 16px 32px; }
+  .search-header { margin-bottom:28px; }
+  .search-intro { margin:14px 0 20px; }
+  .search-intro h1 { font-size:26px; }
+  .search-intro p { font-size:12px; }
+  .search-form { gap:7px; padding-left:12px; border-radius:12px; }
+  .search-form input { font-size:16px; }
+  .search-submit { padding:0 17px; min-height:40px; }
+  .search-summary { flex-direction:column; gap:4px; margin-bottom:16px; padding-bottom:13px; }
+  .search-summary h2 { font-size:17px; }
+  .search-results { grid-template-columns:minmax(0,1fr); gap:12px; }
+  .search-book { padding:15px; gap:13px; }
+  .search-cover { flex-basis:65px; height:92px; }
+  .search-book-info h3 { font-size:16px; }
+  .search-description { margin:8px 0; font-size:12px; line-height:1.7; }
+  .search-pagination { gap:10px; padding-top:20px; }
+  .search-pagination button { padding:0 10px; gap:4px; flex-shrink:0; }
+  .search-pagination>span { white-space:normal; text-align:center; }
+}
+@media(prefers-reduced-motion:reduce) { .search-book { transition:none; } }

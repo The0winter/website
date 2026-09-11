@@ -1,208 +1,112 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import {Suspense, useEffect, useState, type FormEvent} from 'react';
+import {useSearchParams, useRouter} from 'next/navigation';
 import Link from 'next/link';
+import {ArrowLeft, ArrowRight, Search, BookOpen, UserRound, X, RotateCcw} from 'lucide-react';
 import BookLink from '@/components/BookLink';
-import { Search, BookOpen, User, Clock, AlertCircle } from 'lucide-react';
-import { booksApi, Book } from '@/lib/api'; // ✅ 确保路径正确
+import {safeFetch} from '@/lib/request';
+import type {Book} from '@/lib/api';
+import './search.css';
 
-// 提取核心搜索内容组件
-function SearchContent() {
-  const searchParams = useSearchParams();
-  const query = searchParams.get('q') || ''; // 获取 URL 里的 ?q=xxx
+const pageSize = 20;
+const searchHref = (query: string, page = 1) => `/search?${new URLSearchParams({q: query, ...(page > 1 ? {page: String(page)} : {})})}`;
+
+function SearchForm({query}: {query: string}) {
+  const [draft, setDraft] = useState(query);
   const router = useRouter();
-
-  const [paging,setPaging]=useState({query,page:1});
-  const page=paging.query===query?paging.page:1;
-  const setPage=(next:number)=>setPaging({query,page:next});
-  const [books, setBooks] = useState<Book[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  // 监听 query 变化，重新触发搜索
-  useEffect(() => {
-    let active=true;
-    if (!query) {
-      setBooks([]);
-      setLoading(false);
-      return;
-    }
-
-    const fetchBooks = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const filtered = await booksApi.getAll({q:query,limit:20,page});
-        if(active)setBooks(filtered);
-      } catch (err) {
-        console.error('Search error:', err);
-        if(active)setError('搜索服务暂时不可用，请稍后再试');
-      } finally {
-        if(active)setLoading(false);
-      }
-    };
-
-    fetchBooks();
-    return()=>{active=false;};
-  }, [query,page]);
-
-  // 如果没有输入关键词
-  if (!query) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-gray-500">
-        <Search className="w-16 h-16 mb-4 opacity-20" />
-        <p className="text-lg">请输入关键词开始搜索</p>
-      </div>
-    );
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const next = draft.trim();
+    router.push(next ? searchHref(next) : '/search');
   }
-
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* 顶部结果提示 */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          “{query}” 的搜索结果
-        </h1>
-        <p className="text-gray-500 text-sm">
-          第 {page} 页 · 本页 {books.length} 本相关书籍
-        </p>
-      </div>
-
-      <div className="flex gap-4 mb-4"><button disabled={page===1} onClick={()=>setPage(page-1)}>上一页</button><button disabled={books.length<20} onClick={()=>setPage(page+1)}>下一页</button></div>
-      {/* 加载状态 */}
-      {loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="animate-pulse flex p-4 border rounded-lg bg-white h-40">
-              <div className="w-24 bg-gray-200 rounded mr-4"></div>
-              <div className="flex-1 space-y-3 py-2">
-                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                <div className="h-20 bg-gray-200 rounded w-full"></div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* 错误提示 */}
-      {error && (
-        <div className="flex items-center p-4 bg-red-50 text-red-700 rounded-lg">
-          <AlertCircle className="w-5 h-5 mr-2" />
-          {error}
-        </div>
-      )}
-
-      {/* 无结果 */}
-      {!loading && !error && books.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-          <BookOpen className="w-12 h-12 text-gray-300 mb-3" />
-          <h3 className="text-lg font-medium text-gray-900">未找到相关书籍</h3>
-          <p className="text-gray-500 mt-1">换个关键词试试？或者去<Link href="/" className="text-blue-600 hover:underline">首页</Link>看看</p>
-        </div>
-      )}
-
-      {/* 结果列表 */}
-      <div className="grid grid-cols-1 gap-6">
-        {books.map((book) => (
-          <BookLink
-            href={`/book/${book.id}`} 
-            key={book.id}
-            className="group block bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-md transition-all hover:border-blue-300"
-          >
-            <div className="flex p-4 sm:p-6">
-              {/* 封面图 */}
-              <div className="flex-shrink-0 w-24 h-32 sm:w-32 sm:h-44 bg-gray-100 rounded-lg overflow-hidden shadow-sm mr-6 relative">
-                {book.cover_image ? (
-                  <img 
-                    src={book.cover_image} 
-                    alt={book.title || '小说封面'} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400">
-                    <BookOpen className="w-8 h-8" />
-                  </div>
-                )}
-                {/* 连载状态角标 */}
-                {book.status && (
-                  <div className={`absolute top-0 right-0 px-2 py-1 text-xs text-white rounded-bl-lg font-medium
-                    ${book.status === 'completed' ? 'bg-green-500' : 'bg-blue-500'}`}
-                  >
-                    {book.status === 'completed' ? '完结' : '连载'}
-                  </div>
-                )}
-              </div>
-
-              {/* 书籍信息 */}
-              <div className="flex-1 flex flex-col justify-between min-w-0">
-                <div>
-                  <div className="flex justify-between items-start">
-                    <h2 className="text-xl font-bold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
-                      {book.title}
-                    </h2>
-                    {book.category && (
-                      <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 whitespace-nowrap ml-2">
-                        {book.category}
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div className="mt-1 flex items-center text-sm text-gray-500 mb-3">
-                    <User className="w-4 h-4 mr-1" />
-                    <span className="mr-4">
-                      {/* 处理 author 可能是对象也可能是字符串的情况 */}
-                      {typeof book.author_id === 'object' ? book.author_id?.username : (book.author || '佚名')}
-                    </span>
-                    {book.updated_at && ( // 假设api有updated_at，如果没有可用created_at
-                      <>
-                        <Clock className="w-4 h-4 mr-1 ml-2" />
-                        <span>最近更新</span>
-                      </>
-                    )}
-                  </div>
-
-                  <p className="text-gray-600 text-sm line-clamp-3 mb-4">
-                    {book.description || '暂无简介'}
-                  </p>
-                </div>
-                
-                {/* 底部标签或统计 */}
-                <div className="flex items-center gap-2">
-                   <span className="text-xs px-2 py-1 bg-gray-100 rounded text-gray-500">
-                     {book.category || '综合'}
-                   </span>
-                   {/* 如果有阅读量 */}
-                   {book.views !== undefined && (
-                     <span className="text-xs text-gray-400">
-                       {book.views} 次阅读
-                     </span>
-                   )}
-                </div>
-              </div>
-            </div>
-          </BookLink>
-        ))}
-      </div>
-    </div>
-  );
+  return <form className="search-form" role="search" onSubmit={submit}>
+    <Search size={20} aria-hidden="true"/>
+    <input type="search" name="q" aria-label="搜索书名或作者" placeholder="搜索书名、作者" value={draft} onChange={event => setDraft(event.target.value)} maxLength={200}/>
+    {draft && <button className="search-clear" type="button" aria-label="清空搜索词" onClick={() => setDraft('')}><X size={17}/></button>}
+    <button className="search-submit" type="submit">搜索</button>
+  </form>;
 }
 
-// 主页面组件必须包裹 Suspense 否则 build 会报错
+function BookCover({book}: {book: Book}) {
+  const [failed, setFailed] = useState(false);
+  return <div className="search-cover">{book.cover_image && !failed
+    ? <img src={book.cover_image} alt={`${book.title}封面`} loading="lazy" onError={() => setFailed(true)}/>
+    : <><BookOpen size={25}/><span>{book.title}</span></>}
+  </div>;
+}
+
+function SearchSkeleton() {
+  return <div className="search-results search-skeleton" role="status" aria-label="正在搜索">
+    {Array.from({length: 4}, (_, index) => <div key={index} className="search-book" aria-hidden="true"><div className="search-cover"/><div className="search-book-info"><i/><i/><i/></div></div>)}
+  </div>;
+}
+
+function SearchContent() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const query = (params.get('q') || '').trim();
+  const rawPage = params.get('page') || '1';
+  const page = /^\d+$/.test(rawPage) ? Math.max(1, Math.min(100000, Number(rawPage))) : 1;
+  const [retry, setRetry] = useState(0);
+  const key = JSON.stringify([query, page, retry]);
+  const [result, setResult] = useState<{key: string; books: Book[]; total: number | null; error: string}>({key: '', books: [], total: null, error: ''});
+  const loading = Boolean(query) && result.key !== key;
+  const books = loading || !query ? [] : result.books;
+  const error = loading || !query ? '' : result.error;
+  const total = loading ? null : result.total;
+  const pages = total === null ? null : Math.max(1, Math.ceil(total / pageSize));
+  const hasNext = pages === null ? books.length === pageSize : page < pages;
+
+  useEffect(() => {
+    if (!query) return;
+    const controller = new AbortController();
+    let active = true;
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    void (async () => {
+      try {
+        const response = await safeFetch(`/api/books?${new URLSearchParams({q: query, limit: String(pageSize), page: String(page)})}`, {signal: controller.signal});
+        if (!response.ok) throw new Error('搜索暂时不可用，请重试');
+        const books: Book[] = await response.json();
+        const header = response.headers.get('X-Total-Count');
+        const count = header === null ? NaN : Number(header);
+        if (active) setResult({key, books, total: Number.isSafeInteger(count) && count >= 0 ? count : null, error: ''});
+      } catch {
+        if (active) setResult({key, books: [], total: null, error: '搜索暂时不可用，请重试'});
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    })();
+    return () => {active = false; window.clearTimeout(timeout); controller.abort();};
+  }, [query, page, key]);
+
+  return <div className="search-page"><div className="search-shell">
+    <header className="search-header">
+      <Link href="/" className="search-home"><ArrowLeft size={17}/>返回首页</Link>
+      <div className="search-intro"><span>九天书库</span><h1>搜索书籍</h1><p>从书名或作者开始，找到下一本想读的书。</p></div>
+      <SearchForm key={query} query={query}/>
+    </header>
+    {!query ? <section className="search-empty"><BookOpen size={38}/><h2>好故事，等你发现</h2><p>输入书名或作者，开始搜索。</p></section> : <section className="search-body" aria-label="搜索结果" aria-busy={loading}>
+      <div className="search-summary"><h2>“{query}” 的搜索结果</h2><p aria-live="polite">{loading ? '正在查找相关书籍…' : error ? '搜索未完成' : total === null ? `第 ${page} 页 · 本页 ${books.length} 本` : `共 ${total} 本相关书籍`}</p></div>
+      {loading ? <SearchSkeleton/> : error ? <div className="search-empty" role="alert"><Search size={32}/><h2>暂时没能完成搜索</h2><p>{error}</p><button onClick={() => setRetry(value => value + 1)}><RotateCcw size={16}/>重新搜索</button></div> : books.length === 0 ? <div className="search-empty"><BookOpen size={38}/><h2>{page > 1 ? '这一页没有更多书籍了' : '没有找到相关书籍'}</h2><p>{page > 1 ? '可以返回上一页，继续挑选。' : '试试更短的书名，或搜索作者的名字。'}</p></div> : <div className="search-results">
+        {books.map(book => {
+          const author = typeof book.author_id === 'object' && book.author_id?.username || book.author || '佚名';
+          const category = book.category?.split('>').at(-1)?.trim();
+          const completed = ['completed', '完结', '已完结'].includes(book.status || '');
+          return <BookLink key={book.id} href={`/book/${book.id}`} className="search-book">
+            <BookCover book={book}/><div className="search-book-info"><h3>{book.title}</h3><p className="search-author"><UserRound size={13}/><span>{author}</span></p><p className="search-description">{book.description || '暂无简介'}</p><div className="search-book-meta">{category && <span>{category}</span>}{book.status && <span className={completed ? 'is-complete' : ''}>{completed ? '已完结' : '连载中'}</span>}</div></div>
+          </BookLink>;
+        })}
+      </div>}
+      {!loading && !error && (books.length > 0 || page > 1) && <nav className="search-pagination" aria-label="搜索结果分页">
+        <button disabled={page === 1} onClick={() => router.push(searchHref(query, page - 1))}><ArrowLeft size={16}/>上一页</button>
+        <span aria-current="page">第 {page} 页{pages !== null && ` / 共 ${pages} 页`}</span>
+        <button disabled={!hasNext} onClick={() => router.push(searchHref(query, page + 1))}>下一页<ArrowRight size={16}/></button>
+      </nav>}
+    </section>}
+  </div></div>;
+}
+
 export default function SearchPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-gray-500">正在准备搜索...</p>
-        </div>
-      </div>
-    }>
-      <div className="min-h-screen bg-gray-50">
-        <SearchContent />
-      </div>
-    </Suspense>
-  );
+  return <Suspense fallback={<div className="search-page"><div className="search-shell"><SearchSkeleton/></div></div>}><SearchContent/></Suspense>;
 }

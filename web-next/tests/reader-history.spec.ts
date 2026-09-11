@@ -157,7 +157,7 @@ test('a long catalog retries, stays virtualized, and locates the active chapter 
   await expect(dialog.locator('[aria-current="location"]')).toBeVisible();
   expect(await dialog.locator('.book-catalog-chapter').count()).toBeLessThan(60);
   await dialog.getByRole('button', {name: '倒序', exact: true}).click();
-  await expect(dialog.locator('.book-catalog-chapter').first()).toHaveText('第1章 目录验证');
+  await expect(dialog.locator('.book-catalog-chapter').first().locator('span').first()).toHaveText('第1章 目录验证');
   await dialog.locator('.book-catalog-list').evaluate(el => {el.scrollTop = el.scrollHeight;});
   await expect(dialog.getByRole('link', {name: '第1238章 目录验证', exact: true})).toBeVisible();
   expect(await dialog.locator('.book-catalog-chapter').count()).toBeLessThan(60);
