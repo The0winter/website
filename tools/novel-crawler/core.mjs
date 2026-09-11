@@ -23,6 +23,12 @@ export function validateSpec(input) {
     for (const key of ['headless', 'minimized']) if (spec.browser[key] !== undefined && typeof spec.browser[key] !== 'boolean') throw Error(`browser.${key} 必须为布尔值`);
     if (spec.browser.responseMode !== undefined && !['dom', 'source'].includes(spec.browser.responseMode)) throw Error('browser.responseMode 只支持 dom 或 source');
     if (spec.browser.manualVerificationMs !== undefined && (!Number.isInteger(spec.browser.manualVerificationMs) || spec.browser.manualVerificationMs < 1000 || spec.browser.manualVerificationMs > 600000)) throw Error('browser.manualVerificationMs 必须在 1000–600000 毫秒之间');
+    if (spec.browser.manualLogin) {
+      const login = spec.browser.manualLogin;
+      if (typeof login.selector !== 'string' || !login.selector.trim() || (login.openSelector !== undefined && (typeof login.openSelector !== 'string' || !login.openSelector.trim()))) throw Error('browser.manualLogin 需要有效的登录标记选择器');
+      if (!Number.isInteger(login.timeoutMs) || login.timeoutMs < 1000 || login.timeoutMs > 600000) throw Error('browser.manualLogin.timeoutMs 必须在 1000–600000 毫秒之间');
+    }
+    if (spec.browser.resourceHosts !== undefined && (!Array.isArray(spec.browser.resourceHosts) || spec.browser.resourceHosts.some(host => typeof host !== 'string' || !/^[a-z0-9.-]+$/.test(host) || host.startsWith('.') || host.endsWith('.')))) throw Error('browser.resourceHosts 只能包含明确的小写资源域名');
   }
   if (!spec.metadata?.title || !spec.metadata?.author) throw Error('必须配置来源页面书名和作者提取规则');
   if (spec.kind === 'html' && (!(spec.catalog?.links || spec.catalog?.json) || !spec.chapter?.content || !spec.chapter?.title)) throw Error('HTML 来源需配置目录及章节选择器');
@@ -40,7 +46,8 @@ export function jobId(spec) {
 function extractionHash(spec) {
   const {delayMs, retries, timeoutMs, searchUrl, ...extraction} = spec;
   if (extraction.browser) {
-    const {manualVerificationMs, ...browser} = extraction.browser;
+    // Login waiting and subresource loading do not change source-text extraction.
+    const {manualVerificationMs, manualLogin, resourceHosts, ...browser} = extraction.browser;
     extraction.browser = browser;
   }
   return hash(extraction);
@@ -136,7 +143,8 @@ export async function acquire(input, options = {}) {
     if (previousSpec && extractionHash(previousSpec) !== extractionHash(spec) && fs.existsSync(chaptersDir) && fs.readdirSync(chaptersDir).length) throw Error(`提取规则发生变化，请使用新的 --state-dir 重新试采，避免混用旧正文：${dir}`);
     atomicWrite(specFile, spec);
     const shouldStop = () => options.signal?.aborted || options.shouldStop?.();
-    const client = makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser, onStatus: options.onStatus, shouldStop, signal: options.signal});
+    const client = options.client || makeClient({cacheDir: path.join(stateDir, 'cache'), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser, onStatus: options.onStatus, shouldStop, signal: options.signal});
+    const initialStats = {...client.stats};
     const started = Date.now(), chapters = [], failures = [];
     let catalog = [], evidence, report, exportFile, paused = false, reusedExport = false;
     try {
@@ -217,9 +225,9 @@ export async function acquire(input, options = {}) {
       report.structuralPass = false;
       report.completeAgainstSource = false;
     } finally {
-      await client.close();
+      if (!options.client) await client.close();
     }
-    const details = {...report, paused, reusedExport, title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, jobId: id, checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: client.stats, evidence, exportFile: exportFile || null};
+    const details = {...report, paused, reusedExport, title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, jobId: id, checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: Object.fromEntries(Object.entries(client.stats).map(([key, value]) => [key, value - initialStats[key]])), evidence, exportFile: exportFile || null};
     atomicWrite(path.join(dir, `${mode}-report.json`), details);
     atomicWrite(path.join(dir, `${mode}-report.md`), reportMarkdown(details));
     atomicWrite(path.join(dir, 'history', `${Date.now()}-${mode}.json`), details);

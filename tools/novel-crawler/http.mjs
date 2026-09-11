@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import axios from 'axios';
 import iconv from 'iconv-lite';
+import {load} from 'cheerio';
 import {hash, atomicWrite, readJson} from './storage.mjs';
 
 export function httpUrl(value, base) {
@@ -23,10 +24,13 @@ export function decode(bytes, contentType = '', encoding) {
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal}) {
   const hosts = new Set(allowedHosts.map(h => h.toLowerCase()));
+  const resourceHosts = new Set(browserOptions.resourceHosts || []);
+  const login = browserOptions.manualLogin;
+  const needsLogin = (body, contentType) => !!login && load(decode(body, contentType))(login.selector).length > 0;
   // Also space out search, detail lookup and a new worker's first request.
   let lastRequest = Date.now();
   const stats = {requests: 0, cacheHits: 0, retries: 0, bytes: 0};
-  let browser, page, closingBrowser;
+  let browser, page, closingBrowser, manualAction = false;
   const stopped = () => {
     if (signal?.aborted || shouldStop?.()) throw Object.assign(Error(`任务已${signal?.aborted ? '停止' : '暂停'}，已完成的章节保留。`), {stopSource: true});
   };
@@ -73,9 +77,12 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
       try {
         const parsed = new URL(req.url());
         if (['data:', 'blob:', 'about:'].includes(parsed.protocol)) return req.continue();
-        assertUrl(req.url());
+        httpUrl(req.url());
+        const mainNavigation = req.isNavigationRequest() && req.frame() === page.mainFrame();
         const verificationAsset = browserOptions.manualVerificationMs && parsed.hostname === 'challenges.cloudflare.com';
-        if (!verificationAsset && ['image', 'media', 'font'].includes(req.resourceType())) return req.abort();
+        // Resource permissions never authorize book/navigation URLs on another host.
+        if (mainNavigation || !(resourceHosts.has(parsed.hostname) || verificationAsset)) assertUrl(req.url());
+        if (!manualAction && !verificationAsset && ['image', 'media', 'font'].includes(req.resourceType())) return req.abort();
         return req.continue();
       } catch { return req.abort(); }
     });
@@ -98,7 +105,8 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
     if (!fresh && !refresh && cached && Date.now() - Date.parse(cached.fetchedAt) < ttlMs && fs.existsSync(bodyPath)) {
       assertUrl(cached.url);
       const body = fs.readFileSync(bodyPath);
-      if (hash(body) === cached.hash) { stats.cacheHits++; return {...cached, body}; }
+      // Old restricted responses must not keep a resumed job from reaching login.
+      if (hash(body) === cached.hash && !needsLogin(body, cached.contentType)) { stats.cacheHits++; return {...cached, body}; }
     }
     if (render) {
       if (request) throw Error('浏览器模式只支持网页导航');
@@ -118,6 +126,7 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
           if (documentResponse?.headers()['cf-mitigated'] === 'challenge') {
             const limit = browserOptions.manualVerificationMs;
             if (!limit) throw Object.assign(Error('网站要求人机验证，采集已停止；请使用支持手动验证的浏览器来源配置。'), {stopSource: true});
+            manualAction = true;
             await windowState('normal');
             onStatus?.({kind: 'verification', message: `网站要求人机验证：请在弹出的采集浏览器中手动完成，完成后自动继续。最多等待 ${Math.round(limit / 60000 * 10) / 10} 分钟。`});
             const deadline = Date.now() + limit;
@@ -131,6 +140,7 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
               await wait(200);
             }
             lastRequest = Date.now();
+            manualAction = false;
             if (browserOptions.minimized) await windowState('minimized');
             onStatus?.({kind: 'active', message: '验证已完成，正在继续读取网页…'});
           }
@@ -152,6 +162,45 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
             }
           }
           if (!documentResponse || documentResponse.status() !== 200) throw Error(`浏览器未取得有效页面（HTTP ${documentResponse?.status() || '未知'}）；如需人工验证，请在普通浏览器中核实网站是否可用`);
+          if (login && needsLogin(Buffer.from(await documentResponse.buffer()), documentResponse.headers()['content-type'])) {
+            manualAction = true;
+            await windowState('normal');
+            if (login.openSelector) {
+              const links = await page.$$(login.openSelector);
+              try {
+                // Open the site's form only. Credentials and submission stay with the user.
+                if (links.length === 1) await links[0].click();
+              } catch {
+                stopped();
+                if (page.isClosed()) throw windowClosed();
+                // Keep the visible browser available if the site's button moved or hid.
+              } finally { await Promise.all(links.map(link => link.dispose())); }
+            }
+            onStatus?.({kind: 'login', message: `网站需要登录：采集浏览器已显示，请在该窗口手动登录；如有验证码请自行完成。登录后返回并刷新当前章节，程序会自动继续。最多等待 ${Math.round(login.timeoutMs / 60000 * 10) / 10} 分钟。`});
+            const deadline = Date.now() + login.timeoutMs;
+            let checkedResponse = documentResponse;
+            while (true) {
+              stopped();
+              if (page.isClosed()) throw windowClosed();
+              assertUrl(page.url());
+              if (Date.now() >= deadline) throw Object.assign(Error('等待手动登录超时，已结束本次采集；已保存章节保留，继续采集时会重新显示登录窗口。'), {stopSource: true});
+              // Require a fresh, successful response for this exact chapter. Hiding an
+              // overlay or visiting a login-success page cannot turn a preview into prose.
+              if (documentResponse !== checkedResponse && page.url() === original && documentResponse?.status() === 200) {
+                checkedResponse = documentResponse;
+                const body = Buffer.from(await checkedResponse.buffer());
+                if (!needsLogin(body, checkedResponse.headers()['content-type'])) {
+                  if (readySelector) await page.waitForSelector(readySelector, {timeout: Math.min(timeoutMs, Math.max(1, deadline - Date.now()))});
+                  break;
+                }
+              }
+              await wait(200);
+            }
+            lastRequest = Date.now();
+            manualAction = false;
+            if (browserOptions.minimized) await windowState('minimized');
+            onStatus?.({kind: 'active', message: '登录已完成，正在继续采集；已保存章节会自动跳过。'});
+          }
           const sourceMode = browserOptions.responseMode === 'source';
           const url = assertUrl(page.url());
           // Some sites translate their DOM after load. Source mode preserves the server's
@@ -169,7 +218,7 @@ export function makeClient({cacheDir, allowedHosts, delayMs = 1200, retries = 2,
           if (attempt === retries || !Number.isFinite(error.retryAfterMs)) throw error;
           retryAfterMs = error.retryAfterMs;
           stats.retries++;
-        } finally { if (responseListener) page.off('response', responseListener); }
+        } finally { manualAction = false; if (responseListener) page.off('response', responseListener); }
         onStatus?.({kind: 'waiting', message: `网站暂时限制访问，等待 ${Math.ceil(retryAfterMs / 1000)} 秒后重试；已完成的章节保留。`});
         await wait(retryAfterMs);
         onStatus?.({kind: 'active', message: '正在重试读取网页…'});

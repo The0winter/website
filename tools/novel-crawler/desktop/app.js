@@ -3,7 +3,7 @@ const token = location.hash.slice(1) || sessionStorage.getItem('desktop-token');
 if (token) sessionStorage.setItem('desktop-token', token);
 history.replaceState(null, '', '/');
 let data, selectedUrl = '', initialized = false, pollRunning = false, active = false, resultsKey = '', sitesKey = '';
-const phases = {idle: '等待开始', search: '查找中', ready: '等待选择', resolving: '读取目录', probe: '抽样检查', download: '正在下载', pausing: '正在暂停', paused: '已暂停', stopping: '正在停止', stopped: '已停止', probed: '试采通过', complete: '已完成', error: '需要处理'};
+const phases = {idle: '等待开始', search: '查找中', ready: '等待选择', resolving: '读取目录', probe: '抽样检查', download: '正在下载', pausing: '正在暂停', paused: '已暂停', stopping: '正在停止', stopped: '已停止', probed: '试采通过', complete: '已完成', error: '采集中断'};
 const working = phase => ['search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(phase);
 async function api(action, body) {
   const response = await fetch(`/api/${action}`, {method: body === undefined ? 'GET' : 'POST', headers: {'x-desktop-token': token || '', 'Content-Type': 'application/json'}, ...(body === undefined ? {} : {body: JSON.stringify(body)})});
@@ -70,7 +70,8 @@ function render() {
   for (const id of ['website', 'title', 'author', 'search', 'probe-only']) $(id).disabled = active;
   for (const button of document.querySelectorAll('.site-choice')) button.disabled = active;
   $('search').textContent = task.phase === 'search' ? '正在查找…' : '查找书籍 →';
-  $('phase').textContent = phases[task.phase] || '等待开始';
+  const actionLabel = active && {login: '等待登录', verification: '等待验证'}[task.action];
+  $('phase').textContent = actionLabel || phases[task.phase] || '等待开始';
   $('phase').className = `status-pill ${active ? 'running' : task.phase}`;
   $('stop').hidden = !active;
   $('stop').disabled = task.phase === 'stopping';
@@ -80,7 +81,8 @@ function render() {
   $('task-content').hidden = isEmpty;
   $('task-title').textContent = task.title ? `《${task.title}》${task.author ? ` · ${task.author}` : ''}` : '采集任务';
   $('task-message').textContent = task.message;
-  const progress = task.progress, report = task.report;
+  const report = task.report;
+  const progress = !active && report ? {downloaded: report.downloaded, total: report.expected, failed: report.errors, mode: task.progress?.mode} : task.progress;
   const percent = progress?.total ? Math.min(100, progress.downloaded / progress.total * 100) : task.phase === 'complete' || task.phase === 'probed' ? 100 : 0;
   $('progress-bar').style.width = `${percent}%`;
   $('progress-bar').className = active && !progress?.total ? 'indeterminate' : '';

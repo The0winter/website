@@ -312,13 +312,57 @@ test('stop interrupts an active worker request; resume and update reuse saved ch
   } finally { await app.close(); }
 });
 
+test('worker exposes login waiting, accepts external completion and shares the session into download', async t => {
+  let completeLogin = false, catalogReads = 0, restricted = 0;
+  const source = http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    if (req.url === '/book') {
+      catalogReads++;
+      return res.end('<h1>合成登录测试</h1><b>合成作者</b><nav><a href="/a">第一章</a>' + (catalogReads > 1 ? '<a href="/b">第二章</a>' : '') + '</nav>');
+    }
+    if (req.url === '/session') return res.end(completeLogin ? 'ready' : 'waiting');
+    if (!['/a', '/b'].includes(req.url)) { res.statusCode = 404; return res.end(); }
+    let authenticated = req.headers.cookie === 'fixture-session=valid';
+    if (req.url === '/a' && completeLogin) { completeLogin = false; authenticated = true; res.setHeader('Set-Cookie', 'fixture-session=valid; Path=/; SameSite=Lax'); }
+    if (!authenticated) {
+      restricted++;
+      return res.end('<div id="content"><div class="login-required">合成登录限制</div></div><script>setInterval(async () => { if (await (await fetch("/session")).text() === "ready") location.reload(); }, 100)</script>');
+    }
+    return res.end(`<h1>${req.url === '/a' ? '第一章' : '第二章'}</h1><div id="content">${req.url === '/a' ? '第一章的完整合成正文。' : '第二章的完整合成正文。'}</div>`);
+  });
+  await new Promise(resolve => source.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => source.close(resolve)));
+  const base = `http://127.0.0.1:${source.address().port}`, stateDir = temp(t);
+  const spec = {version: 1, kind: 'html', title: '合成登录测试', author: '合成作者', sourceUrl: base + '/book', delayMs: 200, transport: 'browser', browser: {responseMode: 'source', manualLogin: {selector: '.login-required', timeoutMs: 4000}}, metadata: {title: 'h1', author: 'b'}, catalog: {links: 'nav a'}, chapter: {title: 'h1', content: '#content'}};
+  const book = {title: spec.title, author: spec.author, url: spec.sourceUrl};
+  const app = await createDesktop({stateDir, outputDir: path.join(stateDir, 'out'), findBooks: async () => [book], prepareBook: async () => spec});
+  try {
+    await request(app, 'search', {website: 'fixture.example', title: spec.title});
+    assert.equal((await request(app, 'start', {url: book.url})).status, 200);
+    await until(() => app.state().action === 'login' || app.state().phase === 'error');
+    assert.equal(app.state().action, 'login', app.state().message);
+    assert.equal(app.state().phase, 'probe');
+    assert.match(app.state().message, /手动登录/);
+    const beforeCompletion = restricted;
+    completeLogin = true;
+    await until(() => ['complete', 'error'].includes(app.state().phase));
+    assert.equal(app.state().phase, 'complete', app.state().message);
+    assert.equal(app.state().action, null);
+    assert.equal(app.state().report.downloaded, 2);
+    assert.equal(restricted, beforeCompletion, 'the download stage must reuse the authenticated probe browser');
+  } finally { await app.close(); }
+});
+
 test('window searches, selects, downloads through worker, and shows result without console errors', async t => {
   const stateDir = temp(t), spec = await fixture(t), opened = [];
   for (let i = 0; i < 30; i++) rememberWebsite(stateDir, `history-${i}.example`);
   rememberWebsite(stateDir, 'ixdzs8.com');
   const book = {title: spec.title, author: spec.author, url: spec.sourceUrl, site: '本地测试来源'};
-  const app = await createDesktop({stateDir, outputDir: path.join(stateDir, 'out'), findBooks: async ({title, signal}) => {
-    if (title === '停止测试') await new Promise(resolve => signal.addEventListener('abort', resolve, {once: true}));
+  const app = await createDesktop({stateDir, outputDir: path.join(stateDir, 'out'), findBooks: async ({title, signal, onStatus}) => {
+    if (title === '停止测试') {
+      onStatus({kind: 'login', message: '合成测试：请在采集窗口手动登录。'});
+      await new Promise(resolve => signal.addEventListener('abort', resolve, {once: true}));
+    }
     return title === book.title ? [book] : [];
   }, prepareBook: async () => spec, open: target => opened.push(target)});
   const executablePath = ['C:/Program Files/Google/Chrome/Application/chrome.exe', puppeteer.executablePath()].find(file => fs.existsSync(file));
@@ -354,6 +398,7 @@ test('window searches, selects, downloads through worker, and shows result witho
     await page.click('#start');
     await page.waitForFunction(() => document.getElementById('phase').textContent === '已完成', {timeout: 20000});
     assert.match(await page.$eval('#report-stats', el => el.textContent), /4 \/ 4/);
+    assert.match(await page.$eval('#progress-text', el => el.textContent), /采集 4 \/ 4 章/);
     assert.match(await page.$eval('.local-state', el => el.textContent), /已下载完成/);
     assert.match(await page.$eval('#start', el => el.textContent), /检查更新/);
     assert.ok(fs.existsSync(app.state().report.exportFile));
@@ -368,11 +413,14 @@ test('window searches, selects, downloads through worker, and shows result witho
     await page.$eval('#title', el => { el.value = '停止测试'; });
     await page.click('#search');
     await page.waitForSelector('#stop', {visible: true});
+    await page.waitForFunction(() => document.getElementById('phase').textContent === '等待登录');
+    assert.equal(app.state().action, 'login');
     await page.click('#stop');
     await page.waitForFunction(() => document.getElementById('phase').textContent === '已停止');
     assert.equal(await page.$eval('#stop', el => el.hidden), true);
     assert.equal(await page.$eval('#feedback', el => el.textContent), '');
     assert.equal(await page.$eval('#search', el => el.disabled), false);
+    assert.equal(app.state().action, null);
     assert.deepEqual(errors, []);
   } finally { await browser.close(); await app.close(); }
 });

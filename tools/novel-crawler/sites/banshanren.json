@@ -30,7 +30,18 @@
     "sourceUrl": "${sourceUrl}",
     "allowedHosts": ["banshanren.com", "www.banshanren.com"],
     "transport": "browser",
-    "browser": {"headless": false, "minimized": true, "responseMode": "source", "manualVerificationMs": 180000},
+    "browser": {
+      "headless": false,
+      "minimized": true,
+      "responseMode": "source",
+      "manualVerificationMs": 180000,
+      "resourceHosts": ["cdn.banshanren.com"],
+      "manualLogin": {
+        "selector": ".chapter_content_box .limit_box [onclick='toggleLogin()']",
+        "openSelector": ".chapter_content_box .limit_box [onclick='toggleLogin()']",
+        "timeoutMs": 600000
+      }
+    },
     "identityNormalization": "chinese-simplified",
     "delayMs": 2000,
     "timeoutMs": 30000,

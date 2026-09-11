@@ -30,7 +30,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
   // An interrupted process can be resumed from crawler checkpoints, never shown as running.
   if (busy(task)) task = {...task, phase: 'paused', message: '上次任务已停止。重新查找这本书即可继续。'};
   function save() { atomicWrite(path.join(stateDir, 'desktop-last-task.json'), task); }
-  function update(values) { task = {...task, ...values}; save(); }
+  function update(values) { task = {...task, ...(Object.hasOwn(values, 'phase') ? {action: null} : {}), ...values}; save(); }
   function sites() { return loadSites(sitesDirectory); }
   function withLocalState(book) {
     try { return {...book, local: localBookState(resolvedSpecs.get(book.url) || specForBook(book, sites().sites), {stateDir, outputDir})}; }
@@ -40,7 +40,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
     candidates = candidates.map(withLocalState);
     update({phase: 'stopped', message: '已停止，采集页面已关闭；已保存的章节保留，下次会接着补齐。'});
   }
-  const controls = controller => ({signal: controller.signal, shouldStop: () => closing || controller.signal.aborted, onStatus: status => { if (!controller.signal.aborted) update({message: status.message}); }});
+  const controls = controller => ({signal: controller.signal, shouldStop: () => closing || controller.signal.aborted, onStatus: status => { if (!controller.signal.aborted) update({message: status.message, action: status.kind}); }});
   const server = http.createServer(async (req, res) => {
     const expectedHost = `127.0.0.1:${server.address().port}`;
     const respond = (status, value) => { res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store'}); res.end(JSON.stringify(value)); };
@@ -105,7 +105,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         let workerError = '';
         worker.stderr.on('data', chunk => { workerError = (workerError + chunk.toString()).slice(-1500); });
         worker.on('message', message => {
-          if (message.type === 'status' && !['pausing', 'stopping'].includes(task.phase)) update({message: message.message});
+          if (message.type === 'status' && !['pausing', 'stopping'].includes(task.phase)) update({message: message.message, action: message.kind});
           if (message.type === 'phase' && !['pausing', 'stopping'].includes(task.phase)) update({phase: message.phase, message: `${task.local?.saved ? `已保存 ${task.local.saved} 章，本次会跳过已有正文。` : ''}${message.phase === 'probe' ? '先抽样检查目录、正文和编码…' : '正在补齐章节，完成后检查并导出…'}`, progress: null});
           if (message.type === 'progress') {
             task.progress = message;

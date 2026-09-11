@@ -7,11 +7,11 @@ import http from 'node:http';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import iconv from 'iconv-lite';
-import {acquire, sourcePlan, localBookState} from '../core.mjs';
+import {acquire, sourcePlan, localBookState, validateSpec} from '../core.mjs';
 import {chapterQuality, qualityReport, checkIdentity} from '../quality.mjs';
 import {decode, makeClient} from '../http.mjs';
 import {splitText} from '../adapters.mjs';
-import {readJson, atomicWrite, withLock} from '../storage.mjs';
+import {readJson, atomicWrite, withLock, hash} from '../storage.mjs';
 import {prepareImport} from '../../../infra/import-plan.mjs';
 
 function removeFixture(dir) {
@@ -370,9 +370,87 @@ test('changing pacing and manual verification options preserves existing chapter
   const spec = {...specFor(f.base), browser: {responseMode: 'source'}};
   const first = await acquire(spec, {...f.options, mode: 'probe'});
   assert.equal(first.structuralPass, true);
-  const second = await acquire({...spec, delayMs: 300, browser: {...spec.browser, manualVerificationMs: 180000}}, {...f.options, mode: 'probe'});
+  const updated = {...spec, delayMs: 300, browser: {...spec.browser, manualVerificationMs: 180000, resourceHosts: ['cdn.example'], manualLogin: {selector: '.login-required', timeoutMs: 600000}}};
+  assert.equal(localBookState(updated, f.options).state, 'partial');
+  const second = await acquire(updated, {...f.options, mode: 'probe'});
   assert.equal(second.structuralPass, true, JSON.stringify(second.failures));
   assert.equal(f.counts.get('/a'), 1);
+});
+
+test('manual login opens a working form, ignores cached previews and keeps the session from probe to download', async t => {
+  let externalLoginCompleted = false, formOpened = false, lockedRequests = 0;
+  const f = await fixture(t, (req, res) => {
+    const loggedIn = req.headers.cookie === 'fixture-session=valid';
+    if (req.url === '/book') return res.end(heading + '<div id="catalog"><a href="/a">第一章</a><a href="/b">第二章</a></div>');
+    if (req.url === '/login-helper.js') {
+      res.setHeader('Content-Type', 'application/javascript');
+      return res.end(`document.querySelector('.login-link').onclick = () => { document.querySelector('#login-form').hidden = false; fetch('/form-opened'); }; setInterval(async () => { if (await (await fetch('/session')).text() === 'ready') location.reload(); }, 100);`);
+    }
+    if (req.url === '/form-opened') { formOpened = true; return res.end('ok'); }
+    if (req.url === '/session') {
+      if (externalLoginCompleted && formOpened) { res.setHeader('Set-Cookie', 'fixture-session=valid; Path=/; SameSite=Lax'); return res.end('ready'); }
+      return res.end('waiting');
+    }
+    if (!['/a', '/b'].includes(req.url)) { res.statusCode = 404; return res.end('missing fixture route'); }
+    if (!loggedIn) {
+      lockedRequests++;
+      return res.end(`<h1>第一章</h1><div id="content"><div class="login-required"><button class="login-link">登录</button></div>合成预览</div><form id="login-form" hidden><input name="fixture-user"></form><script src="http://localhost:${new URL(f.base).port}/login-helper.js"></script>`);
+    }
+    res.end(`<h1>${req.url === '/a' ? '第一章' : '第二章'}</h1><div id="content">${req.url === '/a' ? '合成完整第一章。' : '合成完整第二章。'}</div>`);
+  });
+  const browser = {headless: false, minimized: true, responseMode: 'source', resourceHosts: ['localhost'], manualLogin: {selector: '.login-required', openSelector: '.login-link', timeoutMs: 5000}};
+  const cacheDir = path.join(f.dir, 'login-cache'), url = f.base + '/a';
+  const preview = Buffer.from('<h1>第一章</h1><div id="content"><div class="login-required">过期的合成预览</div></div>');
+  const key = hash({url, request: undefined, render: true, browser});
+  atomicWrite(path.join(cacheDir, key + '.bin'), preview);
+  atomicWrite(path.join(cacheDir, key + '.json'), {url, original: url, hash: hash(preview), fetchedAt: new Date().toISOString()});
+  const statuses = [];
+  const client = makeClient({cacheDir, allowedHosts: ['127.0.0.1'], delayMs: 200, browser, onStatus: status => { statuses.push(status.kind); if (status.kind === 'login') externalLoginCompleted = true; }});
+  const spec = {...specFor(f.base), transport: 'browser', browser};
+  try {
+    const probe = await acquire(spec, {...f.options, client, mode: 'probe', maxNew: 1});
+    assert.equal(probe.structuralPass, true, JSON.stringify(probe.failures));
+    assert.equal(probe.downloaded, 1);
+    assert.equal(formOpened, true, 'the external login script and openSelector must work');
+    assert.equal(lockedRequests, 1, 'cached preview must be refreshed before waiting');
+    assert.deepEqual(statuses, ['login', 'active']);
+    assert.equal(client.stats.cacheHits, 0);
+    const report = await acquire(spec, {...f.options, client, mode: 'download'});
+    assert.equal(report.completeAgainstSource, true, JSON.stringify(report.failures));
+    assert.deepEqual(readJson(report.exportFile).chapters.map(c => c.content), ['合成完整第一章。', '合成完整第二章。']);
+    assert.deepEqual(statuses, ['login', 'active'], 'the same session must serve subsequent phases and chapters');
+    assert.equal(lockedRequests, 1);
+    assert.throws(() => client.assertUrl(f.base.replace('127.0.0.1', 'localhost') + '/a'), /域名范围/, 'resource hosts must not become book hosts');
+    assert.equal(readJson(path.join(cacheDir, key + '.json')).hash, hash(fs.readFileSync(path.join(cacheDir, key + '.bin'))));
+    assert.doesNotMatch(fs.readFileSync(path.join(cacheDir, key + '.bin'), 'utf8'), /login-required/);
+  } finally { await client.close(); }
+});
+
+test('manual login does not accept a hidden overlay and can time out or stop without caching a preview', async t => {
+  const f = await fixture(t, (req, res) => res.end('<h1>第一章</h1><div id="content"><div class="login-required">合成限制</div></div><script>document.querySelector(".login-required").remove()</script>'));
+  const controller = new AbortController(), statuses = [];
+  const cacheDir = path.join(f.dir, 'login-timeout');
+  let cancel = false;
+  const client = makeClient({cacheDir, allowedHosts: ['127.0.0.1'], delayMs: 200, browser: {responseMode: 'source', manualLogin: {selector: '.login-required', timeoutMs: 1000}}, signal: controller.signal, onStatus: status => { statuses.push(status.kind); if (cancel && status.kind === 'login') controller.abort(); }});
+  try {
+    await assert.rejects(client.get(f.base + '/timeout', {render: true, readySelector: '#content'}), e => e.stopSource === true && /手动登录超时/.test(e.message));
+    assert.equal(fs.existsSync(cacheDir), false, 'restricted responses must not be written as successful cache entries');
+    cancel = true;
+    const started = Date.now();
+    await assert.rejects(client.get(f.base + '/stop', {render: true, readySelector: '#content'}), /已停止/);
+    assert.ok(Date.now() - started < 3000);
+    assert.deepEqual(statuses, ['login', 'login']);
+  } finally { await client.close(); }
+});
+
+test('login configuration validates time bounds and exact resource host names', () => {
+  const spec = specFor('https://books.example');
+  for (const manualLogin of [{selector: '', timeoutMs: 1000}, {selector: '.login', timeoutMs: 0}, {selector: '.login', timeoutMs: 600001}, {selector: '.login', openSelector: {}, timeoutMs: 1000}]) {
+    assert.throws(() => validateSpec({...spec, browser: {manualLogin}}), /manualLogin/);
+  }
+  for (const resourceHosts of ['cdn.example', ['https://cdn.example'], ['*.example'], ['.example']]) {
+    assert.throws(() => validateSpec({...spec, browser: {resourceHosts}}), /resourceHosts/);
+  }
 });
 
 test('a long server cooldown stops the entire book before requesting other chapters', async t => {
