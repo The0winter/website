@@ -9,7 +9,9 @@ function waitForPage(href: string, signal: AbortSignal) {
   return new Promise<void>(resolve => {
     const path = new URL(href, location.origin).pathname;
     const parts = path.split('/');
-    const ready = () => location.pathname === path && (parts[1] === 'author'
+    const ready = () => location.pathname === path && (parts[1] === 'library'
+      ? visible('.library-page, .account-loading')
+      : parts[1] === 'author'
       ? visible('.author-page')
       : parts[3]
       ? visible(`[data-reader-chapter="${CSS.escape(parts[3])}"][data-reader-ready="true"]`)

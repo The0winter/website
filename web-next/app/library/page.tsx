@@ -1,7 +1,7 @@
 'use client';
 
-import {useEffect, useRef, useState} from 'react';
-import {useRouter} from 'next/navigation';
+import {Suspense, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore} from 'react';
+import {usePathname, useRouter, useSearchParams} from 'next/navigation';
 import Link from 'next/link';
 import {ArrowUpDown, BookOpen, ChevronRight, History, Trash2} from 'lucide-react';
 import BookLink from '@/components/BookLink';
@@ -13,13 +13,12 @@ import {useAuth} from '@/contexts/AuthContext';
 import {useReadingSettings} from '@/contexts/ReadingSettingsContext';
 import {useStoredState} from '@/lib/useStoredState';
 import {safeFetch} from '@/lib/request';
+import {getLibrarySnapshot, loadLibrary, serverLibrarySnapshot, subscribeLibrary, type LibraryEntry as Entry, type LibrarySort as Sort, type LibraryTab as Tab} from '@/lib/library-cache';
+import {syncBookRoute} from '@/lib/book-navigation';
 import {formatRelativeUpdate} from '@/lib/relative-update';
 import type {Book} from '@/lib/api';
 import './library.css';
 
-type Tab = 'shelf' | 'history';
-type Sort = 'combined' | 'read' | 'updated';
-type Entry = {bookId: string; book: Book | null; lastReadAt?: string; lastVisitedAt?: string; chapterId?: string; chapterTitle?: string; latestChapterTitle?: string};
 const sorts = {combined: '综合排序（默认）', read: '按最近阅读排序', updated: '按最近更新排序'};
 
 function Cover({book}: {book: Book | null}) {
@@ -38,35 +37,46 @@ function RemoveDialog({entry, tab, busy, error, onClose, onRemove}: {entry: Entr
   </dialog>;
 }
 
-export default function Library() {
+export default function LibraryPage() {
+  return <Suspense fallback={<AccountLoading checking/>}><Library/></Suspense>;
+}
+
+function Library() {
   const {user, loading: authLoading} = useAuth();
   const {setTheme} = useReadingSettings();
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('shelf');
-  const [sort, setSort] = useStoredState<Sort>('library-sort', 'combined', value => typeof value === 'string' && Object.hasOwn(sorts, value));
-  const [page, setPage] = useState(1);
-  const [refresh, setRefresh] = useState(0);
+  const pathname = usePathname();
+  const search = useSearchParams();
+  const tab: Tab = search.get('tab') === 'history' ? 'history' : 'shelf';
+  const [savedSort, setSort] = useStoredState<Sort>('library-sort', 'combined', value => typeof value === 'string' && Object.hasOwn(sorts, value));
+  const requestedSort = search.get('sort');
+  const sort = requestedSort && Object.hasOwn(sorts, requestedSort) ? requestedSort as Sort : savedSort;
+  const requestedPage = Number(search.get('page') || 1);
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 && requestedPage <= 100000 ? requestedPage : 1;
   const [managing, setManaging] = useState(false);
   const [target, setTarget] = useState<Entry | null>(null);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState('');
-  const [result, setResult] = useState<{key: string; rows: Entry[]; total: number; error: string}>({key: '', rows: [], total: 0, error: ''});
   const userId = user?.id;
-  const key = `${userId}:${tab}:${sort}:${page}:${refresh}`;
-  const loading = result.key !== key;
-  const rows = loading ? [] : result.rows;
+  const query = {userId: userId || '', tab, sort, page};
+  const result = useSyncExternalStore(subscribeLibrary, () => getLibrarySnapshot(query), serverLibrarySnapshot);
+  const loading = result.rows === null && !result.error;
+  const rows = result.rows || [];
+  const searchString = search.toString();
+  useLayoutEffect(() => {syncBookRoute('/library' + (searchString ? `?${searchString}` : ''));}, [searchString]);
   useEffect(() => {setTheme('light');}, [setTheme]);
   useEffect(() => {if (!authLoading && !user) router.replace('/login');}, [authLoading, user, router]);
   useEffect(() => {
-    if (!userId) return;
-    let active = true;
-    safeFetch(`/api/users/${userId}/library?tab=${tab}&sort=${sort}&page=${page}&limit=20`).then(async response => {
-      if (!response.ok) throw new Error('暂时加载失败，请重试');
-      const entries: Entry[] = await response.json();
-      if (active) setResult({key, rows: entries, total: Number(response.headers.get('X-Total-Count') || entries.length), error: ''});
-    }).catch(error => {if (active) setResult({key, rows: [], total: 0, error: error.message});});
-    return () => {active = false;};
-  }, [userId, tab, sort, page, key]);
+    if (userId && pathname === '/library') void loadLibrary({userId, tab, sort, page});
+  }, [userId, tab, sort, page, pathname, result.updatedAt]);
+
+  function changeView(nextTab = tab, nextPage = page, nextSort = sort) {
+    const params = new URLSearchParams();
+    if (nextTab === 'history') params.set('tab', nextTab);
+    params.set('sort', nextSort);
+    if (nextPage > 1) params.set('page', String(nextPage));
+    history.replaceState({}, '', '/library?' + params);
+  }
 
   async function remove() {
     if (!target || !userId || removing) return;
@@ -75,8 +85,8 @@ export default function Library() {
       const response = await safeFetch(`/api/users/${userId}/${tab === 'shelf' ? 'bookmarks' : 'history'}/${target.bookId}`, {method: 'DELETE'});
       if (!response.ok) throw new Error('操作失败，请重试');
       setTarget(null);
-      if (rows.length === 1 && page > 1) setPage(page - 1);
-      setRefresh(value => value + 1);
+      if (rows.length === 1 && page > 1) changeView(tab, page - 1);
+      else await loadLibrary(query);
     } catch (error) {setRemoveError(error instanceof Error ? error.message : '操作失败，请重试');}
     finally {setRemoving(false);}
   }
@@ -89,15 +99,16 @@ export default function Library() {
       <section className="shelf-panel" aria-label="个人书架">
         <header className="shelf-toolbar">
           <div className="shelf-tabs" role="tablist" aria-label="书架与浏览记录">
-            {(['shelf', 'history'] as const).map(value => <button key={value} id={`tab-${value}`} role="tab" aria-selected={tab === value} aria-controls="shelf-content" onClick={() => {setTab(value); setPage(1); setManaging(false);}}>{value === 'shelf' ? '书架' : '浏览记录'}</button>)}
+            {(['shelf', 'history'] as const).map(value => <button key={value} id={`tab-${value}`} role="tab" aria-selected={tab === value} aria-controls="shelf-content" onClick={() => {changeView(value, 1); setManaging(false);}}>{value === 'shelf' ? '书架' : '浏览记录'}</button>)}
           </div>
           <div className="shelf-actions">
             <button aria-pressed={managing} onClick={() => setManaging(!managing)}>{managing ? '完成' : '管理'}</button>
-            <label className="shelf-sort" title={sorts[sort]}><span>排序</span><ArrowUpDown size={13}/><select aria-label="书架排序" value={sort} onChange={event => {setSort(event.target.value as Sort); setPage(1);}}>{Object.entries(sorts).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+            <label className="shelf-sort" title={sorts[sort]}><span>排序</span><ArrowUpDown size={13}/><select aria-label="书架排序" value={sort} onChange={event => {const value = event.target.value as Sort; setSort(value); changeView(tab, 1, value);}}>{Object.entries(sorts).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           </div>
         </header>
         <div id="shelf-content" role="tabpanel" aria-labelledby={`tab-${tab}`} aria-busy={loading}>
-          {loading ? <div className="shelf-empty" role="status"><BookOpen size={32}/><p>正在整理你的书架…</p></div> : result.error ? <div className="shelf-empty" role="alert"><p>{result.error}</p><button onClick={() => setRefresh(value => value + 1)}>重新加载</button></div> : rows.length === 0 ? <div className="shelf-empty">
+          {result.error && result.rows !== null && <p className="shelf-refresh-error" role="alert">更新暂时失败，已保留上次的书架。<button onClick={() => void loadLibrary(query, true)}>重试</button></p>}
+          {loading ? <div className="shelf-empty" role="status"><BookOpen size={32}/><p>正在整理你的书架…</p></div> : result.error && result.rows === null ? <div className="shelf-empty" role="alert"><p>{result.error}</p><button onClick={() => void loadLibrary(query, true)}>重新加载</button></div> : rows.length === 0 ? <div className="shelf-empty">
             <div className="shelf-empty-icon">{tab === 'shelf' ? <BookOpen size={32}/> : <History size={32}/>}</div>
             <h2>{tab === 'shelf' ? '把喜欢的故事，放进书架' : '读过的故事，在这里重逢'}</h2>
             <p>{tab === 'shelf' ? '找到喜欢的书，加入书架就能随时接着读。' : '浏览书籍或开始阅读后，记录会自动保存在这里。'}</p>
@@ -114,7 +125,7 @@ export default function Library() {
               {managing ? <button className="shelf-remove" aria-label={`${tab === 'shelf' ? '移出书架' : '删除记录'}：${entry.book?.title || '作品暂不可用'}`} onClick={() => {setTarget(entry); setRemoveError('');}}><Trash2 size={18}/></button> : entry.book && entry.chapterId ? <ReadingEntryLink bookId={entry.bookId} firstChapterId={entry.chapterId} className="shelf-continue" label="继续"/> : null}
             </article>)}</div>
             {result.total <= 2 && !managing && <div className="shelf-discover"><span>下一本好书，等你发现</span><Link href="/">去精选 <ChevronRight size={14}/></Link></div>}
-            {result.total > 20 && <nav className="shelf-pagination" aria-label={tab === 'shelf' ? '书架分页' : '浏览记录分页'}><button disabled={page === 1} onClick={() => setPage(page - 1)}>上一页</button><span>{page} / {Math.ceil(result.total / 20)}</span><button disabled={page * 20 >= result.total} onClick={() => setPage(page + 1)}>下一页</button></nav>}
+            {result.total > 20 && <nav className="shelf-pagination" aria-label={tab === 'shelf' ? '书架分页' : '浏览记录分页'}><button disabled={page === 1} onClick={() => changeView(tab, page - 1)}>上一页</button><span>{page} / {Math.ceil(result.total / 20)}</span><button disabled={page * 20 >= result.total} onClick={() => changeView(tab, page + 1)}>下一页</button></nav>}
           </>}
         </div>
       </section>

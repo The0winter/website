@@ -3,12 +3,12 @@
 .library-page .mh-topbar { max-width:680px; margin-bottom:24px; }
 .library-page .mh-search { background:var(--home-surface); }
 .shelf-panel { background:var(--home-surface); border:1px solid var(--home-border); border-radius:18px; padding:0 28px; }
-.shelf-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:78px; border-bottom:1px solid var(--home-border); }
+.shelf-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:56px; border-bottom:1px solid var(--home-border); }
 .shelf-tabs,.shelf-actions { display:flex; align-items:center; }
 .shelf-tabs { gap:26px; }
-.shelf-tabs button { position:relative; min-height:60px; font-size:22px; white-space:nowrap; color:var(--home-muted); }
+.shelf-tabs button { position:relative; min-height:48px; font-size:18px; white-space:nowrap; color:var(--home-muted); }
 .shelf-tabs [aria-selected=true] { color:var(--home-text); font-weight:600; }
-.shelf-tabs [aria-selected=true]::after { content:''; position:absolute; bottom:9px; left:0; width:26px; height:4px; border-radius:4px; background:#df3a47; }
+.shelf-tabs [aria-selected=true]::after { content:''; position:absolute; bottom:3px; left:0; width:24px; height:3px; border-radius:4px; background:#df3a47; }
 .shelf-actions { gap:24px; font-size:14px; color:var(--home-muted); }
 .shelf-actions button { min-height:44px; white-space:nowrap; }
 .shelf-actions [aria-pressed=true] { color:#ce3b42; }
@@ -40,6 +40,8 @@
 .shelf-pagination { display:flex; justify-content:center; align-items:center; gap:24px; padding:12px 0 24px; font-size:13px; color:var(--home-muted); }
 .shelf-pagination button { min-height:44px; }
 .shelf-pagination button:disabled { opacity:.35; }
+.shelf-refresh-error { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 0; color:var(--home-muted); font-size:12px; }
+.shelf-refresh-error button { flex-shrink:0; min-height:36px; color:var(--home-accent); }
 .shelf-dialog { margin:auto; max-width:380px; width:calc(100% - 40px); border:0; border-radius:18px; padding:24px; background:#fffaf7; color:#2c2925; }
 .shelf-dialog::backdrop { background:#241a1566; }
 .shelf-dialog h2 { font-size:20px; font-weight:600; }
@@ -53,10 +55,10 @@
   .library-page { padding:18px 12px calc(88px + env(safe-area-inset-bottom)); }
   .library-page .mh-topbar { margin-bottom:16px; }
   .shelf-panel { padding:0 14px; border-color:#efe5dc; border-radius:16px; }
-  .shelf-toolbar { min-height:68px; gap:8px; }
+  .shelf-toolbar { min-height:50px; gap:8px; }
   .shelf-tabs { gap:17px; }
-  .shelf-tabs button { font-size:18px; min-height:58px; }
-  .shelf-tabs [aria-selected=true]::after { bottom:7px; width:23px; height:3px; }
+  .shelf-tabs button { font-size:16px; min-height:44px; }
+  .shelf-tabs [aria-selected=true]::after { bottom:1px; width:23px; height:3px; }
   .shelf-actions { gap:16px; font-size:12px; }
   .shelf-row { gap:8px; padding:20px 0; }
   .shelf-book { gap:12px; }
@@ -71,7 +73,7 @@
 }
 @media (max-width:350px) {
   .shelf-tabs { gap:12px; }
-  .shelf-tabs button { font-size:17px; }
+  .shelf-tabs button { font-size:16px; }
   .shelf-actions { gap:12px; }
   .shelf-cover { flex-basis:56px; height:82px; }
   .shelf-book { gap:10px; }

@@ -8,6 +8,7 @@ import Footer from "@/components/Footer";
 import BookPrefetchSession from "@/components/BookPrefetchSession";
 import BookNavigation from "@/components/BookNavigation";
 import LoginNavigation from "@/components/LoginNavigation";
+import LibraryPrefetch from "@/components/LibraryPrefetch";
 import { Suspense } from 'react';
 
 import { GoogleAnalytics } from '@next/third-parties/google';
@@ -53,6 +54,7 @@ export default function RootLayout({
         <BookNavigation />
         <Suspense fallback={null}><LoginNavigation /></Suspense>
         <AuthProvider>
+          <LibraryPrefetch />
           {/* ✅ Provider 结构正确 */}
           <ReadingSettingsProvider>
             

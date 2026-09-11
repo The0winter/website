@@ -40,9 +40,8 @@ for (const width of [320, 390, 768, 1440]) {
       await page.screenshot({path: info.outputPath(`${count}-books.png`)});
     }
     for (const sort of ['read', 'updated', 'combined']) {
-      const request = page.waitForRequest(req => req.url().includes('/library?') && new URL(req.url()).searchParams.get('sort') === sort);
       await page.getByRole('combobox', {name: '书架排序'}).selectOption(sort);
-      await request;
+      await expect(page.getByRole('combobox', {name: '书架排序'})).toHaveValue(sort);
       await expect(page.locator('.shelf-row')).toHaveCount(2);
     }
     await page.getByRole('tab', {name: '浏览记录', exact: true}).click();
@@ -73,7 +72,7 @@ test('failed requests can retry and removing the last item on page two returns t
   await login(page);
   let total = 21, failLoad = true, failDelete = true;
   await page.route('**/api/users/*/library?*', route => {
-    if (failLoad) {failLoad = false; return route.fulfill({status: 503, json: {error: 'unavailable'}});}
+    if (failLoad) return route.fulfill({status: 503, json: {error: 'unavailable'}});
     const current = Number(new URL(route.request().url()).searchParams.get('page'));
     return route.fulfill({headers: {'X-Total-Count': String(total)}, json: Array.from({length: current === 2 ? total - 20 : 20}, (_, i) => ({bookId: current === 2 ? book : String(i).padStart(24, '0'), book: {id: book, title: `分页作品 ${current}-${i}`, author: '分页作者', lastUpdated: new Date().toISOString()}}))});
   });
@@ -84,6 +83,7 @@ test('failed requests can retry and removing the last item on page two returns t
   await page.goto(base + '/library');
   await expect(page.locator('.shelf-panel').getByRole('alert')).toContainText('暂时加载失败');
   await expect(page.getByText('把喜欢的故事，放进书架', {exact: true})).toHaveCount(0);
+  failLoad = false;
   await page.getByRole('button', {name: '重新加载', exact: true}).click();
   await expect(page.locator('.shelf-row')).toHaveCount(20);
   await page.getByRole('button', {name: '下一页', exact: true}).click();
@@ -96,9 +96,9 @@ test('failed requests can retry and removing the last item on page two returns t
   await page.getByRole('button', {name: '确认移出', exact: true}).click();
   await expect(page.locator('.shelf-row')).toHaveCount(20);
   await expect(page.getByRole('navigation', {name: '书架分页'})).toHaveCount(0);
-  await page.getByRole('textbox', {name: '搜索书名或作者'}).fill('山海 行记');
-  await page.getByRole('search').getByRole('button', {name: '搜索'}).click();
-  await expect(page).toHaveURL(base + '/search?q=' + encodeURIComponent('山海 行记'));
+  await page.getByRole('combobox', {name: '搜索书名或作者'}).fill('山海 行记');
+  await page.getByRole('search').getByRole('button', {name: '搜索', exact: true}).click();
+  await expect(page).toHaveURL(url => url.pathname === '/search' && url.searchParams.get('q') === '山海 行记');
 });
 
 test('real history survives reload, resumes the chapter and shelf removal preserves it', async ({page}) => {

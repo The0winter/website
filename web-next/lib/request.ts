@@ -13,7 +13,13 @@ export async function safeFetch(input: RequestInfo | URL, init?: RequestInit): P
     const { csrfToken } = await response.json();
     headers.set('x-csrf-token', csrfToken);
   }
-  return globalThis.fetch(input, { ...init, headers, credentials: 'same-origin', signal: init?.signal || AbortSignal.timeout(15000) });
+  const response = await globalThis.fetch(input, { ...init, headers, credentials: 'same-origin', signal: init?.signal || AbortSignal.timeout(15000) });
+  if (typeof window !== 'undefined' && response.ok && !['GET','HEAD','OPTIONS'].includes(method)) {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, window.location.origin);
+    const libraryWrite = /^\/api\/users\/([^/]+)\/(bookmarks|history)(?:\/|$)/.exec(url.pathname);
+    if (libraryWrite) window.dispatchEvent(new CustomEvent('library-changed', {detail: {userId: libraryWrite[1]}}));
+  }
+  return response;
 }
 
 export interface CatalogPage<T> {
