@@ -47,11 +47,8 @@ for (const origin of ['details', 'reader']) {
     try {
       await dialog(page).getByRole('link', {name: '第12章 山间来信', exact: true}).click();
       await expect(loader(page)).toHaveAttribute('data-chapter-loading', last);
-      if (origin === 'reader') await expect(loader(page).getByRole('status')).toHaveText('第12章 山间来信正在加载');
-      else {
-        await expect(loader(page)).toHaveAttribute('data-loading-visible', 'false');
-        await expect(page.locator('.chapter-entry-snapshot')).toBeVisible();
-      }
+      await expect(loader(page).getByRole('status')).toHaveText('第12章 山间来信正在加载');
+      await expect(loader(page)).toHaveAttribute('data-loading-visible', 'true');
       await expect.poll(() => page.evaluate(() => Boolean(document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.closest('.chapter-loading-page')))).toBe(true);
       await page.mouse.wheel(0, 1600); await page.keyboard.press('PageDown');
       // Even a queued scroll event from the old viewport cannot win over the selection.

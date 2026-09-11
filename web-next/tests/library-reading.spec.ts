@@ -78,6 +78,7 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
     const dialog = page.getByRole('dialog', {name: '全部目录'});
     await expect(dialog).toBeVisible();
     await page.goBack(); await expect(dialog).not.toBeVisible();
+    await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')))).toBe(false);
     await page.keyboard.press('m');
     await page.locator('.reader-tools:visible').getByRole('button', {name: '目录', exact: true}).click();
     await dialog.getByRole('link', {name: '第3章 山间来信', exact: true}).click();
@@ -104,6 +105,7 @@ test('opening shelf details before reading still returns to those details', asyn
   await page.locator('.shelf-more-button').click();
   await page.getByRole('menuitem', {name: '详情'}).click();
   await expect(page.locator('.book-detail')).toBeVisible();
+  await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
   await page.getByRole('link', {name: '立即阅读', exact: true}).click();
   await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
   await page.keyboard.press('m');

@@ -46,7 +46,7 @@ for (const origin of ['details', 'shelf']) {
 }
 
 for (const mode of ['horizontal', 'vertical', 'scroll']) {
-  test(`detail catalog stays on screen until a single ready ${mode} reader handoff`, async ({page}) => {
+  test(`reading paper stays on screen until a single ready ${mode} reader handoff`, async ({page}) => {
     await page.addInitScript(mode => localStorage.setItem('reader_turnMode', JSON.stringify(mode)), mode);
     await page.goto(detail);
     // Cover both the first visit and re-entering after a return to details.
@@ -60,14 +60,15 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
       try {
         await page.getByRole('dialog', {name: '全部目录'}).locator(`a[href="/book/${book}/${target}"]`).tap();
         const guard = page.locator('.chapter-loading-page');
-        await expect(guard).toHaveAttribute('data-loading-visible', 'false');
+        await expect(guard).toHaveAttribute('data-loading-visible', 'true');
         await page.waitForTimeout(350);
-        await expect(guard).toHaveAttribute('data-loading-visible', 'false');
-        await expect(page.locator('.chapter-entry-snapshot')).toBeVisible();
+        await expect(guard).toHaveAttribute('data-loading-visible', 'true');
+        await expect(guard.getByRole('status')).toContainText('正在加载');
+        await expect(page.locator('.chapter-entry-snapshot')).toHaveCount(0);
         release();
         await expect(page.locator('.reader-pages-root')).toHaveAttribute('data-reader-ready', 'true');
         await page.waitForTimeout(250);
-        await expect(guard).toHaveAttribute('data-loading-visible', 'false');
+        await expect(guard).toHaveAttribute('data-loading-visible', 'true');
         const result = page.evaluate(() => new Promise<{covered: boolean; surface: boolean; ready: boolean}[]>(resolve => {
           const frames: {covered: boolean; surface: boolean; ready: boolean}[] = [];
           let remaining = 45;
@@ -75,14 +76,14 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
             const root = document.querySelector('.reader-pages-root');
             const guard = document.querySelector('.chapter-loading-page');
             const frame = root?.querySelector('.reader-frame')?.getBoundingClientRect();
-            frames.push({covered: Boolean(document.querySelector('.chapter-entry-snapshot')), surface: guard?.getAttribute('data-loading-visible') === 'true', ready: root?.getAttribute('data-reader-ready') === 'true' && frame?.top === 0 && Boolean(frame?.height)});
+            frames.push({covered: Boolean(guard), surface: guard?.getAttribute('data-loading-visible') === 'true', ready: root?.getAttribute('data-reader-ready') === 'true' && frame?.top === 0 && Boolean(frame?.height)});
             if (--remaining) requestAnimationFrame(sample); else resolve(frames);
           }; requestAnimationFrame(sample);
         }));
         await hold.evaluate(element => (element as HTMLElement).remove());
         const frames = await result;
         expect(frames.some(frame => !frame.covered)).toBe(true);
-        expect(frames.every(frame => !frame.surface && (frame.covered || frame.ready))).toBe(true);
+        expect(frames.every(frame => (frame.covered && frame.surface) || (!frame.covered && frame.ready))).toBe(true);
         await expect(guard).toHaveCount(0);
         await expect(reader(page)).toHaveAttribute('data-reader-chapter', target);
         await page.goBack(); await expect(page).toHaveURL(detail); await idle(page);
@@ -90,32 +91,3 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
     }
   });
 }
-
-test('a catalog captured during its slide stays still instead of replaying the slide', async ({page}) => {
-  // Keep the closed snapshot inspectable for this visual-state regression.
-  await page.addInitScript(() => {
-    const attach = Element.prototype.attachShadow;
-    Element.prototype.attachShadow = function(options) {return attach.call(this, {...options, mode: 'open'});};
-  });
-  await page.goto(detail);
-  await page.getByRole('button', {name: /^目录 /}).click();
-  await page.getByRole('dialog', {name: '全部目录'}).getByRole('link').first().waitFor();
-  let release!: () => void; const gate = new Promise<void>(resolve => {release = resolve;});
-  await page.route(`**/book/${book}/${chapter}?_rsc=*`, async route => {await gate; await route.continue();});
-  try {
-    const original = await page.evaluate(({book, chapter}) => {
-      const sheet = document.querySelector<HTMLElement>('.book-catalog-sheet')!;
-      sheet.style.transition = 'none'; sheet.style.transform = 'translateX(32px)';
-      const box = sheet.getBoundingClientRect();
-      document.querySelector<HTMLAnchorElement>(`.book-catalog-sheet a[href="/book/${book}/${chapter}"]`)!.click();
-      return {x: box.x, width: box.width};
-    }, {book, chapter});
-    const snapshot = page.locator('.chapter-entry-snapshot .book-catalog-sheet');
-    await expect(snapshot).toHaveCSS('transition-duration', '0s');
-    const captured = (await snapshot.boundingBox())!;
-    expect(captured.x).toBe(original.x); expect(captured.width).toBe(original.width);
-    await page.waitForTimeout(350);
-    expect(await snapshot.boundingBox()).toEqual(captured);
-    release(); await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
-  } finally {release();}
-});

@@ -2,7 +2,7 @@
 
 import {useEffect, useRef, useSyncExternalStore, type CSSProperties} from 'react';
 import {flushSync} from 'react-dom';
-import {beginChapterEntry, currentChapterEntry, failChapterEntry, finishChapterEntry, serverChapterEntry, subscribeChapterEntry} from '@/lib/chapter-entry';
+import {beginChapterEntry, currentChapterEntry, failChapterEntry, finishChapterEntry, prepareChapterReveal, serverChapterEntry, subscribeChapterEntry} from '@/lib/chapter-entry';
 import './chapter-loading.css';
 
 export default function ChapterLoadingPage() {
@@ -16,33 +16,45 @@ export default function ChapterLoadingPage() {
     const target = currentChapterEntry();
     if (!target || target.token !== token) return;
     panel.current?.focus({preventScroll: true});
-    let frame = 0, settle = 0, inputAt = -Infinity, disposed = false;
+    let frame = 0, inputAt = -Infinity, disposed = false, stableFrames = 0, previousLayout = '';
     const pointers = new Set<number>();
     const ready = () => {
-      if (location.pathname !== target.href) return false;
+      if (location.pathname !== target.href) return null;
       const reader = document.querySelector<HTMLElement>(`[data-reader-entry-key="${target.token}"] [data-reader-chapter="${target.chapterId}"][data-reader-ready="true"]`);
       const sheet = reader?.querySelector<HTMLElement>('.reader-frame');
-      if (!reader || !sheet) return false;
+      if (!reader || !sheet) return null;
       const bounds = sheet.getBoundingClientRect();
-      // Suspense can retain a measured reader in a hidden tree, and Next can
-      // still be restoring the route's scroll position after that measurement.
-      return bounds.width > 0 && bounds.height > 0 && Math.abs(bounds.top) < 1
-        && getComputedStyle(reader).visibility === 'visible';
+      // A measured page can still be offscreen, transparent, or in a hidden
+      // route tree. It must cover its final reading area before it is revealed.
+      const left = Math.max(0, (innerWidth - bounds.width) / 2);
+      if (!bounds.width || bounds.height < innerHeight - 1 || Math.abs(bounds.top) >= 1 || Math.abs(bounds.left - left) >= 1) return null;
+      for (let element: HTMLElement | null = sheet; element; element = element.parentElement) {
+        const style = getComputedStyle(element);
+        if (style.visibility !== 'visible' || Number(style.opacity) < .999) return null;
+      }
+      const scroll = reader.querySelector('.reader-scroll-window');
+      const columns = reader.querySelector<HTMLElement>('.reader-columns');
+      const host = reader.closest('.reader-entry-content');
+      return JSON.stringify([bounds.x, bounds.y, bounds.width, bounds.height, reader.getAttribute('style'),
+        getComputedStyle(sheet).backgroundColor, host && getComputedStyle(host).backgroundColor,
+        scroll?.scrollTop, columns?.getAttribute('style'), reader.querySelector('[data-reader-page]')?.textContent]);
     };
-    // Details keep their frozen catalog for the entire request and layout pass.
-    // Swapping it for a timed loading sheet creates an extra flash on entry.
     const reveal = () => {
-      window.clearTimeout(settle); cancelAnimationFrame(frame);
-      if (disposed || currentChapterEntry()?.error || pointers.size) return;
-      // Scroll restoration and CSS visibility can settle without a DOM mutation.
-      if (!ready()) { frame = requestAnimationFrame(reveal); return; }
-      const quiet = Math.max(0, 140 - (performance.now() - inputAt));
-      settle = window.setTimeout(() => {
-        frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => {
-          if (!disposed && !pointers.size && ready() && performance.now() - inputAt >= 140) flushSync(() => finishChapterEntry(target.token));
-          else reveal();
-        }); });
-      }, quiet);
+      cancelAnimationFrame(frame);
+      if (disposed || currentChapterEntry()?.token !== target.token || currentChapterEntry()?.error) return;
+      const layout = !pointers.size && performance.now() - inputAt >= 140 ? ready() : null;
+      stableFrames = layout && layout === previousLayout ? stableFrames + 1 : 0;
+      previousLayout = layout || '';
+      if (stableFrames >= 2) {
+        if (currentChapterEntry()?.releasing) {
+          flushSync(() => finishChapterEntry(target.token)); return;
+        }
+        // Unlock scrolling and commit the final reader layout while the same
+        // opaque loading page remains above it. Then verify actual paint frames.
+        flushSync(() => prepareChapterReveal(target.token));
+        stableFrames = 0; previousLayout = '';
+      }
+      frame = requestAnimationFrame(reveal);
     };
     const down = (event: PointerEvent) => {pointers.add(event.pointerId); inputAt = performance.now(); reveal();};
     const up = (event: PointerEvent) => {pointers.delete(event.pointerId); inputAt = performance.now(); reveal();};
@@ -61,8 +73,6 @@ export default function ChapterLoadingPage() {
       if (event.key === 'Enter' && !(event.target as HTMLElement).closest('.chapter-loading-actions')) {event.preventDefault(); return;}
       if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(event.key)) blockScroll(event);
     };
-    const observer = new MutationObserver(reveal);
-    observer.observe(document.body, {subtree: true, childList: true, attributes: true});
     window.addEventListener('pointerdown', down, true);
     window.addEventListener('pointerup', up, true);
     window.addEventListener('pointercancel', up, true);
@@ -73,7 +83,7 @@ export default function ChapterLoadingPage() {
     const timeout = window.setTimeout(() => {if (!ready()) failChapterEntry(target.href, '章节暂时未能加载，请重试');}, 20000);
     reveal();
     return () => {
-      disposed = true; observer.disconnect(); window.clearTimeout(timeout); window.clearTimeout(settle); cancelAnimationFrame(frame);
+      disposed = true; window.clearTimeout(timeout); cancelAnimationFrame(frame);
       window.removeEventListener('pointerdown', down, true); window.removeEventListener('pointerup', up, true); window.removeEventListener('pointercancel', up, true);
       window.removeEventListener('blur', releasePointers);
       window.removeEventListener('wheel', blockScroll, true); window.removeEventListener('touchmove', blockScroll, true); window.removeEventListener('keydown', keyboard, true);
@@ -81,8 +91,7 @@ export default function ChapterLoadingPage() {
   }, [token]);
   if (!entry) return null;
   const style = {'--entry-paper': entry.paper, '--entry-ink': entry.ink, '--entry-desk': entry.desk, '--entry-width': entry.width} as CSSProperties;
-  const visible = !entry.deferLoading || Boolean(entry.error);
-  return <div ref={panel} tabIndex={-1} aria-busy={!entry.error} aria-label={`正在打开章节：${entry.title}`} className="chapter-loading-page" style={style} data-chapter-loading={entry.chapterId} data-loading-visible={visible}>
+  return <div ref={panel} tabIndex={-1} aria-busy={!entry.error} aria-label={`正在打开章节：${entry.title}`} className="chapter-loading-page" style={style} data-chapter-loading={entry.chapterId} data-loading-visible="true">
     <div className="chapter-loading-sheet">
       <div role={entry.error ? 'alert' : 'status'} aria-live="polite" className="chapter-loading-message">
         <h2>{entry.title}</h2><p>{entry.error || '正在加载'}</p>

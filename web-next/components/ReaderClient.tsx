@@ -105,6 +105,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const showCatalog = useSyncExternalStore(subscribeBookNavigation, () => bookCatalogOpen(bookId), serverCatalogClosed);
   const showSettings = useSyncExternalStore(subscribeBookNavigation, () => readerSettingsOpen(bookId), serverCatalogClosed);
   const chapterEntry = useSyncExternalStore(subscribeChapterEntry, currentChapterEntry, serverChapterEntry);
+  const entryLocked = Boolean(chapterEntry && !chapterEntry.releasing);
   const [entryKey, setEntryKey] = useState(() => currentChapterEntry()?.token || '');
   const [catalogReversed, setCatalogReversed] = useState(true);
 
@@ -349,7 +350,7 @@ if (loading) return (
   return (
     <div 
       className="reader-entry-content min-h-screen w-full transition-colors duration-300 flex flex-col items-center"
-      data-reader-entry-key={entryKey} data-entry-pending={Boolean(chapterEntry)} inert={Boolean(chapterEntry)}
+      data-reader-entry-key={entryKey} data-entry-pending={entryLocked} inert={entryLocked}
       data-reader-cache-chapters={chapterCache.size}
       data-reader-cache-books={bookCache.size}
       style={{ 
@@ -417,7 +418,7 @@ if (loading) return (
           paragraphGap={paraSpacingMap[paraSpacing] || '1rem'} theme={activeTheme}
           paper={themeColor === 'cream'} dark={isActuallyDark} pageWidth={pageWidth}
           previousId={prevChapterId} nextId={nextChapterId} navigating={isNavigating}
-          blocked={showCatalog || showSettings || Boolean(chapterEntry)}
+          blocked={showCatalog || showSettings || entryLocked}
           turnMode={turnMode} toolsVisible={showNav} onHideTools={hideTools}
           onChapter={goToChapter} onTools={() => { setShowHint(false); setShowNav(value => !value); }}
           onNearEnd={nearEnd}
