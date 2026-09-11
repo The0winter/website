@@ -118,7 +118,7 @@ function renderSettings() {
   }
 }
 function render() {
-  for (const id of ['folder-nav', 'open-folder']) $(id).title = `打开已下载小说所在的目录：${data.outputDir}`;
+  $('folder-nav').title = `打开已下载小说所在的目录：${data.outputDir}`;
   if (!initialized) {
     $('website').value = data.settings.lastWebsite || data.sites[0]?.home || '';
     if (data.task.title) $('title').value = data.task.title;
@@ -143,10 +143,6 @@ function render() {
   $('task-title').textContent = task.title ? `《${task.title}》${task.author ? ` · ${task.author}` : ''}` : '采集任务';
   $('task-message').textContent = task.message;
   const report = task.report;
-  const description = report?.description || task.description;
-  $('task-description').hidden = !description && !report?.descriptionStatus;
-  $('description-status').textContent = description ? report?.descriptionStatus === 'truncated' ? '已截取前 5000 字符' : report?.descriptionStatus === 'retained' ? '沿用已保存简介' : '已获取' : '未获取';
-  $('description-text').textContent = description || '来源未提供可用简介，本次文件不包含简介。';
   const progress = !active && report ? {downloaded: report.downloaded, total: report.expected, failed: report.failures?.filter(item => item.chapter).length || 0, mode: report.mode || task.progress?.mode} : task.progress;
   const percent = progress?.total ? Math.min(100, progress.downloaded / progress.total * 100) : task.phase === 'complete' || task.phase === 'probed' ? 100 : 0;
   $('progress-bar').style.width = `${percent}%`;
@@ -158,8 +154,6 @@ function render() {
   $('report-stats').hidden = !report;
   if (report) $('report-stats').replaceChildren(...[[report.expected, '目录章节'], [report.errors, '错误'], [report.warnings, '待核对']].map(([number, label]) => { const div = document.createElement('div'), strong = document.createElement('strong'); strong.textContent = number; div.append(strong, label); return div; }));
   renderDiagnostics(task);
-  $('open-folder').hidden = !report?.exportFile;
-  $('open-report').hidden = !report?.jobId;
   $('resume').hidden = !['paused', 'stopped', 'probed', 'error'].includes(task.phase) || !task.sourceUrl;
   $('results-panel').hidden = !data.candidates.length;
   const nextKey = JSON.stringify(data.candidates);
@@ -210,13 +204,11 @@ $('stop').onclick = async () => { $('stop').disabled = true; try { await api('st
 showBrowser.onclick = async () => { showBrowser.disabled = true; try { await api('show-browser', {}); } catch (error) { feedback(error.message); } finally { showBrowser.disabled = false; } };
 $('dismiss-interruption').onclick = () => { $('interruption-dialog').close(); $('task-diagnostics').scrollIntoView({block: 'nearest'}); };
 $('resume').onclick = async () => { if (data.task.title) $('title').value = data.task.title; if (data.task.author) $('author').value = data.task.author; if (data.task.sourceUrl) $('website').value = data.task.sourceUrl; $('probe-only').checked = false; await search(); $('results-panel').scrollIntoView({behavior: 'smooth', block: 'nearest'}); };
-const openButtons = ['folder-nav', 'open-folder', 'open-report'].map($);
-for (const button of openButtons) button.onclick = async () => {
-  openButtons.forEach(item => { item.disabled = true; });
-  feedback('正在打开目录…', 'info');
-  try { const result = await api('open', {kind: button.id === 'open-report' ? 'report' : 'folder'}); feedback(result.message, 'info'); }
+$('folder-nav').onclick = async () => {
+  $('folder-nav').disabled = true;
+  try { await api('open', {kind: 'folder'}); }
   catch (error) { feedback(error.message); }
-  finally { openButtons.forEach(item => { item.disabled = false; }); }
+  finally { $('folder-nav').disabled = false; }
 };
 document.querySelector('.brand').onclick = event => event.preventDefault();
 await poll();
