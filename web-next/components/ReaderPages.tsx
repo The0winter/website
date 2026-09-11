@@ -10,7 +10,7 @@ import {fillReaderPreview,fitReaderColumnHeight,readerChapterTitle,readerColumnL
 import {useStoredState} from '@/lib/useStoredState';
 import {useAuth} from '@/contexts/AuthContext';
 import type {Book,Chapter} from '@/lib/api';
-import {useReaderPageTurn,type ReaderTurnMode} from './useReaderPageTurn';
+import {READER_TURN_DURATION_MS,useReaderPageTurn,type ReaderTurnMode} from './useReaderPageTurn';
 import './reader-pages.css';
 
 type Paragraph={key:string;text:string};
@@ -116,7 +116,7 @@ export default function ReaderPages(props:Props) {
         next=Math.round(position*total);
         restored.current=true;
       } else if(previous.width && (previous.width!==width || previous.height!==height || previous.total!==total || previous.typography!==typography || previous.mode!==turnMode)) {
-        if(gesture.current){clearTimeout(gesture.current.timer);gesture.current=null;suppressClickUntil.current=Date.now()+600;}
+        if(gesture.current){clearTimeout(gesture.current.timer);gesture.current=null;suppressClickUntil.current=Date.now()+READER_TURN_DURATION_MS;}
         cancelTurn();next=Math.round(position*total);
       }
       next=Math.max(0,Math.min(next,total-1));
@@ -238,7 +238,7 @@ export default function ReaderPages(props:Props) {
 
   function openMenu(paragraph:Paragraph,x:number,y:number) {
     if(turnBusy())return;
-    suppressClickUntil.current=Date.now()+600;
+    suppressClickUntil.current=Date.now()+READER_TURN_DURATION_MS;
     onHideTools();
     window.getSelection()?.removeAllRanges();
     setMenu({paragraph,x:Math.max(12,Math.min(x-90,window.innerWidth-216)),y:Math.max(12,Math.min(y-62,window.innerHeight-70))});
@@ -270,7 +270,7 @@ export default function ReaderPages(props:Props) {
   function pointerUp(event:React.PointerEvent) {
     const state=gesture.current;gesture.current=null;
     if(!state)return;clearTimeout(state.timer);
-    if(state.long || state.moved)suppressClickUntil.current=Date.now()+600;
+    if(state.long || state.moved)suppressClickUntil.current=Date.now()+READER_TURN_DURATION_MS;
     if(state.long || !state.dragging)return;
     const distance=turnMode==='vertical'?event.clientY-state.y:event.clientX-state.x;
     const extent=turnMode==='vertical'?layout.height:layout.width;
@@ -280,7 +280,7 @@ export default function ReaderPages(props:Props) {
     else if(commit)adjacentChapter(distance<0?1:-1);
   }
   function cancelGesture(){
-    if(gesture.current){clearTimeout(gesture.current.timer);if(gesture.current.moved)suppressClickUntil.current=Date.now()+600;}
+    if(gesture.current){clearTimeout(gesture.current.timer);if(gesture.current.moved)suppressClickUntil.current=Date.now()+READER_TURN_DURATION_MS;}
     gesture.current=null;
     if(!turnSettling())finishTurn(false);
   }
@@ -311,7 +311,7 @@ export default function ReaderPages(props:Props) {
     if(!start || event.touches.length || !event.changedTouches[0] || controlsBlocked)return;
     const dy=event.changedTouches[0].clientY-start.y,dx=event.changedTouches[0].clientX-start.x;
     if(Math.abs(dy)>80 && Math.abs(dy)>Math.abs(dx) && (dy<0?start.bottom:start.top)){
-      suppressClickUntil.current=Date.now()+600;adjacentChapter(dy<0?1:-1);
+      suppressClickUntil.current=Date.now()+READER_TURN_DURATION_MS;adjacentChapter(dy<0?1:-1);
     }
   }
   function wheel(event:React.WheelEvent){

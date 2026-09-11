@@ -533,8 +533,7 @@ if (loading) return (
                 borderColor: activeTheme.line 
                 }}
             >
-                <div className="flex justify-between items-center mb-6 pb-4 border-b" style={{ borderColor: activeTheme.line }}>
-                    <h3 className="font-bold text-xl flex items-center gap-2"><Settings className="w-5 h-5" /> 阅读设置</h3>
+                <div className="flex justify-end mb-2">
                     <button onClick={() => setShowSettings(false)} aria-label="关闭阅读设置" className="p-1 hover:bg-black/5 rounded-full">
                         <X className="w-6 h-6 opacity-60"/>
                     </button>
@@ -663,7 +662,7 @@ if (loading) return (
               borderColor: activeTheme.line 
             }}
           >
-            <div className="flex items-center justify-between mb-3"><span className="text-sm font-bold">阅读设置</span><button aria-label="关闭阅读设置" onClick={()=>setShowSettings(false)} className="p-1"><X size={18}/></button></div>
+            <div className="flex justify-end mb-3"><button aria-label="关闭阅读设置" onClick={()=>setShowSettings(false)} className="p-1"><X size={18}/></button></div>
             <AdminModeNotice/>
             <ReaderModeSetting value={turnMode} onChange={setTurnMode}/>
             {/* 紧凑排版：字号调整 (放在最上面方便操作) */}

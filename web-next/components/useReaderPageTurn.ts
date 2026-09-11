@@ -5,6 +5,7 @@ import {flushSync} from 'react-dom';
 import {readerColumnLayout} from '@/lib/reader-layout';
 
 export type ReaderTurnMode='horizontal'|'scroll'|'vertical';
+export const READER_TURN_DURATION_MS=200;
 type Options={
   mode:ReaderTurnMode;
   onCommit:(page:number)=>void;
@@ -82,7 +83,7 @@ export function useReaderPageTurn({mode,onCommit}:Options) {
     current.animation=current.moving.animate([
       {transform:current.moving.style.transform},
       {transform:`translate${current.axis}(${end}px)`},
-    ],{duration:Math.max(120,Math.min(290,290*remaining/current.extent)),easing:'cubic-bezier(.22,.68,.22,1)',fill:'forwards'});
+    ],{duration:Math.max(120,Math.min(READER_TURN_DURATION_MS,READER_TURN_DURATION_MS*remaining/current.extent)),easing:'cubic-bezier(.22,.68,.22,1)',fill:'forwards'});
     void current.animation.finished.then(complete).catch(()=>{});
   },[viewport,onCommit,cancel]);
 
