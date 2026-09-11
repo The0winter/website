@@ -16,6 +16,7 @@ import {useStoredState} from '@/lib/useStoredState';
 import {safeFetch} from '@/lib/request';
 import {getLibrarySnapshot, loadLibrary, removeLibraryEntries, serverLibrarySnapshot, subscribeLibrary, type LibraryEntry as Entry, type LibrarySort as Sort, type LibraryTab as Tab} from '@/lib/library-cache';
 import {syncBookRoute} from '@/lib/book-navigation';
+import {beginChapterEntry} from '@/lib/chapter-entry';
 import {formatRelativeUpdate} from '@/lib/relative-update';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import type {Book} from '@/lib/api';
@@ -83,6 +84,7 @@ function ShelfRow({entry, tab, managing, selected, menuOpen, onMenu, onManage, o
       <button type="button" role="checkbox" className="shelf-select" aria-checked={selected} aria-label={`选择：${title}`} tabIndex={managing ? 0 : -1} disabled={!managing} onClick={onSelect}><span>{selected && <Check size={14} strokeWidth={3}/>}</span></button>
     </div>
     <PrefetchLink href={readingChapter ? `/book/${entry.bookId}/${readingChapter}` : `/book/${entry.bookId}`} pendingLabel="正在打开章节…" className="shelf-book" aria-label={title} aria-disabled={!entry.book && !managing} tabIndex={managing ? -1 : 0}
+      onNavigate={() => beginChapterEntry(`/book/${entry.bookId}/${readingChapter}`, entry.chapterId === readingChapter && entry.chapterTitle ? entry.chapterTitle : title, 'resume')}
       onPointerDown={startPress} onPointerUp={cancelPress} onPointerCancel={cancelPress} onPointerLeave={cancelPress}
       onPointerMove={event => {if (press.current && Math.hypot(event.clientX - press.current.x, event.clientY - press.current.y) > 10) {suppressClick.current = true; cancelPress();}}}
       onContextMenu={event => event.preventDefault()} onDragStart={event => event.preventDefault()}
@@ -144,6 +146,8 @@ function Library() {
   const [removeError, setRemoveError] = useState('');
   const management = useRef<{token: string; afterClose?: () => void} | null>(null);
   const removalVersion = useRef({value: 0});
+  const swipe = useRef<{id: number; x: number; y: number; horizontal: boolean} | null>(null);
+  const suppressSwipeClick = useRef(false);
   const userId = user?.id;
   const query = {userId: userId || '', tab, sort, page};
   const result = useSyncExternalStore(subscribeLibrary, () => getLibrarySnapshot(query), serverLibrarySnapshot);
@@ -207,6 +211,37 @@ function Library() {
     else change();
   }
 
+  function startSwipe(event: PointerEvent<HTMLElement>) {
+    suppressSwipeClick.current = false;
+    swipe.current = null;
+    if (!event.isPrimary || event.button !== 0 || targets || removing || (event.target as HTMLElement).closest('button, select, input, [role="menu"]')) return;
+    swipe.current = {id: event.pointerId, x: event.clientX, y: event.clientY, horizontal: false};
+  }
+
+  function moveSwipe(event: PointerEvent<HTMLElement>) {
+    const gesture = swipe.current;
+    if (!gesture || gesture.id !== event.pointerId) return;
+    const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
+    if (!gesture.horizontal) {
+      if (Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx)) {swipe.current = null; return;}
+      if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
+      gesture.horizontal = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    suppressSwipeClick.current = true;
+    event.preventDefault();
+  }
+
+  function endSwipe(event: PointerEvent<HTMLElement>) {
+    const gesture = swipe.current;
+    swipe.current = null;
+    if (!gesture || gesture.id !== event.pointerId || !gesture.horizontal) return;
+    const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
+    if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
+    if (dx < 0 && tab === 'shelf') changeView('history', 1);
+    if (dx > 0 && tab === 'history') changeView('shelf', 1);
+  }
+
   async function remove() {
     if (!targets?.length || !userId || removing) return;
     const version = removalVersion.current.value;
@@ -243,10 +278,18 @@ function Library() {
     <div className="library-inner">
       <h1 className="sr-only">我的书架</h1>
       <div inert={managing}><HomeSearchHeader/></div>
-      <section className="shelf-panel" aria-label="个人书架">
+      <section className="shelf-panel" aria-label="个人书架"
+        onPointerDownCapture={startSwipe} onPointerMove={moveSwipe} onPointerUp={endSwipe}
+        onPointerCancel={() => {swipe.current = null;}} onLostPointerCapture={event => {if (event.target === event.currentTarget) swipe.current = null;}}
+        onClickCapture={event => {if (suppressSwipeClick.current) {event.preventDefault(); event.stopPropagation(); suppressSwipeClick.current = false;}}}>
         <header className="shelf-toolbar">
           <div className="shelf-tabs" role="tablist" aria-label="书架与浏览记录">
-            {(['shelf', 'history'] as const).map(value => <button key={value} id={`tab-${value}`} role="tab" aria-selected={tab === value} aria-controls="shelf-content" onClick={() => changeView(value, 1)}>{value === 'shelf' ? '书架' : '浏览记录'}</button>)}
+            {(['shelf', 'history'] as const).map(value => <button key={value} id={`tab-${value}`} role="tab" tabIndex={tab === value ? 0 : -1} aria-selected={tab === value} aria-controls="shelf-content" onClick={() => changeView(value, 1)} onKeyDown={event => {
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              const next = event.key === 'ArrowLeft' || event.key === 'Home' ? 'shelf' : 'history';
+              changeView(next, 1); document.getElementById(`tab-${next}`)?.focus();
+            }}>{value === 'shelf' ? '书架' : '浏览记录'}</button>)}
           </div>
           <div className="shelf-actions">
             <button aria-pressed={managing} disabled={!managing && !rows.length} onClick={() => managing ? finishManaging() : startManaging()}>{managing ? '返回' : '管理'}</button>

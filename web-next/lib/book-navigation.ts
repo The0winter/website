@@ -141,7 +141,7 @@ function onPopState(event: PopStateEvent) {
     notify(); return;
   }
   if (isList(from) && !forward) {
-    if (pending) { cancelBookTransition(); pending = undefined; }
+    if (pending) { cancelBookTransition(); cancelChapterEntry(); pending = undefined; }
     return;
   }
   const predecessor = target?.flow === from.flow && (from.kind === 'reader' && (from.libraryReturn ? target.kind === 'library' && target.href === from.libraryReturn : target.kind === 'detail' && target.bookId === from.bookId) || from.kind === 'detail' && isList(target));

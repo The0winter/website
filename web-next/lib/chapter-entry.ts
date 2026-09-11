@@ -1,7 +1,7 @@
 import {flushSync} from 'react-dom';
 
 type ChapterEntry = {
-  token: string; href: string; chapterId: string; title: string; error?: string;
+  token: string; href: string; chapterId: string; title: string; error?: string; position: 'start' | 'resume';
   paper: string; ink: string; desk: string; width: string; textured: boolean; releasing?: boolean; revealing?: boolean;
 };
 const listeners = new Set<() => void>();
@@ -11,7 +11,7 @@ export const currentChapterEntry = () => entry;
 export const serverChapterEntry = () => null;
 export function subscribeChapterEntry(listener: () => void) { listeners.add(listener); return () => {listeners.delete(listener);}; }
 
-export function beginChapterEntry(href: string, title: string) {
+export function beginChapterEntry(href: string, title: string, position: 'start' | 'resume' = 'start') {
   const chapterId = href.split('/').at(-1)!;
   const reader = [...document.querySelectorAll<HTMLElement>('.reader-pages-root')].find(element => {
     const bounds = element.getBoundingClientRect();
@@ -28,10 +28,13 @@ export function beginChapterEntry(href: string, title: string) {
     const saved = JSON.parse(localStorage.getItem('reader_pageWidth') || 'null');
     if (typeof saved === 'number' && saved > 0 && saved < 3000) width = saved;
   } catch { /* A chapter can still be opened without browser storage. */ }
-  try { sessionStorage.setItem(`reader-entry:${chapterId}`, 'start'); } catch {}
+  try {
+    if (position === 'start') sessionStorage.setItem(`reader-entry:${chapterId}`, 'start');
+    else sessionStorage.removeItem(`reader-entry:${chapterId}`);
+  } catch {}
   const [paper, ink, desk] = colors[theme] || colors.cream;
   const style = reader ? getComputedStyle(reader) : null;
-  entry = {token: crypto.randomUUID(), href, chapterId, title, paper: style?.getPropertyValue('--reader-paper') || paper,
+  entry = {token: crypto.randomUUID(), href, chapterId, title, position, paper: style?.getPropertyValue('--reader-paper') || paper,
     ink: style?.getPropertyValue('--reader-ink') || ink, desk, width: style?.getPropertyValue('--reader-width') || `${width}px`,
     textured: reader ? reader.querySelector('.reader-frame')?.getAttribute('data-paper') === 'true' : theme === 'cream'};
   // Cancel older chapter requests before the catalog's asynchronous history pop.

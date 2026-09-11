@@ -2,7 +2,7 @@
 .library-inner { max-width:1080px; margin:auto; }
 .library-page .mh-topbar { max-width:680px; margin-bottom:24px; }
 .library-page .mh-search { background:var(--home-surface); }
-.shelf-panel { background:var(--home-surface); border:1px solid var(--home-border); border-radius:18px; padding:0 28px; }
+.shelf-panel { background:var(--home-surface); border:1px solid var(--home-border); border-radius:18px; padding:0 28px; touch-action:pan-y pinch-zoom; }
 .shelf-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:56px; border-bottom:1px solid var(--home-border); }
 .shelf-tabs,.shelf-actions { display:flex; align-items:center; }
 .shelf-tabs { gap:26px; }

@@ -1,2 +1,8 @@
 html[data-book-transition] { overflow-x: clip; }
 .book-transition-snapshot,.chapter-entry-snapshot { position: fixed; inset: 0; z-index: 10000; overflow: hidden; background: #fffdf9; pointer-events: auto; contain: paint; box-shadow: -16px 0 40px #0002; }
+.book-navigation-loading { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; padding:24px; background:var(--home-background,#fffdf9); color:var(--home-text,#352a18); font:16px/1.8 Arial,"Microsoft YaHei",sans-serif; text-align:center; touch-action:none; outline:none; }
+.book-navigation-loading[aria-busy=true]::before { content:''; width:28px; height:28px; border:2px solid var(--home-border,#eadfd3); border-top-color:var(--home-accent,#ce3b42); border-radius:50%; animation:book-loading-spin .8s linear infinite; }
+.book-navigation-loading>div { display:flex; gap:20px; }
+.book-navigation-loading button { min-height:44px; padding:8px 20px; border:1px solid var(--home-border,#eadfd3); border-radius:8px; }
+@keyframes book-loading-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce) { .book-navigation-loading::before { animation:none; } }

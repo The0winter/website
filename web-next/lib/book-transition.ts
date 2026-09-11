@@ -5,7 +5,7 @@ function visible(selector: string) {
   return [...document.querySelectorAll<HTMLElement>(selector)].some(element => element.getBoundingClientRect().width > 0);
 }
 
-function waitForPage(href: string, signal: AbortSignal) {
+function waitForPage(href: string, signal: AbortSignal, onSlow?: () => void) {
   return new Promise<void>(resolve => {
     const path = new URL(href, location.origin).pathname;
     const parts = path.split('/');
@@ -20,11 +20,42 @@ function waitForPage(href: string, signal: AbortSignal) {
         : visible('.mobile-home, .desktop-home'));
     const finish = () => { observer.disconnect(); clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };
     const observer = new MutationObserver(() => { if (ready()) finish(); });
-    const timer = window.setTimeout(finish, 8000);
+    // Detail loading keeps its cover until the requested page actually exists.
+    const timer = window.setTimeout(onSlow ?? finish, onSlow ? 20000 : 8000);
     signal.addEventListener('abort', finish, {once: true});
     observer.observe(document.body, {subtree: true, childList: true, attributes: true});
     if (ready() || signal.aborted) finish();
   });
+}
+
+function bookLoadingPage(href: string) {
+  const panel = document.createElement('div');
+  panel.className = 'book-transition-snapshot book-navigation-loading';
+  panel.tabIndex = -1;
+  panel.setAttribute('aria-label', '正在打开书籍');
+  panel.setAttribute('aria-busy', 'true');
+  const message = document.createElement('p');
+  message.setAttribute('role', 'status');
+  message.textContent = '正在打开书籍…';
+  panel.append(message);
+  panel.addEventListener('wheel', event => event.preventDefault(), {passive: false});
+  panel.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {event.preventDefault(); window.history.back();}
+    if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(event.key)) event.preventDefault();
+  });
+  document.body.append(panel);
+  panel.focus({preventScroll: true});
+  return {panel, slow: () => {
+    panel.setAttribute('aria-busy', 'false');
+    message.setAttribute('role', 'alert');
+    message.textContent = '书籍暂时未能加载，请重试';
+    const actions = document.createElement('div');
+    const retry = document.createElement('button'), back = document.createElement('button');
+    retry.textContent = '重试'; back.textContent = '返回';
+    retry.onclick = () => location.assign(href);
+    back.onclick = () => window.history.back();
+    actions.append(retry, back); panel.append(actions);
+  }};
 }
 
 // Keep the current screen visible while Next renders and the reader measures
@@ -73,6 +104,7 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
   const controller = new AbortController();
   const root = document.documentElement;
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const loading = direction === 'enter' && /^\/book\/[^/?#]+$/.test(href) ? bookLoadingPage(href) : undefined;
   const duration = direction === 'exit' ? visible('.reader-pages-root') ? 400 : 180 : 240;
   root.dataset.bookTransition = direction;
   root.dataset.bookTransitionPhase = 'loading';
@@ -87,11 +119,15 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
   cancelActive = cancel;
   const update = async () => {
     navigate();
-    await waitForPage(href, controller.signal);
+    await Promise.all([
+      waitForPage(href, controller.signal, loading?.slow),
+      // Count from a paint opportunity, including cached and reduced-motion visits.
+      loading ? new Promise<void>(resolve => requestAnimationFrame(() => window.setTimeout(resolve, 400))) : Promise.resolve(),
+    ]);
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     if (!controller.signal.aborted) root.dataset.bookTransitionPhase = 'animating';
   };
-  const snapshot = freezeBookPage();
+  const snapshot = loading?.panel ?? freezeBookPage();
   let incoming: HTMLElement | undefined;
   let animation: Animation | undefined;
   skip = () => { animation?.cancel(); incoming?.remove(); snapshot.remove(); };

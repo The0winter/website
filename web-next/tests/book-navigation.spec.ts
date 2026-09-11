@@ -105,7 +105,7 @@ test('Back cancels a slow home-to-detail animation when returning to another pag
   await expect(page).toHaveURL(`${base}/search`);
 });
 
-test('reader entry and exit animate in opposite directions after the target is ready', async ({page}) => {
+test('reader entry uses chapter loading and exit slides back after details are ready', async ({page}) => {
   await page.addInitScript(() => {
     const original = Element.prototype.animate;
     (window as Window & {bookAnimations?: unknown[]}).bookAnimations = [];
@@ -128,7 +128,6 @@ test('reader entry and exit animate in opposite directions after the target is r
   await expect(page.getByRole('link', {name: '继续阅读', exact: true})).toHaveAttribute('href', `/book/${book}/${second}`);
   const animations = await page.evaluate(() => (window as Window & {bookAnimations?: unknown[]}).bookAnimations);
   expect(animations).toEqual([
-    {direction: 'enter', keyframes: [{transform: 'translateX(100%)'}, {transform: 'translateX(0)'}], readerReady: true},
     {direction: 'exit', keyframes: [{transform: 'translateX(0)'}, {transform: 'translateX(100%)'}], readerReady: false},
   ]);
 });
@@ -190,7 +189,7 @@ test('Back during a slow entry and repeated Back cannot resurrect a pending read
   await page.goto(detail); await details(page);
   await page.route(`**/book/${book}/${first}?_rsc=*`, async route => { delayedEntries++; await new Promise(resolve => setTimeout(resolve, 1500)); await route.continue(); });
   await page.getByRole('link', {name: '立即阅读', exact: true}).click();
-  await expect(page.locator('html')).toHaveAttribute('data-book-transition-phase', 'loading');
+  await expect(page.locator('.chapter-loading-page')).toBeVisible();
   await expect.poll(() => delayedEntries).toBeGreaterThan(0);
   await page.goBack(); await home(page);
   await page.waitForTimeout(1700); await home(page);

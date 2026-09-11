@@ -16,6 +16,7 @@ export default function ChapterLoadingPage() {
     const target = currentChapterEntry();
     if (!target || target.token !== token) return;
     panel.current?.focus({preventScroll: true});
+    const visibleAt = performance.now();
     let frame = 0, inputAt = -Infinity, disposed = false, stableFrames = 0, previousLayout = '';
     const pointers = new Set<number>();
     const ready = () => {
@@ -51,7 +52,7 @@ export default function ChapterLoadingPage() {
       const layout = !pointers.size && performance.now() - inputAt >= 140 ? ready() : null;
       stableFrames = layout && layout === previousLayout ? stableFrames + 1 : 0;
       previousLayout = layout || '';
-      if (stableFrames >= 2) {
+      if (stableFrames >= 2 && performance.now() - visibleAt >= 400) {
         if (currentChapterEntry()?.revealing) {
           flushSync(() => finishChapterEntry(target.token)); return;
         }
@@ -102,7 +103,7 @@ export default function ChapterLoadingPage() {
     <div className="chapter-loading-sheet" data-paper={entry.textured}>
       <div role={entry.error ? 'alert' : 'status'} aria-live="polite" className="chapter-loading-message">
         <h2>{entry.title}</h2><p>{entry.error || '正在加载'}</p>
-        {entry.error && <div className="chapter-loading-actions"><button onClick={() => {beginChapterEntry(entry.href, entry.title); window.location.replace(entry.href);}}>重试</button><button onClick={() => window.history.back()}>返回</button></div>}
+        {entry.error && <div className="chapter-loading-actions"><button onClick={() => {beginChapterEntry(entry.href, entry.title, entry.position); window.location.replace(entry.href);}}>重试</button><button onClick={() => window.history.back()}>返回</button></div>}
       </div>
     </div>
   </div>;
