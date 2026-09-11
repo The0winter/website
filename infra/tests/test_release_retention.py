@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
-import time
 import unittest
 from unittest.mock import patch
 
