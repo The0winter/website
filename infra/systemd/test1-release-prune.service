@@ -1,0 +1,19 @@
+[Unit]
+Description=Retain the current Test1 release and two activated rollback versions
+After=test1-web.service test1-api.service
+ConditionPathIsSymbolicLink=/srv/test1/current
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/test1/release_retention.py --apply --wait-ready=180 --settle-seconds=30
+StateDirectory=test1-release-retention
+StateDirectoryMode=0700
+UMask=0077
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/srv/test1/releases /var/lib/test1-release-retention
+ProtectHome=read-only
+TimeoutStartSec=15min
+

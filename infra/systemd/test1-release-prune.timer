@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily fallback cleanup of old Test1 releases
+
+[Timer]
+OnBootSec=10min
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=5min
+Unit=test1-release-prune.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=Clean old Test1 releases after the current release link changes
+
+[Path]
+PathChanged=/srv/test1
+Unit=test1-release-prune.service
+
+[Install]
+WantedBy=multi-user.target

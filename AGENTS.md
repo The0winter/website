@@ -16,3 +16,5 @@
 - 部署前核对线上版本与本次提交，保留已上线功能和现有服务器配置；不能用缺少线上功能的仓库版本直接覆盖服务器。已有未提交改动仍按上面的 Git 约定保留。
 - 在新的版本目录准备代码并完成构建，保留当前兼容版本用于回滚，再切换 `/srv/test1/current` 并重启必要服务。部署后验证服务、健康检查、页面、目录及章节正文，确认公网生效后再报告完成。
 - 部署失败时处理问题或回滚到上一兼容代码版本，如实说明状态。常规部署不包含破坏性数据库变更、秘密更换或删除业务数据。
+- 部署成功后只保留当前版本和最近两个已验证、与现有数据兼容的回滚版本。新版本的 `deployment-manifest.json` 必须记录 `sourceCommit`、`release`、`previousRelease`，并在验收成功后写入 `activatedAt`；验收失败不写成功标记。
+- 服务器通过 `test1-release-prune.path` 在版本切换后自动清理，另有每日 timer 兜底；部署验收后可执行 `sudo systemctl start test1-release-prune.service` 并核对结果。清理脚本为 `infra/release_retention.py`，默认仅预览，保留尚未完成部署或仍被进程使用的目录，绝不清理 `/srv/test1/backups`、数据库、R2 对象和 `/etc/test1` 配置。若保留条件或健康检查不满足，先处理原因，不绕过保护强行删除。
