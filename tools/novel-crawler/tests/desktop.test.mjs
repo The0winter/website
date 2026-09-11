@@ -205,6 +205,7 @@ test('opening a download folder awaits the launcher and reports its path or asyn
     reached = true;
     if (fail) { await Promise.resolve(); throw Error('无法打开目录：系统未响应'); }
     await new Promise(resolve => { release = resolve; });
+    return {verified: true, foreground: false};
   }});
   try {
     let settled = false;
@@ -216,7 +217,9 @@ test('opening a download folder awaits the launcher and reports its path or asyn
     assert.equal(response.status, 200);
     const result = await response.json();
     assert.equal(result.path, outputDir);
-    assert.match(result.message, /已请求打开下载目录/);
+    assert.equal(result.verified, true);
+    assert.equal(result.foreground, false);
+    assert.match(result.message, /已显示下载目录（可从任务栏切换）/);
     fail = true;
     const failed = await request(app, 'open', {kind: 'folder'});
     assert.equal(failed.status, 400);
@@ -392,7 +395,7 @@ test('window searches, selects, downloads through worker, and shows result witho
       await new Promise(resolve => signal.addEventListener('abort', resolve, {once: true}));
     }
     return title === book.title ? [book] : [];
-  }, prepareBook: async () => spec, open: target => opened.push(target)});
+  }, prepareBook: async () => spec, open: target => { opened.push(target); return {verified: true, foreground: true}; }});
   const executablePath = ['C:/Program Files/Google/Chrome/Application/chrome.exe', puppeteer.executablePath()].find(file => fs.existsSync(file));
   const browser = await puppeteer.launch({headless: true, executablePath});
   try {
@@ -435,7 +438,7 @@ test('window searches, selects, downloads through worker, and shows result witho
     assert.equal(await page.$eval('#description-text', el => el.textContent), '小城里的四段故事。\n沿着河岸，寻找春天。');
     assert.equal(JSON.parse(fs.readFileSync(app.state().report.exportFile)).description, app.state().report.description);
     await page.click('#open-folder');
-    await page.waitForFunction(() => document.getElementById('feedback').textContent.startsWith('已请求打开下载目录'));
+    await page.waitForFunction(() => document.getElementById('feedback').textContent.startsWith('已显示下载目录'));
     assert.equal(opened[0], path.join(stateDir, 'out'));
     assert.equal(await page.$eval('#feedback', el => el.getAttribute('role')), 'status');
     assert.match(await page.$eval('#feedback', el => el.textContent), /out/);

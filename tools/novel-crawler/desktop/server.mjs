@@ -171,8 +171,10 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         else throw Error('暂无可打开的结果');
         if (!fs.existsSync(target)) throw Error('结果目录不存在');
         target = path.resolve(target);
-        await open(target);
-        return respond(200, {ok: true, path: target, message: `已请求打开${input.kind === 'report' ? '报告' : '下载'}目录：${target}`});
+        const result = await open(target);
+        const verified = result?.verified === true;
+        return respond(200, {ok: true, path: target, verified, foreground: result?.foreground,
+          message: `${verified ? '已显示' : '已请求打开'}${input.kind === 'report' ? '报告' : '下载'}目录${verified && result.foreground === false ? '（可从任务栏切换）' : ''}：${target}`});
       }
       return respond(404, {error: '操作不存在'});
     } catch (error) { if (!res.headersSent) respond(400, {error: error.message}); else res.end(); }
