@@ -15,9 +15,35 @@
 .shelf-sort { position:relative; display:flex; align-items:center; gap:4px; min-height:44px; cursor:pointer; }
 .shelf-sort select { position:absolute; inset:0; opacity:0; width:100%; cursor:pointer; }
 .shelf-sort:focus-within { outline:2px solid #ce3b4260; outline-offset:3px; border-radius:4px; }
-.shelf-row { display:flex; align-items:center; gap:14px; padding:24px 0; }
+.shelf-row { position:relative; display:flex; align-items:center; padding:24px 0; }
 .shelf-row + .shelf-row { border-top:1px solid color-mix(in srgb,var(--home-border) 65%,transparent); }
-.shelf-book { display:flex; align-items:center; gap:18px; min-width:0; flex:1; }
+.shelf-book { display:flex; align-items:center; gap:18px; min-width:0; flex:1; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; touch-action:pan-y; }
+.shelf-cover img { -webkit-user-drag:none; }
+.shelf-selection { width:0; flex-shrink:0; opacity:0; overflow:hidden; transition:width .22s ease,opacity .22s ease; }
+.shelf-select { display:flex; align-items:center; justify-content:flex-start; width:44px; min-height:48px; }
+.shelf-select>span { display:flex; align-items:center; justify-content:center; width:22px; height:22px; border:1.5px solid var(--home-muted); border-radius:50%; color:white; }
+.shelf-select[aria-checked=true]>span { background:#ce3b42; border-color:#ce3b42; }
+.library-page[data-managing=true] { padding-bottom:calc(100px + env(safe-area-inset-bottom)); }
+.library-page[data-managing=true] .shelf-selection { width:44px; opacity:1; }
+.library-page[data-managing=true] .shelf-book { cursor:pointer; }
+.shelf-info h2 { padding-right:38px; }
+.library-page[data-managing=true] .shelf-info h2 { padding-right:0; }
+.shelf-more { position:absolute; right:-8px; top:20px; z-index:2; }
+.shelf-more:has(.shelf-menu) { z-index:5; }
+.shelf-more-button { display:flex; align-items:center; justify-content:center; width:44px; height:44px; color:var(--home-muted); border-radius:10px; }
+.shelf-more-button:hover,.shelf-more-button[aria-expanded=true] { background:var(--home-background); color:var(--home-text); }
+.shelf-menu { position:absolute; right:0; top:42px; width:128px; padding:5px; background:var(--home-surface); border:1px solid var(--home-border); border-radius:12px; box-shadow:0 8px 28px #241a1526; }
+.shelf-menu [role=menuitem] { display:flex; align-items:center; gap:12px; width:100%; min-height:44px; padding:0 14px; border-radius:7px; font-size:14px; }
+.shelf-menu [role=menuitem]:hover,.shelf-menu [role=menuitem]:focus-visible { background:var(--home-background); outline:none; }
+.shelf-menu-delete { color:#bf3b46; }
+.shelf-menu button:disabled,.shelf-actions button:disabled { opacity:.4; }
+.shelf-management-bar { position:fixed; bottom:0; left:0; right:0; z-index:50; background:var(--home-surface); border-top:1px solid var(--home-border); box-shadow:0 -4px 20px #241a1508; padding:10px 24px calc(10px + env(safe-area-inset-bottom)); animation:shelf-bar-enter .2s ease-out; }
+.shelf-management-bar>div { max-width:1024px; margin:auto; display:flex; align-items:center; justify-content:space-between; gap:20px; min-height:44px; }
+.shelf-management-bar span { color:var(--home-muted); font-size:14px; white-space:nowrap; }
+.shelf-delete-selected { display:flex; justify-content:center; align-items:center; gap:8px; min-height:44px; width:180px; border-radius:10px; background:#ce3b42; color:white; font-size:15px; font-weight:500; }
+.shelf-delete-selected:disabled { background:var(--home-border); color:var(--home-muted); }
+@keyframes shelf-bar-enter { from { transform:translateY(100%); } to { transform:translateY(0); } }
+@media (prefers-reduced-motion:reduce) { .shelf-selection { transition:none; } .shelf-management-bar { animation:none; } }
 .shelf-book[aria-disabled=true] { cursor:default; }
 .shelf-cover { flex:0 0 76px; height:104px; border-radius:6px; overflow:hidden; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9px; color:#a18a6c; background:linear-gradient(145deg,#f0e7da,#e2d4c0); }
 .shelf-cover img { width:100%; height:100%; object-fit:cover; }
@@ -27,9 +53,6 @@
 .shelf-info p { font-size:13px; line-height:1.7; color:var(--home-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .shelf-info .shelf-progress { margin-top:5px; color:var(--home-text); opacity:.76; }
 .shelf-info .shelf-update { margin-top:2px; }
-.shelf-continue { display:flex; align-items:center; flex-shrink:0; color:#ba4550; font-size:12px; padding:0 12px; min-height:36px; background:#df3a470a; border-radius:20px; }
-.shelf-remove { display:flex; align-items:center; justify-content:center; flex:0 0 40px; height:44px; color:#bf4c56; border-radius:10px; }
-.shelf-remove:hover { background:#df3a470d; }
 .shelf-discover { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:16px 18px; margin:0 0 24px; border-radius:10px; background:color-mix(in srgb,var(--home-background) 70%,var(--home-surface)); font-size:13px; color:var(--home-muted); }
 .shelf-discover a { display:flex; align-items:center; gap:3px; min-height:28px; white-space:nowrap; color:#a96d51; }
 .shelf-empty { display:flex; flex-direction:column; align-items:center; text-align:center; padding:46px 12px 50px; color:var(--home-muted); }
@@ -60,13 +83,16 @@
   .shelf-tabs button { font-size:16px; min-height:44px; }
   .shelf-tabs [aria-selected=true]::after { bottom:1px; width:23px; height:3px; }
   .shelf-actions { gap:16px; font-size:12px; }
-  .shelf-row { gap:8px; padding:20px 0; }
+  .shelf-row { padding:20px 0; }
+  .shelf-more { top:13px; }
+  .library-page[data-managing=true] .shelf-selection { width:36px; }
+  .shelf-select { width:36px; }
+  .shelf-management-bar { padding-left:26px; padding-right:26px; }
   .shelf-book { gap:12px; }
   .shelf-cover { flex-basis:64px; height:90px; border-radius:5px; }
   .shelf-info h2 { font-size:17px; margin-bottom:5px; }
   .shelf-info p { font-size:12px; }
   .shelf-info .shelf-progress { margin-top:3px; }
-  .shelf-continue { padding:0 7px; font-size:11px; }
   .shelf-discover { padding:10px 12px; margin-bottom:18px; font-size:12px; }
   .shelf-empty { padding:38px 4px 42px; }
   .shelf-empty h2 { font-size:17px; }

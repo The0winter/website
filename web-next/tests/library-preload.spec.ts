@@ -91,11 +91,15 @@ for (const tab of ['shelf', 'history']) {
   });
 }
 
-test('Continue from the shelf returns through details to the shelf', async ({page}) => {
+test('shelf details menu returns from reading through details to the shelf', async ({page}) => {
   await session(page);
   await page.route('**/api/users/*/library?*', route => route.fulfill({json: [entry()]}));
   await page.goto(base + '/library');
-  await page.locator('.shelf-continue').click();
+  await expect(page.locator('.shelf-continue')).toHaveCount(0);
+  await page.getByRole('button', {name: '更多：山海行记'}).click();
+  await page.getByRole('menuitem', {name: '详情', exact: true}).click();
+  await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);
+  await page.getByRole('link', {name: '立即阅读', exact: true}).click();
   await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true'); await idle(page);
   await page.goBack(); await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);
   await page.goBack(); await expect(page).toHaveURL(base + '/library'); await idle(page);

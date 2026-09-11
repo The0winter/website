@@ -83,6 +83,20 @@ export function invalidateLibrary(userId: string) {
   notify();
 }
 
+// Apply confirmed deletions even if the following refresh is unavailable.
+export function removeLibraryEntries(userId: string, tab: LibraryTab, bookIds: string[]) {
+  if (sessionUser !== userId || !bookIds.length) return;
+  const removed = new Set(bookIds);
+  records.forEach((record, key) => {
+    if (!key.startsWith(`${userId}:${tab}:`)) return;
+    record.controller?.abort(); record.controller = undefined; record.pending = undefined;
+    const remaining = record.snapshot.rows?.filter(entry => !removed.has(entry.bookId)) ?? null;
+    const removedHere = (record.snapshot.rows?.length ?? 0) - (remaining?.length ?? 0);
+    record.snapshot = {...record.snapshot, rows: remaining, total: Math.max(0, record.snapshot.total - removedHere), updatedAt: 0};
+  });
+  notify();
+}
+
 export function prefetchLibrary(userId: string, sort: LibrarySort) {
   return Promise.all((['shelf', 'history'] as const).map(tab => loadLibrary({userId, tab, sort, page: 1})));
 }
