@@ -14,7 +14,10 @@ export function subscribeChapterEntry(listener: () => void) { listeners.add(list
 
 export function beginChapterEntry(href: string, title: string) {
   const chapterId = href.split('/').at(-1)!;
-  const reader = document.querySelector<HTMLElement>('.reader-pages-root');
+  const reader = [...document.querySelectorAll<HTMLElement>('.reader-pages-root')].find(element => {
+    const bounds = element.getBoundingClientRect();
+    return bounds.width > 0 && bounds.height > 0 && getComputedStyle(element).visibility === 'visible';
+  });
   snapshot?.remove();
   // Hold the catalog in place until the reader is ready. Next's shared book
   // loading boundary must never flash through during a chapter navigation.

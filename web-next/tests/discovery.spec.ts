@@ -70,7 +70,7 @@ for (const mode of ['horizontal', 'scroll']) test(`catalog loading covers hidden
   await page.route(`**/book/${book}/${chapter}?_rsc=*`, async route => {await gate; await route.continue();});
   try {
     await dialog.getByRole('link', {name: '第2章 山间来信', exact: true}).click();
-    await expect(page.locator('.chapter-loading-page')).toHaveAttribute('data-loading-visible', 'true');
+    await expect(page.locator('.chapter-loading-page')).toHaveAttribute('data-loading-visible', 'false');
     release();
     await expect(page.locator('.reader-pages-root')).toHaveAttribute('data-reader-ready', 'true');
     await page.waitForTimeout(250);

@@ -38,7 +38,7 @@ export function freezeBookPage(className = 'book-transition-snapshot') {
   const style = document.createElement('style');
   style.textContent = [...document.styleSheets].map(sheet => {
     try { return [...sheet.cssRules].map(rule => rule.cssText).join('\n'); } catch { return ''; }
-  }).join('\n');
+  }).join('\n') + '\n*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}';
   shadow.append(style);
   const clone = document.body.cloneNode(true) as HTMLElement;
   const originals = [document.body, ...document.body.querySelectorAll<HTMLElement>('*')];
@@ -49,7 +49,9 @@ export function freezeBookPage(className = 'book-transition-snapshot') {
     const position = getComputedStyle(original).position;
     if (position === 'fixed' || position === 'sticky') {
       const box = original.getBoundingClientRect();
-      Object.assign(copy.style, {position: 'fixed', top: `${box.top}px`, left: `${box.left}px`, width: `${box.width}px`, height: `${box.height}px`, bottom: 'auto', right: 'auto', margin: '0'});
+      // The viewport bounds already include the current transform. Reapplying
+      // it would move a copied, still-animating catalog a second time.
+      Object.assign(copy.style, {position: 'fixed', top: `${box.top}px`, left: `${box.left}px`, width: `${box.width}px`, height: `${box.height}px`, bottom: 'auto', right: 'auto', margin: '0', transform: 'none'});
     }
   });
   clone.querySelectorAll('script,iframe,.book-transition-snapshot,.chapter-entry-snapshot,.chapter-loading-page').forEach(element => element.remove());
@@ -70,6 +72,7 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
   const controller = new AbortController();
   const root = document.documentElement;
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const duration = direction === 'exit' ? visible('.reader-pages-root') ? 400 : 180 : 240;
   root.dataset.bookTransition = direction;
   root.dataset.bookTransitionPhase = 'loading';
   const cleanup = () => {
@@ -99,7 +102,7 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
       animation = moving.animate(direction === 'exit'
         ? [{transform: 'translateX(0)'}, {transform: 'translateX(100%)'}]
         : [{transform: 'translateX(100%)'}, {transform: 'translateX(0)'}],
-      {duration: direction === 'exit' ? 180 : 240, easing: 'cubic-bezier(.22,.7,.25,1)', fill: 'forwards'});
+      {duration, easing: 'cubic-bezier(.22,.7,.25,1)', fill: 'forwards'});
       await animation.finished.catch(() => {});
     }
   }).finally(() => { incoming?.remove(); snapshot.remove(); cleanup(); });

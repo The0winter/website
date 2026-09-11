@@ -39,7 +39,7 @@ async function enterCatalog(page: Page, origin: string) {
 const requestPattern = (origin: string) => origin === 'details' ? `**/book/${book}/${last}?_rsc=*` : `**/api/chapters/${last}?navigation=1`;
 
 for (const origin of ['details', 'reader']) {
-  test(`${origin} catalog shows blank paper and ignores gestures until the selected chapter is ready`, async ({page, context}) => {
+  test(`${origin} catalog keeps its entry screen and ignores gestures until the selected chapter is ready`, async ({page, context}) => {
     const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
     await enterCatalog(page, origin);
     let release!: () => void; const gate = new Promise<void>(resolve => {release = resolve;});
@@ -47,7 +47,11 @@ for (const origin of ['details', 'reader']) {
     try {
       await dialog(page).getByRole('link', {name: '第12章 山间来信', exact: true}).click();
       await expect(loader(page)).toHaveAttribute('data-chapter-loading', last);
-      await expect(loader(page).getByRole('status')).toHaveText('第12章 山间来信正在加载');
+      if (origin === 'reader') await expect(loader(page).getByRole('status')).toHaveText('第12章 山间来信正在加载');
+      else {
+        await expect(loader(page)).toHaveAttribute('data-loading-visible', 'false');
+        await expect(page.locator('.chapter-entry-snapshot')).toBeVisible();
+      }
       await expect.poll(() => page.evaluate(() => Boolean(document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.closest('.chapter-loading-page')))).toBe(true);
       await page.mouse.wheel(0, 1600); await page.keyboard.press('PageDown');
       // Even a queued scroll event from the old viewport cannot win over the selection.
