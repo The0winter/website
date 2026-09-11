@@ -80,6 +80,7 @@ for (const mode of ['horizontal', 'scroll', 'vertical']) {
     for (let index = 0; index < 3; index++) {
       await open();
       await expect(dialog.locator('[aria-current="location"]')).toHaveAttribute('href', `/book/${book}/${first}`);
+      await expect(dialog.locator('.book-catalog-list')).toHaveCSS('overscroll-behavior-x', 'auto');
       await page.goBack();
       await expect(dialog).not.toBeVisible();
       await expect(page).toHaveURL(reader);

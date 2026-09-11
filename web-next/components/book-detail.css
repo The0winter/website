@@ -18,7 +18,7 @@
 .book-catalog-actions button:first-child { padding:6px 12px; border:1px solid #dee2d8; background:white; font-size:13px; }
 .book-catalog-actions button:hover { background:#edf1e8; }
 .book-catalog-body { flex:1; min-height:0; display:flex; flex-direction:column; padding:12px 8px 0; }
-.book-catalog-list { flex:1; min-height:0; overscroll-behavior:contain; }
+.book-catalog-list { flex:1; min-height:0; overscroll-behavior-y:contain; }
 .book-catalog-row { display:grid; gap:10px; padding:0 8px 10px; }
 .book-catalog-chapter { display:flex; align-items:center; min-width:0; min-height:48px; padding:12px; border:1px solid transparent; border-radius:6px; background:#f7f8f5; font-size:14px; line-height:1.6; }
 .book-catalog-chapter span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
