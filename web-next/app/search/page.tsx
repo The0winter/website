@@ -1,4 +1,5 @@
 'use client';
+import CoverImage from '@/components/BookCover';
 
 import {Suspense, useEffect, useState, type FormEvent} from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
@@ -31,7 +32,7 @@ function SearchForm({query}: {query: string}) {
 function BookCover({book}: {book: Book}) {
   const [failed, setFailed] = useState(false);
   return <div className="search-cover">{book.cover_image && !failed
-    ? <img src={book.cover_image} alt={`${book.title}封面`} loading="lazy" onError={() => setFailed(true)}/>
+    ? <CoverImage src={book.cover_image} alt={`${book.title}封面`} loading="lazy" onError={() => setFailed(true)}/>
     : <><BookOpen size={25}/><span>{book.title}</span></>}
   </div>;
 }

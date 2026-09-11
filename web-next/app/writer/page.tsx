@@ -1,4 +1,5 @@
 'use client';
+import BookCover from '@/components/BookCover';
 import { safeFetch as fetch } from '@/lib/request';
 
 
@@ -111,8 +112,8 @@ export default function WriterDashboard() {
   // ================= 逻辑函数 =================
 
     // 专门用于删除云端图片的函数
-  const deleteImageFromCloudinary = async (imageUrl: string) => {
-    if (!imageUrl || !imageUrl.includes('cloudinary')) return;
+  const retireCover = async (imageUrl: string) => {
+    if (!imageUrl) return;
     try {
       await fetch(`/api/upload/cover`, {
         method: 'DELETE',
@@ -237,24 +238,22 @@ export default function WriterDashboard() {
     return () => clearTimeout(timer);
   }, [adminBookSearch, currentView, user, fetchAdminBookSearchResults]);
 
-  const uploadImageToCloudinary = async (file: File): Promise<string | null> => {
+  const uploadCover = async (file: File): Promise<string | null> => {
     try {
-      setUploading(true);
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch(`/api/upload/cover`, {
+      const res = await fetch(`/api/upload/cover?purpose=book`, {
         method: 'POST',
+        signal: AbortSignal.timeout(90000),
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}`, 'x-user-id': user!.id },
         body: formData,
       });
-      if (!res.ok) throw new Error('上传失败');
-      const data = await res.json();
+      const data = await res.json().catch(() => ({error:'图片上传失败，请稍后重试'}));
+      if (!res.ok) throw new Error(data.error || '图片上传失败');
       return data.url;
     } catch (e) {
-      setToast({ msg: '图片上传失败', type: 'error' });
+      setToast({ msg: e instanceof Error ? e.message : '图片上传失败', type: 'error' });
       return null;
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -262,6 +261,10 @@ export default function WriterDashboard() {
   const onSelectFile = (e: React.ChangeEvent<HTMLInputElement>, type: 'new' | 'edit') => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
+      e.target.value = '';
+      if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 8*1024*1024) {
+        setToast({msg:'请选择 8 MB 以内的 JPG、PNG 或 WebP 图片',type:'error'});return;
+      }
       const reader = new FileReader();
       reader.addEventListener('load', () => {
         setCropperImgSrc(reader.result?.toString() || '');
@@ -275,45 +278,38 @@ export default function WriterDashboard() {
   const onCropComplete = useCallback((croppedArea: {x:number;y:number;width:number;height:number}, croppedAreaPixels: {x:number;y:number;width:number;height:number}) => setCroppedAreaPixels(croppedAreaPixels), []);
 
 const handleSaveCrop = async () => {
-    if (!cropperImgSrc || !croppedAreaPixels) return;
+    if (uploading || !cropperImgSrc || !croppedAreaPixels) return;
     try {
       setUploading(true);
-      const croppedBlob = await getCroppedImg(cropperImgSrc, croppedAreaPixels);
+      const croppedBlob = await getCroppedImg(cropperImgSrc, croppedAreaPixels, 0, 1400);
       if (!croppedBlob) throw new Error('Canvas create failed');
       const file = new File([croppedBlob], "cover.jpg", { type: "image/jpeg" });
-      const url = await uploadImageToCloudinary(file);
+      const url = await uploadCover(file);
       
       if (url) {
         if (isCroppingFor === 'new') {
           // 如果之前已经传过预览图了，现在又裁了一张新的，就把之前那张预览图删掉
-          if (newBookCoverPreview) await deleteImageFromCloudinary(newBookCoverPreview);
+          if (newBookCoverPreview) await retireCover(newBookCoverPreview);
           setNewBookCoverPreview(url);
           setToast({ msg: '裁剪并上传成功', type: 'success' });
         } else if (isCroppingFor === 'edit') {
-          // 如果是在编辑书籍，覆盖前先把老封面删掉
-          if (formBookCover) await deleteImageFromCloudinary(formBookCover);
+          const previousCover = formBookCover;
+          if (!currentBookId) throw new Error('请先选择书籍');
+          await booksApi.update(currentBookId, { cover_image: url });
           setFormBookCover(url);
-
-          // 👇 新增核心逻辑：立刻把新封面 URL 保存到数据库
-          if (currentBookId) {
-              await booksApi.update(currentBookId, { cover_image: url });
-              
-              // 同步更新本地状态，防止后面点“保存修改”时被旧数据覆盖
-              setBookManagerBook((prev) => prev ? { ...prev, cover_image: url } : prev);
-              
-              // 自动刷新外部列表数据，让外面的封面也立刻生效
-              fetchMyData();
-              if (user?.role === 'admin') {
-                  fetchAdminHotBooks();
-                  if (adminBookSearch.trim()) fetchAdminBookSearchResults(adminBookSearch);
-              }
+          setBookManagerBook(prev => prev ? {...prev,cover_image:url} : prev);
+          await retireCover(previousCover);
+          fetchMyData();
+          if (user?.role === 'admin') {
+            fetchAdminHotBooks();
+            if (adminBookSearch.trim()) fetchAdminBookSearchResults(adminBookSearch);
           }
           setToast({ msg: '封面已更新并自动保存', type: 'success' });
         }
       }
-      setCropperImgSrc(null); setIsCroppingFor(null);
+      if (url) { setCropperImgSrc(null); setIsCroppingFor(null); }
     } catch (e) { 
-      setToast({ msg: '裁剪失败', type: 'error' });
+      setToast({ msg: e instanceof Error ? e.message : '封面保存失败，请重试', type: 'error' });
     } finally { 
       setUploading(false); 
     }
@@ -419,9 +415,8 @@ const handleSaveCrop = async () => {
       if(!formBookTitle.trim() || !user || creatingBook) return;
       setCreatingBook(true);
       try {
-          let url = '';
-          if(newBookCoverPreview.startsWith('/api/media/')) url = newBookCoverPreview;
-          else if(newBookCoverFile) { const u = await uploadImageToCloudinary(newBookCoverFile); if(u) {url=u;setNewBookCoverPreview(u);} else return; }
+          let url = newBookCoverPreview || '';
+          if(!url && newBookCoverFile) { const u = await uploadCover(newBookCoverFile); if(u) {url=u;setNewBookCoverPreview(u);} else return; }
           await booksApi.create({ title: formBookTitle, description: formBookDescription, cover_image: url, category: formBookCategory, author: user.username, author_id: user.id },bookCreationKey);
           setShowCreateBookModal(false); setFormBookTitle(''); setFormBookDescription(''); setFormBookCategory(ALL_CATEGORIES[0]); setNewBookCoverFile(null); setNewBookCoverPreview('');
           setToast({msg:'创建成功', type:'success'}); fetchMyData();
@@ -595,7 +590,7 @@ const openBookManager = (book: Book) => {
                         myBooks.map((book) => (
                             <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
                                 <div className="w-20 aspect-[3/4] h-auto md:w-24 md:aspect-[3/4] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
-                                    {book.cover_image ? <img src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
+                                    {book.cover_image ? <BookCover src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
                                 </div>
                                 <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
                                     <div>
@@ -793,7 +788,7 @@ const openBookManager = (book: Book) => {
                             adminHotBooks.map((book) => (
                                 <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
                                     <div className="w-20 aspect-[3/4] h-auto md:w-24 md:aspect-[3/4] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
-                                        {book.cover_image ? <img src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
+                                        {book.cover_image ? <BookCover src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
                                     </div>
                                     <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
                                         <div>
@@ -832,7 +827,7 @@ const openBookManager = (book: Book) => {
                             adminBookSearchResults.map((book) => (
                                 <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
                                     <div className="w-20 aspect-[3/4] h-auto md:w-24 md:aspect-[3/4] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
-                                        {book.cover_image ? <img src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
+                                        {book.cover_image ? <BookCover src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
                                     </div>
                                     <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
                                         <div>
@@ -905,7 +900,7 @@ const openBookManager = (book: Book) => {
                                 ) : formBookCover ? (
                                     // 2. 有封面时显示图片
                                     <>
-                                        <img src={formBookCover} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                        <BookCover priority sizes="160px" src={formBookCover} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                         
                                         {/* ✅ 新增：删除封面按钮 (右上角红色垃圾桶) */}
                                         <button
@@ -913,27 +908,24 @@ const openBookManager = (book: Book) => {
                                             onClick={async (e) => {
                                                 e.stopPropagation(); // 防止触发上传
                                                 e.preventDefault();
-                                                if (confirm('确定要移除这张封面吗？(图片将从云端永久删除)')) {
-                                                    setUploading(true); // 开启 loading
-                                                    await deleteImageFromCloudinary(formBookCover); // 呼叫后端删除图片
-                                                    setFormBookCover(''); // 清空前端状态
-
-                                                    // 👇 新增核心逻辑：云端图片删除后，立刻把数据库里的封面也清空
-                                                    if (currentBookId) {
-                                                        await booksApi.update(currentBookId, { cover_image: '' });
-                                                        setBookManagerBook((prev) => prev ? { ...prev, cover_image: '' } : prev);
-                                                        
-                                                        // 同步刷新外部列表
-                                                        fetchMyData();
-                                                        if (user?.role === 'admin') {
-                                                            fetchAdminHotBooks();
-                                                            if (adminBookSearch.trim()) fetchAdminBookSearchResults(adminBookSearch);
-                                                        }
+                                                if (!currentBookId || uploading || !confirm('确定要移除这本书的封面吗？')) return;
+                                                const previousCover=formBookCover;
+                                                setUploading(true);
+                                                try {
+                                                    await booksApi.update(currentBookId,{cover_image:''});
+                                                    setFormBookCover('');
+                                                    setBookManagerBook(prev=>prev?{...prev,cover_image:''}:prev);
+                                                    await retireCover(previousCover);
+                                                    fetchMyData();
+                                                    if (user?.role==='admin') {
+                                                        fetchAdminHotBooks();
+                                                        if(adminBookSearch.trim())fetchAdminBookSearchResults(adminBookSearch);
                                                     }
+                                                    setToast({msg:'封面已移除',type:'success'});
+                                                } catch(error) {
+                                                    setToast({msg:error instanceof Error?error.message:'移除失败，请重试',type:'error'});
+                                                } finally {setUploading(false);}
 
-                                                    setUploading(false); // 关闭 loading
-                                                    setToast({ msg: '封面已移除', type: 'success' });
-                                                }
                                             }}
                                             className="absolute top-2 right-2 z-20 p-2 bg-red-600/90 text-white rounded-full hover:bg-red-700 shadow-sm opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
                                             title="移除封面"
@@ -957,10 +949,10 @@ const openBookManager = (book: Book) => {
                                         <span className="text-sm font-bold">点击更换</span>
                                     </div>
                                     {/* ⚠️ 记得检查这里是不是 onSelectFile ！ */}
-                                    <input type="file" className="hidden" accept="image/*" onChange={(e) => onSelectFile(e, 'edit')} />
+                                    <input type="file" className="hidden" accept="image/jpeg,image/png,image/webp" aria-label="更换书籍封面" disabled={uploading} onChange={(e) => onSelectFile(e, 'edit')} />
                                 </label>
                             </div>
-                            <p className="text-xs text-gray-400">支持 JPG, PNG (推荐 3:4)</p>
+                            <p className="text-xs text-gray-400">支持 JPG、PNG、WebP，最大 8 MB；推荐 3:4，保存时自动压缩</p>
                         </div>
 
                             {/* 右侧：表单区 */}
@@ -1208,7 +1200,7 @@ const openBookManager = (book: Book) => {
                     <label className="relative cursor-pointer group">
                         <div className="w-28 h-36 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden hover:border-blue-500 transition">
                             {newBookCoverPreview ? (
-                                <img src={newBookCoverPreview} className="w-full h-full object-cover" />
+                                <BookCover priority sizes="160px" src={newBookCoverPreview} className="w-full h-full object-cover" />
                             ) : (
                                 <div className="text-center text-gray-400">
                                     <ImageIcon className="h-8 w-8 mx-auto mb-1" />
@@ -1222,8 +1214,8 @@ const openBookManager = (book: Book) => {
                         <input 
                             type="file" 
                             className="hidden" 
-                            accept="image/*"
-                            onChange={(e) => onSelectFile(e, 'edit')}
+                            accept="image/jpeg,image/png,image/webp"
+                            aria-label="上传新书封面" disabled={uploading} onChange={(e) => onSelectFile(e, 'new')}
                         />
                     </label>
                 </div>

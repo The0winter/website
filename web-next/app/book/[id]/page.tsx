@@ -17,7 +17,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, '') ||
 const PUBLIC_IMAGE_HOST = process.env.NEXT_PUBLIC_API_URL
   ?.trim()
   .replace(/\/api\/?$/, '')
-  .replace(/\/+$/, '') || 'http://127.0.0.1:3000';
+  .replace(/\/+$/, '') || SITE_URL;
 
 // 新增辅助函数：处理封面图片地址，将其转化为完整的公网 URL
 function normalizeCoverImage(coverImage?: string): string {

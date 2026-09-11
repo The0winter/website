@@ -1,4 +1,5 @@
 'use client';
+import BookCover from '@/components/BookCover';
 
 import {useEffect,useLayoutEffect,useState} from 'react';
 import {useRouter,useSearchParams} from 'next/navigation';
@@ -14,12 +15,12 @@ import './mobile-home.css';
 
 const categories=['全部','玄幻','仙侠','都市','历史','科幻','奇幻','悬疑'];
 const browseCache = new Map<string, {books: Book[]; total: number}>();
-function Cover({book}:{book:Book}){
+function Cover({book,priority=false}:{book:Book;priority?:boolean}){
   const [failed,setFailed]=useState(false);
-  return <div className="mh-cover">{book.cover_image&&!failed?<img src={book.cover_image} alt={`${book.title}封面`} onError={()=>setFailed(true)}/>:<><BookOpen size={26}/><span>{book.title}</span></>}</div>;
+  return <div className="mh-cover">{book.cover_image&&!failed?<BookCover priority={priority} sizes="80px" src={book.cover_image} alt={`${book.title}封面`} onError={()=>setFailed(true)}/>:<><BookOpen size={26}/><span>{book.title}</span></>}</div>;
 }
 function BookRows({books}:{books:Book[]}){
-  return <div className="mh-rows">{books.length?books.map(book=><BookLink className="mh-book" key={book.id} href={`/book/${book.id}`}><Cover book={book}/><div className="mh-book-info"><h3>{book.title}</h3><p>{book.description&&book.description!=='暂无简介'?book.description:'打开这本书，开始一段新的阅读旅程。'}</p><div className="mh-book-meta"><span>{book.category?.split('>').pop()||'综合'} · {book.author||'未知作者'}</span><small>{['completed','完结'].includes(book.status||'')?'完结':'连载'}</small></div></div></BookLink>):<p className="mh-empty">暂时没有书籍</p>}</div>;
+  return <div className="mh-rows">{books.length?books.map((book,index)=><BookLink className="mh-book" key={book.id} href={`/book/${book.id}`}><Cover book={book} priority={index<3}/><div className="mh-book-info"><h3>{book.title}</h3><p>{book.description&&book.description!=='暂无简介'?book.description:'打开这本书，开始一段新的阅读旅程。'}</p><div className="mh-book-meta"><span>{book.category?.split('>').pop()||'综合'} · {book.author||'未知作者'}</span><small>{['completed','完结'].includes(book.status||'')?'完结':'连载'}</small></div></div></BookLink>):<p className="mh-empty">暂时没有书籍</p>}</div>;
 }
 export default function MobileHome({featured,recommended,newBooks}:{featured:Book[];recommended:Book[];newBooks:Book[]}){
   const router=useRouter();
@@ -70,7 +71,7 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
     <h1 className="sr-only">九天小说 · 精选</h1>
     <HomeSearchHeader/>
     {mode==='home'?<>
-      {hero&&<BookLink href={`/book/${hero.id}`} className="mh-banner"><div><span className="mh-kicker">九天精选 · 好书推荐</span><h2>{hero.title}</h2><span className="mh-banner-sub">{hero.author||'九天小说'} <ChevronRight size={13}/></span></div><Cover book={hero}/><div className="mh-banner-seal" aria-hidden="true">阅</div></BookLink>}
+      {hero&&<BookLink href={`/book/${hero.id}`} className="mh-banner"><div><span className="mh-kicker">九天精选 · 好书推荐</span><h2>{hero.title}</h2><span className="mh-banner-sub">{hero.author||'九天小说'} <ChevronRight size={13}/></span></div><Cover book={hero} priority/><div className="mh-banner-seal" aria-hidden="true">阅</div></BookLink>}
       <nav className="mh-shortcuts" aria-label="找书入口"><button onClick={()=>browse('category')}><span className="mh-icon coral"><LayoutGrid/></span>分类</button><Link href="/ranking"><span className="mh-icon purple"><Trophy/></span>排行</Link><button onClick={()=>browse('new')}><span className="mh-icon rose"><CalendarDays/></span>新书</button></nav>
       <section className="mh-section"><header><h2>热门精选</h2><Link href="/ranking">更多 <ChevronRight size={14}/></Link></header><BookRows books={featured.slice(0,3)}/></section>
       <section className="mh-section"><header><h2>精选推荐</h2><Link href="/ranking">更多 <ChevronRight size={14}/></Link></header><BookRows books={recommended.slice(0,3)}/></section>

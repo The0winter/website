@@ -7,8 +7,11 @@ import User from '../models/User.js';
 import Book from '../models/Book.js';
 import mongoose from 'mongoose';
 import { asyncRoute, publicUser } from '../security.js';
+import {getCoverStorage,prepareCover,coverUploadLimit} from '../services/cover-storage.js';
+import {mediaFilter} from '../services/media-reference.js';
 
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:1572864,files:1,fields:0}});
+const coverUpload=multer({storage:multer.memoryStorage(),limits:{fileSize:coverUploadLimit,files:1,fields:0}});
 export async function validAsset(url,owner) {
   if (url === '') return true;
   const match=typeof url==='string' && url.match(/^\/api\/media\/([a-f0-9]{24})$/);
@@ -19,8 +22,21 @@ export function mediaRoutes(app,auth) {
   app.post('/api/upload/cover',auth.authenticate,rateLimit({windowMs:60000,limit:10,message:{error:'上传过于频繁'}}),(req,res,next)=>{
     if (active >= 2) return res.status(503).json({error:'图片处理中，请稍后重试'});
     active++;let released=false;const release=()=>{if(!released){released=true;active--;}};res.once('finish',release);res.once('close',release);next();
-  },upload.single('file'),asyncRoute(async(req,res)=>{
+  },(req,res,next)=>(req.query.purpose==='book'?coverUpload:upload).single('file')(req,res,next),asyncRoute(async(req,res)=>{
     if (!req.file) return res.status(400).json({error:'请选择图片'});
+    if (req.query.purpose==='book' && process.env.COVER_STORAGE==='r2') {
+      let variants;
+      try { variants=await prepareCover(req.file.buffer); }
+      catch { return res.status(400).json({error:'请上传 8 MB 以内的静态 JPG、PNG 或 WebP 封面，像素不超过 1600 万'}); }
+      const id=new mongoose.Types.ObjectId();
+      try {
+        const stored=await getCoverStorage().write(String(id),variants);
+        await Media.create({_id:id,owner:req.user.id,...stored});
+        return res.status(201).json({url:stored.publicUrl});
+      } catch {
+        return res.status(503).json({error:'封面存储暂不可用，请稍后重试'});
+      }
+    }
     let content;
     try {
       const input=sharp(req.file.buffer,{limitInputPixels:16000000,failOn:'error'}).timeout({seconds:5});
@@ -34,15 +50,17 @@ export function mediaRoutes(app,auth) {
   app.get('/api/media/:id',asyncRoute(async(req,res)=>{
     const media=await Media.findOne({_id:req.params.id,deleted:false}).select('+content');
     if (!media) return res.status(404).end();
+    if (media.storage==='r2') return res.set('Cache-Control','public, max-age=3600').redirect(302,media.publicUrl);
     res.set('Cache-Control','public, max-age=3600').type(media.mime).send(media.content);
   }));
   app.delete('/api/upload/cover',auth.authenticate,asyncRoute(async(req,res)=>{
-    const match=typeof req.body.url==='string' && req.body.url.match(/^\/api\/media\/([a-f0-9]{24})$/);
-    if (!match) return res.status(403).json({error:'旧图片归属未确认，不能自动删除'});
+    const filter=mediaFilter(req.body.url,req.user.id);
+    if (!filter) return res.status(403).json({error:'旧图片归属未确认，不能自动删除'});
     await mongoose.connection.transaction(async session=>{
-      const media=await Media.findOneAndUpdate({_id:match[1],owner:req.user.id},{$inc:{referenceVersion:1}},{new:true,session});
+      const media=await Media.findOneAndUpdate(filter,{$inc:{referenceVersion:1}},{new:true,session});
       if (!media) throw Object.assign(new Error('无权删除'),{status:403});
-      if (await Book.exists({cover_image:req.body.url}).session(session) || await User.exists({avatar:req.body.url}).session(session)) throw Object.assign(new Error('图片仍在使用'),{status:409});
+      const urls=[`/api/media/${media._id}`,...(media.publicUrl?[media.publicUrl]:[])];
+      if (await Book.exists({cover_image:{$in:urls}}).session(session) || await User.exists({avatar:{$in:urls}}).session(session)) throw Object.assign(new Error('图片仍在使用'),{status:409});
       media.deleted=true;await media.save({session});
     });res.json({success:true});
   }));

@@ -147,6 +147,30 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       assert.equal((await Media.findById(image.data.url.split('/').pop())).deleted,true);
       assert.equal((await owner.write('/api/upload/cover','DELETE',{url:'https://res.cloudinary.com/old/image/upload/a.jpg'})).status,403);
     });
+    await t.test('R2 covers require exact owned URLs and remain available until unbound',async()=>{
+      const id=new mongoose.Types.ObjectId();
+      const url=`https://img.example.test/covers/${id}/480.webp`;
+      await Media.create({_id:id,owner:a._id,storage:'r2',publicUrl:url,bucket:'book-covers',mime:'image/webp',sha256:'test'});
+      assert.equal((await owner.write(`/api/books/${book._id}`,'PATCH',{cover_image:url.replace('img.example.test','attacker.test')})).status,400);
+      const otherCsrf=(await other.request('/api/auth/csrf')).data.csrfToken;
+      assert.equal((await other.request('/api/books','POST',{title:'Stolen cover',cover_image:url},{origin:'http://127.0.0.1:3000','x-csrf-token':otherCsrf,'idempotency-key':'stolen-cover-test-001'})).status,400);
+      assert.equal((await owner.write(`/api/books/${book._id}`,'PATCH',{cover_image:url})).status,200);
+      assert.equal((await owner.request(`/api/books/${book._id}`)).data.cover_image,url);
+      assert.equal((await owner.write('/api/upload/cover','DELETE',{url})).status,409);
+      const publicImage=await fetch(base+`/api/media/${id}`,{redirect:'manual'});
+      assert.equal(publicImage.status,302);assert.equal(publicImage.headers.get('location'),url);
+      assert.equal((await owner.write(`/api/books/${book._id}`,'PATCH',{cover_image:''})).status,200);
+      assert.equal((await other.write('/api/upload/cover','DELETE',{url})).status,403);
+      assert.equal((await owner.write('/api/upload/cover','DELETE',{url})).status,200);
+      assert.equal((await owner.write(`/api/books/${book._id}`,'PATCH',{cover_image:url})).status,400);
+      const adminId=new mongoose.Types.ObjectId();
+      const adminUrl=`https://img.example.test/covers/${adminId}/480.webp`;
+      await Media.create({_id:adminId,owner:admin._id,storage:'r2',publicUrl:adminUrl,mime:'image/webp',sha256:'test'});
+      assert.equal((await administrator.write(`/api/books/${book._id}`,'PATCH',{cover_image:adminUrl})).status,200);
+      const adminCsrf=(await administrator.request('/api/auth/csrf')).data.csrfToken;
+      assert.equal((await administrator.request('/api/books','POST',{title:'New covered book',cover_image:adminUrl},{origin:'http://127.0.0.1:3000','x-csrf-token':adminCsrf,'idempotency-key':'new-cover-test-001'})).status,201);
+      await administrator.write(`/api/books/${book._id}`,'PATCH',{cover_image:''});
+    });
     await t.test('login failures accumulate and expired lock resets',async()=>{
       const bad=client();
       for(let i=0;i<5;i++)assert.equal((await bad.write('/api/auth/signin','POST',{email:b.email,password:'Wrong-password'})).status,401);

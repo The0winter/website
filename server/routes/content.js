@@ -3,7 +3,7 @@ import Book from '../models/Book.js';
 import Chapter from '../models/Chapter.js';
 import Bookmark from '../models/Bookmark.js';
 import Review from '../models/Review.js';
-import Media from '../models/Media.js';
+import {claimMedia} from '../services/media-reference.js';
 import User from '../models/User.js';
 import Operation from '../models/Operation.js';
 import {pagination} from '../services/pagination.js';
@@ -34,8 +34,7 @@ export function contentRoutes(app,auth) {
       const operation=await Operation.findOne({_id:operationId,expiresAt:{$gt:new Date()}}).session(session);
       if(operation){if(operation.hash!==hash)fail(409,'幂等键对应不同请求');book=await Book.findById(operation.resultId).session(session);return;}
       if(req.body.cover_image) {
-        if(!/^\/api\/media\/[a-f0-9]{24}$/.test(req.body.cover_image))fail(400,'封面必须来自本人上传');
-        const asset=await Media.findOneAndUpdate({_id:req.body.cover_image.split('/').pop(),owner:req.user.id,deleted:false},{$inc:{referenceVersion:1}},{session});
+        const asset=await claimMedia(req.body.cover_image,req.user.id,session);
         if(!asset)fail(400,'封面必须来自本人上传');
       }
       [book]=await Book.create([{...req.body,author:req.account.username,author_id:req.user.id}],{session});
@@ -49,8 +48,7 @@ export function contentRoutes(app,auth) {
     await mongoose.connection.transaction(async session=>{
       const book=await lockBook(req.params.id,req.user,session);
       if(req.body.cover_image && req.body.cover_image!==book.cover_image) {
-        if(!/^\/api\/media\/[a-f0-9]{24}$/.test(req.body.cover_image))fail(400,'封面必须来自本人上传');
-        const asset=await Media.findOneAndUpdate({_id:req.body.cover_image.split('/').pop(),owner:req.user.id,deleted:false},{$inc:{referenceVersion:1}},{session});
+        const asset=await claimMedia(req.body.cover_image,req.user.id,session);
         if(!asset)fail(400,'封面必须来自本人上传');
       }
       Object.assign(book,req.body);result=await book.save({session});

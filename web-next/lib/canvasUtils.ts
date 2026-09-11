@@ -10,7 +10,8 @@ export const createImage = (url: string): Promise<HTMLImageElement> =>
 export async function getCroppedImg(
   imageSrc: string,
   pixelCrop: { x: number; y: number; width: number; height: number },
-  rotation = 0
+  rotation = 0,
+  maxWidth?: number
 ): Promise<Blob | null> {
   const image = await createImage(imageSrc)
   const canvas = document.createElement('canvas')
@@ -18,6 +19,15 @@ export async function getCroppedImg(
 
   if (!ctx) {
     return null
+  }
+
+  // Book covers are downscaled while cropping, before uploading or allocating a full image canvas.
+  if (maxWidth && rotation === 0) {
+    const scale = Math.min(1, maxWidth / pixelCrop.width)
+    canvas.width = Math.max(1, Math.round(pixelCrop.width * scale))
+    canvas.height = Math.max(1, Math.round(pixelCrop.height * scale))
+    ctx.drawImage(image, pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height, 0, 0, canvas.width, canvas.height)
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9))
   }
 
   const rotRad = (rotation * Math.PI) / 180 // rotations

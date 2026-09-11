@@ -1,4 +1,5 @@
 'use client';
+import BookCover from '@/components/BookCover';
 import type { Book } from '@/lib/api';
 import type {LucideIcon} from 'lucide-react';
 
@@ -76,7 +77,7 @@ const RankingList = ({
 
                         <div className="relative w-12 h-16 flex-shrink-0 rounded shadow-sm overflow-hidden border border-gray-100">
                            {book.cover_image ? (
-                             <img src={book.cover_image} alt={book.title || '小说封面'} className="w-full h-full object-cover" />
+                             <BookCover priority={index<3} src={book.cover_image} alt={book.title || '小说封面'} className="w-full h-full object-cover" />
                            ) : (
                              <div className="w-full h-full bg-gray-50 flex items-center justify-center">
                                <BookOpen className="w-4 h-4 text-gray-300" />
@@ -122,7 +123,7 @@ const RankingList = ({
                     
                     <div className="relative w-28 h-38 flex-shrink-0 shadow-xl rounded-md overflow-hidden transform group-hover:-translate-y-1 transition-transform duration-300 border border-black/5">
                         {first.cover_image ? (
-                            <img src={first.cover_image} alt={first.title} className="w-full h-full object-cover" />
+                            <BookCover priority sizes="160px" src={first.cover_image} alt={first.title} className="w-full h-full object-cover" />
                         ) : (
                             <div className="w-full h-full bg-gray-200 flex items-center justify-center"><BookOpen className="text-gray-400"/></div>
                         )}
@@ -160,7 +161,7 @@ const RankingList = ({
                                     
                                     <div className="flex gap-3">
                                         <div className="w-20 h-28 flex-shrink-0 rounded bg-gray-200 overflow-hidden shadow-md group-hover:shadow-lg transition-all border border-black/5">
-                                            {book.cover_image && <img src={book.cover_image} 
+                                            {book.cover_image && <BookCover src={book.cover_image}
                                             alt={book.title ? `${book.title} 封面` : '推荐书籍封面'}className="w-full h-full object-cover" />}
                                         </div>
                                         

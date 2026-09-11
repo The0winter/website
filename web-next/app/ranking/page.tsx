@@ -1,4 +1,5 @@
 'use client';
+import BookCover from '@/components/BookCover';
 
 import { useState, useEffect, useMemo } from 'react';
 import BookLink from '@/components/BookLink';
@@ -214,7 +215,7 @@ const [error,setError]=useState('');
                                 {/* 书封 */}
                                 <BookLink href={`/book/${book.id}`} className="relative flex-shrink-0 w-16 h-24 md:w-24 md:h-32 shadow-md rounded overflow-hidden group-hover:shadow-lg transition-all border border-gray-200">
                                      {book.cover_image ? (
-                                         <img src={book.cover_image} alt={book.title || '小说封面'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                         <BookCover priority={index<4} src={book.cover_image} alt={book.title || '小说封面'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                      ) : (
                                          <div className="w-full h-full bg-gray-100 flex items-center justify-center text-[10px] md:text-base text-gray-300">无封面</div>
                                      )}

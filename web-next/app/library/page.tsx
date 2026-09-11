@@ -1,4 +1,5 @@
 'use client';
+import BookCover from '@/components/BookCover';
 
 import {Suspense, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type PointerEvent} from 'react';
 import {usePathname, useRouter, useSearchParams} from 'next/navigation';
@@ -24,7 +25,7 @@ const sorts = {combined: '综合排序（默认）', read: '按最近阅读排�
 
 function Cover({book}: {book: Book | null}) {
   const [failed, setFailed] = useState(false);
-  return <div className="shelf-cover">{book?.cover_image && !failed ? <img src={book.cover_image} alt={`${book.title}封面`} onError={() => setFailed(true)}/> : <><BookOpen size={24}/><span>{book?.title || '作品暂不可用'}</span></>}</div>;
+  return <div className="shelf-cover">{book?.cover_image && !failed ? <BookCover src={book.cover_image} alt={`${book.title}封面`} onError={() => setFailed(true)}/> : <><BookOpen size={24}/><span>{book?.title || '作品暂不可用'}</span></>}</div>;
 }
 
 function RemoveDialog({entries, tab, busy, error, onClose, onRemove}: {entries: Entry[]; tab: Tab; busy: boolean; error: string; onClose: () => void; onRemove: () => void}) {

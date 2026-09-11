@@ -1,4 +1,5 @@
 'use client';
+import BookCover from '@/components/BookCover';
 
 import {useEffect, useLayoutEffect, useState} from 'react';
 import {useParams, useRouter, useSearchParams} from 'next/navigation';
@@ -14,7 +15,7 @@ export const dynamic = 'force-dynamic';
 function Cover({book}: {book: Book}) {
   const [failed, setFailed] = useState(false);
   return <div className="author-book-cover">{book.cover_image && !failed
-    ? <img src={book.cover_image} alt={book.title + '封面'} onError={() => setFailed(true)}/>
+    ? <BookCover src={book.cover_image} alt={book.title + '封面'} onError={() => setFailed(true)}/>
     : <BookOpen size={28} aria-hidden="true"/>}</div>;
 }
 
