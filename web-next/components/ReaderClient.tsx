@@ -20,12 +20,12 @@ import { useReadingSettings } from '@/contexts/ReadingSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
 
 import ReaderPages from './ReaderPages';
-import AdminModeNotice from './AdminModeNotice';
+import ReaderScroll from './ReaderScroll';
 import type {ReaderTurnMode} from './useReaderPageTurn';
 
 const turnModes=[
   {value:'horizontal',label:'左右翻页',hint:'左右滑动或点击两侧翻页，点击中央打开菜单'},
-  {value:'scroll',label:'上下滚屏',hint:'上下滑动阅读，到章末继续上滑进入下一章'},
+  {value:'scroll',label:'上下滚屏',hint:'上下滑动连续阅读，章节自动衔接'},
   {value:'vertical',label:'上下翻页',hint:'上下滑动或点击上下区域翻页，点击中央打开菜单'},
 ] as const;
 function ReaderModeSetting({value,onChange}:{value:ReaderTurnMode;onChange:(value:ReaderTurnMode)=>void}){
@@ -285,14 +285,15 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   // Preload parsed text and paragraph counts in both directions. No hidden
   // reader is mounted, so speculative reads never record views or bookmarks.
   useEffect(()=>{
-    if(!chapter?.id || prefetchPolicy!=='visible')return;
+    if(!chapter?.id || prefetchPolicy==='paused' || (prefetchPolicy==='intent' && !nextButtonVisible))return;
     let active=true;
     const timer=window.setTimeout(()=>{
       for(const [side,id] of [['previous',prevChapterId],['next',nextChapterId]] as const){
         if(!id)continue;
-        void Promise.all([loadReaderChapter(bookId,id),loadReaderCounts(id).catch(()=>({}))]).then(([value])=>{
+        void loadReaderChapter(bookId,id).then(value=>{
           if(active)setAdjacent(previous=>({...previous,[side]:value}));
         }).catch(()=>{});
+        void loadReaderCounts(id).catch(()=>{});
       }
     },nextButtonVisible?0:150);
     return()=>{active=false;window.clearTimeout(timer);};
@@ -304,6 +305,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     kai: '"Kaiti SC", "KaiTi", serif',
   }[fontFamily];
   const displayChapters = catalogReversed ? [...allChapters].reverse() : allChapters;
+  const ReadingSurface=turnMode==='scroll'?ReaderScroll:ReaderPages;
 
 if (loading) return (
     <div 
@@ -382,8 +384,8 @@ if (loading) return (
 
 
       <div className="relative w-full" onPointerDown={() => { if (showHint) setShowHint(false); }}>
-        <ReaderPages
-          key={chapter.id} book={book} chapter={chapter} chapterIndex={currentChapterIndex} chapterTotal={catalogTotal}
+        <ReadingSurface
+          key={turnMode==='scroll'?bookId:chapter.id} book={book} chapter={chapter} chapterIndex={currentChapterIndex} chapterTotal={catalogTotal}
           previousChapter={adjacent.previous?.id===prevChapterId?adjacent.previous:chapterCache.get(prevChapterId || '')}
           nextChapter={adjacent.next?.id===nextChapterId?adjacent.next:chapterCache.get(nextChapterId || '')}
           fontFamily={fontFamilyValue} fontSize={fontSizeNum} lineHeight={lineHeight}
@@ -540,7 +542,6 @@ if (loading) return (
                 </div>
 
                 <div className="space-y-6">
-                    <AdminModeNotice/>
                     <ReaderModeSetting value={turnMode} onChange={setTurnMode}/>
                     {/* Theme */}
                     <div className="flex items-center">
@@ -663,7 +664,6 @@ if (loading) return (
             }}
           >
             <div className="flex justify-end mb-3"><button aria-label="关闭阅读设置" onClick={()=>setShowSettings(false)} className="p-1"><X size={18}/></button></div>
-            <AdminModeNotice/>
             <ReaderModeSetting value={turnMode} onChange={setTurnMode}/>
             {/* 紧凑排版：字号调整 (放在最上面方便操作) */}
             <div className="flex items-center gap-3 mb-4 bg-black/5 rounded-lg p-2">

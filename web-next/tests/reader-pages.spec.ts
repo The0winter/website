@@ -100,16 +100,8 @@ test('immersive navigation, touch-following turns, cancellation and all three sa
     await expect.poll(()=>textWindow.evaluate(el=>Math.round(el.scrollTop))).toBe(840);
     await page.reload();await expect(reader).toHaveAttribute('data-mode','scroll');
     await expect.poll(()=>textWindow.evaluate(el=>Math.round(el.scrollTop))).toBe(840);
-    await textWindow.evaluate(el=>{el.scrollTop=el.scrollHeight;});
-    await expect(pageNumber).toHaveText(/^(\d+)\/\1$/);
-    await touch('touchStart',190,650);await touch('touchMove',190,520);await touch('touchMove',190,350);await touch('touchEnd');
-    await expect(page).toHaveURL(base+'/book/000000000000000000000101/000000000000000000000102');
-    await expect(reader).toHaveAttribute('data-mode','scroll');
-    await expect.poll(()=>textWindow.evaluate(el=>Math.round(el.scrollTop))).toBe(0);
-    // Pull down from the beginning returns to the previous chapter's end.
-    await touch('touchStart',190,300);await touch('touchMove',190,400);await touch('touchMove',190,600);await touch('touchEnd');
-    await expect(page).toHaveURL(url);
-    await expect(pageNumber).toHaveText(/^(\d+)\/\1$/);
+    // Scrolling now keeps adjacent chapters in this same native scroll area.
+    await expect(textWindow.locator('[data-scroll-chapter="000000000000000000000102"]')).toHaveCount(1);
     expect(errors).toEqual([]);
   }finally{await context.close();}
 });

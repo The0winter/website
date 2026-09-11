@@ -26,6 +26,10 @@
 .reader-pages-root[data-mode=scroll] .reader-text-window { overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; touch-action:pan-y pinch-zoom; scrollbar-width:none; }
 .reader-pages-root[data-mode=scroll] .reader-text-window::-webkit-scrollbar { display:none; }
 .reader-pages-root[data-mode=scroll] .reader-columns { height:auto; column-count:auto; display:flow-root; }
+.reader-scroll-window { overflow-anchor:none; }
+.reader-scroll-chapter { padding-bottom:32px; }
+.reader-scroll-loading { padding:24px 0; text-align:center; color:var(--reader-muted); font:13px/1.6 Arial,"Microsoft YaHei",sans-serif; }
+.reader-scroll-loading button { padding:8px 18px; border:1px solid #91806a40; border-radius:8px; }
 .reader-columns { height:100%; column-fill:auto; column-count:1; column-gap:40px; width:100%; text-align:justify; overflow-wrap:anywhere; font-weight:400; letter-spacing:.035em; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
 .reader-columns h1 { font-size:1.4em; font-family:inherit; font-weight:700; line-height:1.5; letter-spacing:.01em; margin:16px 0 32px; break-after:avoid; overflow-wrap:anywhere; }
 .reader-paragraph { text-indent:2em; margin:0 0 var(--reader-paragraph-gap); line-height:inherit; orphans:1; widows:1; }

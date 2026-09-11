@@ -17,7 +17,7 @@ type Paragraph={key:string;text:string};
 const subscribeHydration=()=>()=>{};
 const clientReady=()=>true;
 const serverReady=()=>false;
-type Props={
+export type ReaderPageProps={
   book:Book; chapter:Chapter; chapterIndex:number; chapterTotal:number|null;
   fontFamily:string; fontSize:number; lineHeight:number; paragraphGap:string;
   theme:{bg:string;text:string;panel:string}; paper:boolean; dark:boolean; pageWidth:number;
@@ -27,7 +27,7 @@ type Props={
   onChapter:(id:string)=>void; onTools:()=>void; onHideTools:()=>void; onNearEnd:()=>void;
 };
 
-export default function ReaderPages(props:Props) {
+export default function ReaderPages(props:ReaderPageProps) {
   const {book,chapter,fontFamily,fontSize,lineHeight,paragraphGap,blocked,turnMode,onChapter,onTools,onHideTools,onNearEnd}=props;
   const scrolling=turnMode==='scroll';
   const hydrated=useSyncExternalStore(subscribeHydration,clientReady,serverReady);
