@@ -26,7 +26,7 @@ export default function Navbar() {
 
 const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
   // 只要是旧版阅读页(/read/)、新版阅读页、或者论坛主页，都隐藏
-  if (pathname === '/login' || ((pathname === '/profile' || pathname === '/library') && (authLoading || !user)) || pathname?.startsWith('/read/') || pathname?.startsWith('/forum') || isNewReadingPage) {
+  if (pathname === '/login' || pathname === '/library' || (pathname === '/profile' && (authLoading || !user)) || pathname?.startsWith('/read/') || pathname?.startsWith('/forum') || isNewReadingPage) {
     return null;
   }
 

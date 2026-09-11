@@ -1,4 +1,5 @@
 import Author from '../models/Author.js';
+import {libraryRoutes} from './library.js';
 import {paragraphCommentRoutes} from './paragraph-comments.js';
 import User from '../models/User.js';
 import crypto from 'node:crypto';
@@ -18,6 +19,7 @@ const Daily=mongoose.models.ReadDaily||mongoose.model('ReadDaily',dailySchema);
 const integer=(value,fallback,max)=>{const n=value===undefined?fallback:Number(value);if(!Number.isSafeInteger(n)||n<1||n>max)fail(400,'分页参数无效');return n;};
 const formatted=doc=>({...doc,id:String(doc._id)});
 export function readingRoutes(app,auth) {
+  libraryRoutes(app,auth);
   paragraphCommentRoutes(app,auth);
   app.get('/api/authors/:id',asyncRoute(async(req,res)=>{
     const profile=await Author.findById(req.params.id).lean();

@@ -1,5 +1,6 @@
 'use client';
 import {useStoredState} from '@/lib/useStoredState';
+import MobileBottomNav from '@/components/MobileBottomNav';
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -351,7 +352,7 @@ export default function ForumPage() {
   };
 
 return (
-    <div className={`min-h-screen ${currentTheme.bg} pb-24 md:pb-12 font-sans transition-colors duration-300`}>
+    <div data-forum-theme={themeMode} className={`forum-page min-h-screen ${currentTheme.bg} pb-24 md:pb-12 font-sans transition-colors duration-300`}>
       <div
         className={`sticky top-0 z-40 border-b backdrop-blur-md ${currentTheme.border} ${themeMode === 'light' ? 'bg-white/90' : 'bg-[#121417]/90'}`}
       >
@@ -550,11 +551,12 @@ return (
 
       <Link
         href="/forum/create?type=question"
-        className="md:hidden fixed right-4 bottom-6 z-40 inline-flex items-center gap-2 rounded-full px-4 py-3 bg-[#1677ff] text-white shadow-lg shadow-blue-500/30"
+        className="forum-publish md:hidden fixed right-4 z-40 inline-flex items-center gap-2 rounded-full px-4 py-3 bg-[#1677ff] text-white shadow-lg shadow-blue-500/30"
       >
         <Plus className="w-5 h-5" />
         <span className="text-sm font-semibold">发布</span>
       </Link>
+      <MobileBottomNav/>
     </div>
   );
 }

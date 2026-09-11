@@ -1,223 +1,125 @@
 'use client';
-import { safeFetch as fetch } from '@/lib/request';
 
-
-import { useEffect, useState } from 'react';
+import {useEffect, useRef, useState} from 'react';
+import {useRouter} from 'next/navigation';
 import Link from 'next/link';
+import {ArrowUpDown, BookOpen, ChevronRight, History, Trash2} from 'lucide-react';
 import BookLink from '@/components/BookLink';
-import { useRouter } from 'next/navigation';
-import { Bookmark, BookOpen, Eye, Trash2, AlertTriangle, X } from 'lucide-react';
-import { bookmarksApi, booksApi, Book } from '@/lib/api';
-import { useAuth } from '@/contexts/AuthContext';
+import ReadingEntryLink from '@/components/ReadingEntryLink';
+import HomeSearchHeader from '@/components/HomeSearchHeader';
+import MobileBottomNav from '@/components/MobileBottomNav';
 import AccountLoading from '@/components/AccountLoading';
-// ✅ 1. 引入设置 Context (用来重置主题)
-import { useReadingSettings } from '@/contexts/ReadingSettingsContext'; 
+import {useAuth} from '@/contexts/AuthContext';
+import {useReadingSettings} from '@/contexts/ReadingSettingsContext';
+import {useStoredState} from '@/lib/useStoredState';
+import {safeFetch} from '@/lib/request';
+import {formatRelativeUpdate} from '@/lib/relative-update';
+import type {Book} from '@/lib/api';
+import './library.css';
+
+type Tab = 'shelf' | 'history';
+type Sort = 'combined' | 'read' | 'updated';
+type Entry = {bookId: string; book: Book | null; lastReadAt?: string; lastVisitedAt?: string; chapterId?: string; chapterTitle?: string; latestChapterTitle?: string};
+const sorts = {combined: '综合排序（默认）', read: '按最近阅读排序', updated: '按最近更新排序'};
+
+function Cover({book}: {book: Book | null}) {
+  const [failed, setFailed] = useState(false);
+  return <div className="shelf-cover">{book?.cover_image && !failed ? <img src={book.cover_image} alt={`${book.title}封面`} onError={() => setFailed(true)}/> : <><BookOpen size={24}/><span>{book?.title || '作品暂不可用'}</span></>}</div>;
+}
+
+function RemoveDialog({entry, tab, busy, error, onClose, onRemove}: {entry: Entry; tab: Tab; busy: boolean; error: string; onClose: () => void; onRemove: () => void}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {ref.current?.showModal();}, []);
+  return <dialog ref={ref} className="shelf-dialog" aria-labelledby="remove-title" onCancel={event => {event.preventDefault(); if (!busy) onClose();}}>
+    <h2 id="remove-title">{tab === 'shelf' ? '移出书架？' : '删除这条浏览记录？'}</h2>
+    <p>《{entry.book?.title || '作品暂不可用'}》{tab === 'shelf' ? '的阅读记录会保留，之后可以重新加入书架。' : '的浏览和阅读进度将被清除，书架收藏会保留。'}</p>
+    {error && <p role="alert">{error}</p>}
+    <div><button autoFocus disabled={busy} onClick={onClose}>取消</button><button className="shelf-danger" disabled={busy} onClick={onRemove}>{busy ? '正在处理…' : tab === 'shelf' ? '确认移出' : '确认删除'}</button></div>
+  </dialog>;
+}
 
 export default function Library() {
-  const { user, loading: authLoading } = useAuth();
+  const {user, loading: authLoading} = useAuth();
+  const {setTheme} = useReadingSettings();
   const router = useRouter();
-  
-  // ✅ 2. 获取 setTheme
-  const { setTheme } = useReadingSettings();
-
-  const [bookmarkedBooks, setBookmarkedBooks] = useState<Book[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-
-  // ✅ 3. 强制重置为白天模式 (进入页面瞬间执行)
+  const [tab, setTab] = useState<Tab>('shelf');
+  const [sort, setSort] = useStoredState<Sort>('library-sort', 'combined', value => typeof value === 'string' && Object.hasOwn(sorts, value));
+  const [page, setPage] = useState(1);
+  const [refresh, setRefresh] = useState(0);
+  const [managing, setManaging] = useState(false);
+  const [target, setTarget] = useState<Entry | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState('');
+  const [result, setResult] = useState<{key: string; rows: Entry[]; total: number; error: string}>({key: '', rows: [], total: 0, error: ''});
+  const userId = user?.id;
+  const key = `${userId}:${tab}:${sort}:${page}:${refresh}`;
+  const loading = result.key !== key;
+  const rows = loading ? [] : result.rows;
+  useEffect(() => {setTheme('light');}, [setTheme]);
+  useEffect(() => {if (!authLoading && !user) router.replace('/login');}, [authLoading, user, router]);
   useEffect(() => {
-    setTheme('light');
-  }, [setTheme]);
+    if (!userId) return;
+    let active = true;
+    safeFetch(`/api/users/${userId}/library?tab=${tab}&sort=${sort}&page=${page}&limit=20`).then(async response => {
+      if (!response.ok) throw new Error('暂时加载失败，请重试');
+      const entries: Entry[] = await response.json();
+      if (active) setResult({key, rows: entries, total: Number(response.headers.get('X-Total-Count') || entries.length), error: ''});
+    }).catch(error => {if (active) setResult({key, rows: [], total: 0, error: error.message});});
+    return () => {active = false;};
+  }, [userId, tab, sort, page, key]);
 
-  // --- 认证检查 ---
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) router.replace('/login');
-  }, [user, authLoading, router]);
-
-  const [libraryPage,setLibraryPage]=useState(1);
-  const [total,setTotal]=useState(0);
-  const [refresh,setRefresh]=useState(0);
-  const [error,setError]=useState('');
-  const fetchBookmarkedBooks=()=>setRefresh(value=>value+1);
-  useEffect(()=>{
-    let active=true;
-    if(!user)return;
-    async function load(){
-      try{
-        const response=await fetch(`/api/users/${user!.id}/bookmarks?page=${libraryPage}&limit=20`);
-        if(!response.ok)throw new Error('书架暂不可用，请重试');
-        const rows:Array<{bookId:(Book & {_id:string})|null;unavailableBookId:string}>=await response.json();
-        if(active){
-          setBookmarkedBooks(rows.map(row=>row.bookId ? {...row.bookId,id:row.bookId._id} : {id:row.unavailableBookId,title:'作品暂不可用',description:'原书架记录已保留，可稍后重试或移出书架。'}));
-          setTotal(Number(response.headers.get('X-Total-Count')));setError('');
-        }
-      }catch(e){if(active)setError(e instanceof Error?e.message:'书架加载失败');}
-      finally{if(active)setLoading(false);}
-    }
-    load();return()=>{active=false;};
-  },[user,libraryPage,refresh]);
-  const openDeleteModal = (e: React.MouseEvent, bookId: string) => {
-    e.preventDefault(); 
-    e.stopPropagation();
-    setDeleteTargetId(bookId);
-  };
-
-  const executeDelete = async () => {
-    if (!deleteTargetId || !user) return;
-    const bookId = deleteTargetId;
+  async function remove() {
+    if (!target || !userId || removing) return;
+    setRemoving(true); setRemoveError('');
     try {
-        setBookmarkedBooks(prev => prev.filter(b => b.id !== bookId));
-        setDeleteTargetId(null);
-        const res = await fetch(`/api/users/${user.id}/bookmarks/${bookId}`, {
-            method: 'DELETE'
-        });
-        if (!res.ok) throw new Error('删除失败');
-        fetchBookmarkedBooks();
-    } catch (error) {
-        console.error('移除失败:', error);
-        alert('移除失败，请刷新页面重试');
-        fetchBookmarkedBooks();
-    }
-  };
-
-  if (authLoading || !user) return <AccountLoading checking={authLoading} />;
-
-  if (loading) {
-    // 🔥🔥 核心修复在这里：加上 bg-gray-50 🔥🔥
-    // 之前是透明的，所以会漏出底下的黑色背景
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <BookOpen className="h-12 w-12 text-blue-600 animate-pulse" />
-      </div>
-    );
+      const response = await safeFetch(`/api/users/${userId}/${tab === 'shelf' ? 'bookmarks' : 'history'}/${target.bookId}`, {method: 'DELETE'});
+      if (!response.ok) throw new Error('操作失败，请重试');
+      setTarget(null);
+      if (rows.length === 1 && page > 1) setPage(page - 1);
+      setRefresh(value => value + 1);
+    } catch (error) {setRemoveError(error instanceof Error ? error.message : '操作失败，请重试');}
+    finally {setRemoving(false);}
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 relative">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center space-x-3 mb-8">
-          <Bookmark className="h-8 w-8 text-blue-600" />
-          <h1 className="text-3xl font-bold text-gray-900">我的书架</h1>
-          <span className="text-sm text-gray-500 bg-gray-200 px-2 py-1 rounded-full">
-            {total}
-          </span>
-        </div>
-
-        {error && <p role="alert">{error}<button onClick={fetchBookmarkedBooks}>重试</button></p>}
-        <nav aria-label="书架分页" className="flex gap-4 justify-center mb-6"><button disabled={libraryPage===1} onClick={()=>setLibraryPage(libraryPage-1)}>上一页</button><span>第 {libraryPage} 页</span><button disabled={libraryPage*20>=total} onClick={()=>setLibraryPage(libraryPage+1)}>下一页</button></nav>
-        {bookmarkedBooks.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg shadow-md">
-            <Bookmark className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900 mb-2">书架是空的</h3>
-            <p className="text-gray-600 mb-4">
-              去发现一些好书并加入书架吧！
-            </p>
-            <Link
-              href="/"
-              className="inline-block bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium"
-            >
-              浏览小说
-            </Link>
+  if (authLoading || !user) return <AccountLoading checking={authLoading}/>;
+  return <div className="library-page">
+    <div className="library-inner">
+      <h1 className="sr-only">我的书架</h1>
+      <HomeSearchHeader/>
+      <section className="shelf-panel" aria-label="个人书架">
+        <header className="shelf-toolbar">
+          <div className="shelf-tabs" role="tablist" aria-label="书架与浏览记录">
+            {(['shelf', 'history'] as const).map(value => <button key={value} id={`tab-${value}`} role="tab" aria-selected={tab === value} aria-controls="shelf-content" onClick={() => {setTab(value); setPage(1); setManaging(false);}}>{value === 'shelf' ? '书架' : '浏览记录'}</button>)}
           </div>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {bookmarkedBooks.map((book) => (
-              <div
-                key={book.id}
-                className="group relative bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
-              >
-                <button
-                    onClick={(e) => openDeleteModal(e, book.id)}
-                    className="absolute top-2 right-2 z-10 p-2 bg-black/60 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-lg backdrop-blur-sm"
-                    title="移出书架"
-                >
-                    <Trash2 size={16} />
-                </button>
-
-                <BookLink href={`/book/${book.id}`} className="block h-full flex flex-col">
-                    {book.cover_image ? (
-                      <div className="relative h-64 overflow-hidden">
-                        <img
-                            src={book.cover_image}
-                            alt={book.title || '小说封面'}
-                            className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                      </div>
-                    ) : (
-                      <div className="w-full h-64 bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
-                        <BookOpen className="h-16 w-16 text-white" />
-                      </div>
-                    )}
-                    
-                    <div className="p-4 flex-1 flex flex-col">
-                      <h3 className="font-bold text-lg text-gray-900 mb-1 line-clamp-1 group-hover:text-blue-600 transition-colors">
-                        {book.title}
-                      </h3>
-                      <p className="text-sm text-gray-600 mb-2">
-                        作者: {book.author || '未知'}
-                      </p>
-                      <p className="text-sm text-gray-700 line-clamp-2 mb-3 flex-1">{book.description}</p>
-                      
-                      <div className="flex items-center justify-between text-xs text-gray-500 mt-auto pt-3 border-t border-gray-100">
-                        <span className="flex items-center space-x-1">
-                          <Eye className="h-3 w-3" />
-                          <span>{(book.views || 0).toLocaleString()}</span>
-                        </span>
-                        <span className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-600">
-                          {book.category || '未分类'}
-                        </span>
-                      </div>
-                    </div>
-                </BookLink>
-              </div>
-            ))}
+          <div className="shelf-actions">
+            <button aria-pressed={managing} onClick={() => setManaging(!managing)}>{managing ? '完成' : '管理'}</button>
+            <label className="shelf-sort" title={sorts[sort]}><span>排序</span><ArrowUpDown size={13}/><select aria-label="书架排序" value={sort} onChange={event => {setSort(event.target.value as Sort); setPage(1);}}>{Object.entries(sorts).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           </div>
-        )}
-      </div>
-
-      {deleteTargetId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div 
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
-                onClick={() => setDeleteTargetId(null)}
-            ></div>
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-100">
-                <button 
-                    onClick={() => setDeleteTargetId(null)}
-                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-                >
-                    <X size={20} />
-                </button>
-                <div className="flex flex-col items-center text-center">
-                    <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
-                        <AlertTriangle size={24} />
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">
-                        确定要移出书架吗？
-                    </h3>
-                    <p className="text-gray-500 mb-6">
-                        这本书将从你的收藏列表中移除，但你可以随时再次添加回来。
-                    </p>
-                    <div className="flex gap-3 w-full">
-                        <button 
-                            onClick={() => setDeleteTargetId(null)}
-                            className="flex-1 py-2.5 px-4 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-colors"
-                        >
-                            取消
-                        </button>
-                        <button 
-                            onClick={executeDelete}
-                            className="flex-1 py-2.5 px-4 bg-red-600 text-white font-semibold rounded-xl hover:bg-red-700 shadow-lg shadow-red-200 transition-colors"
-                        >
-                            确认移出
-                        </button>
-                    </div>
+        </header>
+        <div id="shelf-content" role="tabpanel" aria-labelledby={`tab-${tab}`} aria-busy={loading}>
+          {loading ? <div className="shelf-empty" role="status"><BookOpen size={32}/><p>正在整理你的书架…</p></div> : result.error ? <div className="shelf-empty" role="alert"><p>{result.error}</p><button onClick={() => setRefresh(value => value + 1)}>重新加载</button></div> : rows.length === 0 ? <div className="shelf-empty">
+            <div className="shelf-empty-icon">{tab === 'shelf' ? <BookOpen size={32}/> : <History size={32}/>}</div>
+            <h2>{tab === 'shelf' ? '把喜欢的故事，放进书架' : '读过的故事，在这里重逢'}</h2>
+            <p>{tab === 'shelf' ? '找到喜欢的书，加入书架就能随时接着读。' : '浏览书籍或开始阅读后，记录会自动保存在这里。'}</p>
+            <Link href="/">去发现好书 <ChevronRight size={15}/></Link>
+          </div> : <>
+            <div className="shelf-rows">{rows.map(entry => <article className="shelf-row" key={entry.bookId}>
+              <BookLink href={`/book/${entry.bookId}`} className="shelf-book" aria-label={entry.book?.title || '作品暂不可用'} aria-disabled={!entry.book} onClick={event => {if (!entry.book) event.preventDefault();}}>
+                <Cover book={entry.book}/>
+                <div className="shelf-info"><h2>{entry.book?.title || '作品暂不可用'}</h2>
+                  <p>{entry.book ? `${entry.book.author || '未知作者'} · ${['完结', 'completed'].includes(entry.book.status || '') ? '完结' : '连载'}` : '原记录已保留，可稍后重试或移除'}</p>
+                  {entry.book && <><p className="shelf-progress">{entry.chapterTitle ? `读至 · ${entry.chapterTitle}` : tab === 'history' ? '已浏览 · 还未开始阅读' : '还未开始阅读'}</p><p className="shelf-update">{formatRelativeUpdate(entry.book.lastUpdated)}{entry.latestChapterTitle ? ` · ${entry.latestChapterTitle}` : ''}</p></>}
                 </div>
-            </div>
+              </BookLink>
+              {managing ? <button className="shelf-remove" aria-label={`${tab === 'shelf' ? '移出书架' : '删除记录'}：${entry.book?.title || '作品暂不可用'}`} onClick={() => {setTarget(entry); setRemoveError('');}}><Trash2 size={18}/></button> : entry.book && entry.chapterId ? <ReadingEntryLink bookId={entry.bookId} firstChapterId={entry.chapterId} className="shelf-continue" label="继续"/> : null}
+            </article>)}</div>
+            {result.total <= 2 && !managing && <div className="shelf-discover"><span>下一本好书，等你发现</span><Link href="/">去精选 <ChevronRight size={14}/></Link></div>}
+            {result.total > 20 && <nav className="shelf-pagination" aria-label={tab === 'shelf' ? '书架分页' : '浏览记录分页'}><button disabled={page === 1} onClick={() => setPage(page - 1)}>上一页</button><span>{page} / {Math.ceil(result.total / 20)}</span><button disabled={page * 20 >= result.total} onClick={() => setPage(page + 1)}>下一页</button></nav>}
+          </>}
         </div>
-      )}
+      </section>
     </div>
-  );
+    <MobileBottomNav/>
+    {target && <RemoveDialog entry={target} tab={tab} busy={removing} error={removeError} onClose={() => setTarget(null)} onRemove={remove}/>}
+  </div>;
 }

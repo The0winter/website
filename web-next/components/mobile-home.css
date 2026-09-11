@@ -1,14 +1,6 @@
 @media (max-width:767px) {
   body:has(.mobile-home) [data-site-chrome] { display:none; }
   .mobile-home { min-height:100vh; padding:18px 12px calc(88px + env(safe-area-inset-bottom)); background:var(--home-background); color:var(--home-text); font-family:Arial,"Microsoft YaHei",sans-serif; }
-  .mh-topbar { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
-  .mh-logo { display:flex; align-items:center; justify-content:center; flex:0 0 44px; height:44px; border-radius:6px; }
-  .mh-logo img { width:40px; height:40px; object-fit:contain; }
-  .mh-search { display:flex; align-items:center; flex:1; min-width:0; gap:8px; background:#fffaf7; border-radius:28px; padding:0 13px; height:44px; color:#b8b0a8; }
-  .mh-search>svg,.mh-search button { flex-shrink:0; }
-  .mh-search input { min-width:0; flex:1; font-size:14px; color:#433a33; outline:0; }
-  .mh-search input::placeholder { color:#b1a9a1; }
-  .mh-search button { color:#ce3b42; font-size:13px; min-height:44px; }
   .mh-banner { position:relative; isolation:isolate; display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:144px; padding:20px; overflow:hidden; border-radius:15px; color:#ffebc5; background:radial-gradient(ellipse at 65% 120%,#af7548 0,transparent 65%),linear-gradient(115deg,#302c27,#6e5940); }
   .mh-banner::before,.mh-banner::after { content:''; position:absolute; z-index:-1; width:250px; height:250px; border:1px solid #e4bd7826; border-radius:50%; right:-75px; top:-125px; }
   .mh-banner::after { width:300px; height:300px; right:-90px; top:-140px; }

@@ -7,4 +7,10 @@
   .mh-bottom [aria-current=page] { color:#df3a47; }
   .mh-bottom [aria-current=page] svg { fill:#df3a4717; }
   .profile-page { padding-bottom:calc(88px + env(safe-area-inset-bottom)); }
+  .library-page { padding-bottom:calc(88px + env(safe-area-inset-bottom)); }
+  .forum-page { padding-bottom:calc(152px + env(safe-area-inset-bottom)); }
+  .forum-publish { bottom:calc(84px + env(safe-area-inset-bottom)); }
+  [data-forum-theme=dark] .mh-bottom { background:#1c2026f5; border-color:#30353c; }
+  [data-forum-theme=dark] .mh-bottom a { color:#b5bac2; }
+  [data-forum-theme=dark] .mh-bottom [aria-current=page] { color:#ff7e87; }
 }

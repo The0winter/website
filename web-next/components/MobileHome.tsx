@@ -1,12 +1,11 @@
 'use client';
 
 import {useEffect,useState} from 'react';
-import Image from 'next/image';
+import HomeSearchHeader from './HomeSearchHeader';
 import Link from './PrefetchLink';
 import MobileBottomNav from './MobileBottomNav';
 import BookLink from './BookLink';
-import {useRouter} from 'next/navigation';
-import {BookOpen,Search,LayoutGrid,Trophy,CalendarDays,ChevronRight,ArrowLeft} from 'lucide-react';
+import {BookOpen,LayoutGrid,Trophy,CalendarDays,ChevronRight,ArrowLeft} from 'lucide-react';
 import type {Book} from '@/lib/api';
 import {safeFetch} from '@/lib/request';
 import './mobile-home.css';
@@ -20,8 +19,6 @@ function BookRows({books}:{books:Book[]}){
   return <div className="mh-rows">{books.length?books.map(book=><BookLink className="mh-book" key={book.id} href={`/book/${book.id}`}><Cover book={book}/><div className="mh-book-info"><h3>{book.title}</h3><p>{book.description&&book.description!=='暂无简介'?book.description:'打开这本书，开始一段新的阅读旅程。'}</p><div className="mh-book-meta"><span>{book.category?.split('>').pop()||'综合'} · {book.author||'未知作者'}</span><small>{['completed','完结'].includes(book.status||'')?'完结':'连载'}</small></div></div></BookLink>):<p className="mh-empty">暂时没有书籍</p>}</div>;
 }
 export default function MobileHome({featured,recommended,newBooks}:{featured:Book[];recommended:Book[];newBooks:Book[]}){
-  const router=useRouter();
-  const [query,setQuery]=useState('');
   const [mode,setMode]=useState<'home'|'category'|'new'>('home');
   const [category,setCategory]=useState('全部');
   const [page,setPage]=useState(1);
@@ -47,10 +44,7 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
   function browse(next:'category'|'new'){setMode(next);setPage(1);window.scrollTo({top:0,behavior:'smooth'});}
   return <div className="mobile-home md:hidden">
     <h1 className="sr-only">九天小说 · 精选</h1>
-    <header className="mh-topbar">
-      <Link href="/" className="mh-logo" aria-label="九天小说首页" onClick={()=>setMode('home')}><Image src="/icon.png" alt="九天小说" width={40} height={40} sizes="40px" priority/></Link>
-      <form className="mh-search" role="search" onSubmit={event=>{event.preventDefault();if(query.trim())router.push(`/search?q=${encodeURIComponent(query.trim())}`);}}><Search size={19}/><input aria-label="搜索书名或作者" placeholder="搜索书名、作者" value={query} onChange={event=>setQuery(event.target.value)}/>{query&&<button type="submit">搜索</button>}</form>
-    </header>
+    <HomeSearchHeader onHomeSelect={()=>setMode('home')}/>
     {mode==='home'?<>
       {hero&&<BookLink href={`/book/${hero.id}`} className="mh-banner"><div><span className="mh-kicker">九天精选 · 好书推荐</span><h2>{hero.title}</h2><span className="mh-banner-sub">{hero.author||'九天小说'} <ChevronRight size={13}/></span></div><Cover book={hero}/><div className="mh-banner-seal" aria-hidden="true">阅</div></BookLink>}
       <nav className="mh-shortcuts" aria-label="找书入口"><button onClick={()=>browse('category')}><span className="mh-icon coral"><LayoutGrid/></span>分类</button><Link href="/ranking"><span className="mh-icon purple"><Trophy/></span>排行</Link><button onClick={()=>browse('new')}><span className="mh-icon rose"><CalendarDays/></span>新书</button></nav>

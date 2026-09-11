@@ -114,7 +114,7 @@ test('choosing another item cancels a queued account navigation', async ({ page 
   await expect(page).toHaveURL(base + '/forum');
   const restored = page.waitForResponse('**/api/auth/session');
   session.release(); await restored;
-  await expect(page.locator('a[href="/login"]').filter({ visible: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: '移动端主导航' }).getByRole('link', { name: '我', exact: true })).toHaveAttribute('href', '/login');
   await expect(page).toHaveURL(base + '/forum');
 });
 

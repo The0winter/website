@@ -15,6 +15,7 @@ import {
   ArrowUpDown, Check, Sun, Info, Library,
 } from 'lucide-react';
 import { booksApi, chaptersApi, bookmarksApi, Book, Chapter } from '@/lib/api';
+import RecordBookVisit from './RecordBookVisit';
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -328,6 +329,7 @@ if (loading) return (
         backgroundColor: isDesktop ? activeTheme.desk : activeTheme.bg 
       }}
     >
+      <RecordBookVisit bookId={bookId} chapterId={chapter.id}/>
       <div
         className="reader-tools fixed bottom-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6 border-t transition-all duration-300 pb-safe"
         inert={!showNav}
