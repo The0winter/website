@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "id": "69shuba",
+  "name": "69书吧",
+  "home": "https://www.69shuba.com/",
+  "hosts": ["www.69shuba.com"],
+  "book": {
+    "urlPattern": "^/book/(?<bookId>[0-9]+)\\.htm$",
+    "readySelector": ".booknav2 h1",
+    "metadata": {
+      "title": {"selector": "meta[property='og:title']", "attribute": "content"},
+      "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"}
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-69shuba-v1",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": ["www.69shuba.com", "cdn.cdnshu.com", "challenges.cloudflare.com"],
+    "transport": "browser",
+    "browser": {"headless": false, "minimized": true, "responseMode": "source", "manualVerificationMs": 180000},
+    "encoding": "utf8",
+    "identityNormalization": "chinese-simplified",
+    "delayMs": 8000,
+    "timeoutMs": 30000,
+    "metadata": {
+      "title": {"selector": "meta[property='og:title']", "attribute": "content"},
+      "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"},
+      "readySelector": ".booknav2 h1"
+    },
+    "catalog": {
+      "url": "https://www.69shuba.com/book/${bookId}/",
+      "links": "#catalog li[data-num] a[href*='/txt/${bookId}/']",
+      "orderAncestor": "li[data-num]",
+      "orderAttribute": "data-num",
+      "readySelector": "#catalog li[data-num] a"
+    },
+    "chapter": {
+      "title": ".txtnav > h1",
+      "content": ".txtnav",
+      "remove": ["h1", ".txtinfo", "#txtright", ".contentadv", ".bottom-ad", ".txtad", ".txtcenter"],
+      "rejectSelectors": ["#cfts", ".cf-turnstile"]
+    }
+  }
+}

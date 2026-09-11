@@ -6,9 +6,10 @@ import os from 'node:os';
 import http from 'node:http';
 import puppeteer from 'puppeteer';
 import {createDesktop} from '../desktop/server.mjs';
-import {rememberWebsite, readSettings, normalizeWebsite, loadSites, parseSearch, fillTemplate, searchBooks} from '../desktop/sources.mjs';
+import {rememberWebsite, readSettings, normalizeWebsite, loadSites, parseSearch, fillTemplate, searchBooks, specForBook} from '../desktop/sources.mjs';
 import {acquire} from '../core.mjs';
 import {checkIdentity} from '../quality.mjs';
+import {getCatalog, getChapter} from '../adapters.mjs';
 
 function temp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'novel-desktop-test-'));
@@ -126,6 +127,53 @@ test('shudugu details adapter handles variable book IDs and chapter pages withou
     assert.match(book.chapters[0].content, /第一页[\s\S]*第二页/);
     assert.equal(book.chapters[0].provenance.length, 2);
   }
+});
+
+test('69shuba uses book-specific full catalogs, source order and clean single-chapter text', async t => {
+  const site = loadSites().sites.find(s => s.id === '69shuba');
+  const stateDir = temp(t);
+  await assert.rejects(searchBooks({website: site.home, title: '测试书', sites: [site], stateDir}), /只支持书籍详情页/);
+  for (const url of [site.home + 'book/123/', site.home + 'txt/123/999', 'https://foreign.example/book/123.htm']) {
+    assert.throws(() => specForBook({url, title: '测试书', author: '测试作者'}, [site]));
+  }
+  for (const id of ['123', '456']) {
+    const sourceUrl = `${site.home}book/${id}.htm`;
+    const spec = specForBook({url: sourceUrl, title: `测试${id}`, author: '测试作者'}, [site]);
+    assert.equal(spec.catalog.url, `${site.home}book/${id}/`);
+    const link = n => `${site.home}txt/${id}/${900 + n}`;
+    const metadata = `<meta charset="gbk"><meta property="og:title" content="测试${id}"><meta property="og:novel:author" content="测试作者"><div class="booknav2"><h1>测试${id}</h1></div>`;
+    const pages = new Map([
+      [sourceUrl, metadata + `<a href="${link(2)}">最新章节</a>`],
+      [spec.catalog.url, `<div class="catalog"><li data-num="7"><a href="#">书签</a></li></div><div id="catalog"><ul><li data-num="2"><a href="${link(2)}">第2章 继续</a></li><li data-num="1"><a href="${link(1)}">第1章 开始</a></li><li data-num="3"><a href="${site.home}txt/999/999">其他作品推荐</a></li></ul></div>`],
+      [link(1), '<div class="txtnav"><h1>第1章 开始</h1><div class="txtinfo">日期 作者</div><div id="txtright">右侧广告</div>第1章 开始<br>第一页是故事里的一句话。<br><div class="contentadv">广告</div>正文提到“下一章”和广告，仍须保留。<br><div class="bottom-ad">底部广告</div>(本章完)</div>' + `<div class="page1"><a href="${link(2)}">下一章</a></div>`],
+    ]);
+    const requests = [];
+    const client = {
+      assertUrl(url) { assert.equal(new URL(url).hostname, 'www.69shuba.com'); return url; },
+      async get(url) {
+        requests.push(url);
+        assert.ok(pages.has(url), `unexpected request: ${url}`);
+        // Chrome supplies UTF-8 text while the source HTML still declares GBK.
+        return {url, body: Buffer.from(pages.get(url)), contentType: 'text/html', hash: 'fixture', fetchedAt: '2026-09-11T00:00:00Z'};
+      },
+    };
+    const {catalog} = await getCatalog(spec, client);
+    assert.deepEqual(catalog.map(c => [c.link, c.sourceOrder]), [[link(1), 1], [link(2), 2]]);
+    const chapter = await getChapter(spec, catalog[0], new Set(catalog.map(c => c.link)), client);
+    assert.equal(chapter.content, '第一页是故事里的一句话。\n正文提到“下一章”和广告，仍须保留。');
+    assert.equal(chapter.title, '第1章 开始');
+    assert.equal(chapter.provenance.length, 1);
+    assert.deepEqual(requests, [sourceUrl, spec.catalog.url, link(1)]);
+    await assert.rejects(getCatalog({...spec, author: '另一作者'}, client), /身份不匹配/);
+    pages.set(link(1), '<div id="cfts"></div><div class="txtnav"><h1>验证</h1>暂不可读</div>');
+    await assert.rejects(getChapter(spec, catalog[0], new Set(), client), /验证标记/);
+  }
+  const app = await createDesktop({stateDir});
+  try {
+    const state = await (await request(app, 'state')).json();
+    assert.ok(state.sites.some(s => s.id === site.id && s.home === site.home));
+    assert.deepEqual(state.adapterErrors, []);
+  } finally { await app.close(); }
 });
 
 test('desktop API rejects unauthenticated and foreign-origin requests, preserves settings after restart', async t => {
