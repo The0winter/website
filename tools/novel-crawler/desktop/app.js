@@ -143,6 +143,9 @@ function render() {
   $('task-title').textContent = task.title ? `《${task.title}》${task.author ? ` · ${task.author}` : ''}` : '采集任务';
   $('task-message').textContent = task.message;
   const report = task.report;
+  const bookStatus = report ? report.status : task.status;
+  const detection = report ? report.statusDetection : task.statusDetection;
+  $('book-status').textContent = `作品状态：${bookStatus === '完结' ? '已完结' : bookStatus === '连载' ? '连载中' : task.phase === 'resolving' ? '正在读取…' : detection === 'conflict' ? '来源标注有冲突，待核对' : '未识别'}${detection === 'conflict-retained' ? '（来源仍标连载，保留已确认的完结状态）' : detection === 'retained' ? '（沿用已保存状态）' : ''}`;
   const progress = !active && report ? {downloaded: report.downloaded, total: report.expected, failed: report.failures?.filter(item => item.chapter).length || 0, mode: report.mode || task.progress?.mode} : task.progress;
   const percent = progress?.total ? Math.min(100, progress.downloaded / progress.total * 100) : task.phase === 'complete' || task.phase === 'probed' ? 100 : 0;
   $('progress-bar').style.width = `${percent}%`;
@@ -165,7 +168,7 @@ function render() {
       const radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'book'; radio.value = book.url; radio.checked = book.url === selectedUrl;
       radio.onchange = () => { selectedUrl = book.url; render(); };
       const content = document.createElement('span'), title = document.createElement('strong'), detail = document.createElement('small');
-      title.textContent = book.title; detail.textContent = `${book.author} · ${book.site}`; content.append(title, detail);
+      title.textContent = book.title; detail.textContent = `${book.author} · ${book.site}${book.status ? ` · ${book.status === '完结' ? '已完结' : '连载中'}` : ''}`; content.append(title, detail);
       if (book.local) { const status = document.createElement('small'); status.className = `local-state ${book.local.state}`; status.textContent = book.local.message; content.append(status); }
       label.append(radio, content); return label;
     }));

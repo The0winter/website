@@ -18,6 +18,7 @@
     "urlPattern": "^/book/(?<bookId>[0-9]+)\\.html$",
     "readySelector": "h1",
     "metadata": {
+      "status": [{"selector": "meta[property='og:novel:status']", "attribute": "content"}, {"selector": ".booknav2 > p:nth-of-type(3)", "pattern": "\\|\\s*(.+)$"}],
       "description": {"selector": "#tab_info .navtxt", "removeLines": ["^小說關鍵詞[：:]"]},
       "title": {"selector": "meta[property='og:title']", "attribute": "content"},
       "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"}
@@ -37,6 +38,7 @@
     "delayMs": 8000,
     "timeoutMs": 30000,
     "metadata": {
+      "status": [{"selector": "meta[property='og:novel:status']", "attribute": "content"}, {"selector": ".booknav2 > p:nth-of-type(3)", "pattern": "\\|\\s*(.+)$"}],
       "description": {"selector": "#tab_info .navtxt", "removeLines": ["^小說關鍵詞[：:]"]},
       "title": {"selector": "meta[property='og:title']", "attribute": "content"},
       "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"},

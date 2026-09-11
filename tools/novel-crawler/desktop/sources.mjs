@@ -5,7 +5,7 @@ import {projectRoot, defaultStateDir, validateSpec} from '../core.mjs';
 import {readJson, atomicWrite} from '../storage.mjs';
 import {makeClient, httpUrl, decode} from '../http.mjs';
 import {browserProfile} from '../browser-session.mjs';
-import {selectValue, extractDescription} from '../adapters.mjs';
+import {selectValue, extractDescription, extractBookStatus} from '../adapters.mjs';
 import {checkIdentity, normalizedTitle} from '../quality.mjs';
 import {normalizedIdentity} from '../identity.mjs';
 
@@ -96,9 +96,19 @@ export function parseSearch(html, baseUrl, site) {
   return {results, next: next?.attr('href') ? httpUrl(next.attr('href'), baseUrl) : null};
 }
 
-export function specForBook({url, title, author, description}, sites = loadSites().sites) {
+export function specForBook({url, title, author, description, status, statusDetection, statusEvidence}, sites = loadSites().sites) {
   const site = siteFor(url, sites), match = bookUrl(url, site);
-  return validateSpec({...fillTemplate(site.spec, {...match.groups, title, author, sourceUrl: url}), ...(description ? {description} : {})});
+  return validateSpec({...fillTemplate(site.spec, {...match.groups, title, author, sourceUrl: url}), ...(description ? {description} : {}), ...(status ? {status} : {}), ...(statusDetection ? {statusDetection, statusEvidence} : {})});
+}
+
+// Explicitly reviewed endings survive stale mirror metadata and new crawl jobs.
+export function applyVerifiedBookStatus(book, stateDir, identityNormalization) {
+  const registry = readJson(path.join(stateDir, 'book-statuses.json'), {books: []});
+  const verified = (Array.isArray(registry.books) ? registry.books : []).find(item => {
+    if (item.sourceUrl !== (book.sourceUrl || book.url) || item.status !== '完结' || !item.evidence?.url || !item.evidence?.checkedAt) return false;
+    try { checkIdentity({...book, identityNormalization}, item); return true; } catch { return false; }
+  });
+  return verified ? {...book, status: '完结', statusDetection: 'verified', statusEvidence: verified.evidence} : book;
 }
 
 export async function searchBooks({website, title, author = '', stateDir = defaultStateDir, sites = loadSites().sites, onStatus, shouldStop, signal}) {
@@ -117,7 +127,8 @@ export async function searchBooks({website, title, author = '', stateDir = defau
       const book = {title: selectValue($, site.book.metadata.title), author: selectValue($, site.book.metadata.author), url: response.url, site: site.name};
       checkIdentity({title, author: author || book.author, identityNormalization: site.spec.identityNormalization}, book);
       bookUrl(book.url, site);
-      return [book];
+      Object.assign(book, extractBookStatus($, site.book.metadata.status, response));
+      return [applyVerifiedBookStatus(book, stateDir, site.spec.identityNormalization)];
     }
     if (!site.search) throw Error('该网站暂时只支持书籍详情页，请把网站栏换成书籍详情页地址');
     let url = fillTemplate(site.search.url, {query: encodeURIComponent(title.trim())});
@@ -130,7 +141,7 @@ export async function searchBooks({website, title, author = '', stateDir = defau
       // Search accepts title fragments; collection still verifies the selected book's full identity.
       const matches = parsed.results.filter(b => normalize(b.title).includes(query) && (!author.trim() || normalize(b.author) === requestedAuthor));
       matches.sort((a, b) => Number(normalize(b.title) === query) - Number(normalize(a.title) === query));
-      if (matches.length) return [...new Map(matches.map(b => [b.url, b])).values()];
+      if (matches.length) return [...new Map(matches.map(b => [b.url, applyVerifiedBookStatus(b, stateDir, site.spec.identityNormalization)])).values()];
       url = parsed.next;
     }
     return [];
@@ -149,14 +160,15 @@ export async function resolveBook({url, title, author, stateDir = defaultStateDi
     const actual = {title: selectValue($, site.book.metadata.title), author: selectValue($, site.book.metadata.author)};
     checkIdentity({title, author, identityNormalization: site.spec.identityNormalization}, actual);
     Object.assign(actual, extractDescription($, site.book.metadata.description));
+    Object.assign(actual, extractBookStatus($, site.book.metadata.status, response));
     if (reuseSaved) {
       const registry = readJson(path.join(stateDir, 'sources.json'), {sites: {}});
       const saved = Object.values(registry.sites[new URL(url).hostname]?.books || {}).filter(b => b.sourceUrl === url && b.verified && normalizedTitle(b.title) === normalizedTitle(title) && normalizedTitle(b.author) === normalizedTitle(author)).sort((a, b) => b.lastChecked.localeCompare(a.lastChecked))[0];
       if (saved && /^[a-f0-9]{20}$/.test(saved.jobId)) {
         const spec = readJson(path.join(stateDir, 'jobs', saved.jobId, 'spec.json'));
-        if (spec && spec.sourceUrl === url && normalizedTitle(spec.title) === normalizedTitle(title) && normalizedTitle(spec.author) === normalizedTitle(author)) return validateSpec({...spec, ...(actual.description ? {description: actual.description} : {})});
+        if (spec && spec.sourceUrl === url && normalizedTitle(spec.title) === normalizedTitle(title) && normalizedTitle(spec.author) === normalizedTitle(author)) return applyVerifiedBookStatus(validateSpec({...spec, ...(actual.description ? {description: actual.description} : {}), ...(actual.status ? {status: actual.status, statusDetection: actual.statusDetection, statusEvidence: actual.statusEvidence} : {statusDetection: spec.status ? 'retained' : actual.statusDetection})}), stateDir, site.spec.identityNormalization);
       }
     }
-    return specForBook({url, ...actual}, sites);
+    return applyVerifiedBookStatus(specForBook({url, ...actual}, sites), stateDir, site.spec.identityNormalization);
   } finally { await client.close(); }
 }

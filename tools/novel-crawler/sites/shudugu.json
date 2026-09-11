@@ -7,6 +7,7 @@
   "book": {
     "urlPattern": "^/(?<bookId>[0-9]+)/$",
     "metadata": {
+      "status": ".itemtxt > h1 + p > span:first-child",
       "description": ".container > .des:has(p)",
       "title": "h1 > a",
       "author": {"selector": ".itemtxt a[href^='/zuozhe/']", "pattern": "^作者：[\\s]*(.+)$"}
@@ -24,6 +25,7 @@
     "retries": 0,
     "timeoutMs": 15000,
     "metadata": {
+      "status": ".itemtxt > h1 + p > span:first-child",
       "description": ".container > .des:has(p)",
       "title": "h1 > a",
       "author": {"selector": ".itemtxt a[href^='/zuozhe/']", "pattern": "^作者：[\\s]*(.+)$"}

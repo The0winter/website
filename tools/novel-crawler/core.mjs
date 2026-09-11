@@ -34,6 +34,7 @@ export function validateSpec(input) {
   }
   if (!spec.metadata?.title || !spec.metadata?.author) throw Error('必须配置来源页面书名和作者提取规则');
   if (spec.description !== undefined && (typeof spec.description !== 'string' || spec.description.length > 5000)) throw Error('简介须为不超过 5000 字符的文本');
+  if (spec.status !== undefined && !['连载', '完结'].includes(spec.status)) throw Error('作品状态必须为连载或完结');
   if (spec.kind === 'html' && (!(spec.catalog?.links || spec.catalog?.json) || !spec.chapter?.content || !spec.chapter?.title)) throw Error('HTML 来源需配置目录及章节选择器');
   if (spec.kind !== 'html' && !(spec.resource?.url || spec.resource?.link)) throw Error('文件来源需配置下载地址或链接选择器');
   spec.allowedHosts = [...new Set([new URL(spec.sourceUrl).hostname, ...(spec.allowedHosts || [])])];
@@ -47,10 +48,10 @@ export function jobId(spec) {
 }
 
 function extractionHash(spec) {
-  const {delayMs, retries, timeoutMs, searchUrl, description, ...extraction} = spec;
-  // Synopsis changes do not affect chapter identity, order or extraction.
+  const {delayMs, retries, timeoutMs, searchUrl, description, status, statusDetection, statusEvidence, ...extraction} = spec;
+  // Book metadata changes do not affect chapter identity, order or extraction.
   if (extraction.metadata) {
-    const {description: descriptionRule, ...metadata} = extraction.metadata;
+    const {description: descriptionRule, status: statusRule, ...metadata} = extraction.metadata;
     extraction.metadata = metadata;
   }
   if (extraction.browser) {
@@ -106,6 +107,7 @@ function reportMarkdown(report) {
     `| 严重问题 | ${report.errors} |`, `| 待核对警告 | ${report.warnings} |`,
     `| 编号等信息提示 | ${report.information} |`, '',
     `简介：${report.description ? `${report.description.length} 字符${report.descriptionStatus === 'truncated' ? '（来源简介超过 5000 字符，已截取）' : report.descriptionStatus === 'retained' ? '（沿用已保存简介）' : ''}` : '未获取，导出时省略该字段'}。`, '',
+    `作品状态：${report.status === '完结' ? '已完结' : report.status === '连载' ? '连载中' : '未识别，导出时省略该字段'}${report.statusDetection === 'conflict-retained' ? '（来源仍标连载，保留已确认的完结状态）' : report.statusDetection === 'retained' ? '（未取得有效新状态，沿用已保存状态）' : ''}。`, '',
     ...(report.paused ? ['任务已主动暂停；缺失项表示尚未继续采集，不能据此判定来源缺章。', ''] : []),
     report.limitation, '',
     '## 问题分类', '',
@@ -151,6 +153,11 @@ export async function acquire(input, options = {}) {
     const specFile = path.join(dir, 'spec.json'), previousSpec = readJson(specFile);
     if (previousSpec && extractionHash(previousSpec) !== extractionHash(spec) && fs.existsSync(chaptersDir) && fs.readdirSync(chaptersDir).length) throw Error(`提取规则发生变化，请使用新的 --state-dir 重新试采，避免混用旧正文：${dir}`);
     if (!spec.description && previousSpec?.description) spec.description = previousSpec.description;
+    if (previousSpec?.status && (!spec.status || (previousSpec.status === '完结' && spec.status !== '完结'))) {
+      spec.status = previousSpec.status;
+      spec.statusEvidence = previousSpec.statusEvidence;
+      spec.statusDetection = 'retained';
+    }
     atomicWrite(specFile, spec);
     const shouldStop = () => options.signal?.aborted || options.shouldStop?.();
     const client = options.client || makeClient({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser, onStatus: options.onStatus, shouldStop, signal: options.signal});
@@ -164,6 +171,16 @@ export async function acquire(input, options = {}) {
       const description = source.actual?.description || spec.description || previousSpec?.description;
       if (description) spec.description = description;
       descriptionStatus = source.actual?.description ? source.actual.descriptionStatus : description ? 'retained' : source.actual?.descriptionStatus || 'missing';
+      if (spec.status === '完结' && source.actual?.status === '连载') {
+        // Mirrors often keep stale serial labels after a verified ending.
+        spec.statusDetection = 'conflict-retained';
+        spec.statusEvidence = {...spec.statusEvidence, conflictingSource: source.actual.statusEvidence};
+      } else if (source.actual?.status) {
+        Object.assign(spec, {status: source.actual.status, statusDetection: 'collected', statusEvidence: source.actual.statusEvidence});
+      } else {
+        spec.statusDetection = spec.status ? 'retained' : source.actual?.statusDetection || 'missing';
+        if (!spec.status) spec.statusEvidence = source.actual?.statusEvidence;
+      }
       atomicWrite(specFile, spec);
       const oldCatalog = readJson(path.join(dir, 'catalog.json'));
       if (oldCatalog && oldCatalog.some((c, i) => !catalog[i] || catalog[i].link !== c.link || catalog[i].title !== c.title)) throw Error('完整目录有删除、插入或改名，暂停续传以保护旧章节位置；需在新状态目录重新采集核对');
@@ -241,7 +258,7 @@ export async function acquire(input, options = {}) {
     } finally {
       if (!options.client) await client.close();
     }
-    const details = {...report, paused, reusedExport, description: spec.description, descriptionStatus, title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, jobId: id, checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: Object.fromEntries(Object.entries(client.stats).map(([key, value]) => [key, value - initialStats[key]])), evidence, exportFile: exportFile || null};
+    const details = {...report, paused, reusedExport, description: spec.description, descriptionStatus, status: spec.status, statusDetection: spec.statusDetection, statusEvidence: spec.statusEvidence, title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, jobId: id, checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: Object.fromEntries(Object.entries(client.stats).map(([key, value]) => [key, value - initialStats[key]])), evidence, exportFile: exportFile || null};
     atomicWrite(path.join(dir, `${mode}-report.json`), details);
     atomicWrite(path.join(dir, `${mode}-report.md`), reportMarkdown(details));
     atomicWrite(path.join(dir, 'history', `${Date.now()}-${mode}.json`), details);

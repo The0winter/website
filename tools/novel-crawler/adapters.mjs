@@ -46,6 +46,34 @@ export function extractDescription($, rules) {
   return {descriptionStatus: 'missing'};
 }
 
+export function normalizeBookStatus(value) {
+  if (typeof value !== 'string') return undefined;
+  const text = value.normalize('NFKC').replace(/\s+/gu, '').replace(/^(?:作品|小说|小說)?(?:状态|狀態)[：:]?/u, '').toLowerCase();
+  if (/^(?:已)?(?:完结|完結|完本|全本|完成|completed|finished)$/u.test(text)) return '完结';
+  if (/^(?:正在|仍在|尚在)?(?:连载|連載)(?:中)?$|^(?:未完结|未完結|ongoing|serializing)$/u.test(text)) return '连载';
+  return undefined;
+}
+
+// Only inspect explicit metadata for this book, never chapter names, ads or navigation.
+export function extractBookStatus($, rules, page) {
+  if (!rules) return {statusDetection: 'unconfigured'};
+  const matches = [];
+  for (const rule of Array.isArray(rules) ? rules : [rules]) {
+    const config = typeof rule === 'string' ? {selector: rule} : rule;
+    if ($(config.selector).length !== 1) continue;
+    let raw;
+    try { raw = selectValue($, config); } catch { continue; }
+    if (raw) matches.push({raw: raw.slice(0, 200), selector: config.selector, status: normalizeBookStatus(raw)});
+  }
+  const recognized = matches.filter(item => item.status);
+  const statuses = new Set(recognized.map(item => item.status));
+  const statusDetection = statuses.size > 1 ? 'conflict' : statuses.size ? 'collected' : matches.length ? 'unrecognized' : 'missing';
+  return {
+    ...(statuses.size === 1 ? {status: recognized[0].status} : {}), statusDetection,
+    ...(matches.length ? {statusEvidence: {matches, ...(page ? {url: page.url, hash: page.hash, fetchedAt: page.fetchedAt} : {})}} : {}),
+  };
+}
+
 function nextPage($, selector, base, client) {
   if (!selector) return null;
   const links = $(selector).filter((_, el) => !$(el).is('[disabled],.disabled,[aria-disabled="true"]'));
@@ -62,6 +90,7 @@ export async function getCatalog(spec, client) {
   const actual = {title: selectValue($, spec.metadata.title), author: selectValue($, spec.metadata.author)};
   checkIdentity(spec, actual);
   Object.assign(actual, extractDescription($, spec.metadata.description));
+  Object.assign(actual, extractBookStatus($, spec.metadata.status, first));
   const catalog = [], seenPages = new Set(), seenLinks = new Set();
   let url = spec.catalog?.url ? client.assertUrl(httpUrl(spec.catalog.url, spec.sourceUrl)) : first.url;
   const config = spec.catalog;
@@ -199,6 +228,7 @@ export async function getResource(spec, client, jobDir) {
   const actual = {title: selectValue($, spec.metadata.title), author: selectValue($, spec.metadata.author)};
   checkIdentity(spec, actual);
   Object.assign(actual, extractDescription($, spec.metadata.description));
+  Object.assign(actual, extractBookStatus($, spec.metadata.status, evidence));
   const config = spec.resource;
   if (!config.url && ($(config.link).length !== 1 || !$(config.link).attr('href'))) throw Error('文件下载链接必须唯一且含 href');
   const resourceUrl = config.url || httpUrl($(config.link).attr('href'), evidence.url);

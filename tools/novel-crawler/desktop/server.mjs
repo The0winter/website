@@ -16,7 +16,7 @@ const publicFiles = {'/': ['index.html', 'text/html'], '/app.css': ['app.css', '
 const busy = task => ['search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(task.phase);
 function visibleReport(report) {
   if (!report) return null;
-  return {...Object.fromEntries(['title', 'author', 'description', 'descriptionStatus', 'jobId', 'mode', 'checkedAt', 'downloaded', 'expected', 'errors', 'warnings', 'structuralPass', 'completeAgainstSource', 'exportFile', 'summaryFile', 'reportFile', 'limitation', 'reusedExport'].map(key => [key, report[key]])), failures: (report.failures || []).map(item => failureDetails(item, item))};
+  return {...Object.fromEntries(['title', 'author', 'description', 'descriptionStatus', 'status', 'statusDetection', 'jobId', 'mode', 'checkedAt', 'downloaded', 'expected', 'errors', 'warnings', 'structuralPass', 'completeAgainstSource', 'exportFile', 'summaryFile', 'reportFile', 'limitation', 'reusedExport'].map(key => [key, report[key]])), failures: (report.failures || []).map(item => failureDetails(item, item))};
 }
 export async function createDesktop({stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads'), port = 0, sitesDirectory, open = openLocal, onFocus = () => {}, findBooks = searchBooks, prepareBook = resolveBook} = {}) {
   const token = randomBytes(32).toString('hex');
@@ -101,7 +101,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         if (!selectedBook) throw Error('请先查找并选择书籍');
         stopRequested = false;
         const controller = new AbortController(); operation = controller;
-        update({phase: 'resolving', message: '正在读取书籍信息…', title: selectedBook.title, author: selectedBook.author, sourceUrl: selectedBook.url, description: null, report: null, progress: null, probeOnly: input.probeOnly === true});
+        update({phase: 'resolving', message: '正在读取书籍信息…', title: selectedBook.title, author: selectedBook.author, sourceUrl: selectedBook.url, description: null, status: null, statusDetection: null, report: null, progress: null, probeOnly: input.probeOnly === true});
         let spec;
         try { spec = await prepareBook({...selectedBook, stateDir, sites: sites().sites, ...controls(controller)}); }
         catch (error) {
@@ -110,7 +110,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         } finally { if (operation === controller) operation = null; }
         if (closing || controller.signal.aborted) { stoppedTask(); return respond(200, {stopped: true}); }
         resolvedSpecs.set(selectedBook.url, spec);
-        update({local: localBookState(spec, {stateDir, outputDir}), description: spec.description || null});
+        update({local: localBookState(spec, {stateDir, outputDir}), description: spec.description || null, status: spec.status || null, statusDetection: spec.statusDetection});
         worker = fork(path.join(here, 'worker.mjs'), [], {windowsHide: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc']});
         let workerError = '';
         worker.stderr.on('data', chunk => { workerError = (workerError + chunk.toString()).slice(-1500); });

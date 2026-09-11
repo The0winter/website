@@ -24,7 +24,7 @@ async function fixture(t) {
   const chapters = ['松林里的清风拂过河岸，小路旁的石桥映照着晨光。', '漫长的旅途走到山间，客人停下来欣赏遥远的群峰。', '傍晚的灯火照亮街道，邻居们相聚在院中说起往事。', '小城在雨后苏醒，花园里的枝叶滴落清澈的水珠。'];
   const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    if (req.url === '/book') res.end(`<h1>测试故事</h1><b>测试作者</b><div id="intro"><p>小城里的四段故事。</p><p>沿着河岸，寻找春天。</p></div><nav>${chapters.map((_, i) => `<a href="/chapter/${i + 1}">第${i + 1}章 测试${i + 1}</a>`).join('')}</nav>`);
+    if (req.url === '/book') res.end(`<h1>测试故事</h1><b>测试作者</b><p id="status">已完结</p><div id="intro"><p>小城里的四段故事。</p><p>沿着河岸，寻找春天。</p></div><nav>${chapters.map((_, i) => `<a href="/chapter/${i + 1}">第${i + 1}章 测试${i + 1}</a>`).join('')}</nav>`);
     else {
       const n = Number(req.url.split('/').pop());
       res.end(`<h1>第${n}章 测试${n}</h1><article>${chapters[n - 1].repeat(16)}</article>`);
@@ -32,7 +32,7 @@ async function fixture(t) {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
-  return {version: 1, kind: 'html', title: '测试故事', author: '测试作者', sourceUrl: `http://127.0.0.1:${server.address().port}/book`, metadata: {title: 'h1', author: 'b', description: '#intro'}, catalog: {links: 'nav a'}, chapter: {title: 'h1', content: 'article'}, delayMs: 200};
+  return {version: 1, kind: 'html', title: '测试故事', author: '测试作者', sourceUrl: `http://127.0.0.1:${server.address().port}/book`, metadata: {title: 'h1', author: 'b', description: '#intro', status: '#status'}, catalog: {links: 'nav a'}, chapter: {title: 'h1', content: 'article'}, delayMs: 200};
 }
 const request = (app, route, body, headers = {}) => fetch(`${app.baseUrl}/api/${route}`, {method: body === undefined ? 'GET' : 'POST', headers: {'x-desktop-token': app.token, 'Content-Type': 'application/json', ...headers}, ...(body === undefined ? {} : {body: JSON.stringify(body)})});
 
@@ -450,6 +450,9 @@ test('window searches, selects, downloads through worker, and shows result witho
     await page.click('#start');
     await page.waitForFunction(() => document.getElementById('phase').textContent === '已完成', {timeout: 20000});
     assert.equal(await page.$eval('#report-stats strong', el => el.textContent), '4');
+    assert.equal(await page.$eval('#book-status', el => el.textContent), '作品状态：已完结');
+    assert.equal(app.state().report.status, '完结');
+    assert.equal(JSON.parse(fs.readFileSync(app.state().report.exportFile)).status, '完结');
     assert.match(await page.$eval('#progress-text', el => el.textContent), /采集 4 \/ 4 章/);
     assert.match(await page.$eval('.local-state', el => el.textContent), /已下载完成/);
     assert.match(await page.$eval('#start', el => el.textContent), /检查更新/);
