@@ -196,6 +196,34 @@ test('desktop API rejects unauthenticated and foreign-origin requests, preserves
   } finally { await app.close(); }
 });
 
+test('opening a download folder awaits the launcher and reports its path or asynchronous failure', async t => {
+  const stateDir = temp(t), outputDir = path.join(stateDir, '下载目录 with spaces');
+  let release, fail = false, reached = false;
+  const app = await createDesktop({stateDir, outputDir, open: async target => {
+    assert.equal(target, outputDir);
+    assert.equal(fs.statSync(target).isDirectory(), true);
+    reached = true;
+    if (fail) { await Promise.resolve(); throw Error('无法打开目录：系统未响应'); }
+    await new Promise(resolve => { release = resolve; });
+  }});
+  try {
+    let settled = false;
+    const pending = request(app, 'open', {kind: 'folder'}).then(response => { settled = true; return response; });
+    await until(() => reached);
+    assert.equal(settled, false);
+    release();
+    const response = await pending;
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.path, outputDir);
+    assert.match(result.message, /已请求打开下载目录/);
+    fail = true;
+    const failed = await request(app, 'open', {kind: 'folder'});
+    assert.equal(failed.status, 400);
+    assert.match((await failed.json()).error, /系统未响应/);
+  } finally { release?.(); await app.close(); }
+});
+
 test('pause finishes a checkpoint, skips source scoring, and continuation exports every chapter', async t => {
   const stateDir = temp(t), spec = await fixture(t);
   let stop = false;
@@ -407,8 +435,13 @@ test('window searches, selects, downloads through worker, and shows result witho
     assert.equal(await page.$eval('#description-text', el => el.textContent), '小城里的四段故事。\n沿着河岸，寻找春天。');
     assert.equal(JSON.parse(fs.readFileSync(app.state().report.exportFile)).description, app.state().report.description);
     await page.click('#open-folder');
-    await page.waitForFunction(() => !document.getElementById('feedback').textContent);
+    await page.waitForFunction(() => document.getElementById('feedback').textContent.startsWith('已请求打开下载目录'));
     assert.equal(opened[0], path.join(stateDir, 'out'));
+    assert.equal(await page.$eval('#feedback', el => el.getAttribute('role')), 'status');
+    assert.match(await page.$eval('#feedback', el => el.textContent), /out/);
+    await page.click('#folder-nav');
+    await until(() => opened.length === 2);
+    assert.equal(opened[1], path.join(stateDir, 'out'));
     for (const width of [1180, 800, 560]) {
       await page.setViewport({width, height: 920});
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `horizontal overflow at ${width}`);

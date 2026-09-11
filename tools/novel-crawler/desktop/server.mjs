@@ -3,12 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomBytes} from 'node:crypto';
-import {fork, spawn} from 'node:child_process';
+import {fork} from 'node:child_process';
 import {defaultStateDir, projectRoot, localBookState} from '../core.mjs';
 import {readJson, atomicWrite} from '../storage.mjs';
 import {loadSites, readSettings, rememberWebsite, searchBooks, resolveBook, specForBook, normalizeWebsite} from './sources.mjs';
 import {failureDetails} from '../diagnostics.mjs';
 import {clearBrowserSession} from '../browser-session.mjs';
+import {openLocal} from './open-local.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const publicFiles = {'/': ['index.html', 'text/html'], '/app.css': ['app.css', 'text/css'], '/app.js': ['app.js', 'text/javascript'], '/icon.svg': ['icon.svg', 'image/svg+xml']};
@@ -17,13 +18,6 @@ function visibleReport(report) {
   if (!report) return null;
   return {...Object.fromEntries(['title', 'author', 'description', 'descriptionStatus', 'jobId', 'mode', 'checkedAt', 'downloaded', 'expected', 'errors', 'warnings', 'structuralPass', 'completeAgainstSource', 'exportFile', 'summaryFile', 'reportFile', 'limitation', 'reusedExport'].map(key => [key, report[key]])), failures: (report.failures || []).map(item => failureDetails(item, item))};
 }
-function openLocal(target) {
-  const child = process.platform === 'win32'
-    ? spawn('explorer.exe', [target], {windowsHide: true, stdio: 'ignore'})
-    : spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [target], {stdio: 'ignore'});
-  child.on('error', () => {});
-}
-
 export async function createDesktop({stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads'), port = 0, sitesDirectory, open = openLocal, onFocus = () => {}, findBooks = searchBooks, prepareBook = resolveBook} = {}) {
   const token = randomBytes(32).toString('hex');
   let worker, operation, stopRequested = false, closing = false, selectedBook = null, candidates = [], lastProgress = 0;
@@ -176,8 +170,9 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         else if (input.kind === 'report' && /^[a-f0-9]{20}$/.test(task.report?.jobId)) target = path.join(stateDir, 'jobs', task.report.jobId);
         else throw Error('暂无可打开的结果');
         if (!fs.existsSync(target)) throw Error('结果目录不存在');
-        open(target);
-        return respond(200, {ok: true});
+        target = path.resolve(target);
+        await open(target);
+        return respond(200, {ok: true, path: target, message: `已请求打开${input.kind === 'report' ? '报告' : '下载'}目录：${target}`});
       }
       return respond(404, {error: '操作不存在'});
     } catch (error) { if (!res.headersSent) respond(400, {error: error.message}); else res.end(); }

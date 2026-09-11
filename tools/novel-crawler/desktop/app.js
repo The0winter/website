@@ -20,7 +20,11 @@ async function api(action, body) {
   if (!response.ok) throw Error(result.error || '操作失败');
   return result;
 }
-function feedback(message = '') { $('feedback').textContent = message; $('feedback').hidden = !message; }
+function feedback(message = '', kind = 'error') {
+  $('feedback').textContent = message; $('feedback').hidden = !message;
+  $('feedback').dataset.kind = kind;
+  $('feedback').setAttribute('role', kind === 'error' ? 'alert' : 'status');
+}
 function failureNode(failure) {
   const item = document.createElement('div'); item.className = 'failure-item';
   const title = document.createElement('strong'), reason = document.createElement('p'), next = document.createElement('p');
@@ -114,6 +118,7 @@ function renderSettings() {
   }
 }
 function render() {
+  for (const id of ['folder-nav', 'open-folder']) $(id).title = `打开已下载小说所在的目录：${data.outputDir}`;
   if (!initialized) {
     $('website').value = data.settings.lastWebsite || data.sites[0]?.home || '';
     if (data.task.title) $('title').value = data.task.title;
@@ -205,7 +210,14 @@ $('stop').onclick = async () => { $('stop').disabled = true; try { await api('st
 showBrowser.onclick = async () => { showBrowser.disabled = true; try { await api('show-browser', {}); } catch (error) { feedback(error.message); } finally { showBrowser.disabled = false; } };
 $('dismiss-interruption').onclick = () => { $('interruption-dialog').close(); $('task-diagnostics').scrollIntoView({block: 'nearest'}); };
 $('resume').onclick = async () => { if (data.task.title) $('title').value = data.task.title; if (data.task.author) $('author').value = data.task.author; if (data.task.sourceUrl) $('website').value = data.task.sourceUrl; $('probe-only').checked = false; await search(); $('results-panel').scrollIntoView({behavior: 'smooth', block: 'nearest'}); };
-for (const id of ['folder-nav', 'open-folder', 'open-report']) $(id).onclick = async () => { try { await api('open', {kind: id === 'open-report' ? 'report' : 'folder'}); } catch (error) { feedback(error.message); } };
+const openButtons = ['folder-nav', 'open-folder', 'open-report'].map($);
+for (const button of openButtons) button.onclick = async () => {
+  openButtons.forEach(item => { item.disabled = true; });
+  feedback('正在打开目录…', 'info');
+  try { const result = await api('open', {kind: button.id === 'open-report' ? 'report' : 'folder'}); feedback(result.message, 'info'); }
+  catch (error) { feedback(error.message); }
+  finally { openButtons.forEach(item => { item.disabled = false; }); }
+};
 document.querySelector('.brand').onclick = event => event.preventDefault();
 await poll();
 setInterval(poll, 1000);

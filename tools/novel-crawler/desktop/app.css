@@ -83,6 +83,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 16
 .text-button { border: 0; background: transparent; color: #1d4ed8; font-size: 13px; padding: 5px 0; }
 .text-button:hover { text-decoration: underline; text-underline-offset: 3px; }
 .feedback, .attention-box, #task-diagnostics { margin-top: 16px; padding: 13px 16px; border: 1px solid #ecd7b1; border-radius: 8px; background: #fffbf2; color: #785015; font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
+.feedback[data-kind=info] { border-color: #d3dffb; background: #f3f6ff; color: #1d4ed8; }
 #results-panel { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
 .results-heading { font-size: 14px; font-weight: 600; }
 .results-heading span { margin-left: 10px; font-size: 12px; color: var(--muted); font-weight: 400; }
