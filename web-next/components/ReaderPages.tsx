@@ -1,8 +1,8 @@
 'use client';
 
 import {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState,useSyncExternalStore,type CSSProperties} from 'react';
-import {ChevronLeft,Highlighter,MessageCircle} from 'lucide-react';
-import Link from './PrefetchLink';
+import {Highlighter,MessageCircle} from 'lucide-react';
+import ReaderReturnLink from './ReaderReturnLink';
 import ParagraphComments from './ParagraphComments';
 import {readerParagraphs} from '../../shared/reader-paragraphs.mjs';
 import {cachedReaderCounts,loadReaderCounts,rememberReaderCounts} from '@/lib/reader-chapters';
@@ -333,7 +333,7 @@ export default function ReaderPages(props:ReaderPageProps) {
 
   return <div className="reader-pages-root" data-dark={props.dark} data-mode={turnMode} data-reader-ready={layout.width>0} data-reader-chapter={chapter.id} data-reader-previous={props.previousChapter?.id || ''} data-reader-next={props.nextChapter?.id || ''} style={style}>
     <section className="reader-frame" data-paper={props.paper && !props.dark} aria-label="章节阅读">
-      <header className="reader-status-top" data-open={props.toolsVisible} inert={!props.toolsVisible} aria-hidden={!props.toolsVisible}><Link className="reader-return" href={`/book/${book.id}`} aria-label={`返回书籍详情：${title}`}><ChevronLeft size={20}/><span>{title}</span></Link></header>
+      <header className="reader-status-top" data-open={props.toolsVisible} inert={!props.toolsVisible} aria-hidden={!props.toolsVisible}><ReaderReturnLink bookId={book.id} title={title}/></header>
       <button className="reader-menu-access" onClick={onTools} aria-expanded={props.toolsVisible}>阅读菜单</button>
       <div ref={windowRef} className="reader-page-window" tabIndex={0} aria-label={scrolling?'正文，可上下滚动，点击中央打开菜单':`${turnMode==='vertical'?'上下':'左右'}翻页，点击中央打开菜单`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={cancelGesture} onLostPointerCapture={event=>{if(event.target===event.currentTarget)cancelGesture();}} onClick={click} onTouchStart={touchStart} onTouchEnd={touchEnd} onTouchCancel={()=>{touchEdge.current=null;}} onWheel={wheel}>
         <div ref={surface} className="reader-page-surface">

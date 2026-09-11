@@ -12,7 +12,7 @@ import {beginChapterEntry} from '@/lib/chapter-entry';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, User as UserIcon, Pencil, X, ArrowUpDown, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, User as UserIcon, Pencil, X, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import BookArticles from './BookArticles';
 import './book-detail.css';
 import { useAuth } from '@/contexts/AuthContext';
@@ -140,8 +140,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   const [loading, setLoading] = useState(false);
 
   // --- 章节相关状态 ---
-  const [chapters, setChapters] = useState<Chapter[]>(bookData.chapters || []); 
-  const [loadingChapters, setLoadingChapters] = useState(!(bookData.chapters && bookData.chapters.length > 0));
+  const [chapters, setChapters] = useState<Chapter[]>(initialCatalog?.rows ?? []);
+  const [loadingChapters, setLoadingChapters] = useState(!initialCatalog?.rows.length);
   const [chapterTotal, setChapterTotal] = useState<number | null>(initialCatalog?.total ?? null);
   const [chapterError, setChapterError] = useState('');
   const [catalogRetry, setCatalogRetry] = useState(0);
@@ -149,17 +149,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   const completeCatalog = useRef<Chapter[] | null>(null);
   
   // 🔥 目录交互状态
-  const [isReversed, setIsReversed] = useState(true); // 默认倒序 (最新章节在前)
   const showAllChapters = useSyncExternalStore(subscribeBookNavigation, () => bookCatalogOpen(book.id), serverCatalogClosed);
   const setShowAllChapters = (open: boolean) => open ? openBookCatalog(book.id) : closeBookCatalog();
-  const toggleCatalogOrder = () => {
-    setIsReversed(value => !value);
-    if (!completeCatalog.current) {
-      setChapters([]);
-      setLoadingChapters(true);
-      setChapterError('');
-    }
-  };
 
   const [communityTab, setCommunityTab] = useState<'reviews' | 'articles'>('reviews');
 
@@ -203,8 +194,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
     const controller = new AbortController();
     setLoadingChapters(true);
     setChapterError('');
-    catalogPages<Chapter>(`/api/books/${book.id}/chapters?order=${isReversed ? 'desc' : 'asc'}`, {
-      initialPage: isReversed && catalogRetry === 0 ? initialCatalog : undefined,
+    catalogPages<Chapter>(`/api/books/${book.id}/chapters?order=asc`, {
+      initialPage: catalogRetry === 0 ? initialCatalog : undefined,
       signal: controller.signal,
       onProgress: (rows, total) => {
         if (active) { setChapters(rows); setChapterTotal(total); }
@@ -221,19 +212,20 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
       if (active) setLoadingChapters(false);
     });
     return () => { active = false; controller.abort(); };
-  }, [book.id, initialCatalog, catalogRetry, isReversed]);
+  }, [book.id, initialCatalog, catalogRetry]);
 
   // --- 逻辑：章节排序与切片 ---
   const sortedChapters = useMemo(() => {
     const list = [...chapters];
     list.sort((a, b) => a.chapter_number - b.chapter_number);
-    return isReversed ? list.reverse() : list;
-  }, [chapters, isReversed]);
+    return list;
+  }, [chapters]);
 
   // 页面预览显示的章节 (电脑端显示30章，手机端显示8章)
   const previewChapters = useMemo(() => {
-    return sortedChapters.slice(0, 30);
-  }, [sortedChapters]);
+    // The detail preview keeps recent updates while the full catalog reads forward.
+    return bookData.chapters.length ? bookData.chapters : sortedChapters.slice(-30).reverse();
+  }, [bookData.chapters, sortedChapters]);
 
   useEffect(()=>{
     let active=true;
@@ -604,13 +596,6 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                     <span>目录</span>
                     <span className="text-xs md:text-sm font-normal text-gray-500 ml-2">{['completed', '完结', '已完结'].includes(book.status || '') ? '已完结' : '连载中'} · 共{chapterTotal ?? chapters.length}章</span>
                 </h2>
-                <button 
-                    onClick={toggleCatalogOrder}
-                    className="flex items-center space-x-1 text-xs md:text-sm text-gray-600 hover:text-blue-600 transition-colors"
-                >
-                    <ArrowUpDown className="w-3 h-3 md:w-4 md:h-4" />
-                    <span>{isReversed ? '倒序' : '正序'}</span>
-                </button>
             </div>
 
             {chapterError && <p role="alert" className="mb-3 text-sm text-red-600">{chapterError} <button onClick={() => setCatalogRetry(value => value + 1)} className="underline">重试</button></p>}
@@ -692,7 +677,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
       <BookCatalogSheet open={showAllChapters} onClose={closeBookCatalog} bookId={book.id}
         activeChapterId={recentChapterId ?? undefined} activeChapterLabel="上次读到"
         chapters={sortedChapters} total={chapterTotal} loading={loadingChapters} error={chapterError}
-        reversed={isReversed} onToggleOrder={toggleCatalogOrder} onRetry={() => setCatalogRetry(value => value + 1)}/>
+        onRetry={() => setCatalogRetry(value => value + 1)}/>
 
 
     </div>

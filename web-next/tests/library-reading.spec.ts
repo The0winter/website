@@ -61,3 +61,54 @@ test('books without readable chapters show a message and can still be managed', 
   await page.locator('.shelf-book').click();
   await expect(page.getByRole('checkbox')).toBeChecked();
 });
+
+for (const mode of ['horizontal', 'vertical', 'scroll']) {
+  test(`shelf reader returns to the shelf after turns, overlays, reload and forward in ${mode} mode`, async ({page}) => {
+    await page.addInitScript(mode => localStorage.setItem('reader_turnMode', JSON.stringify(mode)), mode);
+    await shelf(page, null);
+    const length = await page.evaluate(() => history.length);
+    await page.locator('.shelf-book').click();
+    const reader = page.locator('.reader-pages-root:visible');
+    await expect(reader).toHaveAttribute('data-reader-ready', 'true');
+    expect(await page.evaluate(() => history.length)).toBe(length + 1);
+    await page.keyboard.press('Control+ArrowRight');
+    await expect(reader).toHaveAttribute('data-reader-chapter', '000000000000000000000102');
+    await page.keyboard.press('m');
+    await page.locator('.reader-tools:visible').getByRole('button', {name: '目录', exact: true}).click();
+    const dialog = page.getByRole('dialog', {name: '全部目录'});
+    await expect(dialog).toBeVisible();
+    await page.goBack(); await expect(dialog).not.toBeVisible();
+    await page.keyboard.press('m');
+    await page.locator('.reader-tools:visible').getByRole('button', {name: '目录', exact: true}).click();
+    await dialog.getByRole('link', {name: '第3章 山间来信', exact: true}).click();
+    await expect(reader).toHaveAttribute('data-reader-chapter', last);
+    await page.reload();
+    await expect(reader).toHaveAttribute('data-reader-ready', 'true');
+    await page.goBack();
+    await expect(page).toHaveURL(base + '/library');
+    await expect(page.locator('.shelf-book')).toBeVisible();
+    await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
+    await page.goForward();
+    await expect(reader).toHaveAttribute('data-reader-chapter', last);
+    await expect(reader).toHaveAttribute('data-reader-ready', 'true');
+    await page.keyboard.press('m');
+    await expect(page.locator('.reader-return:visible')).toHaveAttribute('href', '/library');
+    await page.getByRole('link', {name: /^返回书架：/}).click();
+    await expect(page).toHaveURL(base + '/library');
+    await expect(page.locator('.shelf-book')).toBeVisible();
+  });
+}
+
+test('opening shelf details before reading still returns to those details', async ({page}) => {
+  await shelf(page, null);
+  await page.locator('.shelf-more-button').click();
+  await page.getByRole('menuitem', {name: '详情'}).click();
+  await expect(page.locator('.book-detail')).toBeVisible();
+  await page.getByRole('link', {name: '立即阅读', exact: true}).click();
+  await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
+  await page.keyboard.press('m');
+  await page.getByRole('link', {name: /^返回书籍详情：/}).click();
+  await expect(page).toHaveURL(`${base}/book/${book}`);
+  await expect(page.locator('.book-detail')).toBeVisible();
+  await page.goBack(); await expect(page).toHaveURL(base + '/library');
+});

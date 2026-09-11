@@ -122,7 +122,7 @@ export default async function BookDetailPage({ params }: Props) {
   const [book, catalog, firstChapter, totalWords] = await Promise.all([
     getBook(id),
     getChapters(id),
-    getChapters(id, 'asc', 1),
+    getChapters(id, 'asc'),
     getTotalWords(id),
   ]);
   
@@ -156,7 +156,7 @@ export default async function BookDetailPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, String.fromCharCode(92) + 'u003c') }}
       />
-      <BookDetailClient key={book.id} initialBookData={{ book, chapters, summary: { totalWords, updatedLabel } }} initialCatalog={catalog} initialFirstChapterId={firstChapter?.rows[0]?.id} />
+      <BookDetailClient key={book.id} initialBookData={{ book, chapters, summary: { totalWords, updatedLabel } }} initialCatalog={firstChapter} initialFirstChapterId={firstChapter?.rows[0]?.id} />
     </>
   );
 }

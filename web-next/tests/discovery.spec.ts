@@ -34,7 +34,7 @@ for (const width of [390, 1440]) test(`details remember and locate the last read
   dialog = page.getByRole('dialog', {name: '全部目录'});
   await expect(current()).toHaveText('第2章 山间来信上次读到');
   await expect(current()).toBeInViewport();
-  await dialog.getByRole('button', {name: /正序|倒序/}).click();
+  await expect(dialog.getByRole('button', {name: /正序|倒序/})).toHaveCount(0);
   await expect(current()).toBeInViewport();
   await page.screenshot({path: `../artifacts/discovery-catalog-${width}.png`});
   // A new document can restore the same progress, and another tab updates it.

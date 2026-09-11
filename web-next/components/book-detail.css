@@ -15,10 +15,19 @@
 .book-catalog-header p { margin-top:4px; color:#777d73; font-size:13px; }
 .book-catalog-actions { display:flex; align-items:center; gap:12px; }
 .book-catalog-actions button { display:flex; align-items:center; justify-content:center; gap:6px; min-height:40px; min-width:40px; border-radius:8px; }
-.book-catalog-actions button:first-child { padding:6px 12px; border:1px solid #dee2d8; background:white; font-size:13px; }
+.book-catalog-actions button.book-catalog-order { padding:6px 12px; border:1px solid #dee2d8; background:white; font-size:13px; }
 .book-catalog-actions button:hover { background:#edf1e8; }
 .book-catalog-body { flex:1; min-height:0; display:flex; flex-direction:column; padding:12px 8px 0; }
 .book-catalog-list { flex:1; min-height:0; overscroll-behavior-y:contain; }
+.book-catalog-scroll-area { position:relative; flex:1; min-height:0; padding-right:28px; }
+.book-catalog-scroll-area .book-catalog-list { scrollbar-width:none; }
+.book-catalog-scroll-area .book-catalog-list::-webkit-scrollbar { display:none; }
+.book-catalog-scrollbar { position:absolute; inset:0 -4px 10px auto; width:36px; visibility:hidden; touch-action:none; user-select:none; cursor:pointer; border-radius:10px; }
+.book-catalog-scrollbar[data-visible=true] { visibility:visible; }
+.book-catalog-scrollbar::before { content:""; position:absolute; top:0; bottom:0; left:15px; width:6px; border-radius:4px; background:#eef0e9; }
+.book-catalog-thumb { position:absolute; top:0; left:12px; width:12px; border-radius:8px; background:#8a9a7b; box-shadow:0 0 0 2px white; pointer-events:none; }
+.book-catalog-scrollbar:hover .book-catalog-thumb,.book-catalog-scrollbar[data-dragging=true] .book-catalog-thumb { background:#526f40; }
+.book-catalog-scrollbar:focus-visible { outline:2px solid #526f40; outline-offset:-3px; }
 .book-catalog-row { display:grid; gap:10px; padding:0 8px 10px; }
 .book-catalog-chapter { display:flex; align-items:center; min-width:0; min-height:48px; padding:12px; border:1px solid transparent; border-radius:6px; background:#f7f8f5; font-size:14px; line-height:1.6; }
 .book-catalog-chapter span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

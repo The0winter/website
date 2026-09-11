@@ -102,7 +102,7 @@ for (const mode of ['horizontal', 'scroll', 'vertical']) {
 }
 
 for (const width of [320, 390, 768, 1440]) {
-  test(`detail and reader share catalog layout and ordering at ${width}px`, async ({page}) => {
+  test(`detail and reader share catalog layout at ${width}px`, async ({page}) => {
     await page.setViewportSize({width, height: 844});
     await page.goto(detail);
     await page.getByRole('button', {name: width < 768 ? /^目录 连载/ : /^查看完整目录/}).click();
@@ -111,11 +111,12 @@ for (const width of [320, 390, 768, 1440]) {
     const snapshot = () => dialog.evaluate(el => {
       const sheet = el.getBoundingClientRect(), row = el.querySelector('.book-catalog-chapter:not([aria-current])')!;
       const css = getComputedStyle(row);
-      return {width: Math.round(sheet.width * 1000) / 1000, height: Math.round(sheet.height * 1000) / 1000, font: css.font, padding: css.padding, radius: css.borderRadius,
-        order: el.querySelector('.book-catalog-actions button')?.textContent};
+      return {width: Math.round(sheet.width * 1000) / 1000, height: Math.round(sheet.height * 1000) / 1000, font: css.font, padding: css.padding, radius: css.borderRadius};
     });
     await expect(dialog.locator('.book-catalog-chapter').first()).toBeVisible();
     const detailLayout = await snapshot();
+    await expect(dialog.getByRole('button', {name: /正序|倒序/})).toHaveCount(0);
+    await expect(dialog.locator('.book-catalog-chapter').first()).toContainText('第1章');
     await dialog.getByRole('link', {name: '第12章 山间来信', exact: true}).click();
     await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
     await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);

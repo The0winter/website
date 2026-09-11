@@ -1,9 +1,10 @@
 'use client';
 
-import {useEffect, useMemo, useRef, useSyncExternalStore} from 'react';
+import {useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore} from 'react';
 import {ArrowUpDown, X} from 'lucide-react';
 import {Virtuoso, type VirtuosoHandle} from 'react-virtuoso';
 import Link from './PrefetchLink';
+import CatalogScrollbar from './CatalogScrollbar';
 import {formatChapterTitle} from '@/lib/catalog-title';
 import {beginChapterEntry} from '@/lib/chapter-entry';
 import './book-detail.css';
@@ -12,7 +13,7 @@ type CatalogChapter = {id: string; title: string; chapter_number: number};
 type Props = {
   open: boolean; onClose: () => void; bookId: string; chapters: CatalogChapter[];
   total: number | null; loading: boolean; error: string; onRetry: () => void;
-  reversed: boolean; onToggleOrder: () => void; activeChapterId?: string;
+  reversed?: boolean; onToggleOrder?: () => void; activeChapterId?: string;
   activeChapterLabel?: string;
   onSelect?: (id: string) => void; onPrefetch?: (id: string) => void;
 };
@@ -22,9 +23,13 @@ const subscribeWidth = (notify: () => void) => {
 };
 const columnCount = () => innerWidth >= 1024 ? 3 : innerWidth >= 768 ? 2 : 1;
 
-export default function BookCatalogSheet({open, onClose, bookId, chapters, total, loading, error, onRetry, reversed, onToggleOrder, activeChapterId, activeChapterLabel = '正在阅读', onSelect, onPrefetch}: Props) {
+export default function BookCatalogSheet({open, onClose, bookId, chapters, total, loading, error, onRetry, reversed = false, onToggleOrder, activeChapterId, activeChapterLabel = '正在阅读', onSelect, onPrefetch}: Props) {
   const columns = useSyncExternalStore(subscribeWidth, columnCount, () => 1);
   const list = useRef<VirtuosoHandle>(null);
+  const listId = useId();
+  const [scroller, setScroller] = useState<HTMLElement | null>(null);
+  const [listHeight, setListHeight] = useState(0);
+  const scrollerRef = useCallback((element: HTMLElement | Window | null) => setScroller(element instanceof HTMLElement ? element : null), []);
   const rows = useMemo(() => {
     const result: CatalogChapter[][] = [];
     for (let index = 0; index < chapters.length; index += columns) result.push(chapters.slice(index, index + columns));
@@ -66,7 +71,7 @@ export default function BookCatalogSheet({open, onClose, bookId, chapters, total
       <header className="book-catalog-header">
         <div><h2>全部目录</h2><p>共 {total ?? chapters.length} 章</p></div>
         <div className="book-catalog-actions">
-          <button onClick={onToggleOrder} aria-label={reversed ? '倒序' : '正序'}><ArrowUpDown size={16}/><span>{reversed ? '倒序' : '正序'}</span></button>
+          {onToggleOrder && <button className="book-catalog-order" onClick={onToggleOrder} aria-label={reversed ? '倒序' : '正序'}><ArrowUpDown size={16}/><span>{reversed ? '倒序' : '正序'}</span></button>}
           <button onClick={onClose} aria-label="关闭目录"><X size={24}/></button>
         </div>
       </header>
@@ -74,7 +79,7 @@ export default function BookCatalogSheet({open, onClose, bookId, chapters, total
         {loading && !chapters.length && <p role="status" className="book-catalog-message">加载目录…</p>}
         {error && <p role="alert" className="book-catalog-message">{error} <button onClick={onRetry}>重试</button></p>}
         {!loading && !error && !chapters.length && <p className="book-catalog-message">暂无章节</p>}
-        {open && rows.length > 0 && <Virtuoso ref={list} className="book-catalog-list" style={{height: '100%'}} data={rows}
+        {open && rows.length > 0 && <div className="book-catalog-scroll-area"><Virtuoso ref={list} id={listId} scrollerRef={scrollerRef} totalListHeightChanged={setListHeight} className="book-catalog-list" style={{height: '100%'}} data={rows}
           initialTopMostItemIndex={{index: activeRow, align: activeIndex >= 0 ? 'center' : 'start'}}
           itemContent={(_, row) => <div className="book-catalog-row" style={{gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`}}>
             {row.map(chapter => <Link key={chapter.id} href={`/book/${bookId}/${chapter.id}`} prefetchMode="intent"
@@ -88,7 +93,7 @@ export default function BookCatalogSheet({open, onClose, bookId, chapters, total
               <span>{formatChapterTitle(chapter.title, chapter.chapter_number)}</span>
               {chapter.id === activeChapterId && <span aria-hidden="true" className="book-catalog-progress">{activeChapterLabel}</span>}
             </Link>)}
-          </div>}/>}
+          </div>}/><CatalogScrollbar scroller={scroller} contentHeight={listHeight} controls={listId}/></div>}
       </div>
     </div>
   </div>;

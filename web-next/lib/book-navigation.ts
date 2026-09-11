@@ -2,7 +2,7 @@ import {cancelBookTransition, transitionBookPage} from './book-transition';
 import {cancelChapterEntry, currentChapterEntry} from './chapter-entry';
 
 type Route = {kind: 'home' | 'author' | 'library' | 'detail' | 'reader'; href: string; bookId?: string};
-type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; restoreSession?: string; homeBrowse?: boolean};
+type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; restoreSession?: string; homeBrowse?: boolean; libraryReturn?: string};
 type Router = {push: (href: string) => void; replace: (href: string) => void};
 const listeners = new Set<() => void>();
 let router: Router | undefined;
@@ -64,7 +64,11 @@ export function syncBookRoute(path: string) {
   if (route.kind === 'detail' && isList(previous) && previousPath === previous.href) {
     mark(entryFor(route, previous.flow)); return;
   }
-  // Continue reading from a list still returns through details to that list.
+  // Shelf links enter the reader directly and keep the actual shelf visit below it.
+  if (route.kind === 'reader' && previous?.kind === 'library' && previousPath === previous.href) {
+    mark({...entryFor(route, previous.flow), level: 1, libraryReturn: previous.href}); return;
+  }
+  // Other list shortcuts continue to return through details.
   if (route.kind === 'reader' && isList(previous) && previousPath === previous.href) {
     const state = window.history.state;
     const detail = entryFor({kind: 'detail', href: `/book/${route.bookId}`, bookId: route.bookId}, previous.flow);
@@ -140,9 +144,9 @@ function onPopState(event: PopStateEvent) {
     if (pending) { cancelBookTransition(); pending = undefined; }
     return;
   }
-  const predecessor = target?.flow === from.flow && (from.kind === 'reader' && target.kind === 'detail' && target.bookId === from.bookId || from.kind === 'detail' && isList(target));
+  const predecessor = target?.flow === from.flow && (from.kind === 'reader' && (from.libraryReturn ? target.kind === 'library' && target.href === from.libraryReturn : target.kind === 'detail' && target.bookId === from.bookId) || from.kind === 'detail' && isList(target));
   const destination = (forward || predecessor) && target ? target : from.kind === 'reader'
-    ? entryFor({kind: 'detail', href: `/book/${from.bookId}`, bookId: from.bookId}, from.flow)
+    ? entryFor(from.libraryReturn ? {kind: 'library', href: from.libraryReturn} : {kind: 'detail', href: `/book/${from.bookId}`, bookId: from.bookId}, from.flow)
     : entryFor({kind: 'home', href: '/'}, from.flow);
   const restore = target?.href === destination.href && target.restoreSession === session() && Boolean(event.state?.__NA);
   if (!restore) event.stopImmediatePropagation();
@@ -165,8 +169,11 @@ export function navigateBookLink(href: string) {
   const target = routeFor(href);
   if (!target || !router || !current) return false;
   if (document.documentElement.dataset.bookTransition) return true;
-  if (current.kind === 'reader' && target.kind === 'detail' && current.bookId === target.bookId || current.kind === 'detail' && target.kind === 'home') {
+  if (current.kind === 'reader' && (current.libraryReturn ? href === current.libraryReturn : target.kind === 'detail' && current.bookId === target.bookId) || current.kind === 'detail' && target.kind === 'home') {
     window.history.back(); return true;
+  }
+  if (current.kind === 'library' && target.kind === 'reader') {
+    navigate({...entryFor(target, current.flow), level: 1, libraryReturn: current.href}, 'enter', false); return true;
   }
   if (isList(current) && target.kind === 'detail') {
     navigate(entryFor(target, current.flow), 'enter', false); return true;
@@ -180,7 +187,8 @@ export function navigateBookLink(href: string) {
 export function replaceReaderChapter(href: string) {
   const route = routeFor(href);
   if (!route) return;
-  const entry = entryFor(route, current?.flow ?? stored()?.flow);
+  const previous = current ?? stored();
+  const entry = {...entryFor(route, previous?.flow), ...(previous?.libraryReturn ? {libraryReturn: previous.libraryReturn, level: 1} : {})};
   current = entry; currentPath = href;
   // Supply only our metadata so Next's native history integration updates its URL.
   window.history.replaceState({bookNavigation: entry}, '', href);
@@ -214,4 +222,5 @@ export function closeReaderSettings() {
 export const readerSettingsOpen = (bookId: string) => Boolean(current?.settings && current.bookId === bookId);
 export const bookCatalogOpen = (bookId: string) => Boolean(current?.catalog && current.bookId === bookId);
 export const serverCatalogClosed = () => false;
+export const readerReturnHref = (bookId: string) => current?.kind === 'reader' && current.bookId === bookId && current.libraryReturn || `/book/${bookId}`;
 export function subscribeBookNavigation(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
