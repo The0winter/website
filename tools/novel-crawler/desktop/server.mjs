@@ -16,7 +16,7 @@ const publicFiles = {'/': ['index.html', 'text/html'], '/app.css': ['app.css', '
 const busy = task => ['search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(task.phase);
 function visibleReport(report) {
   if (!report) return null;
-  return {...Object.fromEntries(['title', 'author', 'description', 'descriptionStatus', 'status', 'statusDetection', 'jobId', 'mode', 'checkedAt', 'downloaded', 'expected', 'errors', 'warnings', 'structuralPass', 'completeAgainstSource', 'exportFile', 'summaryFile', 'reportFile', 'limitation', 'reusedExport'].map(key => [key, report[key]])), failures: (report.failures || []).map(item => failureDetails(item, item))};
+  return {...Object.fromEntries(['title', 'author', 'description', 'descriptionStatus', 'status', 'statusDetection', 'jobId', 'mode', 'checkedAt', 'downloaded', 'expected', 'errors', 'warnings', 'structuralPass', 'completeAgainstSource', 'exportFile', 'summaryFile', 'reportFile', 'limitation', 'reusedExport', 'readingEdition', 'readingAdded', 'sourceExpected', 'sourceDownloaded', 'rawReportFile'].map(key => [key, report[key]])), failures: (report.failures || []).map(item => failureDetails(item, item))};
 }
 export async function createDesktop({stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads'), port = 0, sitesDirectory, open = openLocal, onFocus = () => {}, findBooks = searchBooks, prepareBook = resolveBook} = {}) {
   const token = randomBytes(32).toString('hex');
@@ -26,7 +26,14 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
   // Older desktop summaries omitted failures; recover them from the original report.
   if (task.report && /^[a-f0-9]{20}$/.test(task.report.jobId) && !task.report.failures) {
     const mode = task.progress?.mode === 'probe' ? 'probe' : 'download';
-    task.report = visibleReport(readJson(path.join(stateDir, 'jobs', task.report.jobId, `${mode}-report.json`), task.report));
+    task.report = visibleReport(readJson(path.join(stateDir, 'jobs', task.report.jobId, `${task.report.readingEdition ? 'reading-' : ''}${mode}-report.json`), task.report));
+  }
+  // An already-open older desktop can run the updated worker while dropping
+  // its new fields. Rehydrate only the report from that same completed run.
+  if (task.report && /^[a-f0-9]{20}$/.test(task.report.jobId) && !task.report.readingEdition) {
+    const mode = task.report.mode === 'probe' ? 'probe' : 'download';
+    const readingReport = readJson(path.join(stateDir, 'jobs', task.report.jobId, `reading-${mode}-report.json`));
+    if (readingReport?.checkedAt === task.report.checkedAt) task.report = visibleReport(readingReport);
   }
   // An interrupted process can be resumed from crawler checkpoints, never shown as running.
   if (busy(task)) task = {...task, phase: 'paused', message: '上次任务已停止。重新查找这本书即可继续。'};
@@ -124,7 +131,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
           if (message.type === 'done') {
             const report = visibleReport(message.report), complete = !!report.exportFile;
             update({phase: message.stopped || stopRequested ? 'stopped' : message.paused ? 'paused' : complete ? 'complete' : message.report.structuralPass && task.probeOnly ? 'probed' : 'error', report,
-              message: message.stopped || stopRequested ? '已停止，采集页面已关闭；已保存的章节保留，下次会接着补齐。' : message.paused ? '已暂停，完成的章节已保存。' : complete ? report.reusedExport ? '已下载过这本书，本次目录没有新增章节；已复用原文件，没有重复下载正文。' : '下载完成，已生成书籍文件和质量报告。' : message.report.structuralPass && task.probeOnly ? '试采通过，可以继续下载整本。' : `本次未导出完整书籍：${message.report.failures?.[0]?.error || '检查发现异常，详见质量报告。'}`});
+              message: message.stopped || stopRequested ? '已停止，采集页面已关闭；已保存的章节保留，下次会接着补齐。' : message.paused ? '已暂停，完成的章节已保存。' : complete ? report.readingEdition ? `已沿用来源映射，网站阅读版共 ${report.expected} 项，本次追加 ${report.readingAdded} 项。${report.reusedExport ? '文件没有变化，已复用原文件。' : '已自动更新阅读版文件。'}` : report.reusedExport ? '已下载过这本书，本次目录没有新增章节；已复用原文件，没有重复下载正文。' : '下载完成，已生成书籍文件和质量报告。' : message.report.structuralPass && task.probeOnly ? '试采通过，可以继续下载整本。' : `本次未导出完整书籍：${message.report.failures?.[0]?.error || '检查发现异常，详见质量报告。'}`});
             candidates = candidates.map(withLocalState);
           }
           if (message.type === 'error') { if (stopRequested) stoppedTask(); else update({phase: 'error', message: message.error, failure: message.failure || failureDetails(message)}); }

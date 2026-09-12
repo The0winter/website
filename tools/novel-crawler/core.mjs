@@ -10,6 +10,7 @@ import {formatChapterForExport} from './titles.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
 import {failureDetails} from './diagnostics.mjs';
 import {browserProfile} from './browser-session.mjs';
+import {loadReadingEdition, adoptReadingEdition, updateReadingEdition} from './reading-edition.mjs';
 
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const defaultStateDir = path.join(projectRoot, '.novel-crawler');
@@ -61,7 +62,7 @@ export function jobId(spec) {
   return hash({title: normalizedTitle(spec.title), author: normalizedTitle(spec.author), sourceUrl: spec.sourceUrl, ...(spec.variant ? {variant: spec.variant} : {})}).slice(0, 20);
 }
 
-function extractionHash(spec) {
+export function extractionHash(spec) {
   const {delayMs, retries, timeoutMs, searchUrl, description, status, statusDetection, statusEvidence, ...extraction} = spec;
   // Book metadata changes do not affect chapter identity, order or extraction.
   if (extraction.metadata) {
@@ -84,6 +85,7 @@ export function localBookState(spec, {stateDir = defaultStateDir, outputDir} = {
   spec = validateSpec(spec);
   const id = jobId(spec), dir = path.join(stateDir, 'jobs', id);
   try {
+    const reading = loadReadingEdition(dir, spec, extractionHash(spec), outputDir || path.join(projectRoot, 'downloads'));
     const previous = readJson(path.join(dir, 'spec.json'));
     if (!previous) return {state: 'new', saved: 0, total: 0, message: '尚未采集'};
     if (extractionHash(previous) !== extractionHash(spec)) return {state: 'incompatible', saved: 0, total: 0, message: '来源规则已有变化，旧进度保留，需先核对适配规则。'};
@@ -93,10 +95,24 @@ export function localBookState(spec, {stateDir = defaultStateDir, outputDir} = {
     const exported = readJson(path.join(dir, 'export.json')), file = exportPath(spec, id, outputDir);
     const fileExists = fs.existsSync(file), fileValid = fileExists && exported?.path === file && hash(fs.readFileSync(file)) === exported.hash;
     const total = spec.catalog?.walk ? readJson(path.join(dir, 'navigation-state.json'), {}).expectedCount || catalog.length : catalog.length;
+    if (reading) {
+      const readingCount = reading.book.chapters.length;
+      const complete = reading.sources.length === total && saved === total && fs.existsSync(reading.outputPath);
+      return {state: complete ? 'complete' : 'partial', saved, total, readingEdition: true, readingCount, message: `已绑定网站阅读版 · ${readingCount} 项；${complete ? '检查更新' : '继续采集'}会自动沿用来源映射整理并导出。`};
+    }
     if (fileExists && !fileValid) return {state: 'modified', saved, total, message: `已保存 ${saved} / ${total} 章；导出文件存在或已被修改，程序会保护它，拒绝覆盖。`};
     if (saved && saved === total && fileValid) return {state: 'complete', saved, total, message: `已下载完成 · ${saved} 章。再次采集会检查更新，已有正文不会重复下载。`};
     return {state: saved ? 'partial' : 'new', saved, total, message: saved ? `已保存 ${saved} / ${total} 章；继续时自动补齐缺少的章节。` : '尚未保存章节'};
-  } catch { return {state: 'unknown', saved: 0, total: 0, message: '本地记录需要核对；旧文件会保留。'}; }
+  } catch (error) { return {state: 'unknown', saved: 0, total: 0, message: `本地记录需要核对；旧文件会保留。${error.message}`}; }
+}
+
+export async function bindReadingEdition(input, file, {stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads')} = {}) {
+  const spec = validateSpec(input), dir = path.join(path.resolve(stateDir), 'jobs', jobId(spec));
+  return withLock(path.join(dir, 'job.lock'), async () => {
+    const previous = readJson(path.join(dir, 'spec.json'));
+    if (!previous || extractionHash(previous) !== extractionHash(spec)) throw Error('没有与当前规则匹配的原始采集记录');
+    return adoptReadingEdition(dir, spec, extractionHash(spec), path.resolve(file), path.resolve(outputDir));
+  });
 }
 
 function bookData(spec, chapters) {
@@ -116,7 +132,8 @@ function reportMarkdown(report) {
     `作者：${literal(report.author)}。检查时间：${report.checkedAt}。`, '',
     `来源：[${literal(new URL(report.sourceUrl).hostname)}](${report.sourceUrl})`, '',
     '| 项目 | 结果 |', '| --- | --- |',
-    `| 来源目录项 | ${report.expected} |`, `| 已采集 | ${report.downloaded} |`,
+    `| ${report.readingEdition ? '网站阅读版条目' : '来源目录项'} | ${report.expected} |`, `| 已采集 | ${report.downloaded} |`,
+    ...(report.readingEdition ? [`| 本次追加阅读条目 | ${report.readingAdded} |`, `| 原始来源已采集 / 总数 | ${report.sourceDownloaded} / ${report.sourceExpected} |`, `| 原始来源错误 / 警告（单独保留） | ${report.sourceErrors} / ${report.sourceWarnings} |`] : []),
     `| 相对来源目录完整 | ${report.completeAgainstSource ? '是' : '否'} |`,
     `| 严重问题 | ${report.errors} |`, `| 待核对警告 | ${report.warnings} |`,
     `| 编号等信息提示 | ${report.information} |`, '',
@@ -166,6 +183,9 @@ export async function acquire(input, options = {}) {
   return withLock(path.join(dir, 'job.lock'), async () => {
     const specFile = path.join(dir, 'spec.json'), previousSpec = readJson(specFile);
     if (previousSpec && extractionHash(previousSpec) !== extractionHash(spec) && fs.existsSync(chaptersDir) && fs.readdirSync(chaptersDir).length) throw Error(`提取规则发生变化，请使用新的 --state-dir 重新试采，避免混用旧正文：${dir}`);
+    const outputDir = path.resolve(options.outputDir || path.join(projectRoot, 'downloads'));
+    const reading = loadReadingEdition(dir, spec, extractionHash(spec), outputDir, {resume: true});
+    if (reading && options.refresh) throw Error('已绑定阅读版不能强制刷新原始正文；请使用普通检查更新以保留已核对的映射');
     if (!spec.description && previousSpec?.description) spec.description = previousSpec.description;
     if (previousSpec?.status && (!spec.status || (previousSpec.status === '完结' && spec.status !== '完结'))) {
       spec.status = previousSpec.status;
@@ -287,7 +307,7 @@ export async function acquire(input, options = {}) {
         }
         report = navigationReport(qualityReport(catalog, chapters, failures, mode), source, catalog);
         atomicWrite(path.join(dir, 'partial.json'), bookData(spec, chapters));
-        if (report.completeAgainstSource && report.structuralPass) {
+        if (!reading && report.completeAgainstSource && report.structuralPass) {
           const book = bookData(spec, chapters);
           prepareImport(book);
           exportFile = exportPath(spec, id, options.outputDir);
@@ -313,6 +333,16 @@ export async function acquire(input, options = {}) {
     atomicWrite(path.join(dir, `${mode}-report.md`), reportMarkdown(details));
     atomicWrite(path.join(dir, 'history', `${Date.now()}-${mode}.json`), details);
     if (!paused) await recordSource(stateDir, spec, details, id);
+    if (reading) {
+      options.onStatus?.({kind: 'reading-edition', message: '正在核对来源映射并整理网站阅读版…'});
+      const result = updateReadingEdition({dir, state: reading, spec, extraction: extractionHash(spec), outputDir, catalog, rawReport: details});
+      result.rawReportFile = path.join(dir, `${mode}-report.json`);
+      result.reportFile = path.join(dir, `reading-${mode}-report.json`);
+      result.summaryFile = path.join(dir, `reading-${mode}-report.md`);
+      atomicWrite(result.reportFile, result);
+      atomicWrite(result.summaryFile, reportMarkdown(result));
+      return result;
+    }
     return {...details, reportFile: path.join(dir, `${mode}-report.json`), summaryFile: path.join(dir, `${mode}-report.md`)};
   });
 }

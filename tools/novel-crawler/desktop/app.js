@@ -155,7 +155,7 @@ function render() {
   $('pause').disabled = task.phase === 'pausing';
   $('pause').textContent = task.phase === 'pausing' ? '正在保存…' : '暂停采集';
   $('report-stats').hidden = !report;
-  if (report) $('report-stats').replaceChildren(...[[report.expected, '目录章节'], [report.errors, '错误'], [report.warnings, '待核对']].map(([number, label]) => { const div = document.createElement('div'), strong = document.createElement('strong'); strong.textContent = number; div.append(strong, label); return div; }));
+  if (report) $('report-stats').replaceChildren(...[[report.expected, report.readingEdition ? '阅读版条目' : '目录章节'], [report.errors, '错误'], [report.warnings, '待核对']].map(([number, label]) => { const div = document.createElement('div'), strong = document.createElement('strong'); strong.textContent = number; div.append(strong, label); return div; }));
   renderDiagnostics(task);
   $('resume').hidden = !['paused', 'stopped', 'probed', 'error'].includes(task.phase) || !task.sourceUrl;
   $('results-panel').hidden = !data.candidates.length;

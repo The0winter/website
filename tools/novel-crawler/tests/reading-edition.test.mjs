@@ -1,0 +1,192 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import http from 'node:http';
+import {acquire, bindReadingEdition, localBookState, jobId, validateSpec, extractionHash} from '../core.mjs';
+import {atomicWrite, readJson, hash} from '../storage.mjs';
+import {formatChapterForExport} from '../titles.mjs';
+import {loadReadingEdition} from '../reading-edition.mjs';
+import {createDesktop} from '../desktop/server.mjs';
+
+async function fixture(t) {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'novel-edition-'));
+  const state = {count: 5, titles: {}, bodies: {}, requests: []};
+  const ids = [90, 12, 70, 21, 60, 31, 50, 41];
+  const title = n => state.titles[n] || `第${[1,3,1,2,2][n - 1] || n - 2}章 场景${n === 3 ? 1 : n}`;
+  const body = n => state.bodies[n] || (n === 4 ? '銆锛鈥鐨勬姹熸'.repeat(100) : Array.from({length: 100}, (_, i) => String.fromCodePoint(0x4e00 + (n === 3 ? 1 : n) * 200 + i)).join('').repeat(8));
+  const chapterPath = n => `/book/A-${ids[n - 1]}.html`;
+  const anchor = n => `<a href="${chapterPath(n)}">${title(n)}</a>`;
+  const server = http.createServer((req, res) => {
+    state.requests.push(req.url);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    if (req.url === '/book/A.html') return res.end(`<h1>测试书</h1><b>甲作者</b><i>${state.count}</i><ul>${[1,2].map(anchor).join('')}</ul><aside>${[state.count,state.count-1].map(anchor).join('')}</aside>`);
+    const n = ids.findIndex(id => req.url === `/book/A-${id}.html`) + 1;
+    if (!n || n > state.count) { res.statusCode = 404; return res.end(); }
+    res.end(`<h1>${title(n)}</h1><article>${body(n)}</article><nav><a class="book" href="/book/A.html">目录</a><a class="next" href="${n < state.count ? chapterPath(n+1) : '/book/A.html'}">下一章</a></nav>`);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { await new Promise(resolve => server.close(resolve)); assert.equal(path.dirname(stateDir), os.tmpdir()); assert.ok(path.basename(stateDir).startsWith('novel-edition-')); fs.rmSync(stateDir, {recursive: true, force: true}); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const spec = validateSpec({version: 1, kind: 'html', variant: 'edition-v1', title: '测试书', author: '甲作者', sourceUrl: base + '/book/A.html', delayMs: 200, retries: 0, metadata: {title: 'h1', author: 'b'}, catalog: {links: 'ul a', count: 'i', walk: {next: '.next', bookLink: '.book', chapterPattern: '^/book/A-(?<chapterId>[0-9]+)\\.html$', recentLinks: 'aside a', recentReverse: true}}, chapter: {title: 'h1', content: 'article'}});
+  const options = {stateDir, outputDir: path.join(stateDir, 'exports')};
+  const initial = await acquire(spec, {...options, mode: 'download'});
+  assert.equal(initial.completeAgainstSource, true);
+  assert.ok(initial.errors >= 2);
+  assert.equal(initial.exportFile, null);
+  const dir = path.join(stateDir, 'jobs', jobId(spec)), file = path.join(options.outputDir, '测试书--网站阅读版.json');
+  const raw = n => readJson(path.join(dir, 'chapters', hash(base + chapterPath(n)) + '.json')).chapter;
+  const book = {title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, chapters: [1,5,2].map((n, i) => ({...formatChapterForExport(raw(n)), chapter_number: i + 1, sourceChapterNumber: n, sourceChapterUrl: raw(n).link}))};
+  atomicWrite(file, book);
+  const binding = path.join(dir, 'reading-edition.json');
+  const bind = () => bindReadingEdition(spec, file, options);
+  return {spec, options, dir, file, binding, state, raw, bind, base, chapterPath, book};
+}
+
+test('bound updates preserve reviewed order, bypass only pinned source errors, and append after restart', async t => {
+  const f = await fixture(t);
+  const original = fs.readFileSync(f.file), mtime = fs.statSync(f.file).mtimeMs;
+  assert.equal((await f.bind()).readingEntries, 3);
+  assert.equal(localBookState(f.spec, f.options).state, 'complete');
+  assert.match(localBookState(f.spec, f.options).message, /自动沿用/);
+  const probe = await acquire(f.spec, {...f.options, mode: 'probe'});
+  assert.equal(probe.structuralPass, true); assert.equal(probe.readingEdition, true);
+  assert.ok(readJson(probe.rawReportFile).errors >= 2);
+  f.state.requests = [];
+  const unchanged = await acquire(f.spec, {...f.options, mode: 'download'});
+  assert.equal(unchanged.reusedExport, true); assert.equal(unchanged.expected, 3); assert.equal(unchanged.sourceExpected, 5);
+  assert.equal(fs.statSync(f.file).mtimeMs, mtime); assert.deepEqual(fs.readFileSync(f.file), original);
+  assert.deepEqual(f.state.requests, ['/book/A.html']);
+  for (const count of [6,7]) {
+    f.state.count = count;
+    f.state.requests = [];
+    assert.equal((await acquire(f.spec, {...f.options, mode: 'probe'})).structuralPass, true);
+    const update = await acquire(f.spec, {...f.options, mode: 'download'});
+    assert.equal(update.errors, 0); assert.equal(update.readingAdded, 1); assert.equal(update.expected, count - 2);
+    assert.deepEqual(f.state.requests, ['/book/A.html', f.chapterPath(count), '/book/A.html']);
+    const book = readJson(f.file);
+    assert.deepEqual(book.chapters.slice(0,3), f.book.chapters);
+    assert.equal(book.chapters.at(-1).sourceChapterNumber, count);
+    assert.equal(book.chapters.at(-1).chapter_number, count - 2);
+    // Loading solely from disk is the same path used by a newly launched worker.
+    assert.equal(loadReadingEdition(f.dir, f.spec, extractionHash(f.spec), f.options.outputDir).sources.length, count);
+  }
+  assert.ok(!readJson(path.join(f.options.stateDir, 'sources.json')).sites['127.0.0.1'].verifiedBooks);
+  assert.equal(readJson(path.join(f.dir, 'partial.json')).chapters.length, 7);
+});
+
+test('adoption rejects unrelated books, altered text and unsafe output destinations', async t => {
+  const f = await fixture(t);
+  for (const book of [{...f.book, author: '乙作者'}, {...f.book, sourceUrl: f.base + '/book/B.html'}, {...f.book, chapters: f.book.chapters.map((c, i) => i ? c : {...c, content: c.content + '改动'})}]) {
+    atomicWrite(f.file, book);
+    await assert.rejects(f.bind());
+    assert.equal(fs.existsSync(f.binding), false);
+  }
+  atomicWrite(f.file, f.book);
+  await assert.rejects(bindReadingEdition(f.spec, f.file, {...f.options, outputDir: f.dir}), /输出目录/);
+  await f.bind();
+  await assert.rejects(f.bind(), /已绑定/);
+  await assert.rejects(acquire({...f.spec, variant: 'v2'}, {...f.options, mode: 'download'}), /另一版本规则/);
+  assert.match(localBookState({...f.spec, variant: 'v2'}, f.options).message, /另一版本规则/);
+  assert.throws(() => loadReadingEdition(f.dir, {...f.spec, variant: 'v2'}, extractionHash(f.spec), f.options.outputDir), /不匹配/);
+  const value = readJson(f.binding).value;
+  value.file = '../escape.json'; atomicWrite(f.binding, {hash: hash(value), value});
+  assert.throws(() => loadReadingEdition(f.dir, f.spec, extractionHash(f.spec), f.options.outputDir), /文件名无效/);
+});
+
+test('new duplicates, near duplicates, garbling and numbering jumps never change the accepted edition', async t => {
+  const f = await fixture(t); await f.bind();
+  const originalFile = fs.readFileSync(f.file), originalBinding = fs.readFileSync(f.binding);
+  for (const scenario of ['duplicate', 'similar', 'mojibake', 'order', 'unknown-extra']) {
+    f.state.count = 6; f.state.bodies = {}; f.state.titles = {};
+    if (scenario === 'duplicate') f.state.bodies[6] = f.raw(1).content;
+    if (scenario === 'similar') f.state.bodies[6] = f.raw(1).content.slice(0,-1) + '改';
+    if (scenario === 'mojibake') f.state.bodies[6] = '銆锛鈥鐨勬姹熸'.repeat(100);
+    if (scenario === 'order') f.state.titles[6] = '第99章 跳号';
+    if (scenario === 'unknown-extra') f.state.titles[6] = '无章号正文';
+    // Each scenario starts at the same last accepted checkpoint.
+    const file = path.join(f.dir, 'chapters', hash(f.base + f.chapterPath(6)) + '.json');
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+    atomicWrite(path.join(f.dir, 'catalog.json'), readJson(path.join(f.dir, 'catalog.json')).slice(0,5));
+    const result = await acquire(f.spec, {...f.options, mode: 'download'});
+    assert.equal(result.exportFile, null, scenario); assert.equal(result.structuralPass, false, scenario);
+    assert.deepEqual(fs.readFileSync(f.file), originalFile); assert.deepEqual(fs.readFileSync(f.binding), originalBinding);
+  }
+});
+
+test('incomplete and paused updates do not advance the mapping; missing output restores from the accepted snapshot', async t => {
+  const f = await fixture(t); await f.bind();
+  const original = fs.readFileSync(f.binding);
+  f.state.count = 7;
+  const partial = await acquire(f.spec, {...f.options, mode: 'download', maxNew: 1});
+  assert.equal(partial.exportFile, null); assert.deepEqual(fs.readFileSync(f.binding), original);
+  const paused = await acquire(f.spec, {...f.options, mode: 'download', shouldStop: () => true});
+  assert.equal(paused.paused, true); assert.equal(paused.exportFile, null); assert.deepEqual(fs.readFileSync(f.binding), original);
+  const complete = await acquire(f.spec, {...f.options, mode: 'download'});
+  assert.equal(complete.readingAdded, 2);
+  const accepted = fs.readFileSync(f.file); fs.unlinkSync(f.file);
+  assert.equal(localBookState(f.spec, f.options).state, 'partial');
+  assert.equal((await acquire(f.spec, {...f.options, mode: 'download'})).exportFile, f.file);
+  assert.deepEqual(fs.readFileSync(f.file), accepted);
+});
+
+test('changed raw checkpoints and manually edited exports are protected, including during a pending recovery', async t => {
+  const f = await fixture(t); await f.bind();
+  const original = fs.readFileSync(f.file), binding = fs.readFileSync(f.binding);
+  const checkpoint = path.join(f.dir, 'chapters', hash(f.raw(4).link) + '.json');
+  const saved = fs.readFileSync(checkpoint), chapter = f.raw(4);
+  chapter.content += '改变'; atomicWrite(checkpoint, {hash: hash(chapter), chapter});
+  const result = await acquire(f.spec, {...f.options, mode: 'download'});
+  assert.equal(result.exportFile, null); assert.match(result.failures[0].error, /发生变化/);
+  assert.deepEqual(fs.readFileSync(f.file), original);
+  fs.writeFileSync(checkpoint, saved);
+  const previous = readJson(f.binding).value;
+  const nextBook = {...previous.book, description: '新简介'};
+  const next = {...previous, revision: 2, book: nextBook, exportHash: hash(JSON.stringify(nextBook, null, 2) + '\n')};
+  const pending = {previousStateHash: hash(previous), next};
+  atomicWrite(path.join(f.dir, 'reading-edition-pending.json'), {hash: hash(pending), value: pending});
+  fs.writeFileSync(f.file, '用户编辑');
+  await assert.rejects(acquire(f.spec, {...f.options, mode: 'download'}), /被修改|被其他程序修改/);
+  assert.equal(fs.readFileSync(f.file, 'utf8'), '用户编辑'); assert.deepEqual(fs.readFileSync(f.binding), binding);
+  // Simulate interruption after the output rename but before the state rename.
+  atomicWrite(f.file, nextBook);
+  const restored = loadReadingEdition(f.dir, f.spec, extractionHash(f.spec), f.options.outputDir, {resume: true});
+  assert.equal(restored.revision, 2); assert.equal(fs.existsSync(path.join(f.dir, 'reading-edition-pending.json')), false);
+  assert.equal(readJson(f.file).description, '新简介');
+  fs.writeFileSync(f.binding, '{}');
+  await assert.rejects(acquire(f.spec, {...f.options, mode: 'download'}), /来源映射/);
+});
+
+test('the desktop Check updates flow automatically uses the binding and retains its report after reopening', async t => {
+  const f = await fixture(t); await f.bind(); f.state.count = 6;
+  const book = {title: f.spec.title, author: f.spec.author, url: f.spec.sourceUrl, site: '测试来源'};
+  const sitesDirectory = path.join(f.options.stateDir, 'sites'); fs.mkdirSync(sitesDirectory);
+  const settings = {...f.options, sitesDirectory, findBooks: async () => [book], prepareBook: async () => f.spec};
+  let app = await createDesktop(settings);
+  t.after(async () => { if (app) await app.close(); });
+  const api = async (route, input) => {
+    const response = await fetch(app.baseUrl + '/api/' + route, {method: input ? 'POST' : 'GET', headers: {'x-desktop-token': app.token, 'Content-Type': 'application/json'}, ...(input ? {body: JSON.stringify(input)} : {})});
+    const result = await response.json(); assert.equal(response.status, 200, JSON.stringify(result)); return result;
+  };
+  await api('search', {website: 'https://books.example/', title: book.title});
+  await api('start', {url: book.url});
+  const deadline = Date.now() + 15000;
+  while (!['complete','error'].includes(app.state().phase) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(app.state().phase, 'complete', app.state().message);
+  assert.match(app.state().message, /已沿用来源映射/);
+  assert.equal(app.state().report.readingAdded, 1); assert.equal(app.state().report.expected, 4);
+  assert.equal(app.state().report.sourceExpected, 6);
+  await app.close(); app = null;
+  const previousTask = readJson(path.join(f.options.stateDir, 'desktop-last-task.json'));
+  delete previousTask.report.readingEdition;
+  delete previousTask.report.sourceExpected;
+  atomicWrite(path.join(f.options.stateDir, 'desktop-last-task.json'), previousTask);
+  app = await createDesktop(settings);
+  const restored = await api('state');
+  assert.equal(restored.task.report.readingEdition, true); assert.equal(restored.task.report.expected, 4);
+  await api('search', {website: 'https://books.example/', title: book.title});
+  await api('start', {url: book.url});
+  while (!['complete','error'].includes(app.state().phase) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(app.state().phase, 'complete', app.state().message); assert.equal(app.state().report.readingAdded, 0); assert.equal(app.state().report.reusedExport, true);
+});
