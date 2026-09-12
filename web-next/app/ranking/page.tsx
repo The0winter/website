@@ -2,7 +2,7 @@
 
 import {useEffect, useState} from 'react';
 import Link from 'next/link';
-import {ArrowLeft, ArrowUpRight, BookOpen, ChevronRight, Star} from 'lucide-react';
+import {ArrowLeft, BookOpen, ChevronRight, Star} from 'lucide-react';
 import BookCover from '@/components/BookCover';
 import BookLink from '@/components/BookLink';
 import {booksApi, type Book} from '@/lib/api';
@@ -86,18 +86,18 @@ export default function RankingPage() {
                   <BookCover src={book.cover_image} alt={book.title} priority={index < 5}/>
                 </BookLink>
                 <div className="ranking-book-info">
-                  <h2><BookLink href={`/book/${book.id}`}>{book.title}</BookLink></h2>
+                  <div className="ranking-book-heading">
+                    <h2><BookLink href={`/book/${book.id}`}>{book.title}</BookLink></h2>
+                    <span className="ranking-rating" data-unrated={!book.rating} aria-label={book.rating ? `评分 ${book.rating.toFixed(1)}` : '暂无评分'}>
+                      {book.rating ? <><Star size={13} aria-hidden="true"/><strong>{book.rating.toFixed(1)}</strong></> : '暂无评分'}
+                    </span>
+                  </div>
                   <p className="ranking-book-meta"><span>{book.author || book.profiles?.username || '佚名'}</span><span>{book.category || '未分类'}</span></p>
                   <p className="ranking-description">{book.description || '这个故事，等你翻开。'}</p>
                   <div className="ranking-book-stats">
-                    <span className="ranking-rating"><Star size={12} aria-hidden="true"/>{book.rating ? book.rating.toFixed(1) : '暂无评分'}</span>
-                    <span>{formatViews(activeRank === 'views' ? book.views : book.rankingViews)}<span className="ranking-views-label"> {rank.period}浏览</span></span>
+                    {activeRank !== 'views' && <span className="ranking-metric">热度指数 {(book.rankingScore ?? 0).toFixed(1)}</span>}
+                    <span className="ranking-views"><strong>{formatViews(activeRank === 'views' ? book.views : book.rankingViews)}</strong><span className="ranking-views-label">{rank.period}浏览</span></span>
                   </div>
-                </div>
-                <div className="ranking-metric">
-                  <strong>{activeRank === 'views' ? formatViews(book.views) : (book.rankingScore ?? 0).toFixed(1)}</strong>
-                  <span>{activeRank === 'views' ? '累计浏览' : '热度指数'}</span>
-                  <BookLink href={`/book/${book.id}`} aria-label={`打开${book.title}`}><ArrowUpRight size={17}/></BookLink>
                 </div>
               </li>)}
             </ol>}
