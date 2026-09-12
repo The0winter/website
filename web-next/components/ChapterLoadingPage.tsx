@@ -56,7 +56,7 @@ export default function ChapterLoadingPage() {
       const layout = !pointers.size && performance.now() - inputAt >= 140 ? ready() : null;
       stableFrames = layout && layout === previousLayout ? stableFrames + 1 : 0;
       previousLayout = layout || '';
-      if (stableFrames >= 2 && performance.now() - visibleAt >= 400) {
+      if (stableFrames >= 2 && performance.now() - visibleAt >= target.minimumVisibleMs) {
         if (currentChapterEntry()?.revealing) {
           flushSync(() => finishChapterEntry(target.token)); return;
         }

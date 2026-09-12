@@ -17,7 +17,7 @@ type Props = {
   onRange: (start: number, end: number) => void; onRetry: () => void;
   activeChapterId?: string;
   activeChapterLabel?: string;
-  onSelect?: (id: string) => void; onPrefetch?: (id: string) => void;
+  onSelect?: (id: string, title: string) => void; onPrefetch?: (id: string) => void;
 };
 const subscribeWidth = (notify: () => void) => {
   window.addEventListener('resize', notify);
@@ -26,9 +26,31 @@ const subscribeWidth = (notify: () => void) => {
 const columnCount = () => innerWidth >= 1024 ? 3 : innerWidth >= 768 ? 2 : 1;
 
 export default function BookCatalogSheet({open, onClose, bookTitle, ...props}: Props) {
+  const {bookId, onSelect} = props;
   const columns = useSyncExternalStore(subscribeWidth, columnCount, () => 1);
   const openingChapter = useSyncExternalStore(subscribeChapterEntry, () => Boolean(currentChapterEntry()?.href.startsWith(`/book/${props.bookId}/`)), () => false);
   const panel = useRef<HTMLDivElement>(null);
+  const [selection, setSelection] = useState<{id: string; title: string} | null>(null);
+  const selecting = useRef(false);
+  useEffect(() => {
+    if (!selection) return;
+    let cancelled = false;
+    const cancel = () => {cancelled = true; selecting.current = false; setSelection(null);};
+    window.addEventListener('book-navigation-leave', cancel);
+    // Wait for the actual CSS exit (also works with reduced motion). Keep the
+    // open history slot and chapter list until the sheet has slid offscreen.
+    const frame = requestAnimationFrame(() => {
+      if (!open || !panel.current) {cancel(); return;}
+      const animations = panel.current.parentElement!.getAnimations({subtree: true});
+      void Promise.allSettled(animations.map(animation => animation.finished)).then(() => {
+        if (cancelled || !panel.current?.isConnected) return;
+        beginChapterEntry(`/book/${bookId}/${selection.id}`, selection.title, 'start', 0);
+        onSelect?.(selection.id, selection.title);
+        selecting.current = false; setSelection(null);
+      });
+    });
+    return () => {cancelled = true; cancelAnimationFrame(frame); window.removeEventListener('book-navigation-leave', cancel);};
+  }, [selection, open, bookId, onSelect]);
   useEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
@@ -50,13 +72,17 @@ export default function BookCatalogSheet({open, onClose, bookTitle, ...props}: P
       if (previousFocus?.isConnected) previousFocus.focus({preventScroll: true});
     };
   }, [open, onClose]);
-  return <div className="book-catalog-overlay" data-open={open} data-chapter-entry={openingChapter} aria-hidden={!open || openingChapter} inert={!open || openingChapter} onClick={onClose}>
+  return <div className="book-catalog-overlay" data-open={open && !selection} data-selecting={Boolean(selection)} data-chapter-entry={openingChapter} aria-hidden={!open || openingChapter || Boolean(selection)} inert={!open || openingChapter || Boolean(selection)} onClick={onClose}>
     <div ref={panel} role="dialog" aria-modal="true" aria-label="全部目录" className="book-catalog-sheet" onClick={event => event.stopPropagation()}>
       <header className="book-catalog-header">
         <button className="book-catalog-back" onClick={onClose} aria-label="关闭目录"><ArrowLeft size={22}/></button>
         <h2 title={bookTitle}>{bookTitle}</h2><p>{props.catalog.total === null ? '加载中…' : `共 ${props.catalog.total} 章`}</p>
       </header>
-      {open && <CatalogContents key={`${props.bookId}:${columns}:${props.activeChapterId ?? ''}:${props.catalog.generation}`} {...props} columns={columns}/>}
+      {open && <CatalogContents key={`${props.bookId}:${columns}:${props.activeChapterId ?? ''}:${props.catalog.generation}`} {...props} columns={columns}
+        onSelect={props.onSelect ? (id, title) => {
+          if (selecting.current) return;
+          selecting.current = true; setSelection({id, title});
+        } : undefined}/>}
     </div>
   </div>;
 }
@@ -161,8 +187,9 @@ function CatalogVolumeRows({bookId, catalog, onRange, onRetry, activeChapterId, 
                 aria-description={chapter.id === activeChapterId ? activeChapterLabel : undefined}
                 onMouseEnter={() => onPrefetch?.(chapter.id)} onFocus={() => onPrefetch?.(chapter.id)} onTouchStart={() => onPrefetch?.(chapter.id)}
                 onNavigate={event => {
-                  beginChapterEntry(`/book/${bookId}/${chapter.id}`, formatChapterTitle(chapter.title, chapter.chapter_number));
-                  if (onSelect) {event.preventDefault(); onSelect(chapter.id);}
+                  const entryTitle = formatChapterTitle(chapter.title, chapter.chapter_number);
+                  if (onSelect) {event.preventDefault(); onSelect(chapter.id, entryTitle);}
+                  else beginChapterEntry(`/book/${bookId}/${chapter.id}`, entryTitle);
                 }}>
                 <span>{title}</span>
                 {chapter.id === activeChapterId && <span aria-hidden="true" className="book-catalog-progress">{activeChapterLabel}</span>}

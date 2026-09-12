@@ -29,7 +29,7 @@ async function chapterStart(page: Page, id: string) {
   await expect(loader(page)).toHaveCount(0);
   const heading = root(page).locator(`[data-scroll-chapter="${id}"] h1`);
   await expect(heading).toBeVisible();
-  await expect.poll(() => heading.evaluate(el => Math.abs(el.getBoundingClientRect().top - el.closest('.reader-scroll-window')!.getBoundingClientRect().top - 16))).toBeLessThan(2);
+  await expect.poll(() => heading.evaluate(el => Math.abs(el.getBoundingClientRect().top - el.closest('.reader-scroll-window')!.getBoundingClientRect().top - parseFloat(getComputedStyle(el).marginTop)))).toBeLessThan(2);
 }
 async function enterCatalog(page: Page, origin: string) {
   await page.goto(origin === 'details' ? detail : reader);

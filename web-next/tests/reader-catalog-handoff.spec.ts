@@ -3,6 +3,99 @@ import {test, expect} from '@playwright/test';
 const base = 'http://127.0.0.1:3000', book = '000000000000000000000101';
 
 for (const mode of ['horizontal', 'vertical', 'scroll']) {
+  test(`reader catalog slides right before loading a ${mode} chapter`, async ({browser}, testInfo) => {
+    const context = await browser.newContext({viewport: {width: mode === 'vertical' ? 320 : 390, height: 844}, isMobile: true, hasTouch: true});
+    const page = await context.newPage(), target = '00000000000000000000010c';
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => {release = resolve;});
+    try {
+      await page.addInitScript(mode => {
+        localStorage.setItem('has-seen-reading-hint', 'true');
+        localStorage.setItem('reader_turnMode', JSON.stringify(mode));
+        Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}});
+      }, mode);
+      await page.goto(`${base}/book/${book}/${book}`);
+      await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
+      await page.touchscreen.tap((mode === 'vertical' ? 320 : 390) / 2, 422);
+      const tools = page.locator('.reader-tools:visible');
+      await expect(tools).toHaveAttribute('aria-hidden', 'false');
+      await expect(tools.getByRole('link', {name: '详情', exact: true})).toHaveCount(0);
+      await expect(tools.getByRole('button')).toHaveText(['设置', '目录', '夜间']);
+      await tools.getByRole('button', {name: '目录', exact: true}).tap();
+      const sheet = page.getByRole('dialog', {name: '全部目录'});
+      await expect(sheet.getByRole('region')).toHaveAttribute('aria-busy', 'false');
+      await expect.poll(() => sheet.evaluate(element => getComputedStyle(element).transform)).toBe('matrix(1, 0, 0, 1, 0, 0)');
+      await page.route(`**/api/chapters/${target}?navigation=1`, async route => {await gate; await route.continue();});
+      await page.evaluate(() => {
+        const frames: {time: number; x: number; chapters: number; loading: boolean; chapter: string | null}[] = [];
+        Object.assign(window, {exitFrames: frames, entryDelay: 0});
+        document.addEventListener('click', event => {
+          if (!(event.target as Element).closest('.book-catalog-chapter')) return;
+          const start = performance.now();
+          window.addEventListener('chapter-entry-start', () => Object.assign(window, {entryDelay: performance.now() - start}), {once: true});
+          const sample = () => {
+            const sheet = document.querySelector('.book-catalog-sheet')!;
+            const loading = Boolean(document.querySelector('.chapter-loading-page'));
+            frames.push({time: performance.now() - start, x: sheet.getBoundingClientRect().x,
+              chapters: sheet.querySelectorAll('.book-catalog-chapter').length, loading,
+              chapter: document.querySelector('.reader-pages-root')?.getAttribute('data-reader-chapter') ?? null});
+            if (!loading && frames.length < 180) requestAnimationFrame(sample);
+          };
+          requestAnimationFrame(sample);
+        }, {capture: true, once: true});
+      });
+      await sheet.locator(`a[href$="/${target}"]`).tap();
+      await expect(page.locator('.chapter-loading-page')).toHaveAttribute('data-chapter-loading', target);
+      const trace = await page.evaluate(() => {
+        const state = window as unknown as {exitFrames: {time: number; x: number; chapters: number; loading: boolean; chapter: string | null}[]; entryDelay: number};
+        return {frames: state.exitFrames, entryDelay: state.entryDelay};
+      });
+      await testInfo.attach('catalog-exit', {body: JSON.stringify(trace), contentType: 'application/json'});
+      expect(trace.entryDelay).toBeGreaterThanOrEqual(390);
+      expect(trace.entryDelay).toBeLessThan(900);
+      const moving = trace.frames.filter(frame => frame.x > 1 && frame.x < 300);
+      expect(moving.length).toBeGreaterThan(2);
+      expect(moving.every(frame => frame.chapters > 0 && !frame.loading && frame.chapter === book)).toBe(true);
+      await expect(page.locator('.book-catalog-overlay')).toBeHidden();
+      release();
+      await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
+      await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-chapter', target);
+      await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
+      await page.goBack();
+      await expect(page).toHaveURL(`${base}/book/${book}`);
+    } finally {release(); await context.close();}
+  });
+}
+
+for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+  test(`reader catalog exit can be cancelled and respects ${reducedMotion}`, async ({page}) => {
+    await page.setViewportSize({width: 390, height: 844});
+    await page.emulateMedia({reducedMotion});
+    await page.addInitScript(() => localStorage.setItem('has-seen-reading-hint', 'true'));
+    await page.goto(`${base}/book/${book}/${book}`);
+    await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
+    await page.keyboard.press('m');
+    await page.locator('.reader-tools:visible').getByRole('button', {name: '目录', exact: true}).click();
+    const sheet = page.getByRole('dialog', {name: '全部目录'});
+    await expect(sheet.getByRole('region')).toHaveAttribute('aria-busy', 'false');
+    await expect.poll(() => sheet.evaluate(element => getComputedStyle(element).transform)).toBe('matrix(1, 0, 0, 1, 0, 0)');
+    await sheet.locator('.book-catalog-chapter').nth(1).click();
+    if (reducedMotion === 'no-preference') {
+      await page.goBack();
+      await page.waitForTimeout(600);
+      await expect(page).toHaveURL(`${base}/book/${book}/${book}`);
+      await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
+      await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-chapter', book);
+      await page.keyboard.press('m');
+      await page.locator('.reader-tools:visible').getByRole('button', {name: '目录', exact: true}).click();
+      await sheet.locator('.book-catalog-chapter').nth(1).click();
+    }
+    await expect(page).toHaveURL(`${base}/book/${book}/000000000000000000000102`);
+    await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
+  });
+}
+
+for (const mode of ['horizontal', 'vertical', 'scroll']) {
   test(`catalog backdrops never paint over a revealed ${mode} chapter`, async ({browser}, testInfo) => {
     const context = await browser.newContext({viewport: {width: 393, height: 851}, deviceScaleFactor: 2.75, isMobile: true, hasTouch: true});
     const page = await context.newPage();
@@ -78,7 +171,7 @@ test('a pointer-inert catalog backdrop still blocks the loading-to-text handoff'
   // Reproduce a still-painted exit backdrop that hit testing cannot detect.
   const hold = await page.addStyleTag({content: '.reader-entry-content .book-catalog-overlay {visibility:visible!important;opacity:.5!important;pointer-events:none!important}'});
   await page.getByRole('dialog', {name: '全部目录'}).locator('.book-catalog-chapter').nth(1).click();
-  await expect(page.locator('.reader-pages-root')).toHaveAttribute('data-reader-ready', 'true');
+  await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
   await page.waitForTimeout(300);
   await expect(page.locator('.chapter-loading-page')).toBeVisible();
   await hold.evaluate(element => element.parentNode?.removeChild(element));

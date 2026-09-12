@@ -2,7 +2,7 @@ import {flushSync} from 'react-dom';
 import {mobileReaderCream, readerPaperPosition} from './reader-paper';
 
 type ChapterEntry = {
-  token: string; href: string; chapterId: string; title: string; error?: string; position: 'start' | 'resume';
+  token: string; href: string; chapterId: string; title: string; error?: string; position: 'start' | 'resume'; minimumVisibleMs: number;
   paper: string; ink: string; desk: string; width: string; textured: boolean; paperPosition: string; releasing?: boolean; revealing?: boolean;
 };
 const listeners = new Set<() => void>();
@@ -12,7 +12,7 @@ export const currentChapterEntry = () => entry;
 export const serverChapterEntry = () => null;
 export function subscribeChapterEntry(listener: () => void) { listeners.add(listener); return () => {listeners.delete(listener);}; }
 
-export function beginChapterEntry(href: string, title: string, position: 'start' | 'resume' = 'start') {
+export function beginChapterEntry(href: string, title: string, position: 'start' | 'resume' = 'start', minimumVisibleMs = 400) {
   const chapterId = href.split('/').at(-1)!;
   const reader = [...document.querySelectorAll<HTMLElement>('.reader-pages-root')].find(element => {
     const bounds = element.getBoundingClientRect();
@@ -40,7 +40,7 @@ export function beginChapterEntry(href: string, title: string, position: 'start'
   } catch {}
   const [paper, ink, desk] = colors[theme] || colors.cream;
   const style = reader ? getComputedStyle(reader) : null;
-  entry = {token: crypto.randomUUID(), href, chapterId, title, position, paper: style?.getPropertyValue('--reader-paper') || paper,
+  entry = {token: crypto.randomUUID(), href, chapterId, title, position, minimumVisibleMs, paper: style?.getPropertyValue('--reader-paper') || paper,
     ink: style?.getPropertyValue('--reader-ink') || ink, desk, width: style?.getPropertyValue('--reader-width') || `${width}px`,
     textured: reader ? reader.querySelector('.reader-frame')?.getAttribute('data-paper') === 'true' : theme === 'cream',
     paperPosition: readerPaperPosition(paperPage)};

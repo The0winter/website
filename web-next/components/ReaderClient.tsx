@@ -338,7 +338,7 @@ if (loading) return (
             transform: `translateY(${showNav ? '0' : '100%'})`,
         }}
       >
-          {/* 1. 设置 (原在右，现移至左) */}
+          {/* 设置 */}
           <button 
             onClick={() => setShowSettings(!showSettings)} 
             className={`flex flex-col items-center gap-1 opacity-80 active:opacity-100 ${showSettings ? 'text-blue-500' : ''}`}
@@ -347,25 +347,16 @@ if (loading) return (
              <span className="text-[10px]">设置</span>
           </button>
 
-          {/* 2. 书籍详情 (新增) */}
-          <Link 
-            href={`/book/${bookId}`}
-            className="flex flex-col items-center gap-1 opacity-80 active:opacity-100"
-          >
-             <Info className="w-5 h-5"/>
-             <span className="text-[10px]">详情</span>
-          </Link>
-
-          {/* 3. 目录 */}
+          {/* 目录 */}
           <button 
             onClick={() => setShowCatalog(true)} 
             className="flex flex-col items-center gap-1 opacity-90 active:opacity-100"
           >
-             <List className="w-5 h-5"/> {/* 图标稍微改小一点点以适配4个按钮 */}
+             <List className="w-5 h-5"/>
              <span className="text-[10px]">目录</span>
           </button>
 
-          {/* 4. 夜间模式 (原在左，现移至右) */}
+          {/* 夜间模式 */}
           <button 
             onClick={() => setTheme(isActuallyDark ? 'light' : 'dark')}
             className="flex flex-col items-center gap-1 opacity-80 active:opacity-100"
