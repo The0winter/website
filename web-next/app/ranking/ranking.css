@@ -1,4 +1,4 @@
-@font-face { font-family:"Jiutian Ranking Serif"; src:url('/fonts/jiutian-ranking-serif-medium.woff2') format('woff2'); font-style:normal; font-weight:500; font-display:swap; }
+@font-face { font-family:"Jiutian Ranking Sans"; src:url('/fonts/jiutian-ranking-sans-medium.woff2') format('woff2'); font-style:normal; font-weight:500; font-display:swap; }
 .ranking-page { --rank-bg:#f7f3ed; --rank-surface:#fffcf8; --rank-text:#342d28; --rank-muted:#918579; --rank-accent:#ba4343; --rank-soft:#f5e7df; --rank-sticky-top:28px; min-height:100svh; padding:28px 32px 56px; color:var(--rank-text); background:var(--rank-bg); font-family:Arial,"Microsoft YaHei",sans-serif; }
 .ranking-shell { max-width:1100px; margin:auto; }
 .ranking-header { margin-bottom:26px; }
@@ -16,7 +16,7 @@
 .ranking-sidebar { min-width:0; }
 .ranking-nav { position:sticky; top:var(--rank-sticky-top); display:flex; flex-direction:column; gap:7px; }
 .ranking-nav button { display:flex; align-items:center; justify-content:space-between; min-height:52px; padding:0 18px; border-radius:10px; color:#81756a; transition:background .15s,color .15s; }
-.ranking-nav button>span { font-family:"Jiutian Ranking Serif","Songti SC",SimSun,serif; font-size:21px; font-weight:500; line-height:1.4; letter-spacing:0; white-space:nowrap; }
+.ranking-nav button>span { font-family:"Jiutian Ranking Sans","PingFang SC","Microsoft YaHei",sans-serif; font-size:21px; font-weight:500; line-height:1.4; letter-spacing:0; white-space:nowrap; }
 .ranking-nav button svg { opacity:0; }
 .ranking-nav button:hover { color:var(--rank-accent); background:#f0e9e0; }
 .ranking-nav [aria-pressed=true] { background:var(--rank-soft); color:var(--rank-accent); }
