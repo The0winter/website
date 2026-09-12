@@ -1,12 +1,13 @@
 'use client';
 
-import {useEffect, useState, useSyncExternalStore} from 'react';
+import {useEffect, useLayoutEffect, useRef, useSyncExternalStore} from 'react';
+import {usePathname} from 'next/navigation';
 import Link from 'next/link';
 import {ArrowLeft, BookOpen, ChevronRight, Star} from 'lucide-react';
 import BookCover from '@/components/BookCover';
 import BookLink from '@/components/BookLink';
-import {booksApi, type Book} from '@/lib/api';
-import {currentRankingView, selectRankingView, subscribeBookNavigation} from '@/lib/book-navigation';
+import {currentRankingVisit, selectRankingView, subscribeBookNavigation} from '@/lib/book-navigation';
+import {getRankingSnapshot, loadRanking, rankingScroll, rememberRankingScroll, serverRankingSnapshot, subscribeRanking} from '@/lib/ranking-cache';
 import './ranking.css';
 
 const RANKS = [
@@ -19,8 +20,7 @@ const RANKS = [
 const CATEGORIES = ['全部', '玄幻', '仙侠', '都市', '历史', '科幻', '奇幻', '悬疑'];
 type RankId = typeof RANKS[number]['id'];
 const defaultView = {activeRank: 'day', category: '全部'};
-const serverView = () => defaultView;
-const currentView = () => currentRankingView() ?? defaultView;
+const serverVisit = () => undefined;
 
 function formatViews(value = 0) {
   if (value >= 100000000) return `${(value / 100000000).toFixed(1).replace(/\.0$/, '')}亿`;
@@ -29,20 +29,41 @@ function formatViews(value = 0) {
 }
 
 export default function RankingPage() {
-  const {activeRank, category} = useSyncExternalStore(subscribeBookNavigation, currentView, serverView);
-  const [retry, setRetry] = useState(0);
-  const [result, setResult] = useState<{key: string; books: Book[]; error: boolean}>({key: '', books: [], error: false});
-  const rank = RANKS.find(item => item.id === activeRank)!;
-  const key = `${rank.sort}:${category}:${retry}`;
-  const loading = result.key !== key;
+  const visit = useSyncExternalStore(subscribeBookNavigation, currentRankingVisit, serverVisit);
+  const {activeRank, category} = visit?.rankingView ?? defaultView;
+  const pathname = usePathname();
+  const categories = useRef<HTMLElement>(null);
+  const rank = RANKS.find(item => item.id === activeRank) ?? RANKS[0];
+  const visitId = visit?.flow ?? '';
+  const query = {visit: visitId, orderBy: rank.sort, category};
+  const result = useSyncExternalStore(subscribeRanking, () => getRankingSnapshot(query), serverRankingSnapshot);
+  const loading = !result.books && !result.error;
 
   useEffect(() => {
-    let active = true;
-    booksApi.getAll({orderBy: rank.sort, limit: 100, category: category === '全部' ? undefined : category})
-      .then(books => {if (active) setResult({key, books, error: false});})
-      .catch(() => {if (active) setResult({key, books: [], error: true});});
-    return () => {active = false;};
-  }, [key, rank.sort, category]);
+    if (pathname === '/ranking') void loadRanking({visit: visitId, orderBy: rank.sort, category});
+  }, [visitId, rank.sort, category, pathname]);
+
+  useLayoutEffect(() => {
+    if (pathname !== '/ranking' || !visitId || !result.books) return;
+    const current = {visit: visitId, orderBy: rank.sort, category};
+    const position = rankingScroll(current);
+    if (position) {
+      window.scrollTo({top: position.top, behavior: 'instant'});
+      if (categories.current) categories.current.scrollLeft = position.categories;
+    }
+    const remember = () => {
+      if (location.pathname === '/ranking') rememberRankingScroll(current, window.scrollY, categories.current?.scrollLeft ?? 0);
+    };
+    window.addEventListener('scroll', remember, {passive: true});
+    window.addEventListener('book-navigation-leave', remember);
+    const categoryBar = categories.current;
+    categoryBar?.addEventListener('scroll', remember, {passive: true});
+    return () => {
+      window.removeEventListener('scroll', remember);
+      window.removeEventListener('book-navigation-leave', remember);
+      categoryBar?.removeEventListener('scroll', remember);
+    };
+  }, [visitId, rank.sort, category, pathname, result.books]);
 
   function selectRank(id: RankId) {
     selectRankingView({activeRank: id, category});
@@ -57,7 +78,7 @@ export default function RankingPage() {
             <Link href="/" className="ranking-back" aria-label="返回首页"><ArrowLeft size={21}/></Link>
             <h1 className="ranking-title">排行榜<span>发现值得读的故事</span></h1>
           </div>
-          <nav className="ranking-categories" aria-label="小说分类">
+          <nav ref={categories} className="ranking-categories" aria-label="小说分类">
             {CATEGORIES.map(name => <button key={name} type="button" aria-pressed={category === name} onClick={event => {
               selectRankingView({activeRank, category: name});
               event.currentTarget.scrollIntoView({block: 'nearest', inline: 'nearest'});
@@ -79,11 +100,11 @@ export default function RankingPage() {
             {loading ? <div className="ranking-loading" role="status" aria-label="正在加载排行榜">
               {Array.from({length: 7}, (_, i) => <div className="ranking-skeleton" key={i} aria-hidden="true"><i/><div><i/><i/><i/></div></div>)}
             </div> : result.error ? <div className="ranking-empty" role="alert">
-              <BookOpen size={30} aria-hidden="true"/><h2>榜单暂时没能加载</h2><p>请稍后再试一次</p><button type="button" onClick={() => setRetry(value => value + 1)}>重新加载</button>
-            </div> : result.books.length === 0 ? <div className="ranking-empty">
+              <BookOpen size={30} aria-hidden="true"/><h2>榜单暂时没能加载</h2><p>请稍后再试一次</p><button type="button" onClick={() => void loadRanking(query, true)}>重新加载</button>
+            </div> : result.books?.length === 0 ? <div className="ranking-empty">
               <BookOpen size={30} aria-hidden="true"/><h2>这个分类还没有作品</h2><p>换个分类，发现更多好故事</p>
             </div> : <ol className="ranking-list" aria-label={`${category}${rank.name}`}>
-              {result.books.map((book, index) => <li key={book.id} className="ranking-row" data-position={index + 1}>
+              {result.books?.map((book, index) => <li key={book.id} className="ranking-row" data-position={index + 1}>
                 <BookLink href={`/book/${book.id}`} className="ranking-card" aria-label={`阅读${book.title}`}>
                   <span className="ranking-number" aria-label={`第${index + 1}名`}>{String(index + 1).padStart(2, '0')}</span>
                   <div className="ranking-cover">

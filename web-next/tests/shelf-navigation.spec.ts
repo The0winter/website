@@ -20,7 +20,7 @@ async function library(page: Page, query = '') {
   await page.route('**/api/users/*/history', route => route.fulfill({json: {success: true}}));
   await page.route('**/api/users/*/library?*', route => route.fulfill({json: [{bookId: book, book: {id: book, title: '书架里的故事', author: '作者'}, chapterId: chapter, chapterTitle: '接着上次阅读', firstChapterId: chapter}]}));
   await page.goto(base + '/library' + query);
-  await expect(page.locator('.shelf-book')).toBeVisible();
+  await expect(page.locator('#shelf-content .shelf-book')).toBeVisible();
 }
 
 async function swipe(page: Page, context: BrowserContext, dx: number, dy = 0) {
@@ -81,7 +81,7 @@ for (const width of [320, 390]) test(`shelf loading slides in for 400ms, preserv
   const gate = new Promise<void>(resolve => {release = resolve;});
   await page.route(`**/book/${book}/${chapter}?_rsc=*`, async route => {await gate; await route.continue();});
   try {
-    await page.locator('.shelf-book').click();
+    await page.locator('#shelf-content .shelf-book').click();
     const loader = page.locator('.chapter-loading-page');
     await expect(loader).toBeVisible();
     await expect(loader).toContainText('接着上次阅读');
@@ -109,7 +109,7 @@ for (const width of [320, 390]) test(`shelf loading slides in for 400ms, preserv
     await page.goBack();
     await expect(page).toHaveURL(base + '/library');
     await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
-    await page.locator('.shelf-book').click();
+    await page.locator('#shelf-content .shelf-book').click();
     await expect(loader).toBeVisible();
     expect(await loader.evaluate(element => element.getAnimations()[0]?.effect?.getTiming().duration)).toBe(400);
     await expect(loader).toHaveCount(0);
@@ -124,14 +124,14 @@ for (const reduced of [false, true]) test(`shelf entry supports Back cancellatio
   const gate = new Promise<void>(resolve => {release = resolve;});
   await page.route(`**/book/${book}/${chapter}?_rsc=*`, async route => {await gate; await route.continue();});
   try {
-    await page.locator('.shelf-book').click();
+    await page.locator('#shelf-content .shelf-book').click();
     await expect(page.locator('.chapter-loading-page')).toHaveAttribute('data-entry-motion', reduced ? 'none' : 'enter');
     if (reduced) await expect(page.locator('.chapter-entry-snapshot')).toHaveCount(0);
     await page.goBack();
     await expect(page).toHaveURL(base + '/library?tab=history&sort=updated');
     await expect(page.locator('.chapter-loading-page,.chapter-entry-snapshot')).toHaveCount(0);
     release();
-    await expect(page.locator('.shelf-book')).toBeVisible();
+    await expect(page.locator('#shelf-content .shelf-book')).toBeVisible();
     await page.waitForTimeout(500);
     await expect(page).toHaveURL(base + '/library?tab=history&sort=updated');
   } finally {release();}

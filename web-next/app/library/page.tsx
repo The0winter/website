@@ -139,6 +139,8 @@ function Library() {
   const sort = requestedSort && Object.hasOwn(sorts, requestedSort) ? requestedSort as Sort : savedSort;
   const requestedPage = Number(search.get('page') || 1);
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 && requestedPage <= 100000 ? requestedPage : 1;
+  const [pages, setPages] = useState({shelf: tab === 'shelf' ? page : 1, history: tab === 'history' ? page : 1});
+  if (pages[tab] !== page) setPages({...pages, [tab]: page});
   const [managing, setManaging] = useState(false);
   const [selected, setSelected] = useState<Entry[]>([]);
   const [menu, setMenu] = useState<string | null>(null);
@@ -147,16 +149,17 @@ function Library() {
   const [removeError, setRemoveError] = useState('');
   const management = useRef<{token: string; afterClose?: () => void} | null>(null);
   const removalVersion = useRef({value: 0});
-  const swipe = useRef<{id: number; x: number; y: number; horizontal: boolean} | null>(null);
+  const swipe = useRef<{id: number; x: number; y: number; horizontal: boolean; lastX: number; lastAt: number; velocity: number} | null>(null);
   const suppressSwipeClick = useRef(false);
-  const tabs = useRef<HTMLDivElement>(null);
   const pageTurn = useShelfPageTurn(tab, pathname === '/library' && Boolean(user) && !authLoading);
-  const {content, viewport} = pageTurn;
+  const {viewport, tabs} = pageTurn;
   const userId = user?.id;
   const query = {userId: userId || '', tab, sort, page};
   const result = useSyncExternalStore(subscribeLibrary, () => getLibrarySnapshot(query), serverLibrarySnapshot);
-  const loading = result.rows === null && !result.error;
   const rows = result.rows || [];
+  const otherTab = tab === 'shelf' ? 'history' : 'shelf';
+  const otherQuery = {userId: userId || '', tab: otherTab as Tab, sort, page: pages[otherTab]};
+  const otherResult = useSyncExternalStore(subscribeLibrary, () => getLibrarySnapshot(otherQuery), serverLibrarySnapshot);
   const searchString = search.toString();
   useLayoutEffect(() => {syncBookRoute('/library' + (searchString ? `?${searchString}` : ''));}, [searchString]);
   useLayoutEffect(() => {
@@ -170,12 +173,15 @@ function Library() {
     const observer = new ResizeObserver(align);
     observer.observe(tablist);
     return () => observer.disconnect();
-  }, [tab, userId, authLoading]);
+  }, [tab, userId, authLoading, tabs]);
   useEffect(() => {setTheme('light');}, [setTheme]);
   useEffect(() => {if (!authLoading && !user) router.replace('/login');}, [authLoading, user, router]);
   useEffect(() => {
     if (userId && pathname === '/library') void loadLibrary({userId, tab, sort, page});
   }, [userId, tab, sort, page, pathname, result.updatedAt]);
+  useEffect(() => {
+    if (userId && pathname === '/library') void loadLibrary({userId, tab: otherTab, sort, page: pages[otherTab]});
+  }, [userId, otherTab, sort, pages, pathname, otherResult.updatedAt]);
   useEffect(() => {
     const versionState = removalVersion.current;
     const popped = (event: PopStateEvent) => {
@@ -223,7 +229,7 @@ function Library() {
     if (nextTab === 'history') params.set('tab', nextTab);
     params.set('sort', nextSort);
     if (nextPage > 1) params.set('page', String(nextPage));
-    const change = () => pageTurn.change(nextTab, () => {setMenu(null); history.replaceState({}, '', '/library?' + params);});
+    const change = () => pageTurn.change(nextTab, () => {setPages(current => ({...current, [nextTab]: nextPage})); setMenu(null); history.replaceState({}, '', '/library?' + params);});
     if (management.current) finishManaging(change);
     else change();
   }
@@ -232,7 +238,8 @@ function Library() {
     suppressSwipeClick.current = false;
     swipe.current = null;
     if (!event.isPrimary || event.button !== 0 || targets || removing || (event.target as HTMLElement).closest('button, select, input, [role="menu"]')) return;
-    swipe.current = {id: event.pointerId, x: event.clientX, y: event.clientY, horizontal: false};
+    setPages(current => current[otherTab] === 1 ? current : {...current, [otherTab]: 1});
+    swipe.current = {id: event.pointerId, x: event.clientX, y: event.clientY, horizontal: false, lastX: event.clientX, lastAt: event.timeStamp, velocity: 0};
   }
 
   function moveSwipe(event: PointerEvent<HTMLElement>) {
@@ -242,11 +249,16 @@ function Library() {
     if (!gesture.horizontal) {
       if (Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx)) {swipe.current = null; return;}
       if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
+      if (!pageTurn.startDrag()) {swipe.current = null; return;}
       gesture.horizontal = true;
       event.currentTarget.setPointerCapture(event.pointerId);
     }
     suppressSwipeClick.current = true;
     event.preventDefault();
+    const elapsed = event.timeStamp - gesture.lastAt;
+    if (elapsed > 0) gesture.velocity = (event.clientX - gesture.lastX) / elapsed;
+    gesture.lastX = event.clientX; gesture.lastAt = event.timeStamp;
+    pageTurn.drag(dx);
   }
 
   function endSwipe(event: PointerEvent<HTMLElement>) {
@@ -254,9 +266,16 @@ function Library() {
     swipe.current = null;
     if (!gesture || gesture.id !== event.pointerId || !gesture.horizontal) return;
     const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
-    if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
-    if (dx < 0 && tab === 'shelf') changeView('history', 1);
-    if (dx > 0 && tab === 'history') changeView('shelf', 1);
+    const quick = event.timeStamp - gesture.lastAt < 100 && Math.abs(gesture.velocity) > .5 && Math.sign(gesture.velocity) === Math.sign(dx);
+    const distance = Math.min(100, (viewport.current?.clientWidth || 300) * .25);
+    const switchTab = Math.abs(dx) >= distance || Math.abs(dx) >= 40 && quick;
+    if (switchTab && Math.abs(dx) >= Math.abs(dy) * 1.25 && (dx < 0 && tab === 'shelf' || dx > 0 && tab === 'history')) changeView(otherTab, 1);
+    else pageTurn.change(tab, () => {});
+  }
+
+  function cancelSwipe() {
+    if (swipe.current?.horizontal) pageTurn.change(tab, () => {});
+    swipe.current = null;
   }
 
   async function remove() {
@@ -297,11 +316,11 @@ function Library() {
       <div inert={managing}><HomeSearchHeader/></div>
       <section className="shelf-panel" aria-label="个人书架"
         onPointerDownCapture={startSwipe} onPointerMove={moveSwipe} onPointerUp={endSwipe}
-        onPointerCancel={() => {swipe.current = null;}} onLostPointerCapture={event => {if (event.target === event.currentTarget) swipe.current = null;}}
+        onPointerCancel={cancelSwipe} onLostPointerCapture={event => {if (event.target === event.currentTarget) cancelSwipe();}}
         onClickCapture={event => {if (suppressSwipeClick.current) {event.preventDefault(); event.stopPropagation(); suppressSwipeClick.current = false;}}}>
         <header className="shelf-toolbar">
           <div ref={tabs} className="shelf-tabs" role="tablist" aria-label="书架与浏览记录">
-            {(['shelf', 'history'] as const).map(value => <button key={value} id={`tab-${value}`} role="tab" tabIndex={tab === value ? 0 : -1} aria-selected={tab === value} aria-controls="shelf-content" onClick={() => changeView(value, 1)} onKeyDown={event => {
+            {(['shelf', 'history'] as const).map(value => <button key={value} id={`tab-${value}`} role="tab" tabIndex={tab === value ? 0 : -1} aria-selected={tab === value} aria-controls={value === tab ? 'shelf-content' : `shelf-preview-${value}`} onClick={() => changeView(value, 1)} onKeyDown={event => {
               if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
               event.preventDefault();
               const next = event.key === 'ArrowLeft' || event.key === 'Home' ? 'shelf' : 'history';
@@ -314,7 +333,12 @@ function Library() {
           </div>
         </header>
         <div ref={viewport} className="shelf-viewport">
-        <div ref={content} id="shelf-content" role="tabpanel" aria-labelledby={`tab-${tab}`} aria-busy={loading}>
+        {(['shelf', 'history'] as const).map(viewTab => {
+          const active = viewTab === query.tab;
+          const result = active ? getLibrarySnapshot(query) : otherResult;
+          const rows = result.rows || [], loading = result.rows === null && !result.error;
+          const tab = viewTab, page = pages[viewTab];
+          return <div key={viewTab} className="shelf-page" id={active ? 'shelf-content' : `shelf-preview-${viewTab}`} data-shelf-tab={viewTab} data-active={active} inert={!active} role="tabpanel" aria-hidden={!active} aria-labelledby={`tab-${viewTab}`} aria-busy={loading}>
           {result.error && result.rows !== null && <p className="shelf-refresh-error" role="alert">更新暂时失败，已保留上次的书架。<button onClick={() => void loadLibrary(query, true)}>重试</button></p>}
           {loading ? <div className="shelf-empty" role="status"><BookOpen size={32}/><p>正在整理你的书架…</p></div> : result.error && result.rows === null ? <div className="shelf-empty" role="alert"><p>{result.error}</p><button onClick={() => void loadLibrary(query, true)}>重新加载</button></div> : rows.length === 0 ? <div className="shelf-empty">
             <div className="shelf-empty-icon">{tab === 'shelf' ? <BookOpen size={32}/> : <History size={32}/>}</div>
@@ -322,14 +346,14 @@ function Library() {
             <p>{tab === 'shelf' ? '找到喜欢的书，加入书架就能随时接着读。' : '浏览书籍或开始阅读后，记录会自动保存在这里。'}</p>
             <Link href="/">去发现好书 <ChevronRight size={15}/></Link>
           </div> : <>
-            <div className="shelf-rows">{rows.map(entry => <ShelfRow key={entry.bookId} entry={entry} tab={tab} managing={managing} selected={selected.some(item => item.bookId === entry.bookId)} menuOpen={menu === entry.bookId}
+            <div className="shelf-rows">{rows.map(entry => <ShelfRow key={entry.bookId} entry={entry} tab={tab} managing={active && managing} selected={selected.some(item => item.bookId === entry.bookId)} menuOpen={active && menu === entry.bookId}
               onMenu={open => setMenu(open ? entry.bookId : null)} onManage={() => startManaging(entry)}
               onSelect={() => setSelected(current => current.some(item => item.bookId === entry.bookId) ? current.filter(item => item.bookId !== entry.bookId) : [...current, entry])}
               onRemove={() => confirmRemove([entry])}/>)}</div>
             {result.total <= 2 && !managing && <div className="shelf-discover"><span>下一本好书，等你发现</span><Link href="/">去精选 <ChevronRight size={14}/></Link></div>}
             {result.total > 20 && <nav className="shelf-pagination" aria-label={tab === 'shelf' ? '书架分页' : '浏览记录分页'}><button disabled={page === 1} onClick={() => changeView(tab, page - 1)}>上一页</button><span>{page} / {Math.ceil(result.total / 20)}</span><button disabled={page * 20 >= result.total} onClick={() => changeView(tab, page + 1)}>下一页</button></nav>}
           </>}
-        </div>
+        </div>;})}
         </div>
       </section>
     </div>

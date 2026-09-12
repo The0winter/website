@@ -79,9 +79,18 @@ export function freezeBookPage(className = 'book-transition-snapshot', source = 
   originals.forEach((original, index) => {
     const copy = copies[index];
     if (!copy) return;
-    const position = getComputedStyle(original).position;
+    const computed = getComputedStyle(original);
+    const position = computed.position;
     if (position === 'fixed' || position === 'sticky') {
       const box = original.getBoundingClientRect();
+      if (position === 'sticky') {
+        // Sticky elements still occupy a layout slot. Keep that slot when
+        // freezing their viewport position, including nested scrolling headers.
+        const spacer = copy.cloneNode(false) as HTMLElement;
+        spacer.removeAttribute('id');
+        Object.assign(spacer.style, {position: 'static', visibility: 'hidden', width: computed.width, height: computed.height, boxSizing: computed.boxSizing, transform: 'none'});
+        copy.before(spacer);
+      }
       // The viewport bounds already include the current transform. Reapplying
       // it would move a copied, still-animating catalog a second time.
       Object.assign(copy.style, {position: 'fixed', top: `${box.top}px`, left: `${box.left}px`, width: `${box.width}px`, height: `${box.height}px`, bottom: 'auto', right: 'auto', margin: '0', transform: 'none'});

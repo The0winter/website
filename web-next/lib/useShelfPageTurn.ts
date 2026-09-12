@@ -1,66 +1,93 @@
 'use client';
 
 import {useCallback, useEffect, useLayoutEffect, useRef} from 'react';
-import {freezeBookPage} from './book-transition';
 import type {LibraryTab} from './library-cache';
 
-type Request = {tab: LibraryTab; commit: () => void};
-type Turn = {to: LibraryTab; snapshot: HTMLElement; animations: Animation[]; queued?: Request; started: boolean};
+type Position = {shelf: number; history: number};
+type Motion = {animations: Animation[]; origin: Position; width: number; dragging: boolean};
 
 export function useShelfPageTurn(tab: LibraryTab, enabled: boolean) {
-  const content = useRef<HTMLDivElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
+  const tabs = useRef<HTMLDivElement>(null);
   const currentTab = useRef(tab);
-  const active = useRef<Turn | null>(null);
+  const active = useRef<Motion | null>(null);
+  const panels = useCallback(() => [...(viewport.current?.querySelectorAll<HTMLElement>('[data-shelf-tab]') ?? [])], []);
+
+  const align = useCallback((progress?: number) => {
+    const bar = tabs.current;
+    if (!bar) return;
+    const shelf = bar.querySelector<HTMLElement>('#tab-shelf'), history = bar.querySelector<HTMLElement>('#tab-history');
+    if (shelf && history) bar.style.setProperty('--shelf-tab-offset', `${shelf.offsetLeft + (history.offsetLeft - shelf.offsetLeft) * (progress ?? (currentTab.current === 'history' ? 1 : 0))}px`);
+  }, [tabs]);
+
   const cancel = useCallback(() => {
-    const turn = active.current;
+    const motion = active.current;
     active.current = null;
-    turn?.animations.forEach(animation => animation.cancel());
-    turn?.snapshot.remove();
+    motion?.animations.forEach(animation => animation.cancel());
+    panels().forEach(panel => {panel.style.transform = '';});
     if (viewport.current) {
       delete viewport.current.dataset.switching;
       viewport.current.style.minHeight = '';
-      viewport.current.inert = false;
     }
-  }, [viewport]);
+    tabs.current?.removeAttribute('data-dragging');
+    align();
+  }, [panels, tabs, align]);
 
-  const change = useCallback(function request(nextTab: LibraryTab, commit: () => void) {
-    // Complete the current page movement before honoring the latest tab click.
-    // This avoids snapping or accumulating stale outgoing pages on rapid taps.
-    if (active.current) {active.current.queued = {tab: nextTab, commit}; return;}
-    const panel = content.current, host = viewport.current;
-    if (!enabled || !panel || !host || nextTab === currentTab.current || matchMedia('(prefers-reduced-motion: reduce)').matches) {commit(); return;}
-    const snapshot = freezeBookPage('shelf-page-outgoing', panel);
+  const capture = useCallback(() => {
+    const host = viewport.current;
+    if (!enabled || !host) return;
+    const width = host.clientWidth;
+    if (!width) return;
+    const origin: Position = {shelf: currentTab.current === 'shelf' ? 0 : -width, history: currentTab.current === 'history' ? 0 : width};
+    if (active.current) for (const panel of panels()) origin[panel.dataset.shelfTab as LibraryTab] = new DOMMatrix(getComputedStyle(panel).transform).m41;
+    active.current?.animations.forEach(animation => animation.cancel());
     host.style.minHeight = `${host.getBoundingClientRect().height}px`;
-    host.dataset.switching = nextTab;
-    host.inert = true;
-    host.append(snapshot);
-    active.current = {to: nextTab, snapshot, animations: [], started: false};
+    host.dataset.switching = 'true';
+    for (const panel of panels()) panel.style.transform = `translateX(${origin[panel.dataset.shelfTab as LibraryTab]}px)`;
+    const motion: Motion = {origin, width, animations: [], dragging: false};
+    active.current = motion;
+    return motion;
+  }, [enabled, panels]);
+
+  const change = useCallback((nextTab: LibraryTab, commit: () => void) => {
+    if (!active.current && nextTab === currentTab.current) {commit(); return;}
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {cancel(); commit(); return;}
+    const motion = capture();
+    if (!motion) {cancel(); commit(); return;}
+    tabs.current?.removeAttribute('data-dragging');
+    const destination: Position = nextTab === 'shelf' ? {shelf: 0, history: motion.width} : {shelf: -motion.width, history: 0};
+    const remaining = Math.abs(destination.shelf - motion.origin.shelf);
+    // Continue from the finger's position; a reversal retargets the current
+    // frame immediately instead of waiting in a 400ms animation queue.
+    const duration = Math.max(120, Math.min(300, 300 * remaining / motion.width));
     commit();
-  }, [content, viewport, enabled]);
-
-  useLayoutEffect(() => {
-    currentTab.current = tab;
-    const turn = active.current, panel = content.current, host = viewport.current;
-    if (!turn) return;
-    if (!enabled || turn.to !== tab || !panel || !host) {cancel(); return;}
-    if (turn.started) return;
-    turn.started = true;
-    const distance = host.clientWidth * (tab === 'history' ? 1 : -1);
-    const options = {duration: 400, easing: 'cubic-bezier(.22,.7,.25,1)', fill: 'forwards' as const};
-    // Both opaque pages travel the same full width; no fade or blank interval.
-    turn.animations = [
-      turn.snapshot.animate([{transform: 'translateX(0)'}, {transform: `translateX(${-distance}px)`}], options),
-      panel.animate([{transform: `translateX(${distance}px)`}, {transform: 'translateX(0)'}], options),
-    ];
-    void Promise.allSettled(turn.animations.map(animation => animation.finished)).then(() => {
-      if (active.current !== turn) return;
-      const queued = turn.queued;
-      cancel();
-      if (queued) change(queued.tab, queued.commit);
+    align(nextTab === 'history' ? 1 : 0);
+    motion.animations = panels().map(panel => {
+      const key = panel.dataset.shelfTab as LibraryTab;
+      return panel.animate([{transform: `translateX(${motion.origin[key]}px)`}, {transform: `translateX(${destination[key]}px)`}], {duration, easing: 'cubic-bezier(.22,.7,.25,1)', fill: 'forwards'});
     });
-  }, [tab, enabled, content, viewport, cancel, change]);
+    void Promise.allSettled(motion.animations.map(animation => animation.finished)).then(() => {if (active.current === motion) cancel();});
+  }, [capture, cancel, panels, align, tabs]);
 
+  const startDrag = useCallback(() => {
+    const motion = capture();
+    if (!motion) return false;
+    motion.dragging = true;
+    tabs.current?.setAttribute('data-dragging', 'true');
+    return true;
+  }, [capture, tabs]);
+
+  const drag = useCallback((distance: number) => {
+    const motion = active.current;
+    if (!motion?.dragging) return;
+    let x = motion.origin.shelf + distance;
+    if (x > 0) x *= .18;
+    if (x < -motion.width) x = -motion.width + (x + motion.width) * .18;
+    for (const panel of panels()) panel.style.transform = `translateX(${x + (panel.dataset.shelfTab === 'history' ? motion.width : 0)}px)`;
+    align(Math.max(0, Math.min(1, -x / motion.width)));
+  }, [panels, align]);
+
+  useLayoutEffect(() => {currentTab.current = tab; if (!enabled) cancel();}, [tab, enabled, cancel]);
   useEffect(() => {
     window.addEventListener('book-navigation-leave', cancel);
     window.addEventListener('pagehide', cancel);
@@ -72,5 +99,5 @@ export function useShelfPageTurn(tab: LibraryTab, enabled: boolean) {
       cancel();
     };
   }, [cancel]);
-  return {content, viewport, change, cancel};
+  return {viewport, tabs, change, startDrag, drag, cancel};
 }

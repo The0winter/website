@@ -32,8 +32,8 @@ for (const width of [320, 390, 768, 1440]) {
     await page.screenshot({path: info.outputPath('empty.png')});
     for (count of [1, 2]) {
       await page.reload();
-      await expect(page.locator('.shelf-row')).toHaveCount(count);
-      await expect(page.locator('.shelf-discover')).toBeVisible();
+      await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(count);
+      await expect(page.locator('#shelf-content .shelf-discover')).toBeVisible();
       const panel = (await page.locator('.shelf-panel').boundingBox())!;
       expect(panel.height).toBeLessThan(count === 1 ? 340 : 480);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -42,7 +42,7 @@ for (const width of [320, 390, 768, 1440]) {
     for (const sort of ['read', 'updated', 'combined']) {
       await page.getByRole('combobox', {name: '书架排序'}).selectOption(sort);
       await expect(page.getByRole('combobox', {name: '书架排序'})).toHaveValue(sort);
-      await expect(page.locator('.shelf-row')).toHaveCount(2);
+      await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(2);
     }
     await page.getByRole('tab', {name: '浏览记录', exact: true}).click();
     await expect(page.getByRole('tab', {name: '浏览记录', exact: true})).toHaveAttribute('aria-selected', 'true');
@@ -88,17 +88,17 @@ test('failed requests can retry and removing the last item on page two returns t
   await expect(page.getByText('把喜欢的故事，放进书架', {exact: true})).toHaveCount(0);
   failLoad = false;
   await page.getByRole('button', {name: '重新加载', exact: true}).click();
-  await expect(page.locator('.shelf-row')).toHaveCount(20);
+  await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(20);
   await page.getByRole('button', {name: '下一页', exact: true}).click();
-  await expect(page.locator('.shelf-row')).toHaveCount(1);
+  await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(1);
   await page.getByRole('button', {name: '管理', exact: true}).click();
   await page.getByRole('checkbox').click();
   await page.getByRole('button', {name: '删除（1）', exact: true}).click();
   await page.getByRole('button', {name: '确认删除', exact: true}).click();
   await expect(page.getByRole('dialog').getByRole('alert')).toContainText('操作失败');
-  await expect(page.locator('.shelf-row')).toHaveCount(1);
+  await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(1);
   await page.getByRole('button', {name: '确认删除', exact: true}).click();
-  await expect(page.locator('.shelf-row')).toHaveCount(20);
+  await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(20);
   await expect(page.getByRole('navigation', {name: '书架分页'})).toHaveCount(0);
   await page.getByRole('combobox', {name: '搜索书名或作者'}).fill('山海 行记');
   await page.getByRole('search').getByRole('button', {name: '搜索', exact: true}).click();
@@ -123,10 +123,10 @@ test('real history survives reload, resumes the chapter and shelf removal preser
   expect((await savedRead).ok()).toBe(true);
   await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
   await page.goto(base + '/library');
-  await expect(page.locator('.shelf-progress')).toContainText('第3章');
+  await expect(page.locator('#shelf-content .shelf-progress')).toContainText('第3章');
   await page.reload();
   await expect(page.locator('.shelf-continue')).toHaveCount(0);
-  await page.locator('.shelf-book').click();
+  await page.locator('#shelf-content .shelf-book').click();
   await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-chapter', '000000000000000000000103');
   await page.goto(base + '/library');
   await page.getByRole('button', {name: '管理', exact: true}).click();
@@ -135,7 +135,7 @@ test('real history survives reload, resumes the chapter and shelf removal preser
   await page.getByRole('button', {name: '确认删除', exact: true}).click();
   await expect(page.getByRole('heading', {name: '把喜欢的故事，放进书架'})).toBeVisible();
   await page.getByRole('tab', {name: '浏览记录', exact: true}).click();
-  await expect(page.locator('.shelf-progress')).toContainText('第3章');
+  await expect(page.locator('#shelf-content .shelf-progress')).toContainText('第3章');
   await page.getByRole('button', {name: '管理', exact: true}).click();
   await page.getByRole('checkbox', {name: '选择：隔离测试：山海行记'}).click();
   await page.getByRole('button', {name: '删除（1）', exact: true}).click();

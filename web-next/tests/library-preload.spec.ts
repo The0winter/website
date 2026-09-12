@@ -34,12 +34,12 @@ test('shelf and history load on home before any click and open without another d
   // Install a trap after the early reads. Opening either tab must use that data.
   await page.route('**/api/users/*/library?*', route => route.fulfill({status: 503, json: {error: 'unexpected later read'}}));
   await page.getByRole('navigation', {name: '移动端主导航'}).getByRole('link', {name: '书架', exact: true}).click();
-  await expect(page.locator('.shelf-row h2')).toHaveText('预加载书架');
+  await expect(page.locator('#shelf-content .shelf-row h2')).toHaveText('预加载书架');
   await expect(page.getByText('正在整理你的书架…')).toHaveCount(0);
-  await expect(page.locator('.shelf-panel [role="alert"]')).toHaveCount(0);
+  await expect(page.locator('#shelf-content [role="alert"]')).toHaveCount(0);
   await page.getByRole('tab', {name: '浏览记录'}).click();
-  await expect(page.locator('.shelf-row h2')).toHaveText('预加载记录');
-  await expect(page.locator('.shelf-panel [role="alert"]')).toHaveCount(0);
+  await expect(page.locator('#shelf-content .shelf-row h2')).toHaveText('预加载记录');
+  await expect(page.locator('#shelf-content [role="alert"]')).toHaveCount(0);
 });
 
 test('an in-flight preload is shared with an early click instead of fetching twice', async ({page}) => {
@@ -55,7 +55,7 @@ test('an in-flight preload is shared with an early click instead of fetching twi
   await expect.poll(() => calls).toBe(1);
   await page.getByRole('navigation', {name: '移动端主导航'}).getByRole('link', {name: '书架', exact: true}).click();
   await expect(page.locator('.library-page')).toBeVisible();
-  release(); await expect(page.locator('.shelf-row')).toHaveCount(1);
+  release(); await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(1);
   expect(calls).toBe(1);
 });
 
@@ -68,24 +68,24 @@ for (const tab of ['shelf', 'history']) {
     });
     await page.goto(base + '/forum');
     await page.getByRole('navigation', {name: '移动端主导航'}).getByRole('link', {name: '书架', exact: true}).click();
-    await expect(page.locator('.shelf-row')).toHaveCount(20);
+    await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(20);
     if (tab === 'history') await page.getByRole('tab', {name: '浏览记录'}).click();
     await page.getByRole('combobox', {name: '书架排序'}).selectOption('updated');
-    await expect(page.locator('.shelf-row')).toHaveCount(20);
+    await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(20);
     await page.getByRole('button', {name: '下一页'}).click();
-    await expect(page.locator('.shelf-row h2')).toHaveText('第二页的书');
+    await expect(page.locator('#shelf-content .shelf-row h2')).toHaveText('第二页的书');
     const source = page.url();
-    await page.locator('.shelf-book').click();
+    await page.locator('#shelf-content .shelf-book').click();
     await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true'); await idle(page);
     await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
     await page.goBack(); await expect(page).toHaveURL(source); await idle(page);
     await page.reload(); await expect(page).toHaveURL(source); await idle(page);
-    await expect(page.locator('.shelf-row h2')).toHaveText('第二页的书');
+    await expect(page.locator('#shelf-content .shelf-row h2')).toHaveText('第二页的书');
     await expect(page.getByRole('tab', {name: tab === 'history' ? '浏览记录' : '书架', exact: true})).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('combobox', {name: '书架排序'})).toHaveValue('updated');
     await page.goBack(); await expect(page).toHaveURL(base + '/forum');
     await page.goForward(); await expect(page).toHaveURL(source);
-    await expect(page.locator('.shelf-row h2')).toHaveText('第二页的书');
+    await expect(page.locator('#shelf-content .shelf-row h2')).toHaveText('第二页的书');
   });
 }
 
@@ -101,7 +101,7 @@ test('shelf details menu returns from reading through details to the shelf', asy
   await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true'); await idle(page);
   await page.goBack(); await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);
   await page.goBack(); await expect(page).toHaveURL(base + '/library'); await idle(page);
-  await expect(page.locator('.shelf-row')).toHaveCount(1);
+  await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(1);
 });
 
 test('guests do not prefetch private data and logout clears cache before another login', async ({page}) => {
@@ -127,19 +127,19 @@ test('guests do not prefetch private data and logout clears cache before another
   await page.getByRole('button', {name: '立即登录', exact: true}).click();
   await expect.poll(() => requested.length).toBe(2);
   await page.getByRole('navigation', {name: '移动端主导航'}).getByRole('link', {name: '书架', exact: true}).click();
-  await expect(page.locator('.shelf-row h2')).toHaveText('第一个帐号的书架');
+  await expect(page.locator('#shelf-content .shelf-row h2')).toHaveText('第一个帐号的书架');
   await page.getByRole('navigation', {name: '移动端主导航'}).getByRole('link', {name: '我', exact: true}).click();
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', {name: '退出登录', exact: true}).click();
   await expect(page).toHaveURL(base + '/');
   await page.goBack();
-  await expect(page.locator('.shelf-row')).toHaveCount(0);
+  await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(0);
   await expect(page.locator('.login-card')).toBeVisible();
   await page.getByPlaceholder('请输入用户名').fill('另一个读者');
   await page.getByPlaceholder('请输入密码').fill('test-password');
   await page.getByRole('button', {name: '立即登录', exact: true}).click();
   await expect(page).toHaveURL(base + '/library');
-  await expect(page.locator('.shelf-row h2')).toHaveText('第二个帐号的书架');
+  await expect(page.locator('#shelf-content .shelf-row h2')).toHaveText('第二个帐号的书架');
   await expect(page.getByText('第一个帐号的书架')).toHaveCount(0);
 });
 
@@ -155,7 +155,7 @@ test('preloading honors the saved sorting preference before entering the shelf',
   await expect.poll(() => sorts).toEqual(['updated', 'updated']);
   await page.getByRole('navigation', {name: '移动端主导航'}).getByRole('link', {name: '书架', exact: true}).click();
   await expect(page.getByRole('combobox', {name: '书架排序'})).toHaveValue('updated');
-  await expect(page.locator('.shelf-row')).toHaveCount(1);
+  await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(1);
 });
 
 for (const width of [320, 390, 768, 1440]) {
@@ -163,7 +163,7 @@ for (const width of [320, 390, 768, 1440]) {
     await session(page);
     await page.route('**/api/users/*/library?*', route => route.fulfill({json: [entry()]}));
     await page.setViewportSize({width, height: 844});
-    await page.goto(base + '/library'); await expect(page.locator('.shelf-row')).toHaveCount(1);
+    await page.goto(base + '/library'); await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(1);
     expect((await page.locator('.shelf-toolbar').boundingBox())!.height).toBe(width < 768 ? 50 : 56);
     expect((await page.getByRole('tab', {name: '书架', exact: true}).boundingBox())!.height).toBeGreaterThanOrEqual(44);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

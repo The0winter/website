@@ -8,7 +8,7 @@ async function shelf(page: Page, chapterId: string | null, firstChapterId: strin
   await page.route('**/api/users/*/history', route => route.fulfill({json: {success: true}}));
   await page.route('**/api/users/*/library?*', route => route.fulfill({json: [{bookId: book, book: {id: book, title: '山海行记', author: '隔离作者'}, chapterId, firstChapterId}]}));
   await page.goto(base + '/library');
-  await expect(page.locator('.shelf-book')).toBeVisible();
+  await expect(page.locator('#shelf-content .shelf-book')).toBeVisible();
 }
 test.beforeEach(async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
@@ -18,11 +18,11 @@ test.beforeEach(async ({page}) => {
 
 test('an unread shelf book opens the first chapter directly, with details still in the menu', async ({page}) => {
   await shelf(page, null);
-  await expect(page.locator('.shelf-book')).toHaveAttribute('href', `/book/${book}/${first}`);
-  await page.locator('.shelf-more-button').click();
+  await expect(page.locator('#shelf-content .shelf-book')).toHaveAttribute('href', `/book/${book}/${first}`);
+  await page.locator('#shelf-content .shelf-more-button').click();
   await expect(page.getByRole('menuitem', {name: '详情'})).toHaveAttribute('href', `/book/${book}`);
   await page.keyboard.press('Escape');
-  await page.locator('.shelf-book').click();
+  await page.locator('#shelf-content .shelf-book').click();
   await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-chapter', first);
   await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
   await expect(page.locator('[data-reader-page]:visible')).toContainText(/^1\//);
@@ -35,8 +35,8 @@ for (const mode of ['horizontal', 'scroll']) {
       localStorage.setItem(`reader-page:${id}`, JSON.stringify({fraction: .45}));
     }, {id: last, mode});
     await shelf(page, last);
-    await expect(page.locator('.shelf-book')).toHaveAttribute('href', `/book/${book}/${last}`);
-    await page.locator('.shelf-book').click();
+    await expect(page.locator('#shelf-content .shelf-book')).toHaveAttribute('href', `/book/${book}/${last}`);
+    await page.locator('#shelf-content .shelf-book').click();
     await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-chapter', last);
     await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
     await expect(page.locator('[data-reader-page]:visible')).not.toContainText(/^1\//);
@@ -47,18 +47,18 @@ for (const mode of ['horizontal', 'scroll']) {
 test('the latest chapter on this device wins over a cached shelf response', async ({page}) => {
   await page.addInitScript(({book, last}) => localStorage.setItem('reader-recent-chapters:v1', JSON.stringify([[book, last]])), {book, last});
   await shelf(page, first);
-  await expect(page.locator('.shelf-book')).toHaveAttribute('href', `/book/${book}/${last}`);
-  await page.locator('.shelf-book').click();
+  await expect(page.locator('#shelf-content .shelf-book')).toHaveAttribute('href', `/book/${book}/${last}`);
+  await page.locator('#shelf-content .shelf-book').click();
   await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-chapter', last);
 });
 
 test('books without readable chapters show a message and can still be managed', async ({page}) => {
   await shelf(page, null, null);
-  await page.locator('.shelf-book').click();
+  await page.locator('#shelf-content .shelf-book').click();
   await expect(page).toHaveURL(base + '/library');
   await expect(page.getByRole('status')).toContainText('暂无可读章节');
   await page.getByRole('button', {name: '管理', exact: true}).click();
-  await page.locator('.shelf-book').click();
+  await page.locator('#shelf-content .shelf-book').click();
   await expect(page.getByRole('checkbox')).toBeChecked();
 });
 
@@ -67,10 +67,12 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
     await page.addInitScript(mode => localStorage.setItem('reader_turnMode', JSON.stringify(mode)), mode);
     await shelf(page, null);
     const length = await page.evaluate(() => history.length);
-    await page.locator('.shelf-book').click();
+    await page.locator('#shelf-content .shelf-book').click();
     const reader = page.locator('.reader-pages-root:visible');
     await expect(reader).toHaveAttribute('data-reader-ready', 'true');
     expect(await page.evaluate(() => history.length)).toBe(length + 1);
+    await expect(reader).toHaveAttribute('data-reader-next', '000000000000000000000102');
+    await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
     await page.keyboard.press('Control+ArrowRight');
     await expect(reader).toHaveAttribute('data-reader-chapter', '000000000000000000000102');
     await page.keyboard.press('m');
@@ -87,7 +89,7 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
     await expect(reader).toHaveAttribute('data-reader-ready', 'true');
     await page.goBack();
     await expect(page).toHaveURL(base + '/library');
-    await expect(page.locator('.shelf-book')).toBeVisible();
+    await expect(page.locator('#shelf-content .shelf-book')).toBeVisible();
     await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
     await page.goForward();
     await expect(reader).toHaveAttribute('data-reader-chapter', last);
@@ -96,13 +98,13 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
     await expect(page.locator('.reader-return:visible')).toHaveAttribute('href', '/library');
     await page.getByRole('link', {name: /^返回书架：/}).click();
     await expect(page).toHaveURL(base + '/library');
-    await expect(page.locator('.shelf-book')).toBeVisible();
+    await expect(page.locator('#shelf-content .shelf-book')).toBeVisible();
   });
 }
 
 test('opening shelf details before reading still returns to those details', async ({page}) => {
   await shelf(page, null);
-  await page.locator('.shelf-more-button').click();
+  await page.locator('#shelf-content .shelf-more-button').click();
   await page.getByRole('menuitem', {name: '详情'}).click();
   await expect(page.locator('.book-detail')).toBeVisible();
   await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);

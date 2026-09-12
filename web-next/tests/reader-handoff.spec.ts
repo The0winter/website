@@ -3,7 +3,10 @@ import {test, expect, type Page} from '@playwright/test';
 const base = 'http://127.0.0.1:3000', book = '000000000000000000000101';
 const chapter = '000000000000000000000102', detail = `${base}/book/${book}`;
 const reader = (page: Page) => page.locator('.reader-pages-root:visible');
-const idle = (page: Page) => expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
+const idle = async (page: Page) => {
+  await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
+  await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
+};
 
 test.use({viewport: {width: 390, height: 844}, hasTouch: true});
 test.beforeEach(async ({page}) => {
@@ -35,7 +38,7 @@ for (const origin of ['details', 'shelf']) {
     const destination = origin === 'shelf' ? `${base}/library` : detail;
     await page.goto(destination);
     for (const action of ['button', 'back']) {
-      await (origin === 'shelf' ? page.locator('.shelf-book') : page.getByRole('link', {name: '立即阅读', exact: true})).click();
+      await (origin === 'shelf' ? page.locator('#shelf-content .shelf-book') : page.getByRole('link', {name: '立即阅读', exact: true})).click();
       await expect(reader(page)).toHaveAttribute('data-reader-ready', 'true'); await idle(page);
       if (action === 'button') {await page.keyboard.press('m'); await page.locator('.reader-return:visible').click();}
       else await page.goBack();

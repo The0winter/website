@@ -1,5 +1,6 @@
 import {cancelBookTransition, transitionBookPage} from './book-transition';
 import {cancelChapterEntry, currentChapterEntry} from './chapter-entry';
+import {installRankingCache, trackRankingReading} from './ranking-cache';
 
 type Route = {kind: 'home' | 'author' | 'library' | 'ranking' | 'detail' | 'reader'; href: string; bookId?: string};
 type RankingView = {activeRank: string; category: string};
@@ -8,6 +9,7 @@ type Router = {push: (href: string) => void; replace: (href: string) => void};
 const listeners = new Set<() => void>();
 let router: Router | undefined;
 let current: Entry | undefined;
+let rankingVisit: Entry | undefined;
 let currentPath = '';
 let pending: Entry | undefined;
 let overlayClosing = false;
@@ -33,7 +35,11 @@ function stored(state = window.history.state): Entry | undefined {
 function entryFor(route: Route, flow = crypto.randomUUID()): Entry {
   return {...route, version: 2, flow, level: route.kind === 'detail' ? 1 : route.kind === 'reader' ? 2 : 0};
 }
-function notify() { listeners.forEach(listener => listener()); }
+function notify() {
+  if (current?.kind === 'ranking') rankingVisit = current;
+  trackRankingReading(current?.flow, current?.kind === 'reader' && !overlay(current));
+  listeners.forEach(listener => listener());
+}
 function mark(entry: Entry) {
   // Only real, rendered home/detail slots have a matching Next route tree.
   // Synthetic predecessors and client-replaced reader chapters must still load
@@ -173,9 +179,11 @@ function onPopState(event: PopStateEvent) {
 
 export function installBookNavigation(value: Router) {
   router = value;
+  const removeRankingCache = installRankingCache();
   window.addEventListener('popstate', onPopState, true);
   window.addEventListener('pagehide', cancelBookTransition);
   return () => {
+    removeRankingCache();
     window.removeEventListener('popstate', onPopState, true);
     window.removeEventListener('pagehide', cancelBookTransition);
     cancelBookTransition(); router = undefined;
@@ -250,7 +258,8 @@ export const readerSettingsOpen = (bookId: string) => Boolean(current?.settings 
 export const bookCatalogOpen = (bookId: string) => Boolean(current?.catalog && current.bookId === bookId);
 export const serverCatalogClosed = () => false;
 export const readerReturnHref = (bookId: string) => current?.kind === 'reader' && current.bookId === bookId && current.libraryReturn || `/book/${bookId}`;
-export const currentRankingView = () => current?.kind === 'ranking' ? current.rankingView : undefined;
+// A departing ranking must not reset its filters while its page is still visible.
+export const currentRankingVisit = () => rankingVisit;
 export function selectRankingView(rankingView: RankingView) {
   // Keep filters with the source entry, including when a reload requires Next
   // to replace its route tree on Back instead of restoring its cached page.

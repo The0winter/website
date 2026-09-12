@@ -25,12 +25,12 @@ async function setup(page: Page, options: {failOnce?: string; failRefresh?: bool
   });
   await page.goto(base + '/forum');
   await page.goto(base + '/library');
-  await expect(page.locator('.shelf-row')).toHaveCount(3);
+  await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(3);
   return deleted;
 }
 
 async function longPress(page: Page, index = 0) {
-  const box = (await page.locator('.shelf-book').nth(index).boundingBox())!;
+  const box = (await page.locator('#shelf-content .shelf-book').nth(index).boundingBox())!;
   await page.mouse.move(box.x + 25, box.y + 35);
   await page.mouse.down();
   await expect(page.locator('.library-page')).toHaveAttribute('data-managing', 'true');
@@ -50,7 +50,7 @@ for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({width, height: 844});
     const deleted = await setup(page);
     await expect(page.locator('.shelf-continue')).toHaveCount(0);
-    const before = (await page.locator('.shelf-cover').first().boundingBox())!;
+    const before = (await page.locator('#shelf-content .shelf-cover').first().boundingBox())!;
     await page.getByRole('button', {name: '更多：山海行记', exact: true}).click();
     const menu = page.getByRole('menu');
     await expect(menu.getByRole('menuitem')).toHaveText(['详情', '删除']);
@@ -65,11 +65,11 @@ for (const width of [320, 390, 768, 1440]) {
     await expect(page.getByRole('checkbox').first()).toBeChecked();
     await expect(page.getByRole('checkbox').nth(1)).not.toBeChecked();
     await expect(page).toHaveURL(base + '/library');
-    await expect.poll(async () => (await page.locator('.shelf-cover').first().boundingBox())!.x - before.x).toBe(width < 768 ? 36 : 44);
+    await expect.poll(async () => (await page.locator('#shelf-content .shelf-cover').first().boundingBox())!.x - before.x).toBe(width < 768 ? 36 : 44);
     await expect(page.getByRole('navigation', {name: '移动端主导航'})).toHaveCount(0);
     const bar = (await page.locator('.shelf-management-bar').boundingBox())!;
     expect(Math.round(bar.y + bar.height)).toBe(844);
-    await page.locator('.shelf-book').nth(1).click();
+    await page.locator('#shelf-content .shelf-book').nth(1).click();
     await expect(page.getByRole('checkbox').nth(1)).toBeChecked();
     await page.getByRole('checkbox').first().click();
     await expect(page.getByRole('checkbox').first()).not.toBeChecked();
@@ -86,7 +86,7 @@ for (const width of [320, 390, 768, 1440]) {
     await expect(page.getByRole('checkbox').nth(1)).toBeChecked();
     await page.getByRole('button', {name: '删除（2）'}).click();
     await page.getByRole('button', {name: '确认删除', exact: true}).click();
-    await expect(page.locator('.shelf-row h2')).toHaveText(['第三本书']);
+    await expect(page.locator('#shelf-content .shelf-row h2')).toHaveText(['第三本书']);
     await expect(page.locator('.library-page')).toHaveAttribute('data-managing', 'false');
     await expect(page.getByRole('dialog')).toHaveCount(0);
     expect(deleted.sort()).toEqual(entries.slice(0, 2).map(entry => entry.bookId));
@@ -116,7 +116,7 @@ test('management button starts empty; back, Escape and switching tabs clear sele
 test('a menu near the bottom opens above the navigation and remains clickable', async ({page}, info) => {
   await page.setViewportSize({width: 390, height: 600});
   const deleted = await setup(page);
-  await page.locator('.shelf-more-button').last().click();
+  await page.locator('#shelf-content .shelf-more-button').last().click();
   const menu = (await page.getByRole('menu').boundingBox())!;
   const nav = (await page.getByRole('navigation', {name: '移动端主导航'}).boundingBox())!;
   expect(menu.y).toBeGreaterThanOrEqual(0);
@@ -138,9 +138,9 @@ test('single item deletion via the menu confirms first and handles a failed refr
   await page.getByRole('button', {name: '更多：山海行记'}).click();
   await page.getByRole('menuitem', {name: '删除'}).click();
   await page.getByRole('button', {name: '确认删除'}).click();
-  await expect(page.locator('.shelf-row')).toHaveCount(2);
-  await expect(page.locator('.shelf-refresh-error')).toBeVisible();
-  await expect(page.locator('.shelf-row h2')).not.toContainText(['山海行记']);
+  await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(2);
+  await expect(page.locator('#shelf-content .shelf-refresh-error')).toBeVisible();
+  await expect(page.locator('#shelf-content .shelf-row h2')).not.toContainText(['山海行记']);
   await expect(page.locator('.library-page')).toHaveAttribute('data-managing', 'false');
 });
 
@@ -151,10 +151,10 @@ test('partial batch failure keeps only failed books selected and retry does not 
   await page.getByRole('button', {name: '删除（2）'}).click();
   await page.getByRole('button', {name: '确认删除'}).click();
   await expect(page.getByRole('dialog').getByRole('alert')).toContainText('已删除 1 项，剩余 1 项操作失败');
-  await expect(page.locator('.shelf-row')).toHaveCount(2);
+  await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(2);
   await expect(page.getByRole('checkbox', {name: '选择：' + entries[1].book.title})).toBeChecked();
   await page.getByRole('button', {name: '确认删除'}).click();
-  await expect(page.locator('.shelf-row h2')).toHaveText(['第三本书']);
+  await expect(page.locator('#shelf-content .shelf-row h2')).toHaveText(['第三本书']);
   await expect(page.locator('.library-page')).toHaveAttribute('data-managing', 'false');
   expect(deleted.sort()).toEqual(entries.slice(0, 2).map(entry => entry.bookId));
 });
@@ -165,7 +165,7 @@ test('touch long press selects once, while a scrolling gesture cancels the hold'
   try {
     await setup(page);
     const cdp = await context.newCDPSession(page);
-    const box = (await page.locator('.shelf-book').first().boundingBox())!;
+    const box = (await page.locator('#shelf-content .shelf-book').first().boundingBox())!;
     const point = {x: box.x + 30, y: box.y + 40};
     await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [point]});
     await cdp.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{...point, y: point.y + 35}]});
