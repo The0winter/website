@@ -110,6 +110,7 @@ test('opening shelf details before reading still returns to those details', asyn
   await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
   await page.getByRole('link', {name: '立即阅读', exact: true}).click();
   await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
+  await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
   await page.keyboard.press('m');
   await page.getByRole('link', {name: /^返回书籍详情：/}).click();
   await expect(page).toHaveURL(`${base}/book/${book}`);

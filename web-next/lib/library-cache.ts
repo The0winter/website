@@ -6,7 +6,7 @@ export type LibrarySort = 'combined' | 'read' | 'updated';
 export type LibraryEntry = {bookId: string; book: Book | null; lastReadAt?: string; lastVisitedAt?: string; chapterId?: string; firstChapterId?: string | null; chapterTitle?: string; latestChapterTitle?: string};
 export type LibraryQuery = {userId: string; tab: LibraryTab; sort: LibrarySort; page: number};
 type Snapshot = {rows: LibraryEntry[] | null; total: number; error: string; updatedAt: number};
-type Record = {snapshot: Snapshot; pending?: Promise<void>; controller?: AbortController};
+type Record = {query: LibraryQuery; snapshot: Snapshot; pending?: Promise<void>; controller?: AbortController};
 const empty: Snapshot = {rows: null, total: 0, error: '', updatedAt: 0};
 const records = new Map<string, Record>();
 const listeners = new Set<() => void>();
@@ -39,7 +39,7 @@ export function loadLibrary(query: LibraryQuery, force = false): Promise<void> {
   let record = records.get(key);
   if (record?.pending) return record.pending;
   if (!force && record?.snapshot.rows && Date.now() - record.snapshot.updatedAt < 60000) return Promise.resolve();
-  record ??= {snapshot: empty};
+  record ??= {query: {...query}, snapshot: empty};
   records.delete(key);
   records.set(key, record);
   while (records.size > 12) {
@@ -81,6 +81,66 @@ export function invalidateLibrary(userId: string) {
     record.snapshot = {...record.snapshot, updatedAt: 0, error: ''};
   });
   notify();
+}
+
+// Refresh the actual visited pages too, including URL-selected sorts and pages
+// other than the first. Do this while the reader is open, before returning.
+export function refreshLibrary(userId: string) {
+  if (sessionUser !== userId) return Promise.resolve([]);
+  const queries = [...records.values()].map(record => record.query);
+  invalidateLibrary(userId);
+  return Promise.all(queries.map(query => loadLibrary(query, true)));
+}
+
+// The loading paper already covers the source when this runs. Update cached
+// lists immediately; the confirmed server write then refreshes exact page edges.
+export function prepareLibraryRead(query: LibraryQuery, entry: LibraryEntry, chapterId: string) {
+  if (sessionUser !== query.userId) return () => {};
+  const now = Date.now(), readAt = new Date(now).toISOString();
+  const clicked = {...entry, chapterId, lastReadAt: readAt, lastVisitedAt: readAt,
+    chapterTitle: entry.chapterId === chapterId ? entry.chapterTitle : undefined};
+  const cached = [...records.values()];
+  const onShelf = query.tab === 'shelf' || cached.some(record => record.query.tab === 'shelf' && record.snapshot.rows?.some(row => row.bookId === entry.bookId));
+  const inHistory = Boolean(entry.lastVisitedAt || entry.lastReadAt) || cached.some(record => record.query.tab === 'history' && record.snapshot.rows?.some(row => row.bookId === entry.bookId));
+  const changes: {record: Record; before: Snapshot; after: Snapshot}[] = [];
+  const time = (value?: string) => value ? Date.parse(value) || 0 : 0;
+  for (const tab of ['shelf', 'history'] as const) for (const sort of ['combined', 'read', 'updated'] as const) {
+    if (tab === 'shelf' && !onShelf) continue;
+    const pages = new Map(cached.filter(record => record.query.tab === tab && record.query.sort === sort).map(record => [record.query.page, record]));
+    const prefix: LibraryEntry[] = [];
+    let pageCount = 0;
+    while (pages.get(pageCount + 1)?.snapshot.rows) {
+      const rows = pages.get(++pageCount)!.snapshot.rows!;
+      prefix.push(...rows);
+      if (rows.length < 20) break;
+    }
+    const reordered = [...prefix.filter(row => row.bookId !== entry.bookId), clicked];
+    const rank = (row: LibraryEntry) => {
+      const read = time(row.lastReadAt || (tab === 'history' ? row.lastVisitedAt : undefined));
+      const updated = time(row.book?.lastUpdated);
+      return [sort === 'read' ? read : sort === 'updated' ? updated : Math.max(read, updated), read, updated];
+    };
+    reordered.sort((a, b) => {const x = rank(a), y = rank(b); return y[0] - x[0] || y[1] - x[1] || y[2] - x[2];});
+    for (const [page, record] of pages) {
+      if (!record.snapshot.rows) continue;
+      const before = record.snapshot;
+      record.controller?.abort(); record.controller = undefined; record.pending = undefined;
+      // Across a gap we cannot invent the preceding page's boundary row. Keep
+      // its existing rows until the eager server refresh supplies the exact page.
+      const rows = page <= pageCount ? reordered.slice((page - 1) * 20, page * 20)
+        : before.rows!.map(row => row.bookId === entry.bookId ? clicked : row);
+      const after = {...before, rows, total: before.total + (tab === 'history' && !inHistory ? 1 : 0), updatedAt: now};
+      record.snapshot = after;
+      changes.push({record, before, after});
+    }
+  }
+  notify();
+  // A failed write must not leave an invented reading order behind, nor undo a
+  // newer read, refresh, deletion or account change that has replaced our data.
+  return () => {
+    for (const {record, before, after} of changes) if (record.snapshot === after) record.snapshot = before;
+    if (sessionUser === query.userId) notify();
+  };
 }
 
 // Apply confirmed deletions even if the following refresh is unavailable.

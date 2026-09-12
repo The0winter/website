@@ -14,9 +14,10 @@ import {useAuth} from '@/contexts/AuthContext';
 import {useReadingSettings} from '@/contexts/ReadingSettingsContext';
 import {useStoredState} from '@/lib/useStoredState';
 import {safeFetch} from '@/lib/request';
-import {getLibrarySnapshot, loadLibrary, removeLibraryEntries, serverLibrarySnapshot, subscribeLibrary, type LibraryEntry as Entry, type LibrarySort as Sort, type LibraryTab as Tab} from '@/lib/library-cache';
+import {getLibrarySnapshot, loadLibrary, prepareLibraryRead, removeLibraryEntries, serverLibrarySnapshot, subscribeLibrary, type LibraryEntry as Entry, type LibrarySort as Sort, type LibraryTab as Tab} from '@/lib/library-cache';
 import {syncBookRoute} from '@/lib/book-navigation';
 import {beginChapterEntry} from '@/lib/chapter-entry';
+import {beginLibraryVisit} from '@/lib/book-visit';
 import {formatRelativeUpdate} from '@/lib/relative-update';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {useShelfPageTurn} from '@/lib/useShelfPageTurn';
@@ -41,9 +42,10 @@ function RemoveDialog({entries, tab, busy, error, onClose, onRemove}: {entries: 
   </dialog>;
 }
 
-function ShelfRow({entry, tab, managing, selected, menuOpen, onMenu, onManage, onSelect, onRemove}: {
+function ShelfRow({entry, tab, managing, selected, menuOpen, onMenu, onManage, onSelect, onRemove, onRead}: {
   entry: Entry; tab: Tab; managing: boolean; selected: boolean; menuOpen: boolean;
   onMenu: (open: boolean) => void; onManage: () => void; onSelect: () => void; onRemove: () => void;
+  onRead: (chapterId: string, token: string) => void;
 }) {
   const title = entry.book?.title || '作品暂不可用';
   const recentChapter = useSyncExternalStore(subscribeReadingSession, () => lastReadChapter(entry.bookId), serverLastReadChapter);
@@ -85,7 +87,10 @@ function ShelfRow({entry, tab, managing, selected, menuOpen, onMenu, onManage, o
       <button type="button" role="checkbox" className="shelf-select" aria-checked={selected} aria-label={`选择：${title}`} tabIndex={managing ? 0 : -1} disabled={!managing} onClick={onSelect}><span>{selected && <Check size={14} strokeWidth={3}/>}</span></button>
     </div>
     <PrefetchLink href={readingChapter ? `/book/${entry.bookId}/${readingChapter}` : `/book/${entry.bookId}`} pendingLabel="正在打开章节…" className="shelf-book" aria-label={title} aria-disabled={!entry.book && !managing} tabIndex={managing ? -1 : 0}
-      onNavigate={() => beginChapterEntry(`/book/${entry.bookId}/${readingChapter}`, entry.chapterId === readingChapter && entry.chapterTitle ? entry.chapterTitle : title, 'resume')}
+      onNavigate={() => {
+        const loading = beginChapterEntry(`/book/${entry.bookId}/${readingChapter}`, entry.chapterId === readingChapter && entry.chapterTitle ? entry.chapterTitle : title, 'resume');
+        if (readingChapter) onRead(readingChapter, loading.token);
+      }}
       onPointerDown={startPress} onPointerUp={cancelPress} onPointerCancel={cancelPress} onPointerLeave={cancelPress}
       onPointerMove={event => {if (press.current && Math.hypot(event.clientX - press.current.x, event.clientY - press.current.y) > 10) {suppressClick.current = true; cancelPress();}}}
       onContextMenu={event => event.preventDefault()} onDragStart={event => event.preventDefault()}
@@ -357,6 +362,7 @@ function Library() {
             <Link href="/">去发现好书 <ChevronRight size={15}/></Link>
           </div> : <>
             <div className="shelf-rows">{rows.map(entry => <ShelfRow key={entry.bookId} entry={entry} tab={tab} managing={active && managing} selected={selected.some(item => item.bookId === entry.bookId)} menuOpen={active && menu === entry.bookId}
+              onRead={(chapterId, token) => beginLibraryVisit({userId: userId!, bookId: entry.bookId, chapterId}, token, prepareLibraryRead(query, entry, chapterId))}
               onMenu={open => setMenu(open ? entry.bookId : null)} onManage={() => startManaging(entry)}
               onSelect={() => setSelected(current => current.some(item => item.bookId === entry.bookId) ? current.filter(item => item.bookId !== entry.bookId) : [...current, entry])}
               onRemove={() => confirmRemove([entry])}/>)}</div>

@@ -3,7 +3,7 @@
 import {useEffect} from 'react';
 import {usePathname, useRouter} from 'next/navigation';
 import {useAuth} from '@/contexts/AuthContext';
-import {invalidateLibrary, prefetchLibrary, type LibrarySort} from '@/lib/library-cache';
+import {refreshLibrary, prefetchLibrary, type LibrarySort} from '@/lib/library-cache';
 
 function savedSort(): LibrarySort {
   try {
@@ -29,7 +29,7 @@ export default function LibraryPrefetch() {
     };
     const changed = (event: Event) => {
       if ((event as CustomEvent<{userId: string}>).detail.userId !== userId) return;
-      invalidateLibrary(userId);
+      void refreshLibrary(userId);
       warm();
     };
     warm();
