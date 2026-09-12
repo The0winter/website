@@ -15,7 +15,7 @@ function waitForPage(href: string, signal: AbortSignal, onSlow?: () => void) {
       : parts[1] === 'author'
       ? visible('.author-page')
       : parts[1] === 'ranking'
-      ? visible('.ranking-content[aria-busy="false"]')
+      ? visible('.ranking-page')
       : parts[3]
       ? visible(`[data-reader-chapter="${CSS.escape(parts[3])}"][data-reader-ready="true"]`)
       : parts[1] === 'book'
@@ -124,8 +124,11 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
   // Preserve the source page underneath the moving loader even if Next swaps
   // the route immediately (including a cached detail page).
   const snapshot = freezeBookPage();
-  const loading = direction === 'enter' && (loadingLabel || /^\/book\/[^/?#]+$/.test(href)) ? bookLoadingPage(href, loadingLabel) : undefined;
-  const duration = direction === 'exit' ? 400 : 240;
+  // Rankings slide in with their own framework and skeleton rows as soon as
+  // the route is ready. Their data request needs no separate loading cover.
+  const ranking = new URL(href, location.origin).pathname === '/ranking';
+  const loading = direction === 'enter' && !ranking && (loadingLabel || /^\/book\/[^/?#]+$/.test(href)) ? bookLoadingPage(href, loadingLabel) : undefined;
+  const duration = direction === 'exit' || ranking ? 400 : 240;
   root.dataset.bookTransition = direction;
   root.dataset.bookTransitionPhase = 'loading';
   const cleanup = () => {

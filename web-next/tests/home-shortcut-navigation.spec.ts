@@ -15,7 +15,11 @@ test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}});
     const motions: {direction?: string; duration: number}[] = [];
-    Object.assign(window, {shortcutMotions: motions});
+    const feedback = {plainLoaders: 0};
+    Object.assign(window, {shortcutMotions: motions, shortcutFeedback: feedback});
+    new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(node => {
+      if (node instanceof Element && node.matches('.book-navigation-loading')) feedback.plainLoaders++;
+    }))).observe(document, {subtree: true, childList: true});
     const animate = Element.prototype.animate;
     Element.prototype.animate = function(frames, options) {
       if (this.classList.contains('book-transition-snapshot')) motions.push({direction: (this as HTMLElement).dataset.motion, duration: Number(typeof options === 'number' ? options : options?.duration)});
@@ -33,11 +37,21 @@ for (const width of [320, 390]) for (const entry of entries) {
     await page.route('**/api/books?*', async route => {await pending; await route.fulfill({headers: {'X-Total-Count': '1'}, json: books});});
     try {
       await page.goto(base);
+      const homeBackground = await page.locator('.mobile-home').evaluate(el => getComputedStyle(el).backgroundColor);
       await open(page, entry.name);
-      await expect(page.locator('.book-navigation-loading')).toContainText(`正在打开${entry.label}…`);
       await expect(page).toHaveURL(base + entry.href);
-      await page.waitForTimeout(500);
-      await expect(page.locator('.book-navigation-loading')).toBeVisible();
+      if (entry.name === '排行') {
+        // The complete ranking frame must appear before its data is released.
+        await idle(page);
+        await expect(page.locator('.ranking-loading')).toBeVisible();
+        await expect(page.locator('.ranking-header')).toBeVisible();
+        await expect(page.locator('.book-navigation-loading')).toHaveCount(0);
+      } else {
+        await expect(page.locator('.book-navigation-loading')).toContainText(`正在打开${entry.label}…`);
+        await page.waitForTimeout(500);
+        await expect(page.locator('.book-navigation-loading')).toBeVisible();
+        await expect(page.locator('.book-navigation-loading')).toHaveCSS('background-color', homeBackground);
+      }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({path: info.outputPath('loading.png')});
       release(); await idle(page);
@@ -50,6 +64,7 @@ for (const width of [320, 390]) for (const entry of entries) {
       await expect(page.locator('.mh-shortcuts')).toBeVisible();
       const motions = await page.evaluate(() => (window as unknown as {shortcutMotions: {direction: string; duration: number}[]}).shortcutMotions);
       expect(motions).toEqual(['enter', 'exit', 'enter', 'exit'].map(direction => ({direction, duration: 400})));
+      if (entry.name === '排行') expect(await page.evaluate(() => (window as unknown as {shortcutFeedback: {plainLoaders: number}}).shortcutFeedback.plainLoaders)).toBe(0);
       await expect(page.locator('.book-transition-snapshot')).toHaveCount(0);
     } finally {release();}
   });
@@ -62,7 +77,10 @@ for (const entry of entries) test(`${entry.name}: Back cancels a pending entry w
   await page.route(entry.name === '排行' ? '**/ranking?_rsc=*' : '**/api/books?*', async route => {await pending; await route.continue();});
   try {
     await page.goto(base); await open(page, entry.name);
-    await expect(page.locator('.book-navigation-loading')).toBeVisible();
+    if (entry.name === '排行') {
+      await expect(page.locator('html')).toHaveAttribute('data-book-transition', 'enter');
+      await expect(page.locator('.book-navigation-loading')).toHaveCount(0);
+    } else await expect(page.locator('.book-navigation-loading')).toBeVisible();
     await page.goBack(); await idle(page);
     await expect(page).toHaveURL(base + '/');
     release(); await page.waitForTimeout(700);
@@ -117,5 +135,49 @@ test('reduced motion keeps the loading feedback until data is ready', async ({pa
     await expect(page.locator('.book-navigation-loading')).toBeVisible();
     release(); await idle(page); await back(page, '新书'); await idle(page);
     expect(await page.evaluate(() => (window as unknown as {shortcutMotions: unknown[]}).shortcutMotions)).toEqual([]);
+  } finally {release();}
+});
+
+test('the ranking frame and its skeleton slide together for 400ms before data arrives', async ({page}, info) => {
+  await page.setViewportSize({width: 390, height: 844});
+  await page.addInitScript(() => {
+    const shadows = new WeakMap<Element, ShadowRoot>();
+    const attach = Element.prototype.attachShadow;
+    Element.prototype.attachShadow = function(options) {
+      const shadow = attach.call(this, options); shadows.set(this, shadow); return shadow;
+    };
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function(frames, options) {
+      const animation = animate.call(this, frames, options);
+      if ((this as HTMLElement).dataset.motion === 'enter' && shadows.get(this)?.querySelector('.ranking-loading')) {
+        animation.pause(); animation.currentTime = 200;
+        const shadow = shadows.get(this)!;
+        Object.assign(window, {rankingSlide: {
+          duration: animation.effect!.getTiming().duration,
+          header: Boolean(shadow.querySelector('.ranking-header')),
+          categories: Boolean(shadow.querySelector('.ranking-categories')),
+          skeleton: Boolean(shadow.querySelector('.ranking-loading')),
+        }});
+      }
+      return animation;
+    };
+  });
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => {release = resolve;});
+  await page.route('**/api/books?*', async route => {await pending; await route.fulfill({json: books});});
+  try {
+    await page.goto(base); await open(page, '排行');
+    const moving = page.locator('.book-transition-snapshot[data-motion=enter]');
+    await expect(moving).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as {rankingSlide: unknown}).rankingSlide)).toEqual({duration: 400, header: true, categories: true, skeleton: true});
+    await expect(page.locator('.book-navigation-loading')).toHaveCount(0);
+    await page.screenshot({path: info.outputPath('ranking-frame-mid-slide.png')});
+    await moving.evaluate(el => el.getAnimations().forEach(animation => animation.finish()));
+    await idle(page);
+    await expect(page.locator('.ranking-loading')).toBeVisible();
+    await page.screenshot({path: info.outputPath('ranking-frame-loading.png')});
+    release();
+    await expect(page.locator('.ranking-row')).toHaveCount(1);
+    await expect(page.locator('.ranking-loading')).toHaveCount(0);
   } finally {release();}
 });
