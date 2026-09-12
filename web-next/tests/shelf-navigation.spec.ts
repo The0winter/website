@@ -70,7 +70,8 @@ test('vertical scroll, short drags and management gestures do not navigate accid
   await expect(page).toHaveURL(base + '/library?sort=combined');
 });
 
-test('shelf loading covers a slow chapter, preserves progress and works on repeated entry', async ({page}, info) => {
+for (const width of [320, 390]) test(`shelf loading slides in for 400ms, preserves progress and repeats at ${width}px`, async ({page}, info) => {
+  await page.setViewportSize({width, height:844});
   await page.addInitScript(id => {
     localStorage.setItem('reader_turnMode', JSON.stringify('scroll'));
     localStorage.setItem(`reader-page:${id}`, JSON.stringify({fraction: .45}));
@@ -84,9 +85,23 @@ test('shelf loading covers a slow chapter, preserves progress and works on repea
     const loader = page.locator('.chapter-loading-page');
     await expect(loader).toBeVisible();
     await expect(loader).toContainText('接着上次阅读');
+    await expect(loader).toHaveAttribute('data-entry-motion', 'enter');
+    const duration = await loader.evaluate(element => {
+      const animation = element.getAnimations()[0];
+      animation.pause(); animation.currentTime = 160;
+      return animation.effect!.getTiming().duration;
+    });
+    expect(duration).toBe(400);
+    await expect(page.locator('.chapter-entry-snapshot')).toHaveCount(1);
+    const left = await loader.evaluate(element => element.getBoundingClientRect().left);
+    expect(left).toBeGreaterThan(0); expect(left).toBeLessThan(width);
+    await page.screenshot({path: info.outputPath('shelf-to-reader-sliding.png')});
+    release();
+    await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
+    await expect(loader).toHaveAttribute('data-text-revealed', 'false');
     await expect.poll(() => page.evaluate(() => Boolean(document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.closest('.chapter-loading-page')))).toBe(true);
     await page.screenshot({path: info.outputPath('chapter-loading.png')});
-    release();
+    await loader.evaluate(element => element.getAnimations()[0].play());
     await expect(loader).toHaveCount(0);
     await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
     await expect(page.locator('[data-reader-page]:visible')).not.toContainText(/^1\//);
@@ -96,8 +111,29 @@ test('shelf loading covers a slow chapter, preserves progress and works on repea
     await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
     await page.locator('.shelf-book').click();
     await expect(loader).toBeVisible();
+    expect(await loader.evaluate(element => element.getAnimations()[0]?.effect?.getTiming().duration)).toBe(400);
     await expect(loader).toHaveCount(0);
     await expect(page.locator('[data-reader-page]:visible')).not.toContainText(/^1\//);
+  } finally {release();}
+});
+
+for (const reduced of [false, true]) test(`shelf entry supports Back cancellation and reduced motion ${reduced}`, async ({page}) => {
+  await page.emulateMedia({reducedMotion: reduced ? 'reduce' : 'no-preference'});
+  await library(page, '?tab=history&sort=updated');
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => {release = resolve;});
+  await page.route(`**/book/${book}/${chapter}?_rsc=*`, async route => {await gate; await route.continue();});
+  try {
+    await page.locator('.shelf-book').click();
+    await expect(page.locator('.chapter-loading-page')).toHaveAttribute('data-entry-motion', reduced ? 'none' : 'enter');
+    if (reduced) await expect(page.locator('.chapter-entry-snapshot')).toHaveCount(0);
+    await page.goBack();
+    await expect(page).toHaveURL(base + '/library?tab=history&sort=updated');
+    await expect(page.locator('.chapter-loading-page,.chapter-entry-snapshot')).toHaveCount(0);
+    release();
+    await expect(page.locator('.shelf-book')).toBeVisible();
+    await page.waitForTimeout(500);
+    await expect(page).toHaveURL(base + '/library?tab=history&sort=updated');
   } finally {release();}
 });
 

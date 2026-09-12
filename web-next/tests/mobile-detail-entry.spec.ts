@@ -23,7 +23,7 @@ async function entryLink(page: Page, origin: string) {
   const sheet = page.getByRole('dialog', {name: '全部目录'});
   await expect(sheet.getByRole('region')).toHaveAttribute('aria-busy', 'false');
   await expect.poll(() => sheet.evaluate(element => getComputedStyle(element).transform)).toBe('matrix(1, 0, 0, 1, 0, 0)');
-  expect(await sheet.evaluate(element => getComputedStyle(element).backgroundColor)).toBe('rgb(244, 236, 230)');
+  expect(await sheet.evaluate(element => getComputedStyle(element).backgroundColor)).toBe('rgb(234, 215, 180)');
   return sheet.locator(`a[href="${href}"]`);
 }
 

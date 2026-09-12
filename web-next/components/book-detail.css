@@ -65,15 +65,15 @@
 .book-catalog-loading { position:absolute; inset:0; display:grid; place-content:center; margin:0; color:#777d73; }
 .book-catalog-message button { text-decoration:underline; }
 @media(max-width:767px) {
-  .book-catalog-sheet { background:var(--home-background); color:var(--home-text); }
-  .book-catalog-header { background:var(--home-background); border-color:var(--home-border); }
-  .book-catalog-header p,.book-catalog-volume-count,.book-catalog-loading { color:var(--home-muted); }
-  .book-catalog-volume-toggle { background:var(--home-surface); }
-  .book-catalog-volume-toggle:hover,.book-catalog-back:hover,.book-catalog-chapter:hover { background:var(--home-soft); color:var(--home-text); }
-  .book-catalog-scrollbar::before { background:var(--home-border); }
-  .book-catalog-thumb { background:#b49b83; box-shadow:0 0 0 2px var(--home-background); }
+  .book-catalog-sheet { --catalog-paper:#ead7b4; --catalog-border:#d9c39c; background:var(--catalog-paper); color:#42331e; }
+  .book-catalog-header { background:var(--catalog-paper); border-color:var(--catalog-border); }
+  .book-catalog-header p,.book-catalog-volume-count,.book-catalog-loading { color:#887451; }
+  .book-catalog-volume-toggle { background:#f2e3c7; }
+  .book-catalog-volume-toggle:hover,.book-catalog-back:hover,.book-catalog-chapter:hover { background:#f5e9d3; }
+  .book-catalog-scrollbar::before { background:var(--catalog-border); }
+  .book-catalog-thumb { background:#b49b73; box-shadow:0 0 0 2px var(--catalog-paper); }
   .book-catalog-scrollbar:hover .book-catalog-thumb,.book-catalog-scrollbar[data-dragging=true] .book-catalog-thumb { background:#8b725c; }
-  .book-catalog-placeholder::before { background:linear-gradient(transparent 30%,var(--home-border) 30%,var(--home-border) 70%,transparent 70%); }
+  .book-catalog-placeholder::before { background:linear-gradient(transparent 30%,var(--catalog-border) 30%,var(--catalog-border) 70%,transparent 70%); }
 }
 .book-hero { --cover-glow:#657e73; --cover-mid:#415e53; --cover-base:#293f38; --cover-wash:#e4ede6; background:radial-gradient(ellipse at 8% 0,var(--cover-wash),transparent 72%),linear-gradient(125deg,#fffdf9,#faf9f6); }
 .book-hero[data-cover-tone=slate] { --cover-glow:#687f93; --cover-mid:#465e75; --cover-base:#2d4054; --cover-wash:#e5ebf1; }

@@ -19,9 +19,10 @@ export function beginChapterEntry(href: string, title: string, position: 'start'
   clearMotion?.();
   const chapterId = href.split('/').at(-1)!;
   const mobileDetail = innerWidth < 768 && location.pathname === href.slice(0, href.lastIndexOf('/'));
+  const mobileEntry = mobileDetail || innerWidth < 768 && location.pathname === '/library';
   const catalog = mobileDetail ? document.querySelector<HTMLElement>('.book-catalog-overlay[data-open=true]') : null;
-  const motion = mobileDetail && !matchMedia('(prefers-reduced-motion: reduce)').matches ? catalog ? 'catalog' : 'enter' : 'none';
-  // Retain only the visible catalog when it slides out; retain the detail page
+  const motion = mobileEntry && !matchMedia('(prefers-reduced-motion: reduce)').matches ? catalog ? 'catalog' : 'enter' : 'none';
+  // Retain only the visible catalog when it slides out; retain the source page
   // beneath an incoming loader. Both snapshots survive a cached route swap.
   const snapshot = motion === 'none' ? null : catalog
     ? freezeBookPage('chapter-entry-snapshot chapter-catalog-snapshot', catalog, clone => {
@@ -59,7 +60,7 @@ export function beginChapterEntry(href: string, title: string, position: 'start'
     ink: style?.getPropertyValue('--reader-ink') || ink, desk, width: style?.getPropertyValue('--reader-width') || `${width}px`,
     textured: reader ? reader.querySelector('.reader-frame')?.getAttribute('data-paper') === 'true' : theme === 'cream',
     paperPosition: readerPaperPosition(paperPage), motion, motionComplete: motion === 'none'};
-  if (motion === 'catalog' || mobileDetail && motion === 'none') entry.minimumVisibleMs = 0;
+  if (motion === 'catalog' || mobileEntry && motion === 'none') entry.minimumVisibleMs = 0;
   // Cancel older chapter requests before the catalog's asynchronous history pop.
   window.dispatchEvent(new Event('chapter-entry-start'));
   // Paint the opaque reading paper before Next can replace the source route.

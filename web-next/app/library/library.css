@@ -77,8 +77,8 @@
 .shelf-dialog .shelf-danger { background:#ce3b42; color:white; }
 .shelf-dialog button:disabled { opacity:.5; }
 @media (max-width:767px) {
-  .library-page { padding:18px 12px calc(88px + env(safe-area-inset-bottom)); }
-  .library-page .mh-topbar { margin-bottom:16px; }
+  .library-page { padding:18px 12px calc(72px + env(safe-area-inset-bottom)); }
+  .library-page .mh-topbar { margin-bottom:12px; }
   .shelf-panel { padding:0 14px; border-color:#efe5dc; border-radius:16px; }
   .shelf-toolbar { min-height:50px; gap:8px; }
   .shelf-tabs { gap:17px; }
