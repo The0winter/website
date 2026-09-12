@@ -93,6 +93,8 @@ export interface Book {
   monthly_views?: number;
   daily_views?: number;
   rating?: number;
+  rankingScore?: number;
+  rankingViews?: number;
   updated_at?: string;
   created_at?: string;
   profiles?: Profile;
