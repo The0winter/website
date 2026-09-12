@@ -137,7 +137,7 @@ for (const width of [320, 390, 768, 1440]) test(`search and ranking omit the glo
   await expect(page.locator('nav[data-site-chrome]')).toHaveCount(0);
   await expect(page.getByRole('button', {name: '周榜', exact: true})).toBeVisible();
   await page.getByRole('button', {name: '周榜', exact: true}).click();
-  await expect(page.getByRole('heading', {level: 1})).toContainText('周榜');
+  await expect(page.getByRole('button', {name: '周榜', exact: true})).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 

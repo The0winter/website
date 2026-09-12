@@ -24,7 +24,7 @@ for (const width of [320, 390, 768, 1440]) test(`ranking navigation and readable
   await expect(page.locator('.ranking-book-info h2').first()).toHaveText('夜无疆');
   for (const [name, sort] of [['周榜', 'rank_week'], ['月榜', 'rank_month'], ['总榜', 'rank_total'], ['浏览榜', 'views'], ['日榜', 'rank_day']]) {
     await page.getByRole('button', {name, exact: true}).click();
-    await expect(page.getByRole('heading', {level: 1})).toHaveText(name);
+    await expect(page.getByRole('region', {name: `全部${name}`, exact: true})).toBeVisible();
     await expect(page.locator('.ranking-content')).toHaveAttribute('aria-busy', 'false');
     expect(new URL(queries.at(-1)!).searchParams.get('orderBy')).toBe(sort);
     await expect(page.getByRole('button', {name, exact: true})).toHaveAttribute('aria-pressed', 'true');
@@ -73,5 +73,5 @@ test('failed and superseded requests never show books from the wrong ranking', a
   await expect(page.getByRole('heading', {name: '这个分类还没有作品'})).toBeVisible();
   await page.waitForTimeout(700);
   await expect(page.locator('.ranking-row')).toHaveCount(0);
-  await expect(page.getByRole('heading', {level: 1})).toHaveText('月榜');
+  await expect(page.getByRole('button', {name: '月榜', exact: true})).toHaveAttribute('aria-pressed', 'true');
 });

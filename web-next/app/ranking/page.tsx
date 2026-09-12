@@ -9,11 +9,11 @@ import {booksApi, type Book} from '@/lib/api';
 import './ranking.css';
 
 const RANKS = [
-  {id: 'day', name: '日榜', sort: 'rank_day', period: '今日', description: '今日人气与口碑'},
-  {id: 'week', name: '周榜', sort: 'rank_week', period: '本周', description: '本周人气与口碑'},
-  {id: 'month', name: '月榜', sort: 'rank_month', period: '本月', description: '本月人气与口碑'},
-  {id: 'total', name: '总榜', sort: 'rank_total', period: '累计', description: '一路积累的好口碑'},
-  {id: 'views', name: '浏览榜', sort: 'views', period: '累计', description: '大家都在读的故事'},
+  {id: 'day', name: '日榜', sort: 'rank_day', period: '今日'},
+  {id: 'week', name: '周榜', sort: 'rank_week', period: '本周'},
+  {id: 'month', name: '月榜', sort: 'rank_month', period: '本月'},
+  {id: 'total', name: '总榜', sort: 'rank_total', period: '累计'},
+  {id: 'views', name: '浏览榜', sort: 'views', period: '累计'},
 ] as const;
 const CATEGORIES = ['全部', '玄幻', '仙侠', '都市', '历史', '科幻', '奇幻', '悬疑'];
 type RankId = typeof RANKS[number]['id'];
@@ -52,7 +52,7 @@ export default function RankingPage() {
         <header className="ranking-header">
           <div className="ranking-titlebar">
             <Link href="/" className="ranking-back" aria-label="返回首页"><ArrowLeft size={21}/></Link>
-            <p className="ranking-title">排行榜<span>发现值得读的故事</span></p>
+            <h1 className="ranking-title">排行榜<span>发现值得读的故事</span></h1>
           </div>
           <nav className="ranking-categories" aria-label="小说分类">
             {CATEGORIES.map(name => <button key={name} type="button" aria-pressed={category === name} onClick={event => {
@@ -72,12 +72,7 @@ export default function RankingPage() {
             </nav>
           </aside>
 
-          <section className="ranking-content" aria-labelledby="ranking-heading" aria-busy={loading}>
-            <div className="ranking-list-heading">
-              <div><h1 id="ranking-heading">{rank.name}</h1><p>{rank.description}</p></div>
-              <span className="ranking-list-limit">TOP 100</span>
-            </div>
-
+          <section className="ranking-content" aria-label={`${category}${rank.name}`} aria-busy={loading}>
             {loading ? <div className="ranking-loading" role="status" aria-label="正在加载排行榜">
               {Array.from({length: 7}, (_, i) => <div className="ranking-skeleton" key={i} aria-hidden="true"><i/><div><i/><i/><i/></div></div>)}
             </div> : result.error ? <div className="ranking-empty" role="alert">
