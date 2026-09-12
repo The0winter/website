@@ -1,8 +1,9 @@
 import {flushSync} from 'react-dom';
+import {mobileReaderCream, readerPaperPosition} from './reader-paper';
 
 type ChapterEntry = {
   token: string; href: string; chapterId: string; title: string; error?: string; position: 'start' | 'resume';
-  paper: string; ink: string; desk: string; width: string; textured: boolean; releasing?: boolean; revealing?: boolean;
+  paper: string; ink: string; desk: string; width: string; textured: boolean; paperPosition: string; releasing?: boolean; revealing?: boolean;
 };
 const listeners = new Set<() => void>();
 let entry: ChapterEntry | null = null;
@@ -22,11 +23,16 @@ export function beginChapterEntry(href: string, title: string, position: 'start'
     green: ['#dcedc8', '#222222', '#cce0b8'], blue: ['#e3edfc', '#222222', '#d5e2f5'],
     dark: ['#1a1a1a', '#a0a0a0', '#121212'],
   };
+  if (innerWidth < 1024) colors.cream = [mobileReaderCream.bg, mobileReaderCream.text, colors.cream[2]];
   let theme = 'cream', width = 1000;
+  let paperPage = 0;
   try {
     theme = JSON.parse(localStorage.getItem('novelhub_theme') || 'null') === 'dark' ? 'dark' : JSON.parse(localStorage.getItem('reader_themeColor') || '"cream"');
     const saved = JSON.parse(localStorage.getItem('reader_pageWidth') || 'null');
     if (typeof saved === 'number' && saved > 0 && saved < 3000) width = saved;
+    if (position === 'resume' && JSON.parse(localStorage.getItem('reader_turnMode') || '"horizontal"') !== 'scroll') {
+      paperPage = JSON.parse(localStorage.getItem(`reader-page:${chapterId}`) || 'null')?.paperPage || 0;
+    }
   } catch { /* A chapter can still be opened without browser storage. */ }
   try {
     if (position === 'start') sessionStorage.setItem(`reader-entry:${chapterId}`, 'start');
@@ -36,7 +42,8 @@ export function beginChapterEntry(href: string, title: string, position: 'start'
   const style = reader ? getComputedStyle(reader) : null;
   entry = {token: crypto.randomUUID(), href, chapterId, title, position, paper: style?.getPropertyValue('--reader-paper') || paper,
     ink: style?.getPropertyValue('--reader-ink') || ink, desk, width: style?.getPropertyValue('--reader-width') || `${width}px`,
-    textured: reader ? reader.querySelector('.reader-frame')?.getAttribute('data-paper') === 'true' : theme === 'cream'};
+    textured: reader ? reader.querySelector('.reader-frame')?.getAttribute('data-paper') === 'true' : theme === 'cream',
+    paperPosition: readerPaperPosition(paperPage)};
   // Cancel older chapter requests before the catalog's asynchronous history pop.
   window.dispatchEvent(new Event('chapter-entry-start'));
   // Paint the opaque reading paper before Next can replace the source route.

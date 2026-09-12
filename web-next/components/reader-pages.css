@@ -34,6 +34,10 @@
 .reader-columns h1 { font-size:1.4em; font-family:inherit; font-weight:700; line-height:1.5; letter-spacing:.01em; margin:16px 0 32px; break-after:avoid; overflow-wrap:anywhere; }
 .reader-paragraph { text-indent:2em; margin:0 0 var(--reader-paragraph-gap); line-height:inherit; orphans:1; widows:1; }
 .reader-paragraph:last-child { margin-bottom:0; }
+@media(max-width:1023px) {
+  .reader-columns { letter-spacing:.015em; text-justify:inter-character; }
+  .reader-columns h1 { font-size:1.2em; font-weight:600; line-height:1.45; margin:12px 0 26px; }
+}
 .reader-paragraph:focus-visible { outline:1px dashed var(--reader-muted); outline-offset:2px; }
 .reader-paragraph[data-marked=true] .reader-paragraph-text { background:var(--reader-mark); box-decoration-break:clone; -webkit-box-decoration-break:clone; border-radius:2px; }
 .reader-paragraph[data-selected=true] .reader-paragraph-text { background:#9f8b6738; box-decoration-break:clone; -webkit-box-decoration-break:clone; }

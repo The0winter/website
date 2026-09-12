@@ -98,7 +98,7 @@ export default function ChapterLoadingPage() {
     };
   }, [token]);
   if (!entry) return null;
-  const style = {'--reader-paper': entry.paper, '--entry-ink': entry.ink, '--entry-desk': entry.desk, '--entry-width': entry.width} as CSSProperties;
+  const style = {'--reader-paper': entry.paper, '--entry-ink': entry.ink, '--entry-desk': entry.desk, '--entry-width': entry.width, '--reader-paper-position': entry.paperPosition} as CSSProperties;
   return <div ref={panel} tabIndex={-1} aria-busy={!entry.error} aria-label={`正在打开章节：${entry.title}`} className="chapter-loading-page" style={style} data-chapter-loading={entry.chapterId} data-loading-visible="true" data-text-revealed={Boolean(entry.revealing)}>
     <div className="chapter-loading-sheet" data-paper={entry.textured}>
       <div role={entry.error ? 'alert' : 'status'} aria-live="polite" className="chapter-loading-message">

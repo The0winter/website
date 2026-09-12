@@ -8,6 +8,7 @@ import {readerParagraphs} from '../../shared/reader-paragraphs.mjs';
 import {cachedReaderCounts,loadReaderCounts,rememberReaderCounts} from '@/lib/reader-chapters';
 import {fillReaderPreview,fitReaderColumnHeight,readerChapterTitle,readerColumnLayout} from '@/lib/reader-layout';
 import {useStoredState} from '@/lib/useStoredState';
+import {readerPaperPosition} from '@/lib/reader-paper';
 import {useAuth} from '@/contexts/AuthContext';
 import type {Book,Chapter} from '@/lib/api';
 import {READER_TURN_DURATION_MS,useReaderPageTurn,type ReaderTurnMode} from './useReaderPageTurn';
@@ -137,7 +138,7 @@ export default function ReaderPages(props:ReaderPageProps) {
   useEffect(()=>{
     if(!layout.width)return;
     if(!scrolling)fraction.current=page/layout.total;
-    try{localStorage.setItem(saveKey,JSON.stringify({fraction:fraction.current}));}catch{ /* Reading remains available without storage. */ }
+    try{localStorage.setItem(saveKey,JSON.stringify({fraction:fraction.current,paperPage:page}));}catch{ /* Reading remains available without storage. */ }
     if(page>=layout.total-2)onNearEnd();
   },[page,layout,saveKey,onNearEnd,scrolling]);
   useLayoutEffect(()=>{
@@ -169,6 +170,7 @@ export default function ReaderPages(props:ReaderPageProps) {
     host.replaceChildren(sheet);
     fitReaderColumnHeight(body,sheet.querySelector('.reader-text-window')!.getBoundingClientRect().height);
     const targetLayout=readerColumnLayout(body),targetPage=direction<0?targetLayout.total-1:0;
+    sheet.style.setProperty('--reader-paper-position',readerPaperPosition(targetPage));
     body.style.transform=`translateX(${-targetPage*targetLayout.step}px)`;
     sheet.querySelector('[data-reader-page]')!.textContent=`${targetPage+1}/${targetLayout.total}`;
     sheet.querySelector('.reader-progress span:last-child')!.textContent=progressAt(props.chapterIndex+direction,(targetPage+1)/targetLayout.total);
@@ -336,7 +338,7 @@ export default function ReaderPages(props:ReaderPageProps) {
       <header className="reader-status-top" data-open={props.toolsVisible} inert={!props.toolsVisible} aria-hidden={!props.toolsVisible}><ReaderReturnLink bookId={book.id} title={title}/></header>
       <button className="reader-menu-access" onClick={onTools} aria-expanded={props.toolsVisible}>阅读菜单</button>
       <div ref={windowRef} className="reader-page-window" tabIndex={0} aria-label={scrolling?'正文，可上下滚动，点击中央打开菜单':`${turnMode==='vertical'?'上下':'左右'}翻页，点击中央打开菜单`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={cancelGesture} onLostPointerCapture={event=>{if(event.target===event.currentTarget)cancelGesture();}} onClick={click} onTouchStart={touchStart} onTouchEnd={touchEnd} onTouchCancel={()=>{touchEdge.current=null;}} onWheel={wheel}>
-        <div ref={surface} className="reader-page-surface">
+        <div ref={surface} className="reader-page-surface" style={{'--reader-paper-position':readerPaperPosition(page)} as CSSProperties}>
         <div ref={textWindow} className="reader-text-window" onScroll={onScroll}>
         <div ref={columns} className="reader-columns" style={{fontFamily,fontSize:`${fontSize}px`,lineHeight,transform:scrolling?'none':`translateX(${-page*(layout.width+40)}px)`}}>
           <h1>{title}</h1>

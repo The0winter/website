@@ -1,5 +1,6 @@
 'use client';
 import {useStoredState} from '@/lib/useStoredState';
+import {mobileReaderCream} from '@/lib/reader-paper';
  
 
 import { useEffect, useCallback, useState, useRef, useSyncExternalStore } from 'react';
@@ -48,7 +49,6 @@ const settingsCache = {
   themeColor: 'cream' as 'gray' | 'cream' | 'green' | 'blue',
   fontFamily: 'sans' as 'sans' | 'serif' | 'kai',
   fontSizeNum: 22,
-  lineHeight: 1.6,
   paraSpacing: 4,
   pageWidth: 1000,
   turnMode: 'horizontal' as ReaderTurnMode,
@@ -131,7 +131,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const [themeColor, setThemeColor] = useStoredState('reader_themeColor',settingsCache.themeColor,v=>['gray','cream','green','blue'].includes(String(v)));
   const [fontFamily, setFontFamily] = useStoredState('reader_fontFamily',settingsCache.fontFamily,v=>['sans','serif','kai'].includes(String(v)));
   const [fontSizeNum, setFontSizeNum] = useStoredState('reader_fontSizeNum',settingsCache.fontSizeNum,v=>typeof v==='number'&&Number.isFinite(v)&&v>=12&&v<=72);
-  const [lineHeight, setLineHeight] = useStoredState('reader_lineHeight',settingsCache.lineHeight,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000);
+  const [lineHeight, setLineHeight] = useStoredState('reader_lineHeight',isDesktop ? 1.6 : 1.5,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000);
   const [paraSpacing, setParaSpacing] = useStoredState('reader_paraSpacing',settingsCache.paraSpacing,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000); 
   const [pageWidth, setPageWidth] = useStoredState('reader_pageWidth',settingsCache.pageWidth,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000);
   const [turnMode,setTurnMode]=useStoredState<ReaderTurnMode>('reader_turnMode',settingsCache.turnMode,value=>turnModes.some(mode=>mode.value===value));
@@ -142,7 +142,6 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   useEffect(() => { settingsCache.themeColor = themeColor; }, [themeColor]);
   useEffect(() => { settingsCache.fontFamily = fontFamily; }, [fontFamily]);
   useEffect(() => { settingsCache.fontSizeNum = fontSizeNum; }, [fontSizeNum]);
-  useEffect(() => { settingsCache.lineHeight = lineHeight; }, [lineHeight]);
   useEffect(() => { settingsCache.paraSpacing = paraSpacing; }, [paraSpacing]);
   useEffect(() => { settingsCache.pageWidth = pageWidth; }, [pageWidth]);
   useEffect(() => { settingsCache.turnMode = turnMode; }, [turnMode]);
@@ -153,7 +152,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
 
   // 主题映射
   const themeMap = {
-    cream:  { name: '羊皮纸', bg: '#e7d2ae', text: '#352a18', line: '#c7b18d', panel: '#faf3e5', desk: '#d9c6a6' },
+    cream:  { name: '羊皮纸', bg: '#e7d2ae', text: '#352a18', ...(!isDesktop ? mobileReaderCream : {}), line: '#c7b18d', panel: '#faf3e5', desk: '#d9c6a6' },
     gray:   { name: '雅致灰', bg: '#f0f0f0', text: '#222222', line: '#dcdcdc', panel: '#ffffff', desk: '#dcdcdc' },
     green:  { name: '护眼绿', bg: '#dcedc8', text: '#222222', line: '#c5e1a5', panel: '#e8f5e9', desk: '#cce0b8' },
     blue:   { name: '极光蓝', bg: '#e3edfc', text: '#222222', line: '#d0e0f8', panel: '#f0f7ff', desk: '#d5e2f5' },
@@ -188,8 +187,10 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     };
 }, [activeTheme, isDesktop]);
 
-  const paraSpacingMap: Record<number, string> = {
+  const paraSpacingMap: Record<number, string> = isDesktop ? {
     2: '0.5rem', 4: '1rem', 6: '1.5rem', 8: '2rem',
+  } : {
+    2: '0.36em', 4: '0.72em', 6: '1.08em', 8: '1.44em',
   };
 
   useEffect(() => {
@@ -293,7 +294,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   },[prefetchPolicy,bookId,chapter?.id,prevChapterId,nextChapterId,nextButtonVisible]);
 
   const fontFamilyValue = {
-    sans: '"PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif',
+    sans: '"PingFang SC", "Noto Sans CJK SC", "Noto Sans SC", "Microsoft YaHei", sans-serif',
     serif: '"Songti SC", "SimSun", serif',
     kai: '"Kaiti SC", "KaiTi", serif',
   }[fontFamily];
@@ -642,7 +643,7 @@ if (loading) return (
                 <div className="flex items-center gap-2">
                     <span className="text-xs opacity-50 font-bold w-10">行高</span>
                     <div className="flex flex-1 gap-2 bg-black/5 rounded-lg p-1">
-                      {[1.6, 1.8, 2.0, 2.4].map((lh) => (
+                      {[1.5, 1.6, 1.8, 2.0, 2.4].map((lh) => (
                         <button
                           key={lh}
                           onClick={() => setLineHeight(lh)}

@@ -3,6 +3,7 @@
 import {useCallback,useLayoutEffect,useRef} from 'react';
 import {flushSync} from 'react-dom';
 import {readerColumnLayout} from '@/lib/reader-layout';
+import {readerPaperPosition} from '@/lib/reader-paper';
 
 export type ReaderTurnMode='horizontal'|'scroll'|'vertical';
 export const READER_TURN_DURATION_MS=200;
@@ -44,6 +45,7 @@ export function useReaderPageTurn({mode,onCommit}:Options) {
     const clone=(prepared || active).cloneNode(true) as HTMLDivElement;
     clone.style.transform='';clone.removeAttribute('data-moving');
     if(!prepared){
+      clone.style.setProperty('--reader-paper-position',readerPaperPosition(target));
       clone.querySelector<HTMLElement>('.reader-columns')!.style.transform=`translateX(${-target*readerColumnLayout(body).step}px)`;
       const page=clone.querySelector<HTMLElement>('[data-reader-page]');
       if(page)page.textContent=`${target+1}/${page.textContent?.split('/')[1] || 1}`;
