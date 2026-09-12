@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 const base = 'http://127.0.0.1:3000';
 const home = (page: Page) => page.locator('.mobile-home');
-const link = (page: Page, name: string) => page.locator('.mh-bottom').getByRole('link', { name: new RegExp(`^${name}(?:\\s|$)`) });
+const link = (page: Page, name: string) => name === '我' ? page.locator('.mobile-account-link:visible') : page.locator('.mh-bottom').getByRole('link', { name: new RegExp(`^${name}(?:\\s|$)`) });
 const releases = new Set<() => void>();
 let pageErrors: string[] = [];
 function gate() {
@@ -114,7 +114,7 @@ test('choosing another item cancels a queued account navigation', async ({ page 
   await expect(page).toHaveURL(base + '/forum');
   const restored = page.waitForResponse('**/api/auth/session');
   session.release(); await restored;
-  await expect(page.getByRole('navigation', { name: '移动端主导航' }).getByRole('link', { name: '我', exact: true })).toHaveAttribute('href', '/login');
+  await expect(link(page, '我')).toHaveAttribute('href', '/login');
   await expect(page).toHaveURL(base + '/forum');
 });
 

@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import Link from './PrefetchLink';
 import AccountLink from './AccountLink';
+import MobileAccountLink from './MobileAccountLink';
 import BookSearch from './BookSearch';
 import { useRouter, usePathname } from 'next/navigation';
 // 1. 引入 Next.js 的图片组件
@@ -146,11 +147,7 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
                    <AccountLink href="/library" aria-label="书架"><Library className="w-5 h-5" /></AccountLink>
                    
                    {/* 用户头像 */}
-                   <AccountLink href="/profile" aria-label="我的">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center ${isDark ? 'bg-[#333]' : 'bg-gray-100'}`}>
-                          <User className="w-4 h-4" />
-                      </div>
-                   </AccountLink>
+                   <MobileAccountLink dark={isDark}/>
                 </div>
             </div>
 

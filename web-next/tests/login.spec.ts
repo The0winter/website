@@ -21,7 +21,7 @@ for (const width of [320, 390, 768, 1440]) {
     const home = page.locator(width < 768 ? '.mobile-home' : '.desktop-home');
     const background = await home.evaluate(element => getComputedStyle(element).backgroundColor);
     expect(background).toBe(width < 768 ? 'rgb(244, 236, 230)' : 'rgb(248, 249, 250)');
-    await (width < 768 ? page.locator('.mh-bottom').getByRole('link', { name: '我', exact: true }) : page.locator('nav').getByRole('link', { name: '登录', exact: true })).click();
+    await (width < 768 ? page.locator('.mobile-account-link:visible') : page.locator('nav').getByRole('link', { name: '登录', exact: true })).click();
     await atLogin(page);
     await expect(page.locator('nav, footer')).toHaveCount(0);
     await expect(page.locator('a[href^="mailto:"]')).toHaveCount(0);
