@@ -51,9 +51,9 @@ test('4jiwx preserves catalog order across volume numbering and joins only pages
     const link = n => site.home + `book/${id}-${n}.html`;
     const metadata = '<meta property="og:novel:book_name" content="测试书"><meta property="og:novel:author" content="甲作者"><div class="bookDetail"><div class="txtb"><dl><dt>总章节：</dt><dd>2章</dd></dl></div></div>';
     const pages = new Map([
-      [url, metadata + `<a href="${link(2)}">最新章节</a><div class="chapter_list"><ul><li><div class="name"><a href="/book/${id}-1.html">第九章 春</a></div></li><li><div class="name"><a href="/book/${id}-2.html">第一章 夏</a></div></li><li><div class="name"><a href="/book/OTHER-1.html">别的书</a></div></li></ul></div>`],
-      [link(1), `<div class="conBox"><div class="conC"><h1>第九章 春</h1><div class="content"><p>首段${watermark}正文。</p></div></div><div class="readPage"><a href="/book/${id}-1-2.html">下一页</a></div></div>`],
-      [link('1-2'), `<div class="conBox"><div class="conC"><h1>第九章 春</h1><div class="content"><p>&lt;img src=\\ 尾段正文。</p></div></div><div class="readPage"><a href="/book/${id}-2.html">下一章</a></div></div>`],
+      [url, metadata + `<div class="chapBox"><div class="direList"><ul><li><div class="name"><a href="/book/${id}-2.html">第一章 夏</a></div></li></ul></div></div><div class="chapter_list"><ul><li><div class="name"><a href="/book/${id}-1.html">第九章 春</a></div></li><li><div class="name"><a href="/book/${id}-2.html">第一章 夏</a></div></li><li><div class="name"><a href="/book/OTHER-1.html">别的书</a></div></li></ul></div>`],
+      [link(1), `<div class="conBox"><div class="conC"><h1>第九章 春</h1><div class="content"><p>首段${watermark}正文。</p></div></div><div class="readPage"><a href="${url}">目录</a><a href="/book/${id}-1-2.html">下一页</a></div></div>`],
+      [link('1-2'), `<div class="conBox"><div class="conC"><h1>第九章 春</h1><div class="content"><p>&lt;img src=\\ 尾段正文。</p></div></div><div class="readPage"><a href="${url}">目录</a><a href="/book/${id}-2.html">下一章</a></div></div>`],
     ]);
     const requests = [];
     const client = {
@@ -72,7 +72,7 @@ test('4jiwx preserves catalog order across volume numbering and joins only pages
     assert.equal(chapter.provenance.length, 2);
     assert.deepEqual(requests, [url, link(1), link('1-2')]);
     await assert.rejects(getCatalog({...spec, author: '乙作者'}, client), /身份不匹配/);
-    pages.set(url, pages.get(url).replace('2章</dd>', '3章</dd>'));
+    pages.set(url, pages.get(url).replace('2章</dd>', '1章</dd>'));
     await assert.rejects(getCatalog(spec, client), /目录数量/);
     pages.set(link('1-2'), pages.get(link('1-2')).replace('下一章', '下一页'));
     await assert.rejects(getChapter(spec, catalog[0], new Set(catalog.map(c => c.link)), client), /另一章/);

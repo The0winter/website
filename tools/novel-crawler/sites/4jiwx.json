@@ -50,7 +50,7 @@
   "spec": {
     "version": 1,
     "kind": "html",
-    "variant": "desktop-4jiwx-v2",
+    "variant": "desktop-4jiwx-v3",
     "title": "${title}",
     "author": "${author}",
     "sourceUrl": "${sourceUrl}",
@@ -87,11 +87,12 @@
         "selector": ".bookDetail .txtb dl:has(dt:contains('总章节')) > dd",
         "pattern": "^([0-9]+)章$"
       },
-      "selectPages": {
-        "selector": ".chapter_page select",
-        "content": ".chapter_list",
-        "responseUrl": "/index.php?action=loadChapterPage",
-        "maxPages": 100
+      "walk": {
+        "next": ".conBox > .readPage a:contains('下一章')",
+        "bookLink": ".conBox > .readPage a:contains('目录')",
+        "chapterPattern": "^/book/${bookId}-(?<chapterId>[0-9]+)(?:-(?<page>[0-9]+))?\\.html$",
+        "recentLinks": ".chapBox .direList:not(.chapter_list) > ul > li .name > a[href^='/book/${bookId}-']",
+        "recentReverse": true
       }
     },
     "chapter": {

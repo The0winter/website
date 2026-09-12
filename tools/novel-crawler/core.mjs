@@ -3,7 +3,8 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {atomicWrite, readJson, hash, safeName, withLock} from './storage.mjs';
 import {makeClient, httpUrl} from './http.mjs';
-import {getCatalog, getChapter, getResource} from './adapters.mjs';
+import {getCatalog, getChapter, getResource, refreshNextChapter} from './adapters.mjs';
+import {navigationCatalog, mergeRecent, navigationReport} from './navigation.mjs';
 import {chapterQuality, qualityReport, sampleCatalog, normalizedTitle} from './quality.mjs';
 import {formatChapterForExport} from './titles.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
@@ -43,6 +44,11 @@ export function validateSpec(input) {
   if (spec.catalog?.selectPages) {
     const config = spec.catalog.selectPages;
     if (!config.selector || !config.content || !Number.isInteger(config.maxPages) || config.maxPages < 1 || config.maxPages > 100 || spec.catalog.next || spec.catalog.json) throw Error('目录下拉分页需要 selector、content、maxPages（1–100），不能混用其他翻页方式');
+  }
+  if (spec.catalog?.walk) {
+    const walk = spec.catalog.walk;
+    if (spec.kind !== 'html' || !spec.catalog.count || spec.catalog.next || spec.catalog.selectPages || spec.catalog.json || !walk.next || !walk.bookLink || !walk.recentLinks || typeof walk.chapterPattern !== 'string' || !walk.chapterPattern.includes('(?<chapterId>')) throw Error('顺序采集需要目录总数、下一章、书籍链接、最新列表和本书章节路径规则，不能混用目录翻页');
+    new RegExp(walk.chapterPattern, 'u');
   }
   if (spec.kind !== 'html' && !(spec.resource?.url || spec.resource?.link)) throw Error('文件来源需配置下载地址或链接选择器');
   spec.allowedHosts = [...new Set([new URL(spec.sourceUrl).hostname, ...(spec.allowedHosts || [])])];
@@ -86,7 +92,7 @@ export function localBookState(spec, {stateDir = defaultStateDir, outputDir} = {
     const saved = catalog.filter(entry => files.has(hash(entry.link) + '.json')).length;
     const exported = readJson(path.join(dir, 'export.json')), file = exportPath(spec, id, outputDir);
     const fileExists = fs.existsSync(file), fileValid = fileExists && exported?.path === file && hash(fs.readFileSync(file)) === exported.hash;
-    const total = catalog.length;
+    const total = spec.catalog?.walk ? readJson(path.join(dir, 'navigation-state.json'), {}).expectedCount || catalog.length : catalog.length;
     if (fileExists && !fileValid) return {state: 'modified', saved, total, message: `已保存 ${saved} / ${total} 章；导出文件存在或已被修改，程序会保护它，拒绝覆盖。`};
     if (saved && saved === total && fileValid) return {state: 'complete', saved, total, message: `已下载完成 · ${saved} 章。再次采集会检查更新，已有正文不会重复下载。`};
     return {state: saved ? 'partial' : 'new', saved, total, message: saved ? `已保存 ${saved} / ${total} 章；继续时自动补齐缺少的章节。` : '尚未保存章节'};
@@ -171,9 +177,9 @@ export async function acquire(input, options = {}) {
     const client = options.client || makeClient({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser, onStatus: options.onStatus, shouldStop, signal: options.signal});
     const initialStats = {...client.stats};
     const started = Date.now(), chapters = [], failures = [];
-    let catalog = [], evidence, report, exportFile, descriptionStatus, paused = false, reusedExport = false;
+    let catalog = [], source, evidence, report, exportFile, descriptionStatus, paused = false, reusedExport = false;
     try {
-      const source = spec.kind === 'html' ? await getCatalog(spec, client) : await getResource(spec, client, dir);
+      source = spec.kind === 'html' ? await getCatalog(spec, client) : await getResource(spec, client, dir);
       catalog = source.catalog;
       evidence = source.evidence;
       const description = source.actual?.description || spec.description || previousSpec?.description;
@@ -191,6 +197,7 @@ export async function acquire(input, options = {}) {
       }
       atomicWrite(specFile, spec);
       const oldCatalog = readJson(path.join(dir, 'catalog.json'));
+      if (spec.catalog?.walk) catalog = navigationCatalog(source, oldCatalog);
       if (oldCatalog && oldCatalog.some((c, i) => !catalog[i] || catalog[i].link !== c.link || catalog[i].title !== c.title)) throw Error('完整目录有删除、插入或改名，暂停续传以保护旧章节位置；需在新状态目录重新采集核对');
       if (spec.kind !== 'html') {
         const previousResource = readJson(path.join(dir, 'accepted-resource.json'));
@@ -199,43 +206,78 @@ export async function acquire(input, options = {}) {
         atomicWrite(path.join(dir, 'accepted-resource.json'), currentResource);
       }
       atomicWrite(path.join(dir, 'catalog.json'), catalog);
-      const targets = mode === 'probe' ? sampleCatalog(catalog, options.samples || 9) : catalog;
+      const walk = !!spec.catalog?.walk;
+      const saveNavigation = () => {
+        atomicWrite(path.join(dir, 'catalog.json'), catalog);
+        atomicWrite(path.join(dir, 'navigation-state.json'), {expectedCount: source.expectedCount, knownCatalog: catalog.length, complete: catalog.length === source.expectedCount, evidence});
+      };
+      const saveNextChapter = (chapter, link, nextChapterEvidence) => {
+        Object.assign(chapter, {nextChapterUrl: link, nextChapterEvidence});
+        atomicWrite(path.join(chaptersDir, hash(chapter.link) + '.json'), {hash: hash(chapter), chapter});
+      };
+      if (walk) saveNavigation();
+      const targets = mode === 'probe' ? (walk ? catalog.slice(0, options.samples || 9) : sampleCatalog(catalog, options.samples || 9)) : catalog;
       const links = new Set(catalog.map(c => c.link));
       let fetched = 0, consecutiveFailures = 0;
-      options.onProgress?.({jobId: id, mode, downloaded: 0, total: targets.length, failed: 0});
-      for (const entry of targets) {
+      const total = mode === 'download' && walk ? source.expectedCount : targets.length;
+      options.onProgress?.({jobId: id, mode, downloaded: 0, total, failed: 0});
+      for (let index = 0; index < total; index++) {
         if (shouldStop()) { paused = true; break; }
-        const chapterFile = path.join(chaptersDir, hash(entry.link) + '.json');
-        const saved = readJson(chapterFile);
-        if (saved && !options.refresh) {
-          if (saved.chapter.link !== entry.link || saved.chapter.chapter_number !== entry.chapter_number || saved.hash !== hash(saved.chapter)) throw Error('章节检查点损坏或与目录不匹配');
-          chapters.push(saved.chapter);
-          consecutiveFailures = 0;
-          options.onProgress?.({jobId: id, mode, downloaded: chapters.length, total: targets.length, failed: failures.length});
-          continue;
-        }
-        if (options.maxNew !== undefined && fetched >= options.maxNew) break;
-        fetched++;
+        let entry = targets[index];
         try {
-          const chapter = source.chapters?.[entry.chapter_number - 1] || (spec.chapter ? await getChapter(spec, entry, links, client) : null);
+          if (!entry) {
+            if (options.maxNew !== undefined && fetched >= options.maxNew) break;
+            const previous = chapters.at(-1);
+            if (!walk || !previous) throw Error('顺序采集缺少上一章检查点');
+            const refreshed = previous.nextChapterUrl ? null : await refreshNextChapter(spec, previous, client);
+            const next = previous.nextChapterUrl || refreshed.link;
+            if (!next) throw Error('下一章链接提前结束，与详情页总数不一致');
+            if (links.has(next)) throw Error('下一章形成循环或回到已采章节，已停止');
+            if (refreshed) saveNextChapter(previous, next, refreshed.evidence);
+            entry = {link: next, chapter_number: index + 1, sourceOrder: index + 1};
+          }
+          const chapterFile = path.join(chaptersDir, hash(entry.link) + '.json');
+          const saved = options.refresh ? null : readJson(chapterFile);
+          if (saved && (saved.chapter.link !== entry.link || saved.chapter.chapter_number !== entry.chapter_number || saved.hash !== hash(saved.chapter))) throw Error('章节检查点损坏或与目录不匹配');
+          if (!saved && options.maxNew !== undefined && fetched >= options.maxNew) break;
+          if (!saved) fetched++;
+          const chapter = saved?.chapter || source.chapters?.[entry.chapter_number - 1] || (spec.chapter ? await getChapter(spec, entry, links, client) : null);
           if (!chapter) throw Error('文件缺少该目录项，且未配置同一来源的补采规则');
           const invalid = chapterQuality(chapter).filter(i => i.level === 'error');
           if (invalid.length) {
             atomicWrite(path.join(dir, 'rejected', hash(entry.link) + '.json'), {chapter, issues: invalid});
             throw Error(invalid.map(i => i.code).join(', '));
           }
-          atomicWrite(chapterFile, {hash: hash(chapter), chapter});
+          if (walk) {
+            if (!Object.hasOwn(chapter, 'nextChapterUrl')) throw Error('章节检查点缺少下一章来源记录');
+            if (!entry.title) {
+              catalog.push({...entry, title: chapter.title});
+              links.add(entry.link);
+              mergeRecent(catalog, source.recent, source.expectedCount);
+              for (const item of catalog) links.add(item.link);
+            }
+            const nextKnown = catalog[index + 1];
+            // A preceding probe or pause may already have saved the extended
+            // catalog. The checked recent-list overlap proves the new successor.
+            const updatedEnding = saved && !chapter.nextChapterUrl && source.recent.some(item => item.link === nextKnown?.link);
+            if (nextKnown && chapter.nextChapterUrl !== nextKnown.link && !updatedEnding) throw Error('下一章链接与已知目录顺序不一致，已停止');
+            if (updatedEnding) saveNextChapter(chapter, nextKnown.link, {kind: 'recent-catalog', ...evidence});
+            if (!nextKnown && chapter.nextChapterUrl && links.has(chapter.nextChapterUrl)) throw Error('下一章形成循环，已停止');
+            if (index + 1 === source.expectedCount && chapter.nextChapterUrl) throw Error('正文仍有下一章但已达到详情页总数，请重新检查来源更新');
+          }
+          if (!saved) atomicWrite(chapterFile, {hash: hash(chapter), chapter});
+          if (walk) saveNavigation();
           chapters.push(chapter);
           consecutiveFailures = 0;
         } catch (error) {
           if (shouldStop()) { paused = true; break; }
-          failures.push(failureDetails(error, {chapter: entry.chapter_number, title: entry.title, link: entry.link}));
+          failures.push(failureDetails(error, {chapter: entry?.chapter_number || index + 1, title: entry?.title, link: entry?.link}));
           // Three consecutive failing pages usually mean the source has stopped serving us.
-          if (error.stopSource || ++consecutiveFailures >= 3) break;
+          if (walk || error.stopSource || ++consecutiveFailures >= 3) break;
         }
-        options.onProgress?.({jobId: id, mode, downloaded: chapters.length, total: targets.length, failed: failures.length});
+        options.onProgress?.({jobId: id, mode, downloaded: chapters.length, total, failed: failures.length});
       }
-      report = qualityReport(catalog, chapters, failures, mode);
+      report = navigationReport(qualityReport(catalog, chapters, failures, mode), source, catalog);
       if (mode === 'download') {
         // Load previously downloaded chapters outside a bounded continuation run too.
         for (const entry of catalog) {
@@ -243,7 +285,7 @@ export async function acquire(input, options = {}) {
           const saved = readJson(path.join(chaptersDir, hash(entry.link) + '.json'));
           if (!options.refresh && saved && saved.hash === hash(saved.chapter) && saved.chapter.link === entry.link && saved.chapter.chapter_number === entry.chapter_number) chapters.push(saved.chapter);
         }
-        report = qualityReport(catalog, chapters, failures, mode);
+        report = navigationReport(qualityReport(catalog, chapters, failures, mode), source, catalog);
         atomicWrite(path.join(dir, 'partial.json'), bookData(spec, chapters));
         if (report.completeAgainstSource && report.structuralPass) {
           const book = bookData(spec, chapters);
@@ -260,7 +302,7 @@ export async function acquire(input, options = {}) {
       exportFile = null;
       if (shouldStop()) paused = true;
       else failures.push(failureDetails(error));
-      report = qualityReport(catalog, chapters, failures, mode);
+      report = navigationReport(qualityReport(catalog, chapters, failures, mode), source, catalog);
       report.structuralPass = false;
       report.completeAgainstSource = false;
     } finally {

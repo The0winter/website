@@ -158,19 +158,55 @@ export async function getCatalog(spec, client) {
   if (config.expectedCount !== undefined && config.expectedCount !== catalog.length) throw Error(`目录数量 ${catalog.length} 与已核实的 ${config.expectedCount} 不同`);
   if (config.count) {
     const expected = Number(selectValue($, config.count));
-    if (!Number.isSafeInteger(expected) || expected < 1 || expected !== catalog.length) throw Error(`目录数量 ${catalog.length} 与详情页声明的 ${expected} 不同`);
+    if (!Number.isSafeInteger(expected) || expected < 1 || expected > 20000 || (config.walk ? expected < catalog.length : expected !== catalog.length)) throw Error(`目录数量 ${catalog.length} 与详情页声明的 ${expected} 不同`);
+    if (config.walk) {
+      const recent = $(config.walk.recentLinks).toArray().map(el => ({title: $(el).text().trim(), link: client.assertUrl(httpUrl($(el).attr('href'), first.url))}));
+      if (config.walk.recentReverse) recent.reverse();
+      if (!recent.length || recent.length > expected || new Set(recent.map(c => c.link)).size !== recent.length || recent.some(c => !c.title || c.title.length > 200)) throw Error('最新章节列表为空、重复或无效');
+      for (const entry of [...catalog, ...recent]) walkChapterIdentity(spec, entry.link);
+      return {actual, catalog: catalog.map((c, i) => ({...c, chapter_number: i + 1})), recent, expectedCount: expected, evidence: {url: first.url, hash: first.hash, fetchedAt: first.fetchedAt}, pages: 1};
+    }
   }
   return {actual, catalog: catalog.map((c, i) => ({...c, chapter_number: i + 1})), evidence: {url: first.url, hash: first.hash, fetchedAt: first.fetchedAt, ...(first.browserPages ? {browserPages: first.browserPages} : {})}, pages: first.browserPages?.length || seenPages.size};
+}
+
+function walkChapterIdentity(spec, url, page = false) {
+  const parsed = new URL(url), match = new RegExp(spec.catalog.walk.chapterPattern, 'u').exec(parsed.pathname);
+  if (parsed.origin !== new URL(spec.sourceUrl).origin || parsed.search || !match?.groups?.chapterId || (!page && match.groups.page)) throw Error('顺序采集链接不属于本书章节，已停止');
+  return match.groups.chapterId;
+}
+
+function nextChapter($, spec, pageUrl, client) {
+  const config = spec.catalog.walk;
+  const home = nextPage($, config.bookLink, pageUrl, client);
+  if (home !== spec.sourceUrl) throw Error('章节所属书籍与请求不符，已停止');
+  const link = nextPage($, config.next, pageUrl, client);
+  if (link === null || link === spec.sourceUrl) return null;
+  walkChapterIdentity(spec, link);
+  return link;
+}
+
+// Only refresh the last page's navigation when a saved ending no longer reaches
+// today's latest list. Previously validated prose is not downloaded again.
+export async function refreshNextChapter(spec, chapter, client) {
+  const url = chapter.provenance.at(-1).url;
+  const response = await client.get(url, {fresh: true, render: (spec.chapter.transport || spec.transport) === 'browser', readySelector: spec.chapter.content, rejectSelectors: spec.chapter.rejectSelectors});
+  if (response.url !== url) throw Error('续传末页发生跳转，已停止');
+  const $ = load(decode(response.body, response.contentType, spec.encoding));
+  if (normalizedTitle(selectValue($, spec.chapter.title)) !== normalizedTitle(chapter.title) || nextPage($, spec.chapter.next, url, client)) throw Error('已保存章节的标题或分页变化，需核对后继续');
+  return {link: nextChapter($, spec, url, client), evidence: {kind: 'chapter-navigation', url, hash: response.hash, fetchedAt: response.fetchedAt}};
 }
 
 export async function getChapter(spec, chapter, catalogLinks, client) {
   const seen = new Set(), parts = [], pageHashes = [], warnings = [];
   const config = spec.chapter;
-  let url = chapter.link, title;
+  let url = chapter.link, title, nextChapterUrl;
+  const walkId = spec.catalog?.walk ? walkChapterIdentity(spec, chapter.link) : null;
   while (url) {
     if (seen.has(url)) throw Error('章节分页形成循环');
     if (seen.size >= (config.maxPages || 20)) throw Error('章节分页超过上限');
     if (url !== chapter.link && catalogLinks.has(url)) throw Error('章节下一页指向另一章，拒绝拼接');
+    if (walkId && walkChapterIdentity(spec, url, true) !== walkId) throw Error('章节下一页指向另一章，拒绝拼接');
     seen.add(url);
     const response = await client.get(url, {render: (config.transport || spec.transport) === 'browser', readySelector: config.content, rejectSelectors: config.rejectSelectors});
     if (response.url !== url) throw Error('章节页面发生跳转，拒绝错配正文');
@@ -191,8 +227,12 @@ export async function getChapter(spec, chapter, catalogLinks, client) {
     parts.push(text);
     pageHashes.push({url, hash: response.hash, fetchedAt: response.fetchedAt});
     url = nextPage($, config.next, response.url, client);
+    if (walkId) {
+      const next = nextChapter($, spec, response.url, client);
+      if (!url) nextChapterUrl = next;
+    }
   }
-  return {...chapter, catalogTitle: chapter.title, title, content: parts.join('\n'), contentFetchedAt: new Date().toISOString(), provenance: pageHashes, extractionWarnings: warnings};
+  return {...chapter, catalogTitle: chapter.title || title, title, content: parts.join('\n'), contentFetchedAt: new Date().toISOString(), provenance: pageHashes, extractionWarnings: warnings, ...(walkId ? {nextChapterUrl} : {})};
 }
 
 export function splitText(text, spec) {
