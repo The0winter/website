@@ -104,6 +104,9 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
   const controller = new AbortController();
   const root = document.documentElement;
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Preserve the source page underneath the moving loader even if Next swaps
+  // the route immediately (including a cached detail page).
+  const snapshot = freezeBookPage();
   const loading = direction === 'enter' && /^\/book\/[^/?#]+$/.test(href) ? bookLoadingPage(href) : undefined;
   const duration = direction === 'exit' ? visible('.reader-pages-root') ? 400 : 180 : 240;
   root.dataset.bookTransition = direction;
@@ -119,20 +122,24 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
   cancelActive = cancel;
   const update = async () => {
     navigate();
-    await Promise.all([
-      waitForPage(href, controller.signal, loading?.slow),
-      // Count from a paint opportunity, including cached and reduced-motion visits.
-      loading ? new Promise<void>(resolve => requestAnimationFrame(() => window.setTimeout(resolve, 400))) : Promise.resolve(),
-    ]);
+    await waitForPage(href, controller.signal, loading?.slow);
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     if (!controller.signal.aborted) root.dataset.bookTransitionPhase = 'animating';
   };
-  const snapshot = loading?.panel ?? freezeBookPage();
   let incoming: HTMLElement | undefined;
   let animation: Animation | undefined;
-  skip = () => { animation?.cancel(); incoming?.remove(); snapshot.remove(); };
-  void update().then(async () => {
-    if (!reduced && !controller.signal.aborted) {
+  skip = () => { animation?.cancel(); incoming?.remove(); loading?.panel.remove(); snapshot.remove(); };
+  // Only the loading page slides in. Loading and motion run together, with no
+  // minimum display timer or second animation when the details are ready.
+  if (loading && !reduced) {
+    loading.panel.dataset.motion = 'enter';
+    animation = loading.panel.animate(
+      [{transform: 'translateX(100%)'}, {transform: 'translateX(0)'}],
+      {duration: 400, easing: 'cubic-bezier(.22,.7,.25,1)', fill: 'forwards'},
+    );
+  }
+  void Promise.all([update(), animation?.finished.catch(() => {})]).then(async () => {
+    if (!loading && !reduced && !controller.signal.aborted) {
       incoming = direction === 'enter' ? freezeBookPage() : undefined;
       const moving = incoming ?? snapshot;
       moving.dataset.motion = direction;
@@ -142,7 +149,7 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
       {duration, easing: 'cubic-bezier(.22,.7,.25,1)', fill: 'forwards'});
       await animation.finished.catch(() => {});
     }
-  }).finally(() => { incoming?.remove(); snapshot.remove(); cleanup(); });
+  }).finally(() => { skip(); cleanup(); });
 }
 
 export function cancelBookTransition() { cancelActive?.(); }

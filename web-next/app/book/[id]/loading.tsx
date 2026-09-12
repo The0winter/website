@@ -1,5 +1,5 @@
 export default function LoadingBook() {
-  return <div role="status" aria-label="正在打开书籍" aria-busy="true" className="min-h-screen bg-gray-50 px-4 py-6 md:py-10">
+  return <div role="status" aria-label="正在打开书籍" aria-busy="true" className="min-h-screen bg-white px-4 py-6 md:py-10">
     <span className="sr-only">正在打开书籍…</span>
     <div aria-hidden="true" className="mx-auto max-w-7xl space-y-6 motion-safe:animate-pulse">
       <div className="flex gap-5 rounded-xl bg-white p-5 md:gap-8 md:p-8">

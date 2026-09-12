@@ -102,32 +102,49 @@ test('shelf loading covers a slow chapter, preserves progress and works on repea
 });
 
 for (const reduced of [false, true]) {
-  test(`home book loading lasts at least 400ms on initial and cached entry, reduced motion ${reduced}`, async ({page}, info) => {
+  test(`home details replace the white loader without an extra wait on initial and cached entry, reduced motion ${reduced}`, async ({page}, info) => {
     await page.emulateMedia({reducedMotion: reduced ? 'reduce' : 'no-preference'});
     await page.goto(base);
     await page.evaluate(() => {
-      const intervals: {start: number; end?: number}[] = [];
-      Object.assign(window, {loadingIntervals: intervals});
+      const intervals: {start: number; ready?: number; end?: number; finished?: number}[] = [];
+      const motions: {loading: boolean; duration: number | undefined}[] = [];
+      Object.assign(window, {loadingIntervals: intervals, loadingMotions: motions});
+      const animate = Element.prototype.animate;
+      Element.prototype.animate = function(frames, options) {
+        const animation = animate.call(this, frames, options);
+        if (document.documentElement.dataset.bookTransition === 'enter' && this.classList.contains('book-transition-snapshot')) {
+          motions.push({loading: this.classList.contains('book-navigation-loading'), duration: typeof options === 'object' ? options.duration as number : options});
+          animation.finished.then(() => {if (intervals.at(-1)) intervals.at(-1)!.finished = performance.now();}).catch(() => {});
+        }
+        return animation;
+      };
       new MutationObserver(() => {
         const shown = !!document.querySelector('.book-navigation-loading');
         const last = intervals.at(-1);
         if (shown && (!last || last.end !== undefined)) intervals.push({start: performance.now()});
         else if (!shown && last && last.end === undefined) last.end = performance.now();
+        const interval = intervals.at(-1);
+        if (interval && !interval.ready && document.querySelector('.book-detail')?.getBoundingClientRect().width) interval.ready = performance.now();
       }).observe(document.body, {childList: true, subtree: true});
     });
     for (let visit = 0; visit < 2; visit++) {
       await page.locator('.mobile-home').locator(`a[href="/book/${book}"]:visible`).first().click();
-      await expect(page.locator('.book-navigation-loading')).toBeVisible();
-      if (!visit) await page.screenshot({path: info.outputPath('book-loading.png')});
       await expect(page.locator('.book-navigation-loading')).toHaveCount(0);
       await expect(page.locator('.book-detail:visible')).toHaveAttribute('data-book-id', book);
       await page.goBack();
       await expect(page).toHaveURL(base + '/');
       await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
     }
-    const timings = await page.evaluate(() => (window as unknown as {loadingIntervals: {start: number; end: number}[]}).loadingIntervals.map(value => value.end - value.start));
+    const {timings, motions} = await page.evaluate(() => {
+      const state = window as unknown as {loadingIntervals: {start: number; end: number; ready: number; finished?: number}[]; loadingMotions: {loading: boolean; duration: number}[]};
+      return {timings: state.loadingIntervals, motions: state.loadingMotions};
+    });
     expect(timings).toHaveLength(2);
-    timings.forEach(duration => expect(duration).toBeGreaterThanOrEqual(400));
+    expect(motions).toEqual(reduced ? [] : Array.from({length: 2}, () => ({loading: true, duration: 400})));
+    timings.forEach(timing => {
+      expect(timing.end - Math.max(timing.ready, timing.finished || timing.ready)).toBeLessThan(200);
+      if (!reduced) expect(timing.end - timing.start).toBeGreaterThanOrEqual(380);
+    });
     await info.attach('loading-durations', {body: JSON.stringify(timings), contentType: 'application/json'});
   });
 }

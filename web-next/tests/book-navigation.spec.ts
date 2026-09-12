@@ -15,7 +15,7 @@ test.beforeEach(async ({page}) => {
 });
 
 for (const width of [390, 1440]) {
-  test(`home entry slides in after details are ready and keeps reader → details → home at ${width}px`, async ({page}) => {
+  test(`home loader slides in before details are ready and keeps reader → details → home at ${width}px`, async ({page}) => {
     await page.setViewportSize({width, height: 844});
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}});
@@ -26,6 +26,8 @@ for (const width of [390, 1440]) {
         if (this.classList.contains('book-transition-snapshot')) animations.push({
           path: location.pathname,
           direction: document.documentElement.dataset.bookTransition,
+          loading: this.classList.contains('book-navigation-loading'),
+          duration: typeof options === 'object' ? options.duration : options,
           keyframes,
           detailReady: Boolean(document.querySelector('.book-detail')?.getBoundingClientRect().width),
         });
@@ -43,11 +45,12 @@ for (const width of [390, 1440]) {
     await page.locator(width < 768 ? '.mobile-home' : '.desktop-home').locator(`a[href="/book/${book}"]:visible`).first().click();
     await expect.poll(() => requested).toBe(true);
     await expect(page.locator('html')).toHaveAttribute('data-book-transition-phase', 'loading');
-    await expect(page.locator('.book-transition-snapshot')).toHaveCount(1);
+    await expect(page.locator('.book-transition-snapshot')).toHaveCount(2);
+    await expect(page.locator('.book-navigation-loading')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
     await details(page);
     expect(await page.evaluate(() => history.length)).toBe(length + 1);
     expect(await page.evaluate(() => (window as Window & {bookAnimations?: unknown[]}).bookAnimations)).toEqual([{
-      path: `/book/${book}`, direction: 'enter', detailReady: true,
+      path: '/', direction: 'enter', detailReady: false, loading: true, duration: 400,
       keyframes: [{transform: 'translateX(100%)'}, {transform: 'translateX(0)'}],
     }]);
     await page.getByRole('link', {name: width < 768 ? '立即阅读' : '开始阅读', exact: true}).click(); await ready(page);
@@ -60,6 +63,69 @@ for (const width of [390, 1440]) {
     expect(await page.evaluate(() => history.length)).toBe(length + 2);
   });
 }
+
+for (const origin of ['/ranking', '/search?q=山海', '/author/000000000000000000000001']) {
+  for (const width of [320, 1440]) {
+    test(`${origin} slides the white loader over the source and reveals details without another motion at ${width}px`, async ({page}, info) => {
+      await page.setViewportSize({width, height: 844});
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}});
+        const original = Element.prototype.animate;
+        const motions: unknown[] = [];
+        Object.assign(window, {entryMotions: motions});
+        Element.prototype.animate = function(frames, options) {
+          const animation = original.call(this, frames, options);
+          if (this.classList.contains('book-transition-snapshot')) {
+            motions.push({loading: this.classList.contains('book-navigation-loading'), duration: typeof options === 'object' ? options.duration : options});
+            // Hold a real intermediate frame to inspect the source underneath.
+            animation.pause(); animation.currentTime = 100;
+          }
+          return animation;
+        };
+      });
+      await page.goto(base + origin);
+      const link = page.locator(`a[href="/book/${book}"]:visible`).first();
+      await expect(link).toBeVisible();
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {release = resolve;});
+      await page.route(`**/book/${book}?_rsc=*`, async route => {await gate; await route.continue();});
+      try {
+        await link.click();
+        const loader = page.locator('.book-navigation-loading');
+        await expect(loader).toBeVisible();
+        await expect(loader).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+        const x = await loader.evaluate(element => element.getBoundingClientRect().left);
+        expect(x).toBeGreaterThan(0); expect(x).toBeLessThan(width);
+        await expect(page.locator('.book-transition-snapshot')).toHaveCount(2);
+        await page.screenshot({path: info.outputPath('loader-sliding.png')});
+        await loader.evaluate(element => element.getAnimations().forEach(animation => animation.finish()));
+        await expect(loader).toBeVisible();
+        release(); await details(page);
+        await expect(page.locator('.book-transition-snapshot')).toHaveCount(0);
+        expect(await page.evaluate(() => (window as unknown as {entryMotions: unknown[]}).entryMotions)).toEqual([{loading: true, duration: 400}]);
+        await page.screenshot({path: info.outputPath('detail-ready.png')});
+      } finally {release();}
+    });
+  }
+}
+
+test('Back during the ranking loader slide cancels the pending request and both overlays', async ({page}) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}}));
+  await page.goto(base + '/search');
+  await page.goto(base + '/ranking');
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => {release = resolve;});
+  await page.route(`**/book/${book}?_rsc=*`, async route => {await gate; await route.continue();});
+  try {
+    await page.locator(`a[href="/book/${book}"]:visible`).first().click();
+    await expect(page.locator('.book-navigation-loading')).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(base + '/search'); await idle(page);
+    await expect(page.locator('.book-transition-snapshot')).toHaveCount(0);
+    release(); await page.waitForTimeout(500);
+    await expect(page).toHaveURL(base + '/search');
+  } finally {release();}
+});
 
 for (const origin of ['direct details', 'search', 'direct reader', 'legacy reader']) {
   test(`${origin}: Back always follows reader, details, home without re-entering a chapter`, async ({page}) => {

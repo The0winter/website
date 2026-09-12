@@ -115,7 +115,7 @@ function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, t
 function onPopState(event: PopStateEvent) {
   const from = current;
   const target = stored(event.state);
-  if (!from || !router) return;
+  if (!from || !router) { cancelBookTransition(); return; }
   // Forward may reopen a separate list visit or login; leave that to Next.
   if (/^\/(login|register)$/.test(location.pathname) || isList(target) && target.kind !== 'home' && target.flow !== from.flow) {
     if (pending) { cancelBookTransition(); pending = undefined; }
@@ -167,8 +167,17 @@ export function installBookNavigation(value: Router) {
 // Called only by Next's onNavigate, so modified clicks still open normal tabs.
 export function navigateBookLink(href: string) {
   const target = routeFor(href);
-  if (!target || !router || !current) return false;
+  if (!target || !router) return false;
   if (document.documentElement.dataset.bookTransition) return true;
+  // Search, ranking and other pages use the same detail loader while keeping
+  // their existing canonical history handling in syncBookRoute.
+  if (target.kind === 'detail' && (!current || !isList(current) && target.bookId !== current.bookId)) {
+    cancelChapterEntry();
+    window.dispatchEvent(new Event('book-navigation-leave'));
+    transitionBookPage(href, 'enter', () => router!.push(href));
+    return true;
+  }
+  if (!current) return false;
   if (current.kind === 'reader' && (current.libraryReturn ? href === current.libraryReturn : target.kind === 'detail' && current.bookId === target.bookId) || current.kind === 'detail' && target.kind === 'home') {
     window.history.back(); return true;
   }
