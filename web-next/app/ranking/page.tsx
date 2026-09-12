@@ -92,7 +92,7 @@ export default function RankingPage() {
                       {book.rating ? <><Star size={13} aria-hidden="true"/><strong>{book.rating.toFixed(1)}</strong></> : '暂无评分'}
                     </span>
                   </div>
-                  <p className="ranking-book-meta"><span>{book.author || book.profiles?.username || '佚名'}</span><span>{book.category || '未分类'}</span></p>
+                  <p className="ranking-book-meta"><span>{book.author || book.profiles?.username || '佚名'}</span></p>
                   <p className="ranking-description">{book.description || '这个故事，等你翻开。'}</p>
                   <div className="ranking-book-stats">
                     {activeRank !== 'views' && <span className="ranking-metric">热度指数 {(book.rankingScore ?? 0).toFixed(1)}</span>}

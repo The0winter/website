@@ -35,8 +35,6 @@
 .ranking-book-info h2 a:hover { color:var(--rank-accent); }
 .ranking-book-meta { display:flex; align-items:baseline; min-width:0; margin-top:8px; font-size:12px; color:var(--rank-muted); }
 .ranking-book-meta>span:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; color:var(--rank-author,#77695d); }
-.ranking-book-meta>span+span { flex-shrink:0; }
-.ranking-book-meta>span+span::before { content:'·'; padding:0 7px; }
 .ranking-description { margin-top:8px; color:var(--rank-muted); font-size:13px; line-height:1.6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ranking-book-stats { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-top:auto; padding-top:8px; font-size:11px; line-height:1.5; color:var(--rank-muted); font-variant-numeric:tabular-nums; }
 .ranking-rating { display:inline-flex; align-items:center; flex-shrink:0; gap:4px; margin-top:4px; color:var(--rank-rating,#a4773d); font-size:16px; line-height:1.5; white-space:nowrap; font-variant-numeric:tabular-nums; }
@@ -88,7 +86,6 @@
   .ranking-book-info h2 { font-size:16px; line-height:1.4; }
   .ranking-book-meta { font-size:10px; margin-top:6px; }
   .ranking-book-meta>span:first-child { font-size:12px; }
-  .ranking-book-meta>span+span::before { padding:0 5px; }
   .ranking-description { display:none; }
   .ranking-book-stats { font-size:10px; padding-top:7px; }
   .ranking-rating { font-size:13px; gap:3px; margin-top:2px; }
