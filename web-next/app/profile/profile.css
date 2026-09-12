@@ -69,7 +69,7 @@
   .profile-theme-sample { height:62px; }
   .profile-appearance-actions>span { flex-basis:100%; }
   .profile-appearance-actions { justify-content:flex-end; }
-  .profile-logout { padding-bottom:8px; }
+  .profile-logout { padding-bottom:24px; }
 }
 @media (max-width:359px) {
   .profile-cover { height:136px; }

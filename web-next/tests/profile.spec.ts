@@ -9,7 +9,7 @@ async function login(page:Page,password:string){
 }
 async function passwordChange(page:Page,previous:string,next:string){
   await page.goto(base+'/profile');
-  await page.getByText('登录密码',{exact:true}).click();
+  await page.getByText('修改密码',{exact:true}).click();
   await page.getByPlaceholder('输入当前密码').fill(previous);
   await page.getByPlaceholder('设置新密码（至少8位）').fill(next);
   await page.getByPlaceholder('再次输入新密码').fill(next);

@@ -286,7 +286,7 @@ return (
             </section>}
 
             {/* ================= 功能入口 ================= */}
-            <div className="profile-shortcuts px-4 md:px-6 pb-2 grid grid-cols-2 gap-3 mt-4">
+            <div className="profile-shortcuts px-4 md:px-6 pb-2 hidden md:grid grid-cols-2 gap-3 mt-4">
                 
                 <Link href="/library" className="group flex items-center p-3 sm:p-4 bg-[var(--profile-soft)] hover:bg-[var(--profile-accent-soft)] border border-[var(--profile-border)] rounded-2xl transition">
                     {/* 修改：手机端图标变小 (h-8 w-8)，右边距变小 (mr-2) */}
@@ -313,11 +313,11 @@ return (
                 </Link>
             </div>
 
-            {adminMode && <div className="px-6 pt-4 text-[var(--profile-text)]"><AdminModeNotice/></div>}
+            {adminMode && <div className="hidden md:block px-6 pt-4 text-[var(--profile-text)]"><AdminModeNotice/></div>}
 
-            {/* ================= 账户安全 (保持原样) ================= */}
+            {/* ================= 账户设置 ================= */}
             <div className="mt-2">
-                <div className="px-8 py-4 flex items-center gap-2 mt-4">
+                <div className="px-8 py-4 hidden md:flex items-center gap-2 mt-4">
                     <Shield className="h-4 w-4 text-[#6a7d60]" />
                     <h3 className="font-bold text-[var(--profile-text)] text-sm">账户安全</h3>
                 </div>
@@ -328,7 +328,7 @@ return (
                         className="flex justify-between items-center px-8 py-4 hover:bg-[var(--profile-soft)] transition cursor-pointer active:bg-[var(--profile-soft)]"
                     >
                         <div>
-                            <div className="font-medium text-[var(--profile-text)] text-sm">登录密码</div>
+                            <div className="font-medium text-[var(--profile-text)] text-sm">修改密码</div>
                             <div className="text-xs text-[var(--profile-muted)] mt-0.5">建议定期修改密码以保护账户安全</div>
                         </div>
                         <ChevronRight className="h-4 w-4 text-[var(--profile-muted)]" />
@@ -356,8 +356,7 @@ return (
                 </button>
             </div>
             
-            {/* 版本号移到里面，避免被截断 */}
-            <p className="text-center text-[var(--profile-muted)] text-xs py-6">v1.0.0</p>
+            <p className="hidden md:block text-center text-[var(--profile-muted)] text-xs py-6">v1.0.0</p>
 
         </div> {/* End of 大容器 */}
 

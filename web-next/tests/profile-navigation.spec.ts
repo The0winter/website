@@ -29,7 +29,8 @@ for (const width of [320, 390, 768, 1440]) {
     await login(page, true);
     await page.goto(base + '/profile');
     await expect(page.getByRole('heading', { name: /隔离管理员/ })).toBeVisible();
-    await expect(page.locator('[data-admin-mode]')).toContainText('管理员模式');
+    if (width < 768) await expect(page.locator('[data-admin-mode]')).toBeHidden();
+    else await expect(page.locator('[data-admin-mode]')).toBeVisible();
     const nav = page.getByRole('navigation', { name: '移动端主导航' });
     if (width < 768) {
       await expect(page.locator('[data-site-chrome]:visible')).toHaveCount(0);
@@ -75,7 +76,8 @@ test('administrator mode does not remain after logout or transfer to a reader ac
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page, true);
   await page.goto(base + '/profile');
-  await expect(page.locator('[data-admin-mode]')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /隔离管理员/ })).toBeVisible();
+  await expect(page.locator('[data-admin-mode]')).toBeHidden();
   await page.getByRole('button', { name: '退出登录', exact: true }).click();
   await expect(page).toHaveURL(base + '/');
   await expect(page.locator('[data-admin-mode]')).toHaveCount(0);
