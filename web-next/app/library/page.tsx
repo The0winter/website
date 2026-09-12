@@ -161,6 +161,16 @@ function Library() {
   const otherQuery = {userId: userId || '', tab: otherTab as Tab, sort, page: pages[otherTab]};
   const otherResult = useSyncExternalStore(subscribeLibrary, () => getLibrarySnapshot(otherQuery), serverLibrarySnapshot);
   const searchString = search.toString();
+  useEffect(() => {
+    const panel = viewport.current?.closest<HTMLElement>('.shelf-panel');
+    if (!panel) return;
+    // Pointer capture moves our pages, but does not cancel the browser's touch
+    // gesture. Consume horizontal touch moves so its tap suppression cannot
+    // swallow fresh clicks after a swipe. Vertical scrolling stays native.
+    const move = (event: TouchEvent) => {if (swipe.current?.horizontal && event.touches.length === 1 && event.cancelable) event.preventDefault();};
+    panel.addEventListener('touchmove', move, {passive: false});
+    return () => panel.removeEventListener('touchmove', move);
+  }, [authLoading, userId, viewport]);
   useLayoutEffect(() => {syncBookRoute('/library' + (searchString ? `?${searchString}` : ''));}, [searchString]);
   useLayoutEffect(() => {
     const tablist = tabs.current;

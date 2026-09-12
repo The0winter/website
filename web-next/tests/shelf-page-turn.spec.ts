@@ -175,3 +175,56 @@ test('a cancelled drag restores the selected page and an edge drag never changes
   await expect(page.locator('.shelf-viewport')).not.toHaveAttribute('data-switching','true');
   await expect(page).toHaveURL(base+'/library?sort=updated&page=2');
 });
+
+test.describe('mobile taps immediately after a swipe', () => {
+  test.use({isMobile: true, hasTouch: true});
+
+  for (const width of [320, 390]) {
+    test(`${width}px accepts a fresh tab tap in either direction before the turn finishes`, async ({page, context}) => {
+      await setup(page, width);
+      for (const direction of [1, -1]) {
+        const source = direction > 0 ? 'shelf' : 'history';
+        await page.locator(`#tab-${source}`).click();
+        await expect(page.locator('.shelf-viewport')).not.toHaveAttribute('data-switching', 'true');
+        const box = (await page.locator(`#tab-${source}`).boundingBox())!;
+        await swipe(page, context, direction);
+        await expect(page.locator(`#tab-${source}`)).toHaveAttribute('aria-selected', 'false');
+        // Raw touch input deliberately skips Playwright's stability retries.
+        // The next tap must work even while the swipe animation is running.
+        await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+        await expect(page.locator(`#tab-${source}`)).toHaveAttribute('aria-selected', 'true', {timeout: 500});
+      }
+    });
+
+    test(`${width}px accepts row actions and bottom navigation without a post-swipe dead period`, async ({page, context}) => {
+      await setup(page, width);
+      await swipe(page, context, 1);
+      await page.waitForTimeout(320);
+      const more = page.locator('#shelf-content .shelf-more-button').first();
+      const box = (await more.boundingBox())!;
+      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(page.getByRole('menu')).toBeVisible({timeout: 500});
+      await page.keyboard.press('Escape');
+      const home = (await page.getByRole('navigation', {name: '移动端主导航'}).getByRole('link', {name: '精选', exact: true}).boundingBox())!;
+      await swipe(page, context, -1);
+      await page.touchscreen.tap(home.x + home.width / 2, home.y + home.height / 2);
+      await expect(page).toHaveURL(base + '/');
+    });
+  }
+
+  test('vertical touch scrolling stays native and does not switch tabs or enter management', async ({page, context}) => {
+    await setup(page, 390);
+    await page.getByRole('tab', {name: '浏览记录'}).tap();
+    await expect(page.locator('#shelf-content .shelf-row')).toHaveCount(3);
+    await expect(page.locator('.shelf-viewport')).not.toHaveAttribute('data-switching', 'true');
+    await page.setViewportSize({width: 390, height: 420});
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x: 150, y: 290, id: 1}]});
+    for (let step = 1; step <= 6; step++) await cdp.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: 150, y: 290 - step * 25, id: 1}]});
+    await cdp.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(40);
+    await expect(page.getByRole('tab', {name: '浏览记录'})).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.library-page')).toHaveAttribute('data-managing', 'false');
+    await cdp.detach();
+  });
+});
