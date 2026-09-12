@@ -82,13 +82,14 @@ for (const width of [320, 390]) test(`creator actions open the matching creation
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath(`create-${width}.png`) });
   await page.getByRole('button', { name: '取消', exact: true }).click();
-  await page.goBack(); await expect(modal(page)).toBeVisible();
+  await expect(page.locator('.mw-view')).toHaveCount(0);
+  await expect(modal(page)).toBeVisible();
   await modal(page).getByRole('link', { name: '写一章', exact: true }).click();
   await expect(page.getByPlaceholder('请输入章节标题')).toBeVisible();
   await expect(page.getByRole('button', { name: '存草稿', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath(`editor-${width}.png`) });
-  await page.goBack(); await expect(modal(page)).toBeVisible();
+  await page.goBack(); await expect(page.locator('.mw-view')).toHaveCount(0); await expect(modal(page)).toBeVisible();
   await modal(page).getByRole('link', { name: '目录与草稿', exact: true }).click();
   await expect(page.getByText('目录与设置', { exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath(`manager-${width}.png`) });
@@ -104,20 +105,22 @@ for (const width of [320, 390]) for (const action of ['新建作品', '作品管
     await launch(page).click();
     const marker = await page.evaluate(() => history.state.mobileWriter);
     await modal(page).getByRole('link', { name: new RegExp(action) }).click();
-    await expect(page.getByRole('heading', { name: '作品管理', exact: true })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: action, exact: true })).toBeVisible();
     if (action === '新建作品') await expect(page.getByPlaceholder('请输入书名')).toBeVisible();
     await page.goBack();
+    await expect(page.locator('.mw-view')).toHaveCount(0);
     await expect(modal(page)).toBeVisible();
     expect(await page.evaluate(() => history.state.mobileWriter)).toBe(marker);
     expect(await page.evaluate(() => history.length)).toBe(initialLength + 2);
 
     await page.goForward();
-    await expect(page.getByRole('heading', { name: '作品管理', exact: true })).toBeVisible();
-    await expect(modal(page)).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: action, exact: true })).toBeVisible();
+    await expect(modal(page)).toBeVisible();
     // Reloading a child route must retain the same parent history entry.
     await page.reload();
     if (action === '新建作品') await page.getByRole('button', { name: '取消', exact: true }).click();
-    await page.getByRole('button', { name: '返回创作中心', exact: true }).click();
+    else await page.getByRole('button', { name: '返回创作中心', exact: true }).click();
+    await expect(page.locator('.mw-view')).toHaveCount(0);
     await expect(modal(page)).toBeVisible();
     await expect(modal(page).getByRole('heading', { name: book.title })).toBeVisible();
     expect(await page.evaluate(() => history.state.mobileWriter)).toBe(marker);
@@ -134,6 +137,7 @@ test('returning from work management restores the creation center over its forum
   await launch(page).click();
   await modal(page).getByRole('link', { name: /作品管理/ }).click();
   await page.getByRole('button', { name: '返回创作中心', exact: true }).click();
+  await expect(page.locator('.mw-view')).toHaveCount(0);
   await expect(page).toHaveURL(`${base}/forum`);
   await expect(modal(page)).toBeVisible();
   await modal(page).getByRole('button', { name: '关闭创作中心' }).click();
@@ -191,4 +195,134 @@ test('Back during the reveal closes from its current size without flashing full-
   expect(sizes.after).toBeLessThanOrEqual(sizes.before + 2);
   await expect(modal(page)).toHaveCount(0);
   await expect(launch(page)).toBeFocused();
+});
+
+for (const width of [320, 390]) for (const action of ['新建作品', '作品管理']) {
+  test(`${action} keeps the center mounted and loads inside a 400ms sliding panel at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(base); await launch(page).click();
+    await expect(modal(page)).toHaveAttribute('data-ready', 'true');
+    await page.evaluate(() => {
+      const center = document.querySelector<HTMLDialogElement>('.mw-dialog')!;
+      const probe = { done: false, frames: [] as boolean[], opened: 0, ready: 0, radialRestarts: 0, motion: [] as { name: string; duration: number; x: number; y: number }[] };
+      Object.assign(window, { writerLayerProbe: probe });
+      const observer = new MutationObserver(() => {
+        if (!probe.opened && document.querySelector('.mw-view-loading')) probe.opened = performance.now();
+        if (!probe.ready && document.querySelector('.mw-view-panel[data-ready=true]')) probe.ready = performance.now();
+        if (probe.done) observer.disconnect();
+      });
+      observer.observe(center, { childList: true, subtree: true, attributes: true });
+      document.addEventListener('animationstart', event => {
+        if (event.animationName === 'mw-reveal-in') probe.radialRestarts++;
+        if (!(event.target as HTMLElement).matches('.mw-view-panel')) return;
+        const style = getComputedStyle(event.target as HTMLElement);
+        const transform = new DOMMatrix(style.transform);
+        probe.motion.push({ name: event.animationName, duration: parseFloat(style.animationDuration) * 1000, x: transform.m41, y: transform.m42 });
+      });
+      function sample() {
+        probe.frames.push(center.isConnected && center.open && center.dataset.ready === 'true' && getComputedStyle(center.querySelector('.mw-reveal')!).transform === 'none');
+        if (!probe.done) requestAnimationFrame(sample);
+      }
+      requestAnimationFrame(sample);
+    });
+    await modal(page).getByRole('link', { name: new RegExp(action) }).click();
+    const panel = page.locator('.mw-view-panel');
+    await expect(panel).toHaveAttribute('data-ready', 'true');
+    const geometry = await panel.evaluate(element => {
+      const box = element.getBoundingClientRect();
+      return { height: box.height, top: box.top, viewport: innerHeight };
+    });
+    if (action === '新建作品') { expect(geometry.height).toBeLessThan(geometry.viewport); expect(geometry.top).toBeGreaterThan(0); }
+    else expect(geometry.height).toBe(geometry.viewport);
+    await page.screenshot({ path: info.outputPath(`loaded-${action}-${width}.png`) });
+    if (action === '新建作品') await page.getByRole('button', { name: '取消', exact: true }).click();
+    else await page.getByRole('button', { name: '返回创作中心', exact: true }).click();
+    await expect(page.locator('.mw-view')).toHaveCount(0);
+    const probe = await page.evaluate(() => {
+      const probe = (window as Window & { writerLayerProbe?: { done: boolean; frames: boolean[]; opened: number; ready: number; radialRestarts: number; motion: { name: string; duration: number; x: number; y: number }[] } }).writerLayerProbe!;
+      probe.done = true; return probe;
+    });
+    expect(probe.ready - probe.opened).toBeGreaterThanOrEqual(400);
+    expect(probe.frames.length).toBeGreaterThan(10);
+    expect(probe.frames.every(Boolean)).toBe(true);
+    expect(probe.radialRestarts).toBe(0);
+    const entry = probe.motion.find(motion => motion.name.endsWith('-in'))!;
+    expect(entry.duration).toBeGreaterThanOrEqual(400);
+    expect(probe.motion.find(motion => motion.name.endsWith('-out'))!.duration).toBeGreaterThanOrEqual(400);
+    if (action === '新建作品') { expect(entry.name).toBe('mw-view-sheet-in'); expect(entry.y).toBeGreaterThan(0); expect(entry.x).toBe(0); }
+    else { expect(entry.name).toBe('mw-view-slide-in'); expect(entry.x).toBeGreaterThan(0); expect(entry.y).toBe(0); }
+    await expect(modal(page).getByRole('heading', { name: book.title })).toBeVisible();
+  });
+}
+
+test('slow management data keeps its loading panel visible and Back cancels an unfinished entry', async ({ page }) => {
+  await page.goto(base); await launch(page).click();
+  await expect(modal(page).getByRole('heading', { name: book.title })).toBeVisible();
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let started!: () => void;
+  const requested = new Promise<void>(resolve => { started = resolve; });
+  await page.route('**/api/books?**', async route => {
+    if (new URL(route.request().url()).searchParams.get('author_id') !== account.id) return route.continue();
+    started(); await gate; await route.fulfill({ json: [book] });
+  });
+  try {
+    await modal(page).getByRole('link', { name: /作品管理/ }).click();
+    await requested;
+    await expect(page.locator('.mw-view-loading')).toBeVisible();
+    await expect(page.locator('.mw-view-panel')).toHaveAttribute('data-ready', 'false');
+    await page.goBack();
+    await expect(page.locator('.mw-view')).toHaveCount(0);
+    release();
+    await expect(modal(page).getByRole('heading', { name: book.title })).toBeVisible();
+    await modal(page).getByRole('link', { name: /新建作品/ }).click();
+    await expect(page.locator('.mw-view-loading')).toBeVisible();
+    const box = await page.locator('.mw-view-loading').boundingBox();
+    expect(box!.y).toBeGreaterThan(0); expect(box!.height).toBeLessThan(844);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.mw-view')).toHaveCount(0);
+    await expect(modal(page)).toBeVisible();
+  } finally { release(); }
+});
+
+test('new work opened from management returns to the same management layer before the center', async ({ page }) => {
+  await page.goto(base); await launch(page).click();
+  await modal(page).getByRole('link', { name: /作品管理/ }).click();
+  await expect(page.locator('.mw-view-panel')).toHaveAttribute('data-ready', 'true');
+  const id = await page.evaluate(() => history.state.mobileWriterViews[0].id);
+  await page.getByRole('button', { name: '新建', exact: true }).click();
+  await expect(page.getByPlaceholder('请输入书名')).toBeVisible();
+  await expect(page.locator('.mw-view')).toHaveCount(2);
+  await page.getByRole('button', { name: '关闭新建作品', exact: true }).click();
+  await expect(page.locator('.mw-view')).toHaveCount(1);
+  expect(await page.evaluate(() => history.state.mobileWriterViews[0].id)).toBe(id);
+  await expect(page.locator('.writer-work').getByRole('heading', { name: book.title })).toBeVisible();
+  await page.goBack(); await expect(page.locator('.mw-view')).toHaveCount(0);
+  await expect(modal(page)).toBeVisible();
+});
+
+test('creating a work closes the sheet directly and refreshes the retained center', async ({ page }) => {
+  let created = false;
+  const newBook = { ...book, id: '000000000000000000000200', title: '新故事' };
+  await page.route('**/api/books', async route => {
+    if (route.request().method() !== 'POST') return route.continue();
+    created = true; await route.fulfill({ json: newBook });
+  });
+  await page.route('**/api/books?**', route => new URL(route.request().url()).searchParams.get('author_id') === account.id ? route.fulfill({ json: created ? [newBook, book] : [book] }) : route.continue());
+  await page.goto(base); await launch(page).click();
+  await modal(page).getByRole('link', { name: /新建作品/ }).click();
+  await page.getByPlaceholder('请输入书名').fill(newBook.title);
+  await page.getByRole('button', { name: '立即创建', exact: true }).click();
+  await expect(page.locator('.mw-view')).toHaveCount(0);
+  await expect(modal(page).getByRole('heading', { name: newBook.title })).toBeVisible();
+});
+
+test('direct desktop writer entry retains its creation form and management page', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${base}/writer`);
+  await page.getByRole('button', { name: '创建新书', exact: true }).click();
+  await expect(page.getByPlaceholder('请输入书名')).toBeVisible();
+  await page.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(page.locator('.writer-create-modal')).toHaveCount(0);
+  await expect(page.locator('.writer-work').getByRole('heading', { name: book.title })).toBeVisible();
 });
