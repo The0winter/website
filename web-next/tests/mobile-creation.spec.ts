@@ -82,18 +82,63 @@ for (const width of [320, 390]) test(`creator actions open the matching creation
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath(`create-${width}.png`) });
   await page.getByRole('button', { name: '取消', exact: true }).click();
-  await page.goBack(); await launch(page).click();
+  await page.goBack(); await expect(modal(page)).toBeVisible();
   await modal(page).getByRole('link', { name: '写一章', exact: true }).click();
   await expect(page.getByPlaceholder('请输入章节标题')).toBeVisible();
   await expect(page.getByRole('button', { name: '存草稿', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath(`editor-${width}.png`) });
-  await page.goBack(); await launch(page).click();
+  await page.goBack(); await expect(modal(page)).toBeVisible();
   await modal(page).getByRole('link', { name: '目录与草稿', exact: true }).click();
   await expect(page.getByText('目录与设置', { exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath(`manager-${width}.png`) });
   await page.getByRole('button', { name: '继续草稿', exact: true }).click();
   await expect(page.getByPlaceholder('在这里开始你的创作...')).toHaveValue('留给自己的未发布草稿。');
+});
+
+for (const width of [320, 390]) for (const action of ['新建作品', '作品管理']) {
+  test(`${action} returns to the creation center with browser and page Back at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(base);
+    const initialLength = await page.evaluate(() => history.length);
+    await launch(page).click();
+    const marker = await page.evaluate(() => history.state.mobileWriter);
+    await modal(page).getByRole('link', { name: new RegExp(action) }).click();
+    await expect(page.getByRole('heading', { name: '作品管理', exact: true })).toBeVisible();
+    if (action === '新建作品') await expect(page.getByPlaceholder('请输入书名')).toBeVisible();
+    await page.goBack();
+    await expect(modal(page)).toBeVisible();
+    expect(await page.evaluate(() => history.state.mobileWriter)).toBe(marker);
+    expect(await page.evaluate(() => history.length)).toBe(initialLength + 2);
+
+    await page.goForward();
+    await expect(page.getByRole('heading', { name: '作品管理', exact: true })).toBeVisible();
+    await expect(modal(page)).toHaveCount(0);
+    // Reloading a child route must retain the same parent history entry.
+    await page.reload();
+    if (action === '新建作品') await page.getByRole('button', { name: '取消', exact: true }).click();
+    await page.getByRole('button', { name: '返回创作中心', exact: true }).click();
+    await expect(modal(page)).toBeVisible();
+    await expect(modal(page).getByRole('heading', { name: book.title })).toBeVisible();
+    expect(await page.evaluate(() => history.state.mobileWriter)).toBe(marker);
+    expect(await page.evaluate(() => history.length)).toBe(initialLength + 2);
+    await page.goBack();
+    await expect(modal(page)).toHaveCount(0);
+    await expect(launch(page)).toBeFocused();
+    expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
+  });
+}
+
+test('returning from work management restores the creation center over its forum entry', async ({ page }) => {
+  await page.goto(`${base}/forum`);
+  await launch(page).click();
+  await modal(page).getByRole('link', { name: /作品管理/ }).click();
+  await page.getByRole('button', { name: '返回创作中心', exact: true }).click();
+  await expect(page).toHaveURL(`${base}/forum`);
+  await expect(modal(page)).toBeVisible();
+  await modal(page).getByRole('button', { name: '关闭创作中心' }).click();
+  await expect(modal(page)).toHaveCount(0);
+  await expect(page).toHaveURL(`${base}/forum`);
 });
 
 test('guest login, failed works retry and reduced motion remain usable', async ({ page }) => {
