@@ -4,6 +4,7 @@ import {useEffect, useRef, useSyncExternalStore, type CSSProperties} from 'react
 import {flushSync} from 'react-dom';
 import {beginChapterEntry, currentChapterEntry, failChapterEntry, finishChapterEntry, prepareChapterReveal, showChapterText, serverChapterEntry, subscribeChapterEntry} from '@/lib/chapter-entry';
 import './chapter-loading.css';
+import {prepareReaderPaper, readerPaperImage} from '@/lib/reader-paper';
 
 export default function ChapterLoadingPage() {
   const entry = useSyncExternalStore(subscribeChapterEntry, currentChapterEntry, serverChapterEntry);
@@ -17,9 +18,12 @@ export default function ChapterLoadingPage() {
     if (!target || target.token !== token) return;
     panel.current?.focus({preventScroll: true});
     const visibleAt = performance.now();
+    let paperReady = !target.textured || innerWidth >= 1024;
+    if (!paperReady) void prepareReaderPaper().then(() => {paperReady = true;});
     let frame = 0, inputAt = -Infinity, disposed = false, stableFrames = 0, previousLayout = '';
     const pointers = new Set<number>();
     const ready = () => {
+      if (!paperReady) return null;
       if (location.pathname !== target.href) return null;
       const reader = document.querySelector<HTMLElement>(`[data-reader-entry-key="${target.token}"] [data-reader-chapter="${target.chapterId}"][data-reader-ready="true"]`);
       const sheet = reader?.querySelector<HTMLElement>('.reader-frame');
@@ -100,6 +104,7 @@ export default function ChapterLoadingPage() {
   if (!entry) return null;
   const style = {'--reader-paper': entry.paper, '--entry-ink': entry.ink, '--entry-desk': entry.desk, '--entry-width': entry.width, '--reader-paper-position': entry.paperPosition} as CSSProperties;
   return <div ref={panel} tabIndex={-1} aria-busy={!entry.error} aria-label={`正在打开章节：${entry.title}`} className="chapter-loading-page" style={style} data-chapter-loading={entry.chapterId} data-loading-visible="true" data-text-revealed={Boolean(entry.revealing)}>
+    {entry.textured && <link rel="preload" as="image" href={readerPaperImage} media="(max-width:1023px)" />}
     <div className="chapter-loading-sheet" data-paper={entry.textured}>
       <div role={entry.error ? 'alert' : 'status'} aria-live="polite" className="chapter-loading-message">
         <h2>{entry.title}</h2><p>{entry.error || '正在加载'}</p>

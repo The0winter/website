@@ -1,6 +1,6 @@
 'use client';
 import {useStoredState} from '@/lib/useStoredState';
-import {mobileReaderCream} from '@/lib/reader-paper';
+import {mobileReaderCream, readerPaperImage} from '@/lib/reader-paper';
  
 
 import { useEffect, useCallback, useState, useRef, useSyncExternalStore } from 'react';
@@ -325,6 +325,7 @@ if (loading) return (
         backgroundColor: isDesktop ? activeTheme.desk : activeTheme.bg 
       }}
     >
+      {themeColor === 'cream' && !isActuallyDark && <link rel="preload" as="image" href={readerPaperImage} media="(max-width:1023px)" />}
       <RecordBookVisit bookId={bookId} chapterId={chapter.id}/>
       <div
         className="reader-tools fixed bottom-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6 border-t transition-all duration-300 pb-safe"

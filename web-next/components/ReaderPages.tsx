@@ -146,11 +146,16 @@ export default function ReaderPages(props:ReaderPageProps) {
     if(!viewport || !body)return;
     const box=viewport.getBoundingClientRect();
     const visible=(element:HTMLElement)=>[...element.getClientRects()].some(rect=>rect.right>box.left+1 && rect.left<box.right-1 && rect.bottom>box.top && rect.top<box.bottom);
-    for(const element of body.querySelectorAll<HTMLElement>('[data-paragraph-key]')){
-      element.inert=!scrolling && !visible(element);
-      if(element.matches('[data-paragraph-key]'))element.tabIndex=element.inert?-1:0;
+    // Read all geometry before changing inert/tabindex. Interleaving these
+    // operations forces a style recalculation for every paragraph on each turn.
+    const rows=[...body.querySelectorAll<HTMLElement>('[data-paragraph-key]')].map(element=>({element,inert:!scrolling && !visible(element)}));
+    const buttons=[...body.querySelectorAll<HTMLButtonElement>('button')].map(element=>({element,tabIndex:scrolling || visible(element)?0:-1}));
+    for(const {element,inert} of rows){
+      if(element.inert!==inert)element.inert=inert;
+      const tabIndex=inert?-1:0;
+      if(element.tabIndex!==tabIndex)element.tabIndex=tabIndex;
     }
-    for(const button of body.querySelectorAll<HTMLButtonElement>('button'))button.tabIndex=scrolling || visible(button)?0:-1;
+    for(const {element,tabIndex} of buttons)if(element.tabIndex!==tabIndex)element.tabIndex=tabIndex;
     viewport.scrollLeft=0;
   },[page,layout,counts,scrolling,columns,textWindow]);
   useEffect(()=>{if(!notice)return;const timer=window.setTimeout(()=>setNotice(''),2200);return()=>window.clearTimeout(timer);},[notice]);

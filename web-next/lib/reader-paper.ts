@@ -5,4 +5,20 @@ export function readerPaperPosition(page: number) {
   return `${-(index * 137 % 768)}px ${-(index * 211 % 1024)}px`;
 }
 
-export const mobileReaderCream = {bg: '#ddc7a2', text: '#382b19'};
+export const readerPaperImage = '/textures/reader-paper-v2.webp';
+export const mobileReaderCream = {bg: '#dbc49e', text: '#382b19'};
+
+let paperDecoded: Promise<void> | undefined;
+export function prepareReaderPaper() {
+  // Decode once during entry, never as part of a tap or a page-turn animation.
+  if (!paperDecoded) {
+    const image = new Image();
+    image.src = readerPaperImage;
+    paperDecoded = new Promise<void>(resolve => {
+      // Decoration must not hold readable chapter text behind a stalled fetch.
+      const timeout = window.setTimeout(resolve, 1500);
+      void image.decode().catch(() => {}).finally(() => {window.clearTimeout(timeout); resolve();});
+    });
+  }
+  return paperDecoded;
+}

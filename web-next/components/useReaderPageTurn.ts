@@ -2,7 +2,7 @@
 
 import {useCallback,useLayoutEffect,useRef} from 'react';
 import {flushSync} from 'react-dom';
-import {readerColumnLayout} from '@/lib/reader-layout';
+import {readerColumnGap} from '@/lib/reader-layout';
 import {readerPaperPosition} from '@/lib/reader-paper';
 
 export type ReaderTurnMode='horizontal'|'scroll'|'vertical';
@@ -39,14 +39,18 @@ export function useReaderPageTurn({mode,onCommit}:Options) {
   const begin=useCallback((target:number,direction:number,prepared?:HTMLElement,progress?:string)=>{
     if(motion.current?.settling || mode==='scroll')return false;
     if(motion.current?.target===target)return true;
-    cancel();
     const frame=viewport.current,body=columns.current,active=surface.current,adjacent=preview.current;
     if(!frame || !body || !active || !adjacent)return false;
+    // Read the already-measured sheet before mutating the preview DOM. Reading
+    // it after insertion synchronously lays out an entire cloned chapter.
+    const box=frame.getBoundingClientRect();
+    const step=prepared?0:body.getBoundingClientRect().width+readerColumnGap;
+    cancel();
     const clone=(prepared || active).cloneNode(true) as HTMLDivElement;
     clone.style.transform='';clone.removeAttribute('data-moving');
     if(!prepared){
       clone.style.setProperty('--reader-paper-position',readerPaperPosition(target));
-      clone.querySelector<HTMLElement>('.reader-columns')!.style.transform=`translateX(${-target*readerColumnLayout(body).step}px)`;
+      clone.querySelector<HTMLElement>('.reader-columns')!.style.transform=`translateX(${-target*step}px)`;
       const page=clone.querySelector<HTMLElement>('[data-reader-page]');
       if(page)page.textContent=`${target+1}/${page.textContent?.split('/')[1] || 1}`;
       if(progress)clone.querySelector<HTMLElement>('.reader-progress span:last-child')!.textContent=progress;
@@ -54,7 +58,7 @@ export function useReaderPageTurn({mode,onCommit}:Options) {
     clone.removeAttribute('id');
     for(const element of clone.querySelectorAll<HTMLElement>('[id],[tabindex]')){element.removeAttribute('id');element.tabIndex=-1;}
     adjacent.replaceChildren(clone);adjacent.removeAttribute('hidden');
-    const axis=mode==='vertical'?'Y':'X',box=frame.getBoundingClientRect(),extent=axis==='X'?box.width:box.height;
+    const axis=mode==='vertical'?'Y':'X',extent=axis==='X'?box.width:box.height;
     const moving=direction>0?active:adjacent;
     active.style.setProperty('z-index',direction>0?'2':'1');adjacent.style.setProperty('z-index',direction>0?'1':'2');
     moving.setAttribute('data-moving',axis);frame.setAttribute('data-turning','dragging');

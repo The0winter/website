@@ -1,0 +1,19 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='768' height='1024' viewBox='0 0 768 1024'>
+<defs>
+<filter id='formation' x='0' y='0' width='100%' height='100%'>
+<feTurbulence type='fractalNoise' baseFrequency='.009 .012' numOctaves='4' seed='29' stitchTiles='stitch'/>
+<feColorMatrix values='0 0 0 0 .32 0 0 0 0 .23 0 0 0 0 .12 .333 .333 .333 0 -.28'/>
+</filter>
+<filter id='fibres' x='0' y='0' width='100%' height='100%'>
+<feTurbulence type='fractalNoise' baseFrequency='.055 .24' numOctaves='3' seed='53' stitchTiles='stitch'/>
+<feColorMatrix values='0 0 0 0 .32 0 0 0 0 .23 0 0 0 0 .12 .333 .333 .333 0 -.28'/>
+</filter>
+<filter id='grain' x='0' y='0' width='100%' height='100%'>
+<feTurbulence type='fractalNoise' baseFrequency='.64' numOctaves='3' seed='11' stitchTiles='stitch'/>
+<feColorMatrix values='0 0 0 0 .32 0 0 0 0 .23 0 0 0 0 .12 .333 .333 .333 0 -.28'/>
+</filter>
+</defs>
+<path d='M0 0h768v1024H0z' filter='url(#formation)' opacity='.26'/>
+<path d='M0 0h768v1024H0z' filter='url(#fibres)' opacity='.18'/>
+<path d='M0 0h768v1024H0z' filter='url(#grain)' opacity='.12'/>
+</svg>
