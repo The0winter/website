@@ -378,7 +378,7 @@ if (loading) return (
           paragraphGap={paraSpacingMap[paraSpacing] || '1rem'} theme={activeTheme}
           paper={themeColor === 'cream'} dark={isActuallyDark} pageWidth={pageWidth}
           previousId={prevChapterId} nextId={nextChapterId} navigating={isNavigating}
-          blocked={showCatalog || showSettings || entryLocked}
+          blocked={showCatalog || showSettings || Boolean(chapterEntry)}
           turnMode={turnMode} toolsVisible={showNav} onHideTools={hideTools}
           onChapter={goToChapter} onTools={() => { setShowHint(false); setShowNav(value => !value); }}
           onNearEnd={nearEnd}

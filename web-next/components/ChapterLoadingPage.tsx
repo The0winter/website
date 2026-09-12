@@ -41,6 +41,10 @@ export default function ChapterLoadingPage() {
       // backdrop stops painting. Reader geometry/hit testing alone misses it.
       for (const overlay of document.querySelectorAll<HTMLElement>('.book-catalog-overlay')) {
         const style = getComputedStyle(overlay), box = overlay.getBoundingClientRect();
+        // A reader selection has no backdrop or shadow. Prepare and reveal
+        // ready text underneath its opaque sliding sheet during the exit.
+        if (overlay.dataset.selecting === 'true' && style.backgroundColor === 'rgba(0, 0, 0, 0)'
+          && getComputedStyle(overlay.querySelector('.book-catalog-sheet')!).boxShadow === 'none') continue;
         if (box.width && box.height && style.visibility === 'visible' && Number(style.opacity) > 0) return null;
       }
       const scroll = reader.querySelector('.reader-scroll-window');
@@ -58,13 +62,18 @@ export default function ChapterLoadingPage() {
       previousLayout = layout || '';
       if (stableFrames >= 2 && performance.now() - visibleAt >= target.minimumVisibleMs) {
         if (currentChapterEntry()?.revealing) {
-          flushSync(() => finishChapterEntry(target.token)); return;
+          // Keep input guarded until the catalog has completely left, even
+          // when a cached chapter is already visible underneath it.
+          if (!document.querySelector('.book-catalog-overlay[data-selecting=true]')) {
+            flushSync(() => finishChapterEntry(target.token)); return;
+          }
+        } else {
+          // Unlock scrolling and commit the final reader layout while the same
+          // opaque loading page remains above it. Then verify actual paint frames.
+          if (currentChapterEntry()?.releasing) flushSync(() => showChapterText(target.token));
+          else flushSync(() => prepareChapterReveal(target.token));
+          stableFrames = 0; previousLayout = '';
         }
-        // Unlock scrolling and commit the final reader layout while the same
-        // opaque loading page remains above it. Then verify actual paint frames.
-        if (currentChapterEntry()?.releasing) flushSync(() => showChapterText(target.token));
-        else flushSync(() => prepareChapterReveal(target.token));
-        stableFrames = 0; previousLayout = '';
       }
       frame = requestAnimationFrame(reveal);
     };

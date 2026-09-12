@@ -1,6 +1,7 @@
 'use client';
 
 import {useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore} from 'react';
+import {flushSync} from 'react-dom';
 import {ArrowLeft, ChevronDown} from 'lucide-react';
 import {Virtuoso} from 'react-virtuoso';
 import Link from './PrefetchLink';
@@ -26,31 +27,30 @@ const subscribeWidth = (notify: () => void) => {
 const columnCount = () => innerWidth >= 1024 ? 3 : innerWidth >= 768 ? 2 : 1;
 
 export default function BookCatalogSheet({open, onClose, bookTitle, ...props}: Props) {
-  const {bookId, onSelect} = props;
+  const {onSelect} = props;
   const columns = useSyncExternalStore(subscribeWidth, columnCount, () => 1);
   const openingChapter = useSyncExternalStore(subscribeChapterEntry, () => Boolean(currentChapterEntry()?.href.startsWith(`/book/${props.bookId}/`)), () => false);
   const panel = useRef<HTMLDivElement>(null);
-  const [selection, setSelection] = useState<{id: string; title: string} | null>(null);
+  const [selection, setSelection] = useState<ContentsProps | null>(null);
   const selecting = useRef(false);
+  const contents = selection ?? {...props, columns};
   useEffect(() => {
     if (!selection) return;
     let cancelled = false;
     const cancel = () => {cancelled = true; selecting.current = false; setSelection(null);};
     window.addEventListener('book-navigation-leave', cancel);
-    // Wait for the actual CSS exit (also works with reduced motion). Keep the
-    // open history slot and chapter list until the sheet has slid offscreen.
+    // Keep the original list mounted while the selected chapter loads below
+    // the sliding sheet. History and reader props may already have changed.
     const frame = requestAnimationFrame(() => {
-      if (!open || !panel.current) {cancel(); return;}
+      if (!panel.current) {cancel(); return;}
       const animations = panel.current.parentElement!.getAnimations({subtree: true});
       void Promise.allSettled(animations.map(animation => animation.finished)).then(() => {
         if (cancelled || !panel.current?.isConnected) return;
-        beginChapterEntry(`/book/${bookId}/${selection.id}`, selection.title, 'start', 0);
-        onSelect?.(selection.id, selection.title);
         selecting.current = false; setSelection(null);
       });
     });
     return () => {cancelled = true; cancelAnimationFrame(frame); window.removeEventListener('book-navigation-leave', cancel);};
-  }, [selection, open, bookId, onSelect]);
+  }, [selection]);
   useEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
@@ -72,16 +72,21 @@ export default function BookCatalogSheet({open, onClose, bookTitle, ...props}: P
       if (previousFocus?.isConnected) previousFocus.focus({preventScroll: true});
     };
   }, [open, onClose]);
-  return <div className="book-catalog-overlay" data-open={open && !selection} data-selecting={Boolean(selection)} data-chapter-entry={openingChapter} aria-hidden={!open || openingChapter || Boolean(selection)} inert={!open || openingChapter || Boolean(selection)} onClick={onClose}>
+  return <div className="book-catalog-overlay" data-reader={Boolean(onSelect)} data-open={open && !selection} data-selecting={Boolean(selection)} data-chapter-entry={openingChapter} aria-hidden={!open || openingChapter || Boolean(selection)} inert={!open || openingChapter || Boolean(selection)} onClick={onClose}>
     <div ref={panel} role="dialog" aria-modal="true" aria-label="全部目录" className="book-catalog-sheet" onClick={event => event.stopPropagation()}>
       <header className="book-catalog-header">
         <button className="book-catalog-back" onClick={onClose} aria-label="关闭目录"><ArrowLeft size={22}/></button>
         <h2 title={bookTitle}>{bookTitle}</h2><p>{props.catalog.total === null ? '加载中…' : `共 ${props.catalog.total} 章`}</p>
       </header>
-      {open && <CatalogContents key={`${props.bookId}:${columns}:${props.activeChapterId ?? ''}:${props.catalog.generation}`} {...props} columns={columns}
-        onSelect={props.onSelect ? (id, title) => {
+      {(open || selection) && <CatalogContents key={`${contents.bookId}:${contents.columns}:${contents.activeChapterId ?? ''}:${contents.catalog.generation}`} {...contents}
+        onSelect={onSelect ? (id, title) => {
           if (selecting.current) return;
-          selecting.current = true; setSelection({id, title});
+          selecting.current = true;
+          // Raise the opaque catalog before painting the loading paper in the
+          // same click. The request and exit animation then run together.
+          flushSync(() => setSelection({...props, columns}));
+          beginChapterEntry(`/book/${props.bookId}/${id}`, title, 'start', 0);
+          onSelect(id, title);
         } : undefined}/>}
     </div>
   </div>;
