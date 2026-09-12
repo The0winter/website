@@ -1,11 +1,12 @@
 'use client';
 
-import {useEffect, useState} from 'react';
+import {useEffect, useState, useSyncExternalStore} from 'react';
 import Link from 'next/link';
 import {ArrowLeft, BookOpen, ChevronRight, Star} from 'lucide-react';
 import BookCover from '@/components/BookCover';
 import BookLink from '@/components/BookLink';
 import {booksApi, type Book} from '@/lib/api';
+import {currentRankingView, selectRankingView, subscribeBookNavigation} from '@/lib/book-navigation';
 import './ranking.css';
 
 const RANKS = [
@@ -17,6 +18,9 @@ const RANKS = [
 ] as const;
 const CATEGORIES = ['全部', '玄幻', '仙侠', '都市', '历史', '科幻', '奇幻', '悬疑'];
 type RankId = typeof RANKS[number]['id'];
+const defaultView = {activeRank: 'day', category: '全部'};
+const serverView = () => defaultView;
+const currentView = () => currentRankingView() ?? defaultView;
 
 function formatViews(value = 0) {
   if (value >= 100000000) return `${(value / 100000000).toFixed(1).replace(/\.0$/, '')}亿`;
@@ -25,8 +29,7 @@ function formatViews(value = 0) {
 }
 
 export default function RankingPage() {
-  const [activeRank, setActiveRank] = useState<RankId>('day');
-  const [category, setCategory] = useState('全部');
+  const {activeRank, category} = useSyncExternalStore(subscribeBookNavigation, currentView, serverView);
   const [retry, setRetry] = useState(0);
   const [result, setResult] = useState<{key: string; books: Book[]; error: boolean}>({key: '', books: [], error: false});
   const rank = RANKS.find(item => item.id === activeRank)!;
@@ -42,7 +45,7 @@ export default function RankingPage() {
   }, [key, rank.sort, category]);
 
   function selectRank(id: RankId) {
-    setActiveRank(id);
+    selectRankingView({activeRank: id, category});
     window.scrollTo({top: 0, behavior: 'instant'});
   }
 
@@ -56,7 +59,7 @@ export default function RankingPage() {
           </div>
           <nav className="ranking-categories" aria-label="小说分类">
             {CATEGORIES.map(name => <button key={name} type="button" aria-pressed={category === name} onClick={event => {
-              setCategory(name);
+              selectRankingView({activeRank, category: name});
               event.currentTarget.scrollIntoView({block: 'nearest', inline: 'nearest'});
               window.scrollTo({top: 0, behavior: 'instant'});
             }}>{name}</button>)}
@@ -81,24 +84,26 @@ export default function RankingPage() {
               <BookOpen size={30} aria-hidden="true"/><h2>这个分类还没有作品</h2><p>换个分类，发现更多好故事</p>
             </div> : <ol className="ranking-list" aria-label={`${category}${rank.name}`}>
               {result.books.map((book, index) => <li key={book.id} className="ranking-row" data-position={index + 1}>
-                <span className="ranking-number" aria-label={`第${index + 1}名`}>{String(index + 1).padStart(2, '0')}</span>
-                <BookLink href={`/book/${book.id}`} className="ranking-cover" aria-label={`阅读${book.title}`}>
-                  <BookCover src={book.cover_image} alt={book.title} priority={index < 5}/>
+                <BookLink href={`/book/${book.id}`} className="ranking-card" aria-label={`阅读${book.title}`}>
+                  <span className="ranking-number" aria-label={`第${index + 1}名`}>{String(index + 1).padStart(2, '0')}</span>
+                  <div className="ranking-cover">
+                    <BookCover src={book.cover_image} alt={book.title} priority={index < 5}/>
+                  </div>
+                  <div className="ranking-book-info">
+                    <div className="ranking-book-heading">
+                      <h2>{book.title}</h2>
+                      <span className="ranking-rating" data-unrated={!book.rating} aria-label={book.rating ? `评分 ${book.rating.toFixed(1)}` : '暂无评分'}>
+                        {book.rating ? <><Star size={13} aria-hidden="true"/><strong>{book.rating.toFixed(1)}</strong></> : '暂无评分'}
+                      </span>
+                    </div>
+                    <p className="ranking-book-meta"><span>{book.author || book.profiles?.username || '佚名'}</span></p>
+                    <p className="ranking-description">{book.description || '这个故事，等你翻开。'}</p>
+                    <div className="ranking-book-stats">
+                      {activeRank !== 'views' && <span className="ranking-metric">热度指数 {(book.rankingScore ?? 0).toFixed(1)}</span>}
+                      <span className="ranking-views"><strong>{formatViews(activeRank === 'views' ? book.views : book.rankingViews)}</strong><span className="ranking-views-label">{rank.period}浏览</span></span>
+                    </div>
+                  </div>
                 </BookLink>
-                <div className="ranking-book-info">
-                  <div className="ranking-book-heading">
-                    <h2><BookLink href={`/book/${book.id}`}>{book.title}</BookLink></h2>
-                    <span className="ranking-rating" data-unrated={!book.rating} aria-label={book.rating ? `评分 ${book.rating.toFixed(1)}` : '暂无评分'}>
-                      {book.rating ? <><Star size={13} aria-hidden="true"/><strong>{book.rating.toFixed(1)}</strong></> : '暂无评分'}
-                    </span>
-                  </div>
-                  <p className="ranking-book-meta"><span>{book.author || book.profiles?.username || '佚名'}</span></p>
-                  <p className="ranking-description">{book.description || '这个故事，等你翻开。'}</p>
-                  <div className="ranking-book-stats">
-                    {activeRank !== 'views' && <span className="ranking-metric">热度指数 {(book.rankingScore ?? 0).toFixed(1)}</span>}
-                    <span className="ranking-views"><strong>{formatViews(activeRank === 'views' ? book.views : book.rankingViews)}</strong><span className="ranking-views-label">{rank.period}浏览</span></span>
-                  </div>
-                </div>
               </li>)}
             </ol>}
 

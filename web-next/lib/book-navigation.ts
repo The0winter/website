@@ -1,8 +1,9 @@
 import {cancelBookTransition, transitionBookPage} from './book-transition';
 import {cancelChapterEntry, currentChapterEntry} from './chapter-entry';
 
-type Route = {kind: 'home' | 'author' | 'library' | 'detail' | 'reader'; href: string; bookId?: string};
-type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; restoreSession?: string; homeBrowse?: boolean; libraryReturn?: string};
+type Route = {kind: 'home' | 'author' | 'library' | 'ranking' | 'detail' | 'reader'; href: string; bookId?: string};
+type RankingView = {activeRank: string; category: string};
+type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; restoreSession?: string; homeBrowse?: boolean; libraryReturn?: string; rankingView?: RankingView};
 type Router = {push: (href: string) => void; replace: (href: string) => void};
 const listeners = new Set<() => void>();
 let router: Router | undefined;
@@ -15,11 +16,12 @@ let documentSession: string | undefined;
 const session = () => documentSession ??= crypto.randomUUID();
 
 const overlay = (entry?: Entry) => entry?.catalog ? 'catalog' : entry?.settings ? 'settings' : undefined;
-const isList = (route?: Route): route is Route & {kind: 'home' | 'author' | 'library'} => route?.kind === 'home' || route?.kind === 'author' || route?.kind === 'library';
+const isList = (route?: Route): route is Route & {kind: 'home' | 'author' | 'library' | 'ranking'} => route?.kind === 'home' || route?.kind === 'author' || route?.kind === 'library' || route?.kind === 'ranking';
 
 function routeFor(href: string): Route | undefined {
   if (href === '/' || href.startsWith('/?')) return {kind: 'home', href};
   if (href === '/library' || href.startsWith('/library?')) return {kind: 'library', href};
+  if (href === '/ranking' || href.startsWith('/ranking?')) return {kind: 'ranking', href};
   if (/^\/author\/[^/?#]+(?:\?[^#]*)?$/.test(href)) return {kind: 'author', href};
   const match = /^\/book\/([^/?#]+)(?:\/([^/?#]+))?$/.exec(href);
   if (match) return {kind: match[2] ? 'reader' : 'detail', href, bookId: match[1]};
@@ -60,7 +62,7 @@ export function syncBookRoute(path: string) {
   if (isList(route)) {
     mark({...entryFor(route), homeBrowse: route.kind === 'home' && Boolean(window.history.state?.homeBrowse)}); return;
   }
-  // Browse views, authors and the library keep their list as the predecessor.
+  // Browse views, authors, the library and rankings keep their list as the predecessor.
   if (route.kind === 'detail' && isList(previous) && previousPath === previous.href) {
     mark(entryFor(route, previous.flow)); return;
   }
@@ -178,7 +180,7 @@ export function navigateBookLink(href: string) {
   const target = routeFor(href);
   if (!target || !router) return false;
   if (document.documentElement.dataset.bookTransition) return true;
-  // Search, ranking and other pages use the same detail loader while keeping
+  // Search and other pages use the same detail loader while keeping
   // their existing canonical history handling in syncBookRoute.
   if (target.kind === 'detail' && (!current || !isList(current) && target.bookId !== current.bookId)) {
     cancelChapterEntry();
@@ -241,4 +243,10 @@ export const readerSettingsOpen = (bookId: string) => Boolean(current?.settings 
 export const bookCatalogOpen = (bookId: string) => Boolean(current?.catalog && current.bookId === bookId);
 export const serverCatalogClosed = () => false;
 export const readerReturnHref = (bookId: string) => current?.kind === 'reader' && current.bookId === bookId && current.libraryReturn || `/book/${bookId}`;
+export const currentRankingView = () => current?.kind === 'ranking' ? current.rankingView : undefined;
+export function selectRankingView(rankingView: RankingView) {
+  // Keep filters with the source entry, including when a reload requires Next
+  // to replace its route tree on Back instead of restoring its cached page.
+  if (current?.kind === 'ranking') mark({...current, rankingView});
+}
 export function subscribeBookNavigation(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }

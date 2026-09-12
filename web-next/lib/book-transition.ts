@@ -13,6 +13,8 @@ function waitForPage(href: string, signal: AbortSignal, onSlow?: () => void) {
       ? visible('.library-page, .account-loading')
       : parts[1] === 'author'
       ? visible('.author-page')
+      : parts[1] === 'ranking'
+      ? visible('.ranking-page')
       : parts[3]
       ? visible(`[data-reader-chapter="${CSS.escape(parts[3])}"][data-reader-ready="true"]`)
       : parts[1] === 'book'

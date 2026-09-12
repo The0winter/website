@@ -109,7 +109,7 @@ for (const origin of ['/ranking', '/search?q=山海', '/author/00000000000000000
   }
 }
 
-test('Back during the ranking loader slide cancels the pending request and both overlays', async ({page}) => {
+test('Back during the ranking loader returns to the ranking before the earlier page', async ({page}) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}}));
   await page.goto(base + '/search');
   await page.goto(base + '/ranking');
@@ -120,12 +120,47 @@ test('Back during the ranking loader slide cancels the pending request and both 
     await page.locator(`a[href="/book/${book}"]:visible`).first().click();
     await expect(page.locator('.book-navigation-loading')).toBeVisible();
     await page.goBack();
-    await expect(page).toHaveURL(base + '/search'); await idle(page);
+    await expect(page).toHaveURL(base + '/ranking'); await idle(page);
     await expect(page.locator('.book-transition-snapshot')).toHaveCount(0);
     release(); await page.waitForTimeout(500);
-    await expect(page).toHaveURL(base + '/search');
+    await expect(page).toHaveURL(base + '/ranking');
+    await page.goBack(); await expect(page).toHaveURL(base + '/search');
   } finally {release();}
 });
+
+for (const width of [320, 1440]) {
+  test(`every ranking card area opens details and returns to the selected ranking at ${width}px`, async ({page}) => {
+    await page.setViewportSize({width, height: 844});
+    await page.goto(base + '/ranking');
+    await page.getByRole('button', {name: '周榜', exact: true}).click();
+    await page.getByRole('button', {name: '玄幻', exact: true}).click();
+    const card = page.locator('.ranking-card').first();
+    await expect(card).toBeVisible();
+    const length = await page.evaluate(() => history.length);
+    for (const area of ['.ranking-number', '.ranking-cover', 'h2', '.ranking-book-meta', ...(width >= 768 ? ['.ranking-description'] : []), '.ranking-rating', '.ranking-book-stats', 'padding', 'keyboard']) {
+      if (area === 'padding') await card.click({position: {x: 5, y: 5}});
+      else if (area === 'keyboard') {await card.focus(); await page.keyboard.press('Enter');}
+      else await card.locator(area).click();
+      await details(page);
+      expect(await page.evaluate(() => history.length)).toBe(length + 1);
+      await page.goBack();
+      await expect(page).toHaveURL(base + '/ranking'); await idle(page);
+      await expect(page.getByRole('button', {name: '周榜', exact: true})).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.getByRole('button', {name: '玄幻', exact: true})).toHaveAttribute('aria-pressed', 'true');
+      await expect(card).toBeVisible();
+      await expect(card.locator('a, button')).toHaveCount(0);
+      await expect(page.locator('.book-transition-snapshot')).toHaveCount(0);
+    }
+    await page.goForward(); await details(page);
+    await page.getByRole('link', {name: width < 768 ? '立即阅读' : '开始阅读', exact: true}).click(); await ready(page);
+    await page.goBack(); await details(page);
+    await page.reload(); await details(page);
+    await page.goBack(); await expect(page).toHaveURL(base + '/ranking'); await idle(page);
+    await expect(card).toBeVisible();
+    await expect(page.getByRole('button', {name: '周榜', exact: true})).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', {name: '玄幻', exact: true})).toHaveAttribute('aria-pressed', 'true');
+  });
+}
 
 for (const origin of ['direct details', 'search', 'direct reader', 'legacy reader']) {
   test(`${origin}: Back always follows reader, details, home without re-entering a chapter`, async ({page}) => {
