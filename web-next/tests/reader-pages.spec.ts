@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 
-const base='http://127.0.0.1:3000';
+const base=process.env.READER_PAGES_BASE || 'http://127.0.0.1:3000';
 const url=base+'/book/000000000000000000000101/000000000000000000000101';
 
 test('touch hold survives release, marks persist, swipes page, and exiting restores scrolling',async({browser})=>{

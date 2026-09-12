@@ -11,7 +11,7 @@ type Options={
   mode:ReaderTurnMode;
   onCommit:(page:number)=>void;
 };
-type Motion={target:number;direction:number;extent:number;axis:'X'|'Y';moving:HTMLElement;offset:number;settling:boolean;animation?:Animation};
+type Motion={target:number;direction:number;extent:number;axis:'X'|'Y';moving:HTMLElement;offset:number;settling:boolean;animation?:Animation;complete?:()=>void};
 
 // Only the active page is interactive. A short-lived, inert copy supplies the
 // adjacent sheet during a turn; no duplicate chapter trees remain after it.
@@ -82,6 +82,7 @@ export function useReaderPageTurn({mode,onCommit}:Options) {
       cancel();
       if(commit)flushSync(()=>onCommit(current.target));
     };
+    current.complete=complete;
     const remaining=commit?current.extent-current.offset:current.offset;
     const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if(reduced || remaining<1 || !current.moving.animate){complete();return;}
@@ -95,5 +96,8 @@ export function useReaderPageTurn({mode,onCommit}:Options) {
 
   const busy=useCallback(()=>!!motion.current,[]);
   const settling=useCallback(()=>!!motion.current?.settling,[]);
-  return {viewport,textWindow,columns,surface,preview,begin,drag,finish,cancel,busy,settling};
+  // A new gesture may finish the previous release animation immediately,
+  // retaining its commit/rebound decision before accepting the next input.
+  const settle=useCallback(()=>motion.current?.complete?.(),[]);
+  return {viewport,textWindow,columns,surface,preview,begin,drag,finish,cancel,busy,settling,settle};
 }

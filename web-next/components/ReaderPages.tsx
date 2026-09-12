@@ -11,7 +11,7 @@ import {useStoredState} from '@/lib/useStoredState';
 import {readerPaperPosition} from '@/lib/reader-paper';
 import {useAuth} from '@/contexts/AuthContext';
 import type {Book,Chapter} from '@/lib/api';
-import {READER_TURN_DURATION_MS,useReaderPageTurn,type ReaderTurnMode} from './useReaderPageTurn';
+import {useReaderPageTurn,type ReaderTurnMode} from './useReaderPageTurn';
 import './reader-pages.css';
 
 type Paragraph={key:string;text:string};
@@ -48,7 +48,7 @@ export default function ReaderPages(props:ReaderPageProps) {
   const fraction=useRef(0);
   const previousLayout=useRef({width:0,height:0,total:1,typography:'',mode:turnMode});
   const restored=useRef(false);
-  const suppressClickUntil=useRef(0);
+  const suppressGestureClick=useRef(false);
   const gesture=useRef<{x:number;y:number;id:number;time:number;last:number;lastTime:number;velocity:number;timer?:ReturnType<typeof setTimeout>;long:boolean;moved:boolean;dragging:boolean}|null>(null);
   const touchEdge=useRef<{x:number;y:number;top:boolean;bottom:boolean}|null>(null);
   const wheelEdge=useRef<{last:number;direction:number}>({last:0,direction:0});
@@ -66,7 +66,17 @@ export default function ReaderPages(props:ReaderPageProps) {
     }
     currentPage.current=target;setPage(target);
   },[props.previousId,props.nextId,onChapter]);
-  const {viewport:windowRef,textWindow,columns,surface,preview,begin:beginTurn,drag:dragTurn,finish:finishTurn,cancel:cancelTurn,busy:turnBusy,settling:turnSettling}=useReaderPageTurn({mode:turnMode,onCommit:commitPage});
+  const {viewport:windowRef,textWindow,columns,surface,preview,begin:beginTurn,drag:dragTurn,finish:finishTurn,cancel:cancelTurn,busy:turnBusy,settling:turnSettling,settle:settleTurn}=useReaderPageTurn({mode:turnMode,onCommit:commitPage});
+
+  useEffect(()=>{
+    const viewport=windowRef.current;
+    if(!viewport || scrolling)return;
+    // Pointer capture alone does not consume the browser's touch gesture.
+    // Cancel only our single-finger page drag; pinch zoom stays native.
+    const move=(event:TouchEvent)=>{if(gesture.current?.dragging && event.touches.length===1 && event.cancelable)event.preventDefault();};
+    viewport.addEventListener('touchmove',move,{passive:false});
+    return()=>viewport.removeEventListener('touchmove',move);
+  },[scrolling,windowRef]);
 
   useEffect(()=>{
     const previous=document.body.style.overflow;
@@ -117,7 +127,7 @@ export default function ReaderPages(props:ReaderPageProps) {
         next=Math.round(position*total);
         restored.current=true;
       } else if(previous.width && (previous.width!==width || previous.height!==height || previous.total!==total || previous.typography!==typography || previous.mode!==turnMode)) {
-        if(gesture.current){clearTimeout(gesture.current.timer);gesture.current=null;suppressClickUntil.current=Date.now()+READER_TURN_DURATION_MS;}
+        if(gesture.current){clearTimeout(gesture.current.timer);gesture.current=null;suppressGestureClick.current=true;}
         cancelTurn();next=Math.round(position*total);
       }
       next=Math.max(0,Math.min(next,total-1));
@@ -245,14 +255,18 @@ export default function ReaderPages(props:ReaderPageProps) {
 
   function openMenu(paragraph:Paragraph,x:number,y:number) {
     if(turnBusy())return;
-    suppressClickUntil.current=Date.now()+READER_TURN_DURATION_MS;
+    suppressGestureClick.current=true;
     onHideTools();
     window.getSelection()?.removeAllRanges();
     setMenu({paragraph,x:Math.max(12,Math.min(x-90,window.innerWidth-216)),y:Math.max(12,Math.min(y-62,window.innerHeight-70))});
   }
   function pointerDown(event:React.PointerEvent) {
     if(!event.isPrimary){cancelGesture();return;}
-    if(controlsBlocked || props.navigating || turnBusy() || event.button!==0 || (event.target as HTMLElement).closest('button,a'))return;
+    if(controlsBlocked || props.navigating || event.button!==0 || (event.target as HTMLElement).closest('button,a'))return;
+    // Suppress the drag's own click, never a separate press that follows it.
+    suppressGestureClick.current=false;
+    settleTurn();
+    if(turnBusy())return;
     if(gesture.current?.timer)clearTimeout(gesture.current.timer);
     const element=(event.target as HTMLElement).closest<HTMLElement>('[data-paragraph-key]');
     const paragraph=element?paragraphs.find(row=>row.key===element.dataset.paragraphKey):undefined;
@@ -277,7 +291,7 @@ export default function ReaderPages(props:ReaderPageProps) {
   function pointerUp(event:React.PointerEvent) {
     const state=gesture.current;gesture.current=null;
     if(!state)return;clearTimeout(state.timer);
-    if(state.long || state.moved)suppressClickUntil.current=Date.now()+READER_TURN_DURATION_MS;
+    if(state.long || state.moved)suppressGestureClick.current=true;
     if(state.long || !state.dragging)return;
     const distance=turnMode==='vertical'?event.clientY-state.y:event.clientX-state.x;
     const extent=turnMode==='vertical'?layout.height:layout.width;
@@ -287,12 +301,12 @@ export default function ReaderPages(props:ReaderPageProps) {
     else if(commit)adjacentChapter(distance<0?1:-1);
   }
   function cancelGesture(){
-    if(gesture.current){clearTimeout(gesture.current.timer);if(gesture.current.moved)suppressClickUntil.current=Date.now()+READER_TURN_DURATION_MS;}
+    if(gesture.current){clearTimeout(gesture.current.timer);suppressGestureClick.current=true;}
     gesture.current=null;
     if(!turnSettling())finishTurn(false);
   }
   function click(event:React.MouseEvent) {
-    if(controlsBlocked || turnBusy() || Date.now()<suppressClickUntil.current || (event.target as HTMLElement).closest('button,a'))return;
+    if(controlsBlocked || turnBusy() || suppressGestureClick.current || (event.target as HTMLElement).closest('button,a'))return;
     if(props.toolsVisible || scrolling){onTools();return;}
     const box=windowRef.current!.getBoundingClientRect();
     const position=turnMode==='vertical'?(event.clientY-box.top)/box.height:(event.clientX-box.left)/box.width;
@@ -318,7 +332,7 @@ export default function ReaderPages(props:ReaderPageProps) {
     if(!start || event.touches.length || !event.changedTouches[0] || controlsBlocked)return;
     const dy=event.changedTouches[0].clientY-start.y,dx=event.changedTouches[0].clientX-start.x;
     if(Math.abs(dy)>80 && Math.abs(dy)>Math.abs(dx) && (dy<0?start.bottom:start.top)){
-      suppressClickUntil.current=Date.now()+READER_TURN_DURATION_MS;adjacentChapter(dy<0?1:-1);
+      suppressGestureClick.current=true;adjacentChapter(dy<0?1:-1);
     }
   }
   function wheel(event:React.WheelEvent){
@@ -363,7 +377,7 @@ export default function ReaderPages(props:ReaderPageProps) {
       {props.navigating && <div className="reader-notice" role="status">正在加载章节…</div>}
       {(notice || countError) && <div className="reader-notice" role="status">{notice || '段评暂不可用，正文可继续阅读'}</div>}
     </section>
-    {menu && <div className="paragraph-menu-backdrop" onClick={()=>{if(Date.now()>=suppressClickUntil.current)setMenu(null);}}><div ref={menuRef} role="menu" aria-label="段落操作" className="paragraph-menu" style={{left:menu.x,top:menu.y}} onClick={event=>event.stopPropagation()}><button role="menuitem" onClick={()=>{setDiscussion(menu.paragraph);setMenu(null);}}><MessageCircle size={16}/>评论</button><button role="menuitem" onClick={toggleMark}><Highlighter size={16}/>{marks.includes(menu.paragraph.key)?'取消标记':'标记'}</button></div></div>}
+    {menu && <div className="paragraph-menu-backdrop" onPointerDown={()=>{suppressGestureClick.current=false;}} onClick={()=>{if(!suppressGestureClick.current)setMenu(null);}}><div ref={menuRef} role="menu" aria-label="段落操作" className="paragraph-menu" style={{left:menu.x,top:menu.y}} onClick={event=>event.stopPropagation()}><button role="menuitem" onClick={()=>{setDiscussion(menu.paragraph);setMenu(null);}}><MessageCircle size={16}/>评论</button><button role="menuitem" onClick={toggleMark}><Highlighter size={16}/>{marks.includes(menu.paragraph.key)?'取消标记':'标记'}</button></div></div>}
     {discussion && <ParagraphComments key={discussion.key} chapterId={chapter.id} paragraph={discussion} onClose={closeDiscussion} onCount={countChanged}/>}
   </div>;
 }

@@ -11,7 +11,6 @@ import {readerChapterTitle} from '@/lib/reader-layout';
 import {cachedReaderCounts,loadReaderChapter,loadReaderCounts,rememberReaderCounts} from '@/lib/reader-chapters';
 import {useStoredState} from '@/lib/useStoredState';
 import {useAuth} from '@/contexts/AuthContext';
-import {READER_TURN_DURATION_MS} from './useReaderPageTurn';
 import './reader-pages.css';
 
 type Paragraph={key:string;text:string};
@@ -60,9 +59,9 @@ export default function ReaderScroll(props:ReaderPageProps){
   const [menu,setMenu]=useState<Selection|null>(null),[discussion,setDiscussion]=useState<Selection|null>(null);
   const [countUpdates,setCountUpdates]=useState<Record<string,Record<string,number>>>({});
   const [marks,setMarks]=useStoredState<string[]>(markKey(userId,menu?.chapter.id || props.chapter.id),[],validMarks);
-  const menuRef=useRef<HTMLDivElement>(null),suppressClickUntil=useRef(0),touching=useRef(false);
+  const menuRef=useRef<HTMLDivElement>(null),suppressGestureClick=useRef(false),touching=useRef(false);
   const heldMenu=useRef(false);
-  const gesture=useRef<{x:number;y:number;long:boolean;selection:Selection|null;timer?:ReturnType<typeof setTimeout>}|null>(null);
+  const gesture=useRef<{x:number;y:number;long:boolean;scrollTop:number;selection:Selection|null;timer?:ReturnType<typeof setTimeout>}|null>(null);
   const frame=useRef(0),idle=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
   const idleWork=useRef(()=>{});
   const blocked=props.blocked || !!menu || !!discussion;
@@ -126,6 +125,7 @@ export default function ReaderScroll(props:ReaderPageProps){
     if(next!==chapters){
       captureAnchor();
       // Changing the chapter window must restore its measured anchor before paint.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setChapters(next);return;
     }
     if(!restored.current || (navigated && !fromScroll)){
@@ -176,10 +176,11 @@ export default function ReaderScroll(props:ReaderPageProps){
   function onScroll(){
     const layoutTop=layoutScrollTop.current;layoutScrollTop.current=null;
     if(layoutTop!==null && Math.abs((viewport.current?.scrollTop || 0)-layoutTop)<1){measure();return;}
-    cancelGesture();
-    // This runs only for a native scroll event, never during rendering.
-    // eslint-disable-next-line react-hooks/purity
-    suppressClickUntil.current=Date.now()+READER_TURN_DURATION_MS;
+    // Ignore queued scroll events from before a new press. Only movement
+    // during this gesture can disqualify its tap; momentum adds no cooldown.
+    if(gesture.current && Math.abs((viewport.current?.scrollTop || 0)-gesture.current.scrollTop)>1){
+      suppressGestureClick.current=true;cancelGesture();
+    }
     cancelAnimationFrame(frame.current);frame.current=requestAnimationFrame(()=>measure(true));
     clearTimeout(idle.current);idle.current=setTimeout(()=>idleWork.current(),200);
     if(props.toolsVisible && !blocked)props.onHideTools();
@@ -212,7 +213,7 @@ export default function ReaderScroll(props:ReaderPageProps){
   }
   function openMenu(selection:Selection,held=false){
     heldMenu.current=held;
-    props.onHideTools();suppressClickUntil.current=Date.now()+READER_TURN_DURATION_MS;
+    props.onHideTools();suppressGestureClick.current=true;
     window.getSelection()?.removeAllRanges();setMenu({...selection,x:Math.max(12,Math.min(selection.x-90,innerWidth-216)),y:Math.max(12,Math.min(selection.y-62,innerHeight-70))});
   }
   function cancelGesture(){clearTimeout(gesture.current?.timer);gesture.current=null;}
@@ -258,14 +259,14 @@ export default function ReaderScroll(props:ReaderPageProps){
       <div className="reader-page-window" tabIndex={0} aria-label="正文，可连续上下滚动，点击中央打开菜单"
         onPointerDown={event=>{
           if(blocked || !event.isPrimary || event.button!==0 || (event.target as HTMLElement).closest('button,a'))return;
-          cancelGesture();const selection=selectionAt(event.target,event.clientX,event.clientY);
-          const state={x:event.clientX,y:event.clientY,long:false,selection,timer:undefined as ReturnType<typeof setTimeout>|undefined};
+          cancelGesture();suppressGestureClick.current=false;const selection=selectionAt(event.target,event.clientX,event.clientY);
+          const state={x:event.clientX,y:event.clientY,long:false,scrollTop:viewport.current?.scrollTop || 0,selection,timer:undefined as ReturnType<typeof setTimeout>|undefined};
           if(selection)state.timer=setTimeout(()=>{state.long=true;openMenu(selection,true);},450);gesture.current=state;
         }}
-        onPointerMove={event=>{const state=gesture.current;if(state && Math.hypot(event.clientX-state.x,event.clientY-state.y)>8){cancelGesture();suppressClickUntil.current=Date.now()+READER_TURN_DURATION_MS;}}}
-        onPointerUp={()=>{if(gesture.current?.long)suppressClickUntil.current=Date.now()+READER_TURN_DURATION_MS;cancelGesture();}} onPointerCancel={cancelGesture}
+        onPointerMove={event=>{const state=gesture.current;if(state && Math.hypot(event.clientX-state.x,event.clientY-state.y)>8){cancelGesture();suppressGestureClick.current=true;}}}
+        onPointerUp={()=>{if(gesture.current?.long)suppressGestureClick.current=true;cancelGesture();}} onPointerCancel={()=>{suppressGestureClick.current=true;cancelGesture();}}
         onTouchStart={()=>{touching.current=true;}} onTouchEnd={()=>{touching.current=false;clearTimeout(idle.current);idle.current=setTimeout(()=>idleWork.current(),200);}} onTouchCancel={()=>{touching.current=false;}}
-        onClick={event=>{if(!blocked && Date.now()>=suppressClickUntil.current && !(event.target as HTMLElement).closest('button,a'))props.onTools();}}
+        onClick={event=>{if(!blocked && !suppressGestureClick.current && !(event.target as HTMLElement).closest('button,a'))props.onTools();}}
         onContextMenu={event=>{event.preventDefault();const selection=selectionAt(event.target,event.clientX,event.clientY);if(selection && !blocked)openMenu(selection,gesture.current?.long || heldMenu.current);}}
         onKeyDown={event=>{if(event.key==='Enter' || (event.shiftKey && event.key==='F10')){const box=(event.target as HTMLElement).getBoundingClientRect(),selection=selectionAt(event.target,box.x+80,box.y+40);if(selection && !blocked){event.preventDefault();openMenu(selection);}}}}>
         <div className="reader-page-surface">
@@ -278,7 +279,7 @@ export default function ReaderScroll(props:ReaderPageProps){
       </div>
     </section>
     {continuationError && <div role="alert" className="reader-navigation-error">{continuationError}<button onClick={()=>{setContinuationError('');setContinuationRetry(value=>value+1);}}>重试</button><button onClick={()=>setContinuationError('')}>关闭</button></div>}
-    {menu && <div className="paragraph-menu-backdrop" onPointerDown={()=>{heldMenu.current=false;}} onClickCapture={event=>{if(heldMenu.current){event.preventDefault();event.stopPropagation();}}} onClick={()=>{if(Date.now()>=suppressClickUntil.current)setMenu(null);}}><div ref={menuRef} role="menu" aria-label="段落操作" className="paragraph-menu" style={{left:menu.x,top:menu.y}} onClick={event=>event.stopPropagation()}><button role="menuitem" onClick={()=>{setDiscussion(menu);setMenu(null);}}><MessageCircle size={16}/>评论</button><button role="menuitem" onClick={()=>{const key=menu.paragraph.key;setMarks(previous=>previous.includes(key)?previous.filter(item=>item!==key):[...previous,key]);setMenu(null);}}><Highlighter size={16}/>{marks.includes(menu.paragraph.key)?'取消标记':'标记'}</button></div></div>}
+    {menu && <div className="paragraph-menu-backdrop" onPointerDown={()=>{heldMenu.current=false;suppressGestureClick.current=false;}} onClickCapture={event=>{if(heldMenu.current){event.preventDefault();event.stopPropagation();}}} onClick={()=>{if(!suppressGestureClick.current)setMenu(null);}}><div ref={menuRef} role="menu" aria-label="段落操作" className="paragraph-menu" style={{left:menu.x,top:menu.y}} onClick={event=>event.stopPropagation()}><button role="menuitem" onClick={()=>{setDiscussion(menu);setMenu(null);}}><MessageCircle size={16}/>评论</button><button role="menuitem" onClick={()=>{const key=menu.paragraph.key;setMarks(previous=>previous.includes(key)?previous.filter(item=>item!==key):[...previous,key]);setMenu(null);}}><Highlighter size={16}/>{marks.includes(menu.paragraph.key)?'取消标记':'标记'}</button></div></div>}
     {discussion && <ParagraphComments key={`${discussion.chapter.id}:${discussion.paragraph.key}`} chapterId={discussion.chapter.id} paragraph={discussion.paragraph} onClose={closeDiscussion} onCount={(key,count)=>{const id=discussion.chapter.id;rememberReaderCounts(id,{...cachedReaderCounts(id),[key]:count});setCountUpdates(previous=>({...previous,[id]:{...previous[id],[key]:count}}));}}/>}
   </div>;
 }
