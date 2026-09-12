@@ -60,7 +60,7 @@ test('an in-flight preload is shared with an early click instead of fetching twi
 });
 
 for (const tab of ['shelf', 'history']) {
-  test(tab + ' returns from details and reading to the same tab, sort and page', async ({page}) => {
+  test(tab + ' returns from reading to the same tab, sort and page', async ({page}) => {
     await session(page);
     await page.route('**/api/users/*/library?*', route => {
       const second = new URL(route.request().url()).searchParams.get('page') === '2';
@@ -77,9 +77,9 @@ for (const tab of ['shelf', 'history']) {
     const source = page.url();
     await page.locator('.shelf-book').click();
     await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true'); await idle(page);
-    await page.goBack(); await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);
-    await page.reload(); await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);
+    await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
     await page.goBack(); await expect(page).toHaveURL(source); await idle(page);
+    await page.reload(); await expect(page).toHaveURL(source); await idle(page);
     await expect(page.locator('.shelf-row h2')).toHaveText('第二页的书');
     await expect(page.getByRole('tab', {name: tab === 'history' ? '浏览记录' : '书架', exact: true})).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('combobox', {name: '书架排序'})).toHaveValue('updated');

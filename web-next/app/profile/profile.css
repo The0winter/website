@@ -60,7 +60,7 @@
 .profile-dialog input::placeholder { color:var(--profile-muted); opacity:.8; }
 .profile-dialog form>div:last-child { padding-bottom:max(0px,env(safe-area-inset-bottom)); }
 @media (max-width:767px) {
-  .profile-page { padding:18px 12px calc(72px + env(safe-area-inset-bottom)); }
+  .profile-page { padding:18px 12px calc(80px + env(safe-area-inset-bottom)); }
   .profile-card { border-radius:18px; }
   .profile-cover { height:152px; }
   .profile-appearance-trigger { top:12px; right:12px; min-height:36px; }

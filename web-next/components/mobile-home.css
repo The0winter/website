@@ -1,6 +1,6 @@
 @media (max-width:767px) {
   body:has(.mobile-home) [data-site-chrome] { display:none; }
-  .mobile-home { min-height:100vh; padding:10px 12px calc(72px + env(safe-area-inset-bottom)); background:var(--home-background); color:var(--home-text); font-family:Arial,"Microsoft YaHei",sans-serif; }
+  .mobile-home { min-height:100vh; padding:10px 12px calc(80px + env(safe-area-inset-bottom)); background:var(--home-background); color:var(--home-text); font-family:Arial,"Microsoft YaHei",sans-serif; }
   .mobile-home .mh-topbar { gap:8px; margin-bottom:8px; }
   .mobile-home .mh-logo img { width:30px; height:30px; }
   .mh-banner { position:relative; isolation:isolate; display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:116px; padding:12px 16px; overflow:hidden; border-radius:14px; color:#ffebc5; background:radial-gradient(ellipse at 65% 120%,#af7548 0,transparent 65%),linear-gradient(115deg,#302c27,#6e5940); }

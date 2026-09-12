@@ -19,6 +19,7 @@ import {syncBookRoute} from '@/lib/book-navigation';
 import {beginChapterEntry} from '@/lib/chapter-entry';
 import {formatRelativeUpdate} from '@/lib/relative-update';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
+import {useShelfPageTurn} from '@/lib/useShelfPageTurn';
 import type {Book} from '@/lib/api';
 import './library.css';
 
@@ -148,9 +149,9 @@ function Library() {
   const removalVersion = useRef({value: 0});
   const swipe = useRef<{id: number; x: number; y: number; horizontal: boolean} | null>(null);
   const suppressSwipeClick = useRef(false);
-  const content = useRef<HTMLDivElement>(null);
   const tabs = useRef<HTMLDivElement>(null);
-  const previousTab = useRef(tab);
+  const pageTurn = useShelfPageTurn(tab, pathname === '/library' && Boolean(user) && !authLoading);
+  const {content, viewport} = pageTurn;
   const userId = user?.id;
   const query = {userId: userId || '', tab, sort, page};
   const result = useSyncExternalStore(subscribeLibrary, () => getLibrarySnapshot(query), serverLibrarySnapshot);
@@ -170,21 +171,6 @@ function Library() {
     observer.observe(tablist);
     return () => observer.disconnect();
   }, [tab, userId, authLoading]);
-  useLayoutEffect(() => {
-    const changed = previousTab.current !== tab;
-    previousTab.current = tab;
-    const panel = content.current;
-    if (!changed || !panel || pathname !== '/library' || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    // Animate only a tab change; refreshing data and sorting keep their position.
-    const animation = panel.animate([
-      {transform: `translateX(${tab === 'history' ? 28 : -28}px)`, opacity: .25},
-      {transform: 'translateX(0)', opacity: 1},
-    ], {duration: 260, easing: 'cubic-bezier(.22,.7,.25,1)'});
-    panel.dataset.switching = tab;
-    const clear = () => {delete panel.dataset.switching;};
-    animation.finished.then(clear, () => {});
-    return () => {animation.cancel(); clear();};
-  }, [tab, pathname]);
   useEffect(() => {setTheme('light');}, [setTheme]);
   useEffect(() => {if (!authLoading && !user) router.replace('/login');}, [authLoading, user, router]);
   useEffect(() => {
@@ -206,6 +192,7 @@ function Library() {
 
   function startManaging(entry?: Entry) {
     if (management.current) return;
+    pageTurn.cancel();
     const token = crypto.randomUUID();
     management.current = {token};
     history.pushState({...history.state, libraryManagement: token}, '', location.href);
@@ -236,7 +223,7 @@ function Library() {
     if (nextTab === 'history') params.set('tab', nextTab);
     params.set('sort', nextSort);
     if (nextPage > 1) params.set('page', String(nextPage));
-    const change = () => {setMenu(null); history.replaceState({}, '', '/library?' + params);};
+    const change = () => pageTurn.change(nextTab, () => {setMenu(null); history.replaceState({}, '', '/library?' + params);});
     if (management.current) finishManaging(change);
     else change();
   }
@@ -326,6 +313,7 @@ function Library() {
             <label className="shelf-sort" title={sorts[sort]}><span>排序</span><ArrowUpDown size={13}/><select aria-label="书架排序" value={sort} onChange={event => {const value = event.target.value as Sort; setSort(value); changeView(tab, 1, value);}}>{Object.entries(sorts).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           </div>
         </header>
+        <div ref={viewport} className="shelf-viewport">
         <div ref={content} id="shelf-content" role="tabpanel" aria-labelledby={`tab-${tab}`} aria-busy={loading}>
           {result.error && result.rows !== null && <p className="shelf-refresh-error" role="alert">更新暂时失败，已保留上次的书架。<button onClick={() => void loadLibrary(query, true)}>重试</button></p>}
           {loading ? <div className="shelf-empty" role="status"><BookOpen size={32}/><p>正在整理你的书架…</p></div> : result.error && result.rows === null ? <div className="shelf-empty" role="alert"><p>{result.error}</p><button onClick={() => void loadLibrary(query, true)}>重新加载</button></div> : rows.length === 0 ? <div className="shelf-empty">
@@ -341,6 +329,7 @@ function Library() {
             {result.total <= 2 && !managing && <div className="shelf-discover"><span>下一本好书，等你发现</span><Link href="/">去精选 <ChevronRight size={14}/></Link></div>}
             {result.total > 20 && <nav className="shelf-pagination" aria-label={tab === 'shelf' ? '书架分页' : '浏览记录分页'}><button disabled={page === 1} onClick={() => changeView(tab, page - 1)}>上一页</button><span>{page} / {Math.ceil(result.total / 20)}</span><button disabled={page * 20 >= result.total} onClick={() => changeView(tab, page + 1)}>下一页</button></nav>}
           </>}
+        </div>
         </div>
       </section>
     </div>
