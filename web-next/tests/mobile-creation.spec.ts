@@ -44,12 +44,17 @@ test('opening uses a radial reveal and Back/Forward, Escape and focus restore co
   await page.goto(base); await page.evaluate(() => scrollTo(0, 180));
   const position = await page.evaluate(() => scrollY);
   const length = await page.evaluate(() => history.length);
-  await launch(page).click(); await expect(modal(page)).toBeVisible();
-  const reveal = await modal(page).evaluate(element => {
-    element.getAnimations({ subtree: true }).forEach(animation => { animation.pause(); animation.currentTime = 80; });
-    const background = element.querySelector('.mw-reveal')!;
-    return { transform: getComputedStyle(background).transform, clip: getComputedStyle(element).clipPath, width: background.getBoundingClientRect().width };
+  await page.evaluate(() => {
+    const capture = (event: AnimationEvent) => {
+      if (event.animationName !== 'mw-reveal-in') return;
+      const background = event.target as HTMLElement;
+      Object.assign(window, { writerRevealFrame: { transform: getComputedStyle(background).transform, clip: getComputedStyle(background.closest('.mw-dialog')!).clipPath, width: background.getBoundingClientRect().width } });
+      document.removeEventListener('animationstart', capture);
+    };
+    document.addEventListener('animationstart', capture);
   });
+  await launch(page).click(); await expect(modal(page)).toBeVisible();
+  const reveal = await page.evaluate(() => (window as Window & { writerRevealFrame?: { transform: string; clip: string; width: number } }).writerRevealFrame!);
   expect(reveal.transform).toMatch(/^matrix\(/); expect(reveal.clip).toBe('none');
   expect(reveal.width).toBeLessThan(Math.hypot(390, 844));
   await page.screenshot({ path: info.outputPath('radial-opening.png') });
