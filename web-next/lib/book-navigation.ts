@@ -104,7 +104,14 @@ function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, t
   window.dispatchEvent(new Event('book-navigation-leave'));
   if (currentChapterEntry()?.href === entry.href) {
     cancelBookTransition();
-    if (replace) router.replace(entry.href); else router.push(entry.href);
+    // Reserve the reader visit immediately so Back during its incoming loader
+    // returns to the source details, even before Next finishes the request.
+    if (!replace && entry.kind === 'reader') {
+      window.history.pushState({...window.history.state, bookNavigation: entry}, '', entry.href);
+      current = entry;
+      router.replace(entry.href);
+    } else if (replace) router.replace(entry.href);
+    else router.push(entry.href);
     return;
   }
   transitionBookPage(entry.href, direction, () => {

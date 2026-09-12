@@ -2,6 +2,7 @@
 /* Loading and reading share one paper finish. */
 
 .chapter-loading-page { position:fixed; inset:0; z-index:10001; background:var(--reader-paper); color:var(--entry-ink); touch-action:none; overflow:hidden; }
+.chapter-entry-snapshot.chapter-catalog-snapshot { z-index:10002; background:transparent; box-shadow:none; pointer-events:none; }
 .chapter-loading-sheet { position:relative; display:flex; align-items:center; justify-content:center; height:100%; max-width:var(--entry-width); margin:auto; padding:calc(32px + env(safe-area-inset-top)) 24px calc(32px + env(safe-area-inset-bottom)); }
 /* Match the reader's inner page surface, including its border inset. */
 .chapter-loading-sheet::before { content:""; position:absolute; inset:0; background:inherit; }

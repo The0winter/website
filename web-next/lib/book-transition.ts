@@ -62,7 +62,7 @@ function bookLoadingPage(href: string) {
 
 // Keep the current screen visible while Next renders and the reader measures
 // its pages. A closed shadow root isolates duplicate IDs and reader controls.
-export function freezeBookPage(className = 'book-transition-snapshot') {
+export function freezeBookPage(className = 'book-transition-snapshot', source = document.body, prepareClone?: (clone: HTMLElement) => void) {
   const overlay = document.createElement('div');
   overlay.className = className;
   overlay.setAttribute('aria-hidden', 'true');
@@ -73,8 +73,8 @@ export function freezeBookPage(className = 'book-transition-snapshot') {
     try { return [...sheet.cssRules].map(rule => rule.cssText).join('\n'); } catch { return ''; }
   }).join('\n') + '\n*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}';
   shadow.append(style);
-  const clone = document.body.cloneNode(true) as HTMLElement;
-  const originals = [document.body, ...document.body.querySelectorAll<HTMLElement>('*')];
+  const clone = source.cloneNode(true) as HTMLElement;
+  const originals = [source, ...source.querySelectorAll<HTMLElement>('*')];
   const copies = [clone, ...clone.querySelectorAll<HTMLElement>('*')];
   originals.forEach((original, index) => {
     const copy = copies[index];
@@ -90,8 +90,11 @@ export function freezeBookPage(className = 'book-transition-snapshot') {
   clone.querySelectorAll('script,iframe,.book-transition-snapshot,.chapter-entry-snapshot,.chapter-loading-page').forEach(element => element.remove());
   clone.querySelectorAll('[data-entry-revealing]').forEach(element => element.removeAttribute('data-entry-revealing'));
   clone.style.margin = '0';
-  clone.style.position = 'relative';
-  clone.style.top = `${-window.scrollY}px`;
+  if (source === document.body) {
+    clone.style.position = 'relative';
+    clone.style.top = `${-window.scrollY}px`;
+  }
+  prepareClone?.(clone);
   const wrapper = document.createElement('div');
   wrapper.className = document.documentElement.className;
   const variables = getComputedStyle(document.documentElement);

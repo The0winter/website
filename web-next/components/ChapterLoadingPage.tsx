@@ -23,7 +23,7 @@ export default function ChapterLoadingPage() {
     let frame = 0, inputAt = -Infinity, disposed = false, stableFrames = 0, previousLayout = '';
     const pointers = new Set<number>();
     const ready = () => {
-      if (!paperReady) return null;
+      if (!paperReady || target.motion === 'enter' && !currentChapterEntry()?.motionComplete) return null;
       if (location.pathname !== target.href) return null;
       const reader = document.querySelector<HTMLElement>(`[data-reader-entry-key="${target.token}"] [data-reader-chapter="${target.chapterId}"][data-reader-ready="true"]`);
       const sheet = reader?.querySelector<HTMLElement>('.reader-frame');
@@ -64,7 +64,7 @@ export default function ChapterLoadingPage() {
         if (currentChapterEntry()?.revealing) {
           // Keep input guarded until the catalog has completely left, even
           // when a cached chapter is already visible underneath it.
-          if (!document.querySelector('.book-catalog-overlay[data-selecting=true]')) {
+          if (currentChapterEntry()?.motionComplete && !document.querySelector('.book-catalog-overlay[data-selecting=true]')) {
             flushSync(() => finishChapterEntry(target.token)); return;
           }
         } else {
@@ -112,7 +112,7 @@ export default function ChapterLoadingPage() {
   }, [token]);
   if (!entry) return null;
   const style = {'--reader-paper': entry.paper, '--entry-ink': entry.ink, '--entry-desk': entry.desk, '--entry-width': entry.width, '--reader-paper-position': entry.paperPosition} as CSSProperties;
-  return <div ref={panel} tabIndex={-1} aria-busy={!entry.error} aria-label={`正在打开章节：${entry.title}`} className="chapter-loading-page" style={style} data-chapter-loading={entry.chapterId} data-loading-visible="true" data-text-revealed={Boolean(entry.revealing)}>
+  return <div ref={panel} tabIndex={-1} aria-busy={!entry.error} aria-label={`正在打开章节：${entry.title}`} className="chapter-loading-page" style={style} data-chapter-loading={entry.chapterId} data-entry-motion={entry.motion} data-loading-visible="true" data-text-revealed={Boolean(entry.revealing)}>
     {entry.textured && <link rel="preload" as="image" href={readerPaperImage} media="(max-width:1023px)" />}
     <div className="chapter-loading-sheet" data-paper={entry.textured}>
       <div role={entry.error ? 'alert' : 'status'} aria-live="polite" className="chapter-loading-message">

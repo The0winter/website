@@ -293,8 +293,9 @@ test('Back during a slow entry and repeated Back cannot resurrect a pending read
   await page.getByRole('link', {name: '立即阅读', exact: true}).click();
   await expect(page.locator('.chapter-loading-page')).toBeVisible();
   await expect.poll(() => delayedEntries).toBeGreaterThan(0);
+  await page.goBack(); await details(page);
+  await page.waitForTimeout(1700); await details(page);
   await page.goBack(); await home(page);
-  await page.waitForTimeout(1700); await home(page);
   await expect(page.locator('.book-transition-snapshot')).toHaveCount(0);
   await page.unroute(`**/book/${book}/${first}?_rsc=*`);
   await page.goto(detail); await details(page);
