@@ -36,6 +36,16 @@ export function chapterQuality(chapter) {
   return issues;
 }
 
+// UTF-8 text misdecoded as GBK can contain valid CJK characters without U+FFFD.
+// Require many distinct corruption markers; ordinary mentions are not errors.
+export function mojibakeEvidence(text) {
+  const source = String(text || '');
+  const matches = source.match(/銆|锛|鈥|鐨勬|姹熸|杩欏|鏈変/gu) || [];
+  const distinct = new Set(matches).size;
+  if (matches.length < 20 || distinct < 3 || matches.length / source.length < 0.01) return null;
+  return {markers: matches.length, distinct};
+}
+
 function shingles(text) {
   const result = new Set();
   // A bounded signature is enough to flag suspected duplication, never to delete.
@@ -50,6 +60,8 @@ export function qualityReport(catalog, chapters, failures = [], mode = 'download
   const lengths = chapters.map(c => c.content.trim().length).sort((a, b) => a - b);
   const medianLength = lengths[Math.floor(lengths.length / 2)] || 0;
   for (const chapter of chapters) {
+    const mojibake = mojibakeEvidence(chapter.content);
+    if (mojibake) issues.push({level: 'error', code: 'mojibake', chapter: chapter.chapter_number, detail: '正文密集出现 UTF-8/GBK 二次乱码特征，不能仅凭没有替换字符判定可读；保留原文等待核对', ...mojibake});
     const text = normalizedText(chapter.content);
     if (text.length >= 100) {
       const key = hash(text);
