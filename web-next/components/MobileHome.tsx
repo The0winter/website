@@ -72,7 +72,7 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
     <HomeSearchHeader/>
     {mode==='home'?<>
       {hero&&<BookLink href={`/book/${hero.id}`} className="mh-banner"><div><span className="mh-kicker">九天精选 · 好书推荐</span><h2>{hero.title}</h2><span className="mh-banner-sub">{hero.author||'九天小说'} <ChevronRight size={13}/></span></div><Cover book={hero} priority/><div className="mh-banner-seal" aria-hidden="true">阅</div></BookLink>}
-      <nav className="mh-shortcuts" aria-label="找书入口"><button onClick={()=>browse('category')}><span className="mh-icon coral"><LayoutGrid/></span>分类</button><Link href="/ranking"><span className="mh-icon purple"><Trophy/></span>排行</Link><button onClick={()=>browse('new')}><span className="mh-icon rose"><CalendarDays/></span>新书</button></nav>
+      <nav className="mh-shortcuts" aria-label="找书入口"><button onClick={()=>browse('category')}><span className="mh-icon coral"><LayoutGrid/></span>分类</button><button onClick={()=>browse('new')}><span className="mh-icon rose"><CalendarDays/></span>新书</button><Link href="/ranking"><span className="mh-icon purple"><Trophy/></span>排行</Link></nav>
       <section className="mh-section"><header><h2>热门精选</h2><Link href="/ranking">更多 <ChevronRight size={14}/></Link></header><BookRows books={featured.slice(0,3)}/></section>
       <section className="mh-section"><header><h2>精选推荐</h2><Link href="/ranking">更多 <ChevronRight size={14}/></Link></header><BookRows books={recommended.slice(0,3)}/></section>
       <section className="mh-section"><header><h2>新书上架</h2><button onClick={()=>browse('new')}>更多 <ChevronRight size={14}/></button></header><BookRows books={newBooks.slice(0,3)}/></section>

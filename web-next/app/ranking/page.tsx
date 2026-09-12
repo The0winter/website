@@ -66,7 +66,6 @@ export default function RankingPage() {
         <div className="ranking-layout">
           <aside className="ranking-sidebar">
             <nav className="ranking-nav" aria-label="榜单切换">
-              <span className="ranking-nav-label">发现好书</span>
               {RANKS.map(item => <button key={item.id} type="button" aria-pressed={activeRank === item.id} onClick={() => selectRank(item.id)}>
                 <span>{item.name}</span><ChevronRight size={15} aria-hidden="true"/>
               </button>)}
