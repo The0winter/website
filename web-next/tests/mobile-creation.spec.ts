@@ -71,7 +71,7 @@ test('opening uses a radial reveal and Back/Forward, Escape and focus restore co
   await page.keyboard.press('Escape'); await expect(modal(page)).toHaveCount(0);
   expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
   await launch(page).click(); await expect(modal(page)).toBeVisible();
-  await page.getByRole('button', { name: '关闭创作中心' }).click(); await expect(modal(page)).toHaveCount(0);
+  await page.getByRole('button', { name: '返回上一页' }).click(); await expect(modal(page)).toHaveCount(0);
 });
 
 for (const width of [320, 390]) test(`creator actions open the matching creation, editor and draft-management views at ${width}px`, async ({ page }, info) => {
@@ -140,7 +140,7 @@ test('returning from work management restores the creation center over its forum
   await expect(page.locator('.mw-view')).toHaveCount(0);
   await expect(page).toHaveURL(`${base}/forum`);
   await expect(modal(page)).toBeVisible();
-  await modal(page).getByRole('button', { name: '关闭创作中心' }).click();
+  await modal(page).getByRole('button', { name: '返回上一页' }).click();
   await expect(modal(page)).toHaveCount(0);
   await expect(page).toHaveURL(`${base}/forum`);
 });
