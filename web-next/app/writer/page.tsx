@@ -3,17 +3,18 @@ import BookCover from '@/components/BookCover';
 import { safeFetch as fetch } from '@/lib/request';
 
 
-import { useState, useEffect, useCallback } from 'react';
+import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { 
-  PenTool, BookOpen, BarChart3, 
+  ArrowLeft, PenTool, BookOpen, BarChart3,
   Plus, Upload, X, Edit3, Save, Settings, AlertCircle, CheckCircle2, Sparkles, Trash2,
   Shield, LogIn, Image as ImageIcon, Loader2, Ban, Unlock, Search, LayoutDashboard
 } from 'lucide-react';
 import { booksApi, chaptersApi, Book, Chapter } from '@/lib/api';
 import Cropper from 'react-easy-crop';
 import { getCroppedImg } from '@/lib/canvasUtils'; 
+import './writer-mobile.css';
 
 // ================= 迷你曲线图组件 (纯SVG实现，零依赖) =================
 const MiniChart = ({ data, color = "#3b82f6" }: { data: number[], color?: string }) => {
@@ -41,9 +42,13 @@ const MiniChart = ({ data, color = "#3b82f6" }: { data: number[], color?: string
     );
 };
 
-export default function WriterDashboard() {
+function WriterDashboard({ entry }: { entry: string }) {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const entryParams = new URLSearchParams(entry);
+  const entryBook = entryParams.get('book') || '';
+  const entryAction = entryParams.get('action');
+  const requestedPage = Number(entryParams.get('page') || 1);
 
   const LIMITS = { TITLE: 100, DESC: 500, CONTENT: 50000 };
   
@@ -54,18 +59,18 @@ export default function WriterDashboard() {
 
   // 作品相关
   const [myBooks, setMyBooks] = useState<Book[]>([]);
-  const [worksPage, setWorksPage] = useState(1);
+  const [worksPage, setWorksPage] = useState(Number.isSafeInteger(requestedPage) && requestedPage > 0 && requestedPage <= 100000 ? requestedPage : 1);
   const [loading, setLoading] = useState(true);
   const [activeChapters, setActiveChapters] = useState<Chapter[]>([]);
   const [savingChapter,setSavingChapter]=useState(false);
   const [publishDraftId,setPublishDraftId]=useState<string|null>(null);
 
   // 弹窗控制
-  const [showCreateBookModal, setShowCreateBookModal] = useState(false);
+  const [showCreateBookModal, setShowCreateBookModal] = useState(entryAction === 'new');
   const [bookCreationKey,setBookCreationKey]=useState(()=>crypto.randomUUID());
   const [creatingBook,setCreatingBook]=useState(false);
-  const [showChapterEditor, setShowChapterEditor] = useState(false);
-  const [showBookManager, setShowBookManager] = useState(false);
+  const [showChapterEditor, setShowChapterEditor] = useState(entryAction === 'write' && Boolean(entryBook));
+  const [showBookManager, setShowBookManager] = useState(entryAction === 'manage' && Boolean(entryBook));
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [chapterToDelete, setChapterToDelete] = useState<string | null>(null);
   
@@ -83,7 +88,7 @@ export default function WriterDashboard() {
   const [chapterSearchKeyword, setChapterSearchKeyword] = useState('');
 
   // 表单与选中项
-  const [currentBookId, setCurrentBookId] = useState<string>('');
+  const [currentBookId, setCurrentBookId] = useState<string>(entryBook);
   const [currentChapterId, setCurrentChapterId] = useState<string | null>(null);
   const [formBookTitle, setFormBookTitle] = useState('');
   const [formBookDescription, setFormBookDescription] = useState('');
@@ -505,10 +510,11 @@ const openBookManager = (book: Book) => {
 
   useEffect(() => { if(toast) { const t = setTimeout(()=>setToast(null),3000); return ()=>clearTimeout(t); } }, [toast]);
 
-  if (authLoading || !user) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600"/></div>;
+  if (authLoading || !user) return <div className="writer-page min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600"/></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
+    <div className="writer-page min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
+      <header className="writer-mobile-header"><button type="button" aria-label="返回阅读" onClick={() => router.push('/')}><ArrowLeft size={20}/></button><div><span>九天 · 创作者空间</span><h1>作品管理</h1></div><PenTool size={23} aria-hidden="true"/></header>
       {/* Toast */}
       {toast && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[110] animate-in fade-in slide-in-from-top-4">
@@ -568,12 +574,12 @@ const openBookManager = (book: Book) => {
       </aside>
 
       {/* ================= 主内容区域 ================= */}
-      <main className="flex-1 md:ml-64 p-4 md:p-8 pb-20 md:pb-8">
+      <main className="writer-main flex-1 md:ml-64 p-4 md:p-8 pb-20 md:pb-8">
         
         {/* 1. 作品管理视图 */}
         {currentView === 'works' && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[80vh] md:min-h-0 animate-in fade-in">
-                <div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 md:bg-white">
+            <div className="writer-works-shell bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[80vh] md:min-h-0 animate-in fade-in">
+                <div className="writer-works-heading p-4 md:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 md:bg-white">
                     <h3 className="font-bold text-lg text-gray-900">我的作品</h3>
                     <button onClick={() => {setBookCreationKey(crypto.randomUUID());setShowCreateBookModal(true);}} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg hover:bg-blue-700 transition shadow-md shadow-blue-500/20 active:scale-95 cursor-pointer">
                         <Plus className="h-4 w-4" /> <span className="hidden md:inline">创建新书</span><span className="md:hidden">新建</span>
@@ -588,7 +594,7 @@ const openBookManager = (book: Book) => {
                         </div>
                     ) : (
                         myBooks.map((book) => (
-                            <div key={book.id} className="p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
+                            <div key={book.id} className="writer-work p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
                                 <div className="w-20 aspect-[3/4] h-auto md:w-24 md:aspect-[3/4] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
                                     {book.cover_image ? <BookCover src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
                                 </div>
@@ -858,7 +864,7 @@ const openBookManager = (book: Book) => {
 {/* 5. 书籍管理器 (大修：强制两列 + 宽屏 + 强交互) */}
       {/* 5. 书籍管理器 (终极修正：章节双列 + 默认收起 + 鼠标手势) */}
       {showBookManager && activeBook && (
-        <div className="fixed inset-0 z-40 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
+        <div className="writer-manager fixed inset-0 z-40 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
            {/* 弹窗宽度 max-w-5xl 保证够宽 */}
            <div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] md:max-h-[85vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 md:slide-in-from-bottom-0">
               
@@ -868,7 +874,7 @@ const openBookManager = (book: Book) => {
                     <h3 className="text-lg md:text-xl font-bold text-gray-900 truncate max-w-[200px]">{activeBook.title}</h3>
                     <p className="text-xs text-gray-500">目录与设置</p>
                  </div>
-                 <button onClick={() => setShowBookManager(false)} className="p-2 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors cursor-pointer"><X className="h-5 w-5 text-gray-600" /></button>
+                 <button onClick={() => setShowBookManager(false)} aria-label="关闭作品管理" className="p-2 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors cursor-pointer"><X className="h-5 w-5 text-gray-600" /></button>
               </div>
 
               {/* 中间滚动区 */}
@@ -1075,7 +1081,7 @@ const openBookManager = (book: Book) => {
 
         {/* 2. 章节编辑器 */}
       {showChapterEditor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white md:bg-black/60 md:backdrop-blur-sm p-0 md:p-4 animate-in zoom-in-95 duration-200">
+        <div className="writer-editor fixed inset-0 z-50 flex items-center justify-center bg-white md:bg-black/60 md:backdrop-blur-sm p-0 md:p-4 animate-in zoom-in-95 duration-200">
            <div className="bg-white w-full h-full md:rounded-2xl md:shadow-2xl md:max-w-5xl md:h-[90vh] flex flex-col overflow-hidden">
               {/* 🟢 修复：补回丢失的顶部操作栏 (关闭、标题、发布按钮) */}
               <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-200 flex justify-between items-center bg-white shrink-0">
@@ -1188,7 +1194,7 @@ const openBookManager = (book: Book) => {
 
         {/* 4. 创建新书弹窗 */}
         {showCreateBookModal && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
+        <div className="writer-create-modal fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in slide-in-from-bottom-10 md:slide-in-from-bottom-0">
                 <h3 className="text-xl md:text-2xl font-bold mb-6 text-gray-900 flex items-center gap-2">
                 <Sparkles className="h-6 w-6 text-purple-500" /> 创建新作品
@@ -1349,4 +1355,13 @@ const openBookManager = (book: Book) => {
       )}
     </div>
   );
+}
+
+function WriterEntry() {
+  const search = useSearchParams();
+  return <WriterDashboard entry={search.toString()} key={search.toString()}/>;
+}
+
+export default function WriterPage() {
+  return <Suspense fallback={<div className="writer-page min-h-screen"/>}><WriterEntry/></Suspense>;
 }

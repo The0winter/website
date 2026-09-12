@@ -49,7 +49,7 @@ test('writer creates a book, publishes and edits a chapter that readers can open
   await expect(page.getByPlaceholder('在这里开始你的创作...')).not.toBeVisible();
   await expect(page.getByText('发布成功', { exact: true })).toBeVisible();
   await page.goto(`${base}/book/${book.id || book._id}/${chapter.id || chapter._id}`);
-  await expect(page.getByText('这是编辑保存后的合成正文，旧章节 URL 应当继续有效。', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: '章节阅读', exact: true }).getByText('这是编辑保存后的合成正文，旧章节 URL 应当继续有效。', { exact: true })).toBeVisible();
 });
 
 test('forum question, answer and deep link retain the submitted content', async ({ page }) => {

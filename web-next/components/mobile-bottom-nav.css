@@ -1,13 +1,17 @@
 .mh-bottom { display:none; }
 @media (max-width:767px) {
-  .mh-bottom { position:fixed; bottom:0; left:0; right:0; z-index:45; display:grid; grid-template-columns:repeat(3,1fr); padding:6px 0 calc(5px + env(safe-area-inset-bottom)); background:#fffaf7f5; backdrop-filter:blur(14px); border-top:1px solid #eee4dc; }
+  .mh-bottom { position:fixed; bottom:0; left:0; right:0; z-index:45; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); padding:6px 88px calc(5px + env(safe-area-inset-bottom)) 0; background:#fffaf7f5; backdrop-filter:blur(14px); border-top:1px solid #eee4dc; }
   .mh-bottom a { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:44px; gap:3px; color:#554d45; font-size:11px; }
   .mh-bottom a:has([data-link-pending]), .mh-bottom a[aria-busy=true] { opacity:.55; cursor:progress; }
   .mh-bottom svg { width:22px; height:22px; stroke-width:1.9; }
   .mh-bottom [aria-current=page] { color:#df3a47; }
   .mh-bottom [aria-current=page] svg { fill:#df3a4717; }
+  .mh-create { position:absolute; right:0; bottom:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:5px; width:88px; height:calc(88px + env(safe-area-inset-bottom)); padding:25px 4px calc(10px + env(safe-area-inset-bottom)) 22px; border-radius:88px 0 0 0; color:#fff9f0; background:linear-gradient(135deg,#ce6164,#b73c49); box-shadow:-3px -3px 14px #ac3e471a,inset 1px 1px 0 #ffffff30; font-size:12px; font-weight:500; cursor:pointer; }
+  .mh-bottom .mh-create svg { width:24px; height:24px; stroke-width:1.7; }
+  .mh-create:focus-visible { outline:2px solid #7c2633; outline-offset:-5px; }
+  .mh-create:active { filter:brightness(.94); }
   .profile-page { padding-bottom:calc(80px + env(safe-area-inset-bottom)); }
   .library-page { padding-bottom:calc(80px + env(safe-area-inset-bottom)); }
   .forum-page { padding-bottom:calc(144px + env(safe-area-inset-bottom)); }
-  .forum-publish { bottom:calc(76px + env(safe-area-inset-bottom)); }
+  .forum-publish { bottom:calc(104px + env(safe-area-inset-bottom)); }
 }

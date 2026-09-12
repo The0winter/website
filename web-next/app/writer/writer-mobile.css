@@ -1,0 +1,33 @@
+.writer-mobile-header { display:none; }
+@media(max-width:767px) {
+  body:has(.writer-page) [data-site-chrome] { display:none; }
+  .writer-page { background:#f7efe9; color:#42362f; }
+  .writer-mobile-header { display:flex; align-items:center; gap:12px; padding:calc(18px + env(safe-area-inset-top)) 16px 12px; }
+  .writer-mobile-header>button { display:grid; place-items:center; width:44px; height:44px; border:1px solid #e3d5c8; border-radius:50%; }
+  .writer-mobile-header>div { flex:1; }
+  .writer-mobile-header span { font-size:10px; color:#a18a76; letter-spacing:1px; }
+  .writer-mobile-header h1 { margin-top:3px; font-size:20px; font-weight:700; }
+  .writer-mobile-header>svg { color:#b3484f; margin-right:8px; }
+  .writer-main { padding:8px 12px calc(24px + env(safe-area-inset-bottom)); min-width:0; }
+  .writer-works-shell { min-height:0; border-color:#e9dcd0; border-radius:18px; background:#fffaf6; box-shadow:none; }
+  .writer-works-heading { background:transparent; border-color:#eee0d6; padding:16px; }
+  .writer-work { padding:16px 12px; gap:12px; }
+  .writer-work>div:first-child { width:58px; }
+  .writer-work>div:last-child { min-width:0; min-height:100px; }
+  .writer-work h4 { min-width:0; overflow-wrap:anywhere; }
+  .writer-work h4+span { display:none; }
+  .writer-work button { flex:1; min-width:0; width:auto; min-height:42px; padding:8px 5px; font-size:12px; }
+  .writer-page .bg-blue-600 { background:#b8424c; }
+  .writer-page .text-blue-600 { color:#b8424c; }
+  .writer-page .border-blue-100 { border-color:#ecd1cb; }
+  .writer-page .shadow-blue-500\/20,.writer-page .shadow-blue-500\/30 { --tw-shadow-color:#b8424c20; }
+  .writer-create-modal>div { max-height:calc(100dvh - env(safe-area-inset-top) - 12px); overflow-y:auto; padding:22px 20px calc(20px + env(safe-area-inset-bottom)); }
+  .writer-create-modal input,.writer-create-modal textarea { font-size:16px; }
+  .writer-editor { height:100dvh; }
+  .writer-editor>div>div:first-child { padding:calc(10px + env(safe-area-inset-top)) 12px 10px; }
+  .writer-editor>div>div:first-child button { min-height:40px; }
+  .writer-editor>div>div:first-child h3 { font-size:15px; }
+  .writer-editor [aria-label="存草稿"] { padding-left:10px; padding-right:10px; }
+  .writer-editor [aria-label="存草稿"] span { display:inline; font-size:12px; }
+  .writer-manager>div { height:calc(100dvh - env(safe-area-inset-top) - 20px); }
+}
