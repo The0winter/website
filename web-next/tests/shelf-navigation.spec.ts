@@ -162,10 +162,12 @@ test('home loading stays visible beyond eight seconds and can be cancelled with 
     await page.waitForTimeout(8300);
     await expect(page.locator('.book-navigation-loading')).toBeVisible();
     await page.goBack();
-    await expect(page).toHaveURL(base + '/search');
+    await expect(page).toHaveURL(base + '/');
     await expect(page.locator('.book-navigation-loading')).toHaveCount(0);
     release();
     await page.waitForTimeout(500);
+    await expect(page).toHaveURL(base + '/');
+    await page.goBack();
     await expect(page).toHaveURL(base + '/search');
   } finally {release();}
 });

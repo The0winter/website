@@ -96,8 +96,8 @@ function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, t
   if (!router) return;
   if (currentChapterEntry()?.href !== entry.href) cancelChapterEntry();
   pending = entry;
-  // A click may still be waiting for its route request; Back must then operate
-  // on the page that is actually in history. A pop has already moved the slot.
+  // Keep the rendered source until a click finishes; a pop has already moved
+  // to its destination and must use that entry for subsequent Back actions.
   if (traversing) current = entry;
   window.dispatchEvent(new Event('book-navigation-leave'));
   if (currentChapterEntry()?.href === entry.href) {
@@ -108,7 +108,16 @@ function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, t
   transitionBookPage(entry.href, direction, () => {
     // Let Next's popstate listener restore the visited route and scroll position.
     // Replacing the URL here would refetch the page.
-    if (!restore) { if (replace) router!.replace(entry.href); else router!.push(entry.href); }
+    if (restore) return;
+    if (!replace && entry.kind === 'detail') {
+      // Reserve the detail visit before requesting it so Back from its loader
+      // lands on the source, even when home was the first page in this tab.
+      // This slot has no restoreSession: Forward must load the real details,
+      // rather than restoring the source's temporary Next route tree.
+      window.history.pushState({...window.history.state, bookNavigation: entry}, '', entry.href);
+      router!.replace(entry.href);
+    } else if (replace) router!.replace(entry.href);
+    else router!.push(entry.href);
   });
 }
 

@@ -152,7 +152,7 @@ for (const origin of ['direct details', 'search', 'direct reader', 'legacy reade
   });
 }
 
-test('Back cancels a slow home-to-detail animation when returning to another page', async ({page}) => {
+test('Back cancels a slow home-to-detail animation on home before leaving for the previous page', async ({page}) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}}));
   await page.goto(`${base}/search`);
   await page.getByRole('link', {name: '返回首页', exact: true}).click(); await home(page);
@@ -165,10 +165,11 @@ test('Back cancels a slow home-to-detail animation when returning to another pag
   await page.locator(`.mobile-home a[href="/book/${book}"]`).first().click();
   await expect.poll(() => requested).toBe(true);
   await expect(page.locator('html')).toHaveAttribute('data-book-transition-phase', 'loading');
-  await page.goBack(); await expect(page).toHaveURL(`${base}/search`); await idle(page);
+  await page.goBack(); await home(page);
   await expect(page.locator('.book-transition-snapshot')).toHaveCount(0);
   await page.waitForTimeout(1400);
-  await expect(page).toHaveURL(`${base}/search`);
+  await home(page);
+  await page.goBack(); await expect(page).toHaveURL(`${base}/search`);
 });
 
 test('reader entry uses chapter loading and exit slides back after details are ready', async ({page}) => {

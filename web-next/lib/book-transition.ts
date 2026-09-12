@@ -108,7 +108,7 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
   // the route immediately (including a cached detail page).
   const snapshot = freezeBookPage();
   const loading = direction === 'enter' && /^\/book\/[^/?#]+$/.test(href) ? bookLoadingPage(href) : undefined;
-  const duration = direction === 'exit' ? visible('.reader-pages-root') ? 400 : 180 : 240;
+  const duration = direction === 'exit' ? 400 : 240;
   root.dataset.bookTransition = direction;
   root.dataset.bookTransitionPhase = 'loading';
   const cleanup = () => {
