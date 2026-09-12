@@ -245,7 +245,7 @@ return (
                                     {profile?.role === 'admin' ? '超级管理员' : '创作者'}
                                 </span>
                             </h1>
-                            <p className="text-[var(--profile-muted)] text-sm flex items-center justify-center md:justify-start gap-1.5 font-medium">
+                            <p className="text-[var(--profile-muted)] text-sm hidden md:flex items-center justify-center md:justify-start gap-1.5 font-medium">
                                 <Mail className="h-3.5 w-3.5 text-[var(--profile-muted)]" /> {user.email}
                             </p>
                         </div>
