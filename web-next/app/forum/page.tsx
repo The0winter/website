@@ -3,7 +3,6 @@ import MobileBottomNav from '@/components/MobileBottomNav';
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image'; // 🔥 新增：用于显示网站标志
 import {
   Feather,
   HelpCircle,
@@ -14,7 +13,7 @@ import {
   ThumbsUp,
 } from 'lucide-react';
 import { forumApi, ForumPost } from '@/lib/api';
-import '@/components/home-search-header.css';
+import HomeSearchHeader from '@/components/HomeSearchHeader';
 import './forum.css';
 
 type FeedTab = 'recommend' | 'hot' | 'follow';
@@ -309,12 +308,11 @@ export default function ForumPage() {
 return (
     <div data-forum-theme="home" className={`forum-page min-h-screen ${currentTheme.bg} pb-24 md:pb-12 font-sans transition-colors duration-300`}>
       <div className="forum-masthead">
-        <header className="mh-topbar">
-          <Link href="/" className="mh-logo" aria-label="九天小说首页"><Image src="/icon.png" alt="九天小说" width={40} height={40} sizes="40px" priority/></Link>
-          <form className="forum-search" role="search" onSubmit={event => event.preventDefault()}>
-            <Search size={19} aria-hidden="true"/><input type="search" aria-label="搜索你想看的问题或文章" placeholder="搜索问题或文章" value={searchQuery} onChange={event => setSearchQuery(event.target.value)}/>
+        <HomeSearchHeader>
+          <form className="forum-search book-search book-search--home" role="search" onSubmit={event => event.preventDefault()}>
+            <div className="book-search-field"><Search size={19} aria-hidden="true"/><input type="search" aria-label="搜索你想看的问题或文章" placeholder="搜索问题或文章" value={searchQuery} onChange={event => setSearchQuery(event.target.value)}/></div>
           </form>
-        </header>
+        </HomeSearchHeader>
       </div>
       <div className={`forum-feed-toolbar ${currentTheme.card} ${currentTheme.border}`}>
           {/* 移动端: 选项卡均分宽度; PC端(md): 恢复靠左排布 */}

@@ -2,7 +2,7 @@
 .mh-logo { display:flex; align-items:center; justify-content:center; flex:0 0 44px; height:44px; border-radius:6px; }
 .mh-logo img { width:40px; height:40px; object-fit:contain; }
 @media(max-width:767px) {
-  .mh-topbar { gap:8px; }
+  .mh-topbar { gap:8px; margin-bottom:8px; font-family:Arial,"Microsoft YaHei",sans-serif; }
   .mh-logo { flex-basis:38px; height:38px; }
   .mh-logo img { width:30px; height:30px; }
 }
