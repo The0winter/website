@@ -24,17 +24,17 @@ for (const width of [320, 390, 430]) {
     const entry = await launch(page).boundingBox();
     const bottom = await page.locator('.mh-bottom:visible').boundingBox();
     expect(entry!.x + entry!.width).toBe(width);
-    expect(bottom!.y - entry!.y).toBeGreaterThan(20);
-    expect(bottom!.y - entry!.y).toBeLessThan(40);
-    await expect(launch(page)).toHaveCSS('border-top-left-radius', '88px');
+    expect(bottom!.y - entry!.y).toBeGreaterThan(12);
+    expect(bottom!.y - entry!.y).toBeLessThan(28);
+    await expect(launch(page)).toHaveCSS('border-top-left-radius', '76px');
     for (const link of await page.locator('.mh-bottom:visible>a').all()) {
       const box = await link.boundingBox(); expect(box!.width).toBeGreaterThan(44); expect(box!.x + box!.width).toBeLessThanOrEqual(entry!.x);
     }
     await page.screenshot({ path: info.outputPath(`entry-${width}.png`) });
     await launch(page).click(); await expect(modal(page)).toBeVisible();
     await expect(modal(page).getByRole('heading', { name: book.title })).toBeVisible();
-    await expect(modal(page)).toHaveCSS('animation-name', 'mw-open');
-    await expect.poll(() => modal(page).evaluate(element => element.getAnimations().every(animation => animation.playState === 'finished'))).toBe(true);
+    await expect(modal(page)).toHaveAttribute('data-ready', 'true');
+    await expect(modal(page)).toHaveCSS('clip-path', 'none');
     expect(await modal(page).evaluate(element => element.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: info.outputPath(`center-${width}.png`) });
   });
@@ -45,11 +45,15 @@ test('opening uses a radial reveal and Back/Forward, Escape and focus restore co
   const position = await page.evaluate(() => scrollY);
   const length = await page.evaluate(() => history.length);
   await launch(page).click(); await expect(modal(page)).toBeVisible();
-  await modal(page).evaluate(element => { const animation = element.getAnimations()[0]; animation.pause(); animation.currentTime = 100; });
-  const clip = await modal(page).evaluate(element => getComputedStyle(element).clipPath);
-  expect(clip).toMatch(/^circle\(/); expect(clip).toContain('100% 100%');
+  const reveal = await modal(page).evaluate(element => {
+    element.getAnimations({ subtree: true }).forEach(animation => { animation.pause(); animation.currentTime = 80; });
+    const background = element.querySelector('.mw-reveal')!;
+    return { transform: getComputedStyle(background).transform, clip: getComputedStyle(element).clipPath, width: background.getBoundingClientRect().width };
+  });
+  expect(reveal.transform).toMatch(/^matrix\(/); expect(reveal.clip).toBe('none');
+  expect(reveal.width).toBeLessThan(Math.hypot(390, 844));
   await page.screenshot({ path: info.outputPath('radial-opening.png') });
-  await modal(page).evaluate(element => element.getAnimations()[0].finish());
+  await modal(page).evaluate(element => element.getAnimations({ subtree: true }).forEach(animation => { if (animation.effect?.getComputedTiming().iterations !== Infinity) animation.finish(); }));
   expect(await page.evaluate(() => history.length)).toBe(length + 1);
   expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden');
   await page.keyboard.press('Tab');
@@ -91,7 +95,7 @@ test('guest login, failed works retry and reduced motion remain usable', async (
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.route('**/api/auth/session', route => route.fulfill({ json: { user: null, profile: null } }));
   await page.goto(base); await launch(page).click();
-  await expect(modal(page)).toHaveCSS('animation-duration', '1e-05s');
+  await expect(modal(page)).toHaveAttribute('data-ready', 'true');
   await modal(page).getByRole('link', { name: '登录并开始创作' }).click();
   await expect(page.locator('.login-card')).toBeVisible(); await page.goBack();
   await expect(modal(page)).toHaveCount(0);
@@ -105,4 +109,36 @@ test('guest login, failed works retry and reduced motion remain usable', async (
   await page.setViewportSize({ width: 900, height: 844 });
   await expect(modal(page)).toHaveCount(0);
   await expect(launch(page)).toBeHidden();
+});
+
+test('fast works responses do not mount the list during the opening animation', async ({ page }) => {
+  await page.goto(base);
+  await page.evaluate(() => {
+    const timing = { contentFinished: 0, listMounted: 0 };
+    Object.assign(window, { writerMotionTiming: timing });
+    document.addEventListener('animationend', event => { if (event.animationName === 'mw-content-in') timing.contentFinished = performance.now(); });
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('.mw-book')) { timing.listMounted = performance.now(); observer.disconnect(); }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+  await launch(page).click();
+  await expect(modal(page).getByRole('heading', { name: book.title })).toBeVisible();
+  const timing = await page.evaluate(() => (window as Window & { writerMotionTiming?: { contentFinished: number; listMounted: number } }).writerMotionTiming!);
+  expect(timing.contentFinished).toBeGreaterThan(0);
+  expect(timing.listMounted).toBeGreaterThanOrEqual(timing.contentFinished);
+});
+
+test('Back during the reveal closes from its current size without flashing full-screen', async ({ page }) => {
+  await page.goto(base); await launch(page).click(); await expect(modal(page)).toBeVisible();
+  const sizes = await modal(page).evaluate(element => new Promise<{ before: number; after: number }>(resolve => {
+    const background = element.querySelector('.mw-reveal')!;
+    element.getAnimations({ subtree: true }).forEach(animation => { animation.pause(); animation.currentTime = 40; });
+    const before = background.getBoundingClientRect().width;
+    window.addEventListener('popstate', () => { resolve({ before, after: background.getBoundingClientRect().width }); }, { once: true });
+    history.back();
+  }));
+  expect(sizes.after).toBeLessThanOrEqual(sizes.before + 2);
+  await expect(modal(page)).toHaveCount(0);
+  await expect(launch(page)).toBeFocused();
 });
