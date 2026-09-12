@@ -129,14 +129,17 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
     if (!hosts.has(new URL(url).hostname.toLowerCase())) throw Error(`地址不在该来源配置的域名范围内：${url}`);
     return url;
   }
-  async function get(input, {fresh = false, request, render = false, readySelector, rejectSelectors = []} = {}) {
+  async function get(input, {fresh = false, request, render = false, readySelector, rejectSelectors = [], searchForm, selectPages} = {}) {
     stopped();
+    if ((searchForm || selectPages) && (!render || request || browserOptions.responseMode === 'source')) throw Error('搜索表单和目录下拉分页需要浏览器 DOM 模式');
+    if (searchForm && (!searchForm.input || !searchForm.submit || typeof searchForm.value !== 'string' || !searchForm.value.trim())) throw Error('搜索表单需要输入框、提交按钮和检索词');
+    if (selectPages && (!selectPages.selector || !selectPages.content || !Number.isInteger(selectPages.maxPages) || selectPages.maxPages < 1 || selectPages.maxPages > 100)) throw Error('目录下拉分页配置无效');
     const rejectedSelector = (body, contentType) => {
       if (!rejectSelectors.length) return null;
       const $ = load(decode(body, contentType));
       return rejectSelectors.find(selector => $(selector).length);
     };
-    const original = assertUrl(input), key = hash({url: original, request, render, browser: render ? browserOptions : undefined});
+    const original = assertUrl(input), key = hash({url: original, request, render, browser: render ? browserOptions : undefined, ...(searchForm ? {searchForm} : {}), ...(selectPages ? {selectPages} : {})});
     const metaPath = path.join(cacheDir, key + '.json'), bodyPath = path.join(cacheDir, key + '.bin');
     const cached = readJson(metaPath);
     if (!fresh && !refresh && cached && Date.now() - Date.parse(cached.fetchedAt) < ttlMs && fs.existsSync(bodyPath)) {
@@ -159,6 +162,9 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
             if (response.request().isNavigationRequest() && response.frame() === page.mainFrame()) documentResponse = response;
           };
           page.on('response', responseListener);
+          // Fresh metadata and interactive pages must revalidate in the collector,
+          // not replay a Chromium disk-cache 304 or stale form/pagination scripts.
+          await page.setCacheEnabled(!(fresh || refresh || searchForm || selectPages || browserOptions.responseMode === 'source'));
           await page.goto(original, {waitUntil: 'domcontentloaded', timeout: timeoutMs});
           if (documentResponse?.headers()['cf-mitigated'] === 'challenge') {
             const limit = browserOptions.manualVerificationMs;
@@ -190,6 +196,24 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
             error.stopSource = status === 429;
             error.retryAfterMs = Math.max(delayMs, Number.isFinite(backoff) ? backoff : 15000);
             throw error;
+          }
+          if (searchForm) {
+            await page.waitForSelector(searchForm.input, {timeout: timeoutMs});
+            const inputs = await page.$$(searchForm.input), buttons = await page.$$(searchForm.submit);
+            try {
+              if (inputs.length !== 1 || buttons.length !== 1) throw Error('搜索表单控件必须唯一');
+              const actionUrl = await inputs[0].evaluate(el => el.form?.action);
+              if (!actionUrl) throw Error('搜索输入框没有所属表单');
+              assertUrl(actionUrl);
+              await inputs[0].click({clickCount: 3});
+              await inputs[0].press('Backspace');
+              await inputs[0].type(searchForm.value);
+              await wait(Math.max(0, lastRequest + delayMs - Date.now()));
+              lastRequest = Date.now(); stats.requests++;
+              // The site's ordinary submit handler supplies any dynamic search signature.
+              await Promise.all([page.waitForNavigation({waitUntil: 'domcontentloaded', timeout: timeoutMs}), buttons[0].click()]);
+              assertUrl(page.url());
+            } finally { await Promise.all([...inputs, ...buttons].map(el => el.dispose())); }
           }
           if (readySelector) {
             try { await page.waitForSelector(readySelector, {timeout: timeoutMs}); }
@@ -251,13 +275,57 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
           const url = assertUrl(page.url());
           // Some sites translate their DOM after load. Source mode preserves the server's
           // stable titles and prose while using a normal browser for the HTTP request.
-          const body = sourceMode ? Buffer.from(await documentResponse.buffer()) : Buffer.from(await page.content());
+          let body = sourceMode ? Buffer.from(await documentResponse.buffer()) : Buffer.from(await page.content());
+          let browserPages;
+          if (selectPages) {
+            if (url !== original) throw Error('目录页面跳转，拒绝操作其他书籍的分页');
+            const {selector, content, maxPages} = selectPages;
+            await page.waitForSelector(selector, {timeout: timeoutMs});
+            const values = await page.$$eval(selector, els => {
+              if (els.length !== 1 || els[0].tagName !== 'SELECT') throw Error('目录分页下拉框必须唯一');
+              return [...els[0].options].filter(option => !option.disabled).map(option => option.value);
+            });
+            if (!values.length || values.length > maxPages || values.some(value => !value) || new Set(values).size !== values.length) throw Error('目录分页选项为空、重复或超过上限');
+            const fragments = [], signatures = new Set();
+            browserPages = [];
+            for (const value of values) {
+              stopped();
+              const selected = await page.$eval(selector, el => el.value);
+              if (selected !== value) {
+                const before = await page.$eval(content, el => el.innerHTML);
+                await wait(Math.max(0, lastRequest + delayMs - Date.now()));
+                lastRequest = Date.now(); stats.requests++;
+                let failureStatus;
+                const responseUrl = selectPages.responseUrl ? assertUrl(httpUrl(selectPages.responseUrl, original)) : null;
+                const observe = response => { if (response.url() === responseUrl && response.status() >= 400) failureStatus = response.status(); };
+                page.on('response', observe);
+                try {
+                  await page.select(selector, value);
+                  await page.waitForFunction((selector, content, value, before) => {
+                    const nodes = document.querySelectorAll(content);
+                    return document.querySelector(selector)?.value === value && nodes.length === 1 && nodes[0].querySelector('a[href]') && nodes[0].innerHTML !== before;
+                  }, {timeout: timeoutMs}, selector, content, value, before);
+                } catch { stopped(); throw Error(`目录第 ${value} 页${failureStatus ? `接口返回 HTTP ${failureStatus}` : '没有更新'}，已停止，未使用不完整目录`); }
+                finally { page.off('response', observe); }
+              }
+              if (assertUrl(page.url()) !== original) throw Error('目录下拉分页跳转到其他页面');
+              const snapshot = load(await page.content());
+              if (snapshot(content).length !== 1 || !snapshot(content).find('a[href]').length) throw Error('目录分页内容为空或不唯一');
+              const fragment = snapshot(content).html(), signature = hash(fragment);
+              if (signatures.has(signature)) throw Error('目录下拉分页返回重复内容');
+              signatures.add(signature); fragments.push(fragment);
+              browserPages.push({value, hash: signature, fetchedAt: new Date().toISOString()});
+            }
+            const combined = load(body.toString('utf8'));
+            combined(content).html(fragments.join('\n'));
+            body = Buffer.from(combined.html());
+          }
           const rejected = rejectedSelector(body, sourceMode ? documentResponse.headers()['content-type'] : 'text/html; charset=utf-8');
           if (rejected) throw rejectedPage(rejected, original);
           await savedCookies?.save(browser.defaultBrowserContext());
           if (body.length > maxBytes) throw Error('渲染页面超过大小限制');
           stats.bytes += body.length;
-          const meta = {url, original, fetchedAt: new Date().toISOString(), hash: hash(body), contentType: sourceMode ? documentResponse.headers()['content-type'] || 'text/html; charset=utf-8' : 'text/html; charset=utf-8', bytes: body.length, rendered: !sourceMode, browserFetched: true};
+          const meta = {url, original, fetchedAt: new Date().toISOString(), hash: hash(body), contentType: sourceMode ? documentResponse.headers()['content-type'] || 'text/html; charset=utf-8' : 'text/html; charset=utf-8', bytes: body.length, rendered: !sourceMode, browserFetched: true, ...(browserPages ? {browserPages} : {})};
           atomicWrite(bodyPath, body);
           atomicWrite(metaPath, meta);
           return {...meta, body};

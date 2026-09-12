@@ -21,7 +21,7 @@ export function selectValue($, rule) {
   return value;
 }
 
-export function cleanHtml($, selector, remove = []) {
+export function cleanHtml($, selector, remove = [], removeText = []) {
   const source = $(selector);
   if (source.length !== 1) throw Error(`正文容器 ${selector} 应唯一，实际 ${source.length} 个`);
   const fragment = source.clone();
@@ -29,7 +29,10 @@ export function cleanHtml($, selector, remove = []) {
   // Preserve paragraph/BR boundaries without deleting keyword matches in prose.
   fragment.find('br').replaceWith('\n');
   fragment.find('p,div,li,section,blockquote,h1,h2,h3').prepend('\n').append('\n');
-  return fragment.text().replace(/\r\n?/g, '\n').split('\n').map(s => s.trim()).filter(Boolean).join('\n');
+  let text = fragment.text();
+  // Only apply explicitly configured site noise signatures, after HTML entity decoding.
+  for (const pattern of removeText) text = text.replace(new RegExp(pattern, 'gu'), '');
+  return text.replace(/\r\n?/g, '\n').split('\n').map(s => s.trim()).filter(Boolean).join('\n');
 }
 
 // Optional book metadata: only use configured, unique containers, never the whole page.
@@ -85,7 +88,8 @@ function nextPage($, selector, base, client) {
 }
 
 export async function getCatalog(spec, client) {
-  const first = await client.get(spec.sourceUrl, {fresh: true, render: spec.transport === 'browser', readySelector: spec.metadata.readySelector});
+  const inlinePages = spec.catalog?.selectPages && (!spec.catalog.url || httpUrl(spec.catalog.url, spec.sourceUrl) === spec.sourceUrl);
+  const first = await client.get(spec.sourceUrl, {fresh: true, render: inlinePages || spec.transport === 'browser', readySelector: spec.metadata.readySelector, ...(inlinePages ? {selectPages: spec.catalog.selectPages} : {})});
   const $ = load(decode(first.body, first.contentType, spec.encoding));
   const actual = {title: selectValue($, spec.metadata.title), author: selectValue($, spec.metadata.author)};
   checkIdentity(spec, actual);
@@ -126,7 +130,7 @@ export async function getCatalog(spec, client) {
     if (seenPages.has(url)) throw Error('目录翻页形成循环，未使用不完整目录');
     if (seenPages.size >= (config.maxPages || 100)) throw Error('目录页数超过配置上限');
     seenPages.add(url);
-    const page = url === first.url ? first : await client.get(url, {fresh: true, render: (config.transport || spec.transport) === 'browser', readySelector: config.readySelector});
+    const page = url === first.url ? first : await client.get(url, {fresh: true, render: !!config.selectPages || (config.transport || spec.transport) === 'browser', readySelector: config.readySelector, selectPages: config.selectPages});
     if (page.url !== url) throw Error('目录页面跳转，需核实来源配置');
     const doc = load(decode(page.body, page.contentType, spec.encoding));
     const links = doc(config.links);
@@ -152,7 +156,11 @@ export async function getCatalog(spec, client) {
     catalog.sort((a, b) => a.sourceOrder - b.sourceOrder);
   } else if (config.reverse) catalog.reverse();
   if (config.expectedCount !== undefined && config.expectedCount !== catalog.length) throw Error(`目录数量 ${catalog.length} 与已核实的 ${config.expectedCount} 不同`);
-  return {actual, catalog: catalog.map((c, i) => ({...c, chapter_number: i + 1})), evidence: {url: first.url, hash: first.hash, fetchedAt: first.fetchedAt}, pages: seenPages.size};
+  if (config.count) {
+    const expected = Number(selectValue($, config.count));
+    if (!Number.isSafeInteger(expected) || expected < 1 || expected !== catalog.length) throw Error(`目录数量 ${catalog.length} 与详情页声明的 ${expected} 不同`);
+  }
+  return {actual, catalog: catalog.map((c, i) => ({...c, chapter_number: i + 1})), evidence: {url: first.url, hash: first.hash, fetchedAt: first.fetchedAt, ...(first.browserPages ? {browserPages: first.browserPages} : {})}, pages: first.browserPages?.length || seenPages.size};
 }
 
 export async function getChapter(spec, chapter, catalogLinks, client) {
@@ -172,7 +180,7 @@ export async function getChapter(spec, chapter, catalogLinks, client) {
     const heading = selectValue($, config.title);
     if (!title) title = heading;
     else if (normalizedTitle(heading) !== normalizedTitle(title)) throw Error('同章分页标题不一致，需要调整分页标题规则');
-    let text = cleanHtml($, config.content, config.remove);
+    let text = cleanHtml($, config.content, config.remove, config.removeText);
     const lines = text.split('\n');
     if (normalizedTitle(lines[0]) === normalizedTitle(heading)) lines.shift();
     while (/^(?:[（(]本章完[）)]|上一章|下一章|返回目录|加入书签)$/u.test(lines.at(-1) || '')) lines.pop();

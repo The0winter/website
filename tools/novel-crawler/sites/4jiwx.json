@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "id": "4jiwx",
+  "name": "四季文学",
+  "home": "https://www.4jiwx.com/",
+  "hosts": [
+    "www.4jiwx.com",
+    "4jiwx.com"
+  ],
+  "search": {
+    "url": "https://www.rrssk.com/0016.html",
+    "transport": "browser",
+    "form": {
+      "input": "#searchInput",
+      "submit": "#searchBtn"
+    },
+    "readySelector": "#resultContainer",
+    "items": "#resultContainer .book-list > .book-card",
+    "title": ".book-card__title",
+    "author": {
+      "selector": ".book-card__meta-item:first-child",
+      "pattern": "^作者[：:]\\s*(.+)$"
+    },
+    "link": {
+      "selector": ".book-card",
+      "attribute": "onclick",
+      "pattern": "^window\\.open\\('([^']+)'",
+      "base64QueryParameter": "t"
+    },
+    "maxPages": 1
+  },
+  "book": {
+    "urlPattern": "^/book/(?<bookId>[A-Za-z0-9]+)\\.html$",
+    "metadata": {
+      "title": {
+        "selector": "meta[property='og:novel:book_name']",
+        "attribute": "content"
+      },
+      "author": {
+        "selector": "meta[property='og:novel:author']",
+        "attribute": "content"
+      },
+      "description": {
+        "selector": "meta[property='og:description']",
+        "attribute": "content"
+      },
+      "status": ".bookDetail .txtb dl:has(dt:contains('状态')) > dd"
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-4jiwx-v2",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": [
+      "www.4jiwx.com",
+      "4jiwx.com",
+      "www.rrssk.com"
+    ],
+    "browser": {
+      "headless": false
+    },
+    "encoding": "utf8",
+    "delayMs": 2000,
+    "timeoutMs": 20000,
+    "retries": 1,
+    "metadata": {
+      "title": {
+        "selector": "meta[property='og:novel:book_name']",
+        "attribute": "content"
+      },
+      "author": {
+        "selector": "meta[property='og:novel:author']",
+        "attribute": "content"
+      },
+      "description": {
+        "selector": "meta[property='og:description']",
+        "attribute": "content"
+      },
+      "status": ".bookDetail .txtb dl:has(dt:contains('状态')) > dd"
+    },
+    "catalog": {
+      "links": ".chapter_list > ul > li .name > a[href^='/book/${bookId}-']",
+      "count": {
+        "selector": ".bookDetail .txtb dl:has(dt:contains('总章节')) > dd",
+        "pattern": "^([0-9]+)章$"
+      },
+      "selectPages": {
+        "selector": ".chapter_page select",
+        "content": ".chapter_list",
+        "responseUrl": "/index.php?action=loadChapterPage",
+        "maxPages": 100
+      }
+    },
+    "chapter": {
+      "title": ".conC > h1",
+      "content": ".conC > .content",
+      "remove": [
+        "img"
+      ],
+      "removeText": [
+        "<img[\\t ]+src[\\t ]*=[\\t ]*\\\\[\\t ]*",
+        "「得」\\s*「奇」\\s*「小」\\s*「说」\\s*「网」\\s*「首」\\s*「发」\\s*「d」\\s*「e」\\s*「q」\\s*「i」\\s*「x」\\s*「s」\\s*「\\.」\\s*「」"
+      ],
+      "next": ".conBox > .readPage a:contains('下一页')",
+      "maxPages": 20
+    }
+  }
+}

@@ -36,6 +36,14 @@ export function validateSpec(input) {
   if (spec.description !== undefined && (typeof spec.description !== 'string' || spec.description.length > 5000)) throw Error('简介须为不超过 5000 字符的文本');
   if (spec.status !== undefined && !['连载', '完结'].includes(spec.status)) throw Error('作品状态必须为连载或完结');
   if (spec.kind === 'html' && (!(spec.catalog?.links || spec.catalog?.json) || !spec.chapter?.content || !spec.chapter?.title)) throw Error('HTML 来源需配置目录及章节选择器');
+  if (spec.chapter?.removeText !== undefined) {
+    if (!Array.isArray(spec.chapter.removeText) || spec.chapter.removeText.some(pattern => typeof pattern !== 'string' || !pattern || pattern.length > 2000)) throw Error('chapter.removeText 必须为非空正则表达式数组');
+    for (const pattern of spec.chapter.removeText) if (new RegExp(pattern, 'gu').test('')) throw Error('正文噪声规则不能匹配空字符串');
+  }
+  if (spec.catalog?.selectPages) {
+    const config = spec.catalog.selectPages;
+    if (!config.selector || !config.content || !Number.isInteger(config.maxPages) || config.maxPages < 1 || config.maxPages > 100 || spec.catalog.next || spec.catalog.json) throw Error('目录下拉分页需要 selector、content、maxPages（1–100），不能混用其他翻页方式');
+  }
   if (spec.kind !== 'html' && !(spec.resource?.url || spec.resource?.link)) throw Error('文件来源需配置下载地址或链接选择器');
   spec.allowedHosts = [...new Set([new URL(spec.sourceUrl).hostname, ...(spec.allowedHosts || [])])];
   for (const host of spec.allowedHosts) if (typeof host !== 'string' || !host || /[\s/@?#]/.test(host)) throw Error('allowedHosts 只能包含域名');

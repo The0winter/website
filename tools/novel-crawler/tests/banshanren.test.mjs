@@ -34,7 +34,7 @@ test('banshanren uses bare identity fields and book-specific catalogs, removes c
       async get(value){requests.push(value);assert.ok(pages.has(value));return {url:value,body:Buffer.from(pages.get(value)),contentType:'text/html; charset=utf-8',hash:'synthetic',fetchedAt:'2026-09-11T00:00:00Z'};}
     };
     const {actual,catalog}=await getCatalog(spec,client);
-    assert.deepEqual(actual,{title:'测试书',author:'甲作者',descriptionStatus:'missing'});
+    assert.deepEqual(actual,{title:'测试书',author:'甲作者',descriptionStatus:'missing',statusDetection:'missing'});
     assert.deepEqual(catalog.map(c=>[c.link,c.chapter_number]),[[link(1),1],[link(2),2]]);
     const chapter=await getChapter(spec,catalog[0],new Set(catalog.map(c=>c.link)),client);
     assert.equal(chapter.title,'第1章 开始');

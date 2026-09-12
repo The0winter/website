@@ -12,6 +12,7 @@ import {prepareImport} from '../../../infra/import-plan.mjs';
 
 test('all desktop sources extract full paragraphs, excluding controls, SEO and duplicate mobile copies', () => {
   const pages = {
+    '4jiwx': '<meta property="og:description" content="第一段。&#10;第二段。">',
     '69shuba': '<div class="navtxt"><p>第一段。<br>第二段。</p><p>小说关键词：网站推广</p></div>',
     banshanren: '<div class="novel_intro_box pc"><p>第一段。<br>第二段。</p><p class="hl">更新时间</p></div><div class="novel_intro_box h5"><p>手机版重复简介</p></div>',
     ixdzs8: '<p id="intro">第一段。<br>第二段。<span class="c-more">展开</span><script>bad()</script></p>',

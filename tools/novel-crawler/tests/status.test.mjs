@@ -18,6 +18,7 @@ test('publication status recognizes explicit simplified/traditional labels, neve
 
 test('all sources read status only from the selected book; conflicting, missing and unfamiliar labels remain unknown', () => {
   const pages = {
+    '4jiwx': '<meta property="og:novel:status" content="连载"><div class="bookDetail"><div class="txtb"><dl><dt>状态：</dt><dd>完结</dd></dl></div></div>',
     '69shuba': '<meta property="og:novel:status" content="全本"><div class="booknav2"><p>作者</p><p>分类</p><p>100万字 | 全本</p></div>',
     twkan: '<meta property="og:novel:status" content="已完結">',
     ixdzs8: '<h1>书名</h1><p><span class="end">已完结</span></p>',

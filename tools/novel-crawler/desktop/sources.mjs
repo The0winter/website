@@ -87,7 +87,14 @@ export function parseSearch(html, baseUrl, site) {
   for (const element of $(site.search.items).toArray()) {
     const row = load($.html(element));
     const title = selectValue(row, site.search.title), author = selectValue(row, site.search.author);
-    const url = httpUrl(selectValue(row, {selector: site.search.link, attribute: 'href'}), baseUrl);
+    const linkRule = typeof site.search.link === 'string' ? {selector: site.search.link, attribute: 'href'} : site.search.link;
+    let link = selectValue(row, linkRule);
+    if (linkRule.base64QueryParameter) {
+      const encoded = new URL(httpUrl(link, baseUrl)).searchParams.get(linkRule.base64QueryParameter);
+      if (!encoded || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) throw Error('搜索结果的编码链接无效');
+      link = Buffer.from(encoded, 'base64').toString('utf8');
+    }
+    const url = httpUrl(link, baseUrl);
     bookUrl(url, site);
     results.push({title, author, url, site: site.name});
   }
@@ -136,7 +143,7 @@ export async function searchBooks({website, title, author = '', stateDir = defau
     for (let page = 0; url && page < Math.min(site.search.maxPages || 3, 20); page++) {
       if (seen.has(url)) throw Error('搜索翻页循环，需要更新适配');
       seen.add(url);
-      const response = await client.get(url, {fresh: true, render: (site.search.transport || site.spec.transport) === 'browser', readySelector: site.search.readySelector});
+      const response = await client.get(url, {fresh: true, render: (site.search.transport || site.spec.transport) === 'browser', readySelector: site.search.readySelector, ...(page === 0 && site.search.form ? {searchForm: {...site.search.form, value: title.trim()}} : {})});
       const parsed = parseSearch(decode(response.body, response.contentType, site.spec.encoding), response.url, site);
       // Search accepts title fragments; collection still verifies the selected book's full identity.
       const matches = parsed.results.filter(b => normalize(b.title).includes(query) && (!author.trim() || normalize(b.author) === requestedAuthor));
