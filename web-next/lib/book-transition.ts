@@ -7,19 +7,22 @@ function visible(selector: string) {
 
 function waitForPage(href: string, signal: AbortSignal, onSlow?: () => void) {
   return new Promise<void>(resolve => {
-    const path = new URL(href, location.origin).pathname;
+    const url = new URL(href, location.origin);
+    const path = url.pathname;
     const parts = path.split('/');
     const ready = () => location.pathname === path && (parts[1] === 'library'
       ? visible('.library-page, .account-loading')
       : parts[1] === 'author'
       ? visible('.author-page')
       : parts[1] === 'ranking'
-      ? visible('.ranking-page')
+      ? visible('.ranking-content[aria-busy="false"]')
       : parts[3]
       ? visible(`[data-reader-chapter="${CSS.escape(parts[3])}"][data-reader-ready="true"]`)
       : parts[1] === 'book'
         ? visible(`.book-detail[data-book-id="${CSS.escape(parts[2])}"]`)
-        : visible('.mobile-home, .desktop-home'));
+        : window.matchMedia('(max-width: 767px)').matches
+          ? visible(`.mobile-home[data-home-href="${CSS.escape(path + (url.search ? `?${url.searchParams}` : ''))}"][aria-busy="false"]`)
+          : visible('.desktop-home'));
     const finish = () => { observer.disconnect(); clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };
     const observer = new MutationObserver(() => { if (ready()) finish(); });
     // Detail loading keeps its cover until the requested page actually exists.
@@ -30,15 +33,15 @@ function waitForPage(href: string, signal: AbortSignal, onSlow?: () => void) {
   });
 }
 
-function bookLoadingPage(href: string) {
+function bookLoadingPage(href: string, label = '书籍') {
   const panel = document.createElement('div');
   panel.className = 'book-transition-snapshot book-navigation-loading';
   panel.tabIndex = -1;
-  panel.setAttribute('aria-label', '正在打开书籍');
+  panel.setAttribute('aria-label', `正在打开${label}`);
   panel.setAttribute('aria-busy', 'true');
   const message = document.createElement('p');
   message.setAttribute('role', 'status');
-  message.textContent = '正在打开书籍…';
+  message.textContent = `正在打开${label}…`;
   panel.append(message);
   panel.addEventListener('wheel', event => event.preventDefault(), {passive: false});
   panel.addEventListener('keydown', event => {
@@ -50,7 +53,7 @@ function bookLoadingPage(href: string) {
   return {panel, slow: () => {
     panel.setAttribute('aria-busy', 'false');
     message.setAttribute('role', 'alert');
-    message.textContent = '书籍暂时未能加载，请重试';
+    message.textContent = `${label}暂时未能加载，请重试`;
     const actions = document.createElement('div');
     const retry = document.createElement('button'), back = document.createElement('button');
     retry.textContent = '重试'; back.textContent = '返回';
@@ -113,7 +116,7 @@ export function freezeBookPage(className = 'book-transition-snapshot', source = 
   return overlay;
 }
 
-export function transitionBookPage(href: string, direction: Direction, navigate: () => void) {
+export function transitionBookPage(href: string, direction: Direction, navigate: () => void, loadingLabel?: string) {
   cancelActive?.();
   const controller = new AbortController();
   const root = document.documentElement;
@@ -121,7 +124,7 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
   // Preserve the source page underneath the moving loader even if Next swaps
   // the route immediately (including a cached detail page).
   const snapshot = freezeBookPage();
-  const loading = direction === 'enter' && /^\/book\/[^/?#]+$/.test(href) ? bookLoadingPage(href) : undefined;
+  const loading = direction === 'enter' && (loadingLabel || /^\/book\/[^/?#]+$/.test(href)) ? bookLoadingPage(href, loadingLabel) : undefined;
   const duration = direction === 'exit' ? 400 : 240;
   root.dataset.bookTransition = direction;
   root.dataset.bookTransitionPhase = 'loading';

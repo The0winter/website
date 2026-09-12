@@ -4,7 +4,7 @@ import {installRankingCache, trackRankingReading} from './ranking-cache';
 
 type Route = {kind: 'home' | 'author' | 'library' | 'ranking' | 'detail' | 'reader'; href: string; bookId?: string};
 type RankingView = {activeRank: string; category: string};
-type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; restoreSession?: string; homeBrowse?: boolean; libraryReturn?: string; rankingView?: RankingView};
+type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; restoreSession?: string; homeBrowse?: boolean; homeShortcutVisit?: boolean; libraryReturn?: string; rankingView?: RankingView};
 type Router = {push: (href: string) => void; replace: (href: string) => void};
 const listeners = new Set<() => void>();
 let router: Router | undefined;
@@ -19,6 +19,14 @@ const session = () => documentSession ??= crypto.randomUUID();
 
 const overlay = (entry?: Entry) => entry?.catalog ? 'catalog' : entry?.settings ? 'settings' : undefined;
 const isList = (route?: Route): route is Route & {kind: 'home' | 'author' | 'library' | 'ranking'} => route?.kind === 'home' || route?.kind === 'author' || route?.kind === 'library' || route?.kind === 'ranking';
+const mobile = () => window.matchMedia('(max-width: 767px)').matches;
+function homeShortcut(route?: Route) {
+  if (route?.kind === 'ranking') return '排行榜';
+  if (route?.kind !== 'home') return;
+  const view = new URL(route.href, location.origin).searchParams.get('view');
+  return view === 'category' ? '分类找书' : view === 'new' ? '新书上架' : undefined;
+}
+const featuredHome = (route?: Route) => route?.kind === 'home' && !homeShortcut(route);
 
 function routeFor(href: string): Route | undefined {
   if (href === '/' || href.startsWith('/?')) return {kind: 'home', href};
@@ -124,7 +132,17 @@ function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, t
     // Let Next's popstate listener restore the visited route and scroll position.
     // Replacing the URL here would refetch the page.
     if (restore) return;
-    if (!replace && entry.kind === 'detail') {
+    if (!replace && entry.kind === 'home' && entry.homeBrowse) {
+      // Native history updates the existing home component without an RSC request.
+      window.history.pushState({bookNavigation: entry, homeBrowse: true}, '', entry.href);
+      current = entry;
+      window.scrollTo({top: 0, behavior: 'instant'});
+    } else if (!replace && entry.kind === 'ranking' && mobile()) {
+      // Reserve the visit so Back can cancel even a slow route request.
+      window.history.pushState({...window.history.state, bookNavigation: entry}, '', entry.href);
+      current = entry;
+      router!.replace(entry.href);
+    } else if (!replace && entry.kind === 'detail') {
       // Reserve the detail visit before requesting it so Back from its loader
       // lands on the source, even when home was the first page in this tab.
       // This slot has no restoreSession: Forward must load the real details,
@@ -133,13 +151,19 @@ function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, t
       router!.replace(entry.href);
     } else if (replace) router!.replace(entry.href);
     else router!.push(entry.href);
-  });
+  }, mobile() ? homeShortcut(entry) : undefined);
 }
 
 function onPopState(event: PopStateEvent) {
   const from = current;
   const target = stored(event.state);
   if (!from || !router) { cancelBookTransition(); return; }
+  if (mobile() && target && (featuredHome(from) && homeShortcut(target) || homeShortcut(from) && featuredHome(target))) {
+    const restore = target.restoreSession === session() && Boolean(event.state?.__NA);
+    if (!restore) event.stopImmediatePropagation();
+    navigate(target, homeShortcut(target) ? 'enter' : 'exit', true, true, restore);
+    return;
+  }
   // Forward may reopen a separate list visit or login; leave that to Next.
   if (/^\/(login|register)$/.test(location.pathname) || isList(target) && target.kind !== 'home' && target.flow !== from.flow) {
     if (pending) { cancelBookTransition(); pending = undefined; }
@@ -190,11 +214,21 @@ export function installBookNavigation(value: Router) {
   };
 }
 
-// Called only by Next's onNavigate, so modified clicks still open normal tabs.
+// Links call this from Next's onNavigate; browse buttons can call it directly.
+// Modified link clicks still open normal tabs.
 export function navigateBookLink(href: string) {
   const target = routeFor(href);
   if (!target || !router) return false;
   if (document.documentElement.dataset.bookTransition) return true;
+  if (mobile() && featuredHome(current) && homeShortcut(target)) {
+    navigate({...entryFor(target), homeBrowse: target.kind === 'home', homeShortcutVisit: true}, 'enter', false);
+    return true;
+  }
+  if (mobile() && current && homeShortcut(current) && featuredHome(target)) {
+    if (current.homeBrowse || current.homeShortcutVisit) window.history.back();
+    else navigate(entryFor(target), 'exit', true);
+    return true;
+  }
   // Search and other pages use the same detail loader while keeping
   // their existing canonical history handling in syncBookRoute.
   if (target.kind === 'detail' && (!current || !isList(current) && target.bookId !== current.bookId)) {

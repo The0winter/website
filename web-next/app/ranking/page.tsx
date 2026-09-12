@@ -2,7 +2,7 @@
 
 import {useEffect, useLayoutEffect, useRef, useSyncExternalStore} from 'react';
 import {usePathname} from 'next/navigation';
-import Link from 'next/link';
+import Link from '@/components/PrefetchLink';
 import {ArrowLeft, BookOpen, ChevronRight, Star} from 'lucide-react';
 import BookCover from '@/components/BookCover';
 import BookLink from '@/components/BookLink';

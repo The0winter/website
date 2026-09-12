@@ -10,7 +10,7 @@ import BookLink from './BookLink';
 import {BookOpen,LayoutGrid,Trophy,CalendarDays,ChevronRight,ArrowLeft} from 'lucide-react';
 import type {Book} from '@/lib/api';
 import {safeFetch} from '@/lib/request';
-import {syncBookRoute} from '@/lib/book-navigation';
+import {navigateBookLink,syncBookRoute} from '@/lib/book-navigation';
 import './mobile-home.css';
 
 const categories=['全部','玄幻','仙侠','都市','历史','科幻','奇幻','悬疑'];
@@ -34,8 +34,9 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
   const cached=result?.key===key?result:browseCache.get(key);
   const rows=cached?.books||[];
   const total=cached?.total||0;
-  const [error,setError]=useState('');
+  const [failure,setFailure]=useState<{key:string;retry:number;message:string}|null>(null);
   const [retry,setRetry]=useState(0);
+  const error=failure?.key===key&&failure.retry===retry?failure.message:'';
   const loading=mode!=='home'&&!cached&&!error;
   const hero=featured[0];
   const query=search.toString();
@@ -45,7 +46,6 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
     const controller=new AbortController();
     const params=new URLSearchParams({page:String(page),limit:'20',order:'desc',orderBy:mode==='new'?'createdAt':'views'});
     if(mode==='category'&&category!=='全部')params.set('category',category);
-    setError('');
     safeFetch(`/api/books?${params}`,{signal:controller.signal}).then(async response=>{
       if(!response.ok)throw Error('书籍加载失败，请重试');
       const books:Book[]=await response.json();
@@ -54,20 +54,22 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
         browseCache.set(key,data);
         if(browseCache.size>8)browseCache.delete(browseCache.keys().next().value!);
         setResult({key,...data});
+        setFailure(null);
       }
-    }).catch(error=>{if(!controller.signal.aborted)setError(error.message);});
+    }).catch(error=>{if(!controller.signal.aborted)setFailure({key,retry,message:error.message});});
     return()=>controller.abort();
   },[mode,category,page,key,retry]);
   function browse(next:'category'|'new',nextPage=1,nextCategory=category,replace=false){
     const params=new URLSearchParams({view:next});
     if(next==='category'&&nextCategory!=='全部')params.set('category',nextCategory);
     if(nextPage>1)params.set('page',String(nextPage));
+    if(!replace&&navigateBookLink(`/?${params}`))return;
     const state={homeBrowse:replace?Boolean(history.state?.homeBrowse):true};
     if(replace)history.replaceState(state,'',`/?${params}`);else history.pushState(state,'',`/?${params}`);
     window.scrollTo({top:0,behavior:'instant'});
   }
-  function back(){if(history.state?.homeBrowse)router.back();else router.replace('/');}
-  return <div className="mobile-home md:hidden">
+  function back(){if(navigateBookLink('/'))return;if(history.state?.homeBrowse)router.back();else router.replace('/');}
+  return <div className="mobile-home md:hidden" data-home-href={'/'+(query?`?${query}`:'')} aria-busy={loading}>
     <h1 className="sr-only">九天小说 · 精选</h1>
     <HomeSearchHeader/>
     {mode==='home'?<>
