@@ -18,3 +18,8 @@
 - 部署失败时处理问题或回滚到上一兼容代码版本，如实说明状态。常规部署不包含破坏性数据库变更、秘密更换或删除业务数据。
 - 部署成功后只保留当前版本和最近两个已验证、与现有数据兼容的回滚版本。新版本的 `deployment-manifest.json` 必须记录 `sourceCommit`、`release`、`previousRelease`，并在验收成功后写入 `activatedAt`；验收失败不写成功标记。
 - 服务器通过 `test1-release-prune.path` 在版本切换后自动清理，另有每日 timer 兜底；部署验收后可执行 `sudo systemctl start test1-release-prune.service` 并核对结果。清理脚本为 `infra/release_retention.py`，默认仅预览，保留尚未完成部署或仍被进程使用的目录，绝不清理 `/srv/test1/backups`、数据库、R2 对象和 `/etc/test1` 配置。若保留条件或健康检查不满足，先处理原因，不绕过保护强行删除。
+
+## 封面上传流程
+
+- 所有书籍封面统一使用 `infra/upload-cover.mjs`，按书名（可附作者）或书籍 ID 以及图片路径传参；先预览核对，用户已授权上传时执行 `--apply`。用法见 `docs/R2封面存储.md`。
+- 不再为单本书或单张图片新建上传、数据库绑定、SSH 调用脚本。`.runtime/` 只保存该次操作的数据与结果；需要扩展能力时修改通用工具。仅上传封面不需要部署或重启网站。
