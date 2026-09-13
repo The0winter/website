@@ -48,13 +48,20 @@ export default function MobileWriterView({ view, covered, refreshVersion, onBack
   }, [view.closing, view.id]);
 
   const loaded = elapsed && ready;
-  return <div className="mw-view" data-kind={create ? 'new' : 'works'} data-closing={view.closing || undefined} inert={covered} aria-hidden={covered || undefined}>
+  const closeNew = () => {
+    const form = panel.current?.querySelector<HTMLElement>('.manuscript-form');
+    if (form?.dataset.busy === 'true') return;
+    if (form?.dataset.dirty === 'true' && !confirm('还有未保存的内容，确定关闭？可以先保存草稿，之后继续整理。')) return;
+    if (form) form.dataset.dirty = 'false';
+    onBack();
+  };
+  return <div className="mw-view" data-view-id={view.id} data-kind={create ? 'new' : 'works'} data-closing={view.closing || undefined} inert={covered} aria-hidden={covered || undefined}>
     <div className="mw-view-scrim" aria-hidden="true"/>
     <div ref={panel} className="mw-view-panel" role="dialog" aria-modal="true" aria-label={create ? '新建作品' : '作品管理'} tabIndex={-1} data-ready={loaded}>
       <header className="mw-view-header">
         {create ? <Sparkles size={23}/> : <button type="button" aria-label="返回创作中心" onClick={onBack}><ArrowLeft size={20}/></button>}
         <div><span>九天 · 创作者空间</span><h2>{create ? '创建新作品' : '作品管理'}</h2></div>
-        {create ? <button type="button" aria-label="关闭新建作品" onClick={onBack}><X size={22}/></button> : <BookOpen size={23}/>}
+        {create ? <button type="button" aria-label="关闭新建作品" onClick={closeNew}><X size={22}/></button> : <BookOpen size={23}/>}
       </header>
       <div className="mw-view-content">
         {!loaded && <div className="mw-view-loading" role={failed ? 'alert' : 'status'} aria-live="polite">

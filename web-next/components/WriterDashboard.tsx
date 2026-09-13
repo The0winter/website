@@ -1,5 +1,6 @@
 'use client';
 import BookCover from '@/components/BookCover';
+import ManuscriptCreator, {ManuscriptDraftList} from './ManuscriptCreator';
 import {LoadingLogo, LoadingText} from './BrandLoading';
 import { safeFetch as fetch } from '@/lib/request';
 
@@ -53,7 +54,7 @@ export default function WriterDashboard({ entry, embedded = false, onExit, onOpe
   const requestedPage = Number(entryParams.get('page') || 1);
 
   const standaloneCreate = embedded && entryAction === 'new';
-  const closeCreate = () => { if (standaloneCreate) onExit?.(); else setShowCreateBookModal(false); };
+  const closeCreate = () => { if (standaloneCreate) onExit?.(); else { setShowCreateBookModal(false); if (!embedded && entryAction === 'new') router.replace('/writer'); } };
 
   const LIMITS = { TITLE: 100, DESC: 500, CONTENT: 50000 };
 
@@ -73,7 +74,8 @@ export default function WriterDashboard({ entry, embedded = false, onExit, onOpe
   // 弹窗控制
   const [showCreateBookModal, setShowCreateBookModal] = useState(entryAction === 'new');
   const [bookCreationKey,setBookCreationKey]=useState(()=>crypto.randomUUID());
-  const [creatingBook,setCreatingBook]=useState(false);
+  const [resumingManuscript,setResumingManuscript]=useState(false);
+  const [manuscriptRefresh,setManuscriptRefresh]=useState(0);
   const [showChapterEditor, setShowChapterEditor] = useState(entryAction === 'write' && Boolean(entryBook));
   const [showBookManager, setShowBookManager] = useState(entryAction === 'manage' && Boolean(entryBook));
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
@@ -97,8 +99,6 @@ export default function WriterDashboard({ entry, embedded = false, onExit, onOpe
   const [currentChapterId, setCurrentChapterId] = useState<string | null>(null);
   const [formBookTitle, setFormBookTitle] = useState('');
   const [formBookDescription, setFormBookDescription] = useState('');
-  const [formBookCategory, setFormBookCategory] = useState('玄幻');
-  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [formChapterTitle, setFormChapterTitle] = useState('');
   const [formChapterContent, setFormChapterContent] = useState('');
 
@@ -107,17 +107,12 @@ export default function WriterDashboard({ entry, embedded = false, onExit, onOpe
   // 封面上传
   const [uploading, setUploading] = useState(false);
   const [formBookCover, setFormBookCover] = useState('');
-  const [newBookCoverFile, setNewBookCoverFile] = useState<File | null>(null);
-  const [newBookCoverPreview, setNewBookCoverPreview] = useState('');
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<{x:number;y:number;width:number;height:number}|null>(null);
   const [cropperImgSrc, setCropperImgSrc] = useState<string | null>(null);
-  const [isCroppingFor, setIsCroppingFor] = useState<'new' | 'edit' | null>(null);
+  const [isCroppingFor, setIsCroppingFor] = useState<'edit' | null>(null);
 
-  const ALL_CATEGORIES = ['玄幻', '仙侠', '都市', '历史', '科幻', '奇幻', '体育', '军事', '悬疑'];
-  const visibleCategories = ALL_CATEGORIES.slice(0, 4);
-  const hiddenCategories = ALL_CATEGORIES.slice(4);
 
   // ================= 逻辑函数 =================
 
@@ -268,7 +263,7 @@ export default function WriterDashboard({ entry, embedded = false, onExit, onOpe
   };
 
   // ... 裁剪、登录等逻辑保持不变 (此处为了简洁省略，实际使用时请保留) ...
-  const onSelectFile = (e: React.ChangeEvent<HTMLInputElement>, type: 'new' | 'edit') => {
+  const onSelectFile = (e: React.ChangeEvent<HTMLInputElement>, type: 'edit') => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       e.target.value = '';
@@ -297,12 +292,7 @@ const handleSaveCrop = async () => {
       const url = await uploadCover(file);
 
       if (url) {
-        if (isCroppingFor === 'new') {
-          // 如果之前已经传过预览图了，现在又裁了一张新的，就把之前那张预览图删掉
-          if (newBookCoverPreview) await retireCover(newBookCoverPreview);
-          setNewBookCoverPreview(url);
-          setToast({ msg: '裁剪并上传成功', type: 'success' });
-        } else if (isCroppingFor === 'edit') {
+        if (isCroppingFor === 'edit') {
           const previousCover = formBookCover;
           if (!currentBookId) throw new Error('请先选择书籍');
           await booksApi.update(currentBookId, { cover_image: url });
@@ -420,21 +410,6 @@ const handleSaveCrop = async () => {
   const handleConfirmPublish = async () => { if(await saveChapterCore('completed')) { setShowPublishConfirm(false); setShowChapterEditor(false); setToast({msg:'发布成功', type:'success'}); }};
   const handleDeleteChapter = (cid: string) => setChapterToDelete(cid);
   const executeDeleteChapter = async () => { if(!chapterToDelete) return; await chaptersApi.delete(chapterToDelete); setActiveChapters(prev => prev.filter(c => c.id !== chapterToDelete)); setChapterToDelete(null); setToast({msg:'删除成功', type:'success'}); };
-  const handleCreateBook = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if(!formBookTitle.trim() || !user || creatingBook) return;
-      setCreatingBook(true);
-      try {
-          let url = newBookCoverPreview || '';
-          if(!url && newBookCoverFile) { const u = await uploadCover(newBookCoverFile); if(u) {url=u;setNewBookCoverPreview(u);} else return; }
-          await booksApi.create({ title: formBookTitle, description: formBookDescription, cover_image: url, category: formBookCategory, author: user.username, author_id: user.id },bookCreationKey);
-          onWorksChanged?.();
-          if (standaloneCreate) { onExit?.(); return; }
-          setShowCreateBookModal(false); setFormBookTitle(''); setFormBookDescription(''); setFormBookCategory(ALL_CATEGORIES[0]); setNewBookCoverFile(null); setNewBookCoverPreview('');
-          setToast({msg:'创建成功', type:'success'}); fetchMyData();
-      } catch(e) { setToast({msg:e instanceof Error?e.message:'创建失败', type:'error'}); }
-      finally{setCreatingBook(false);}
-  };
   const handleUpdateBook = async () => {
     if (!currentBookId) return;
     await booksApi.update(currentBookId, {
@@ -587,12 +562,13 @@ const openBookManager = (book: Book) => {
       {/* ================= 主内容区域 ================= */}
       <main className="writer-main flex-1 md:ml-64 p-4 md:p-8 pb-20 md:pb-8">
 
+        {currentView==='works'&&!standaloneCreate&&<ManuscriptDraftList refreshVersion={manuscriptRefresh+refreshVersion} onOpen={key=>{setBookCreationKey(key);setResumingManuscript(true);setShowCreateBookModal(true);}}/>}
         {/* 1. 作品管理视图 */}
         {currentView === 'works' && (
             <div className="writer-works-shell bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[80vh] md:min-h-0 animate-in fade-in">
                 <div className="writer-works-heading p-4 md:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 md:bg-white">
                     <h3 className="font-bold text-lg text-gray-900">我的作品</h3>
-                    <button onClick={() => { if (onOpenNew) { onOpenNew(); return; } setBookCreationKey(crypto.randomUUID());setShowCreateBookModal(true);}} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg hover:bg-blue-700 transition shadow-md shadow-blue-500/20 active:scale-95 cursor-pointer">
+                    <button onClick={() => { if (onOpenNew) { onOpenNew(); return; } setBookCreationKey(crypto.randomUUID());setResumingManuscript(false);setShowCreateBookModal(true);}} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg hover:bg-blue-700 transition shadow-md shadow-blue-500/20 active:scale-95 cursor-pointer">
                         <Plus className="h-4 w-4" /> <span className="hidden md:inline">创建新书</span><span className="md:hidden">新建</span>
                     </button>
                 </div>
@@ -1203,96 +1179,13 @@ const openBookManager = (book: Book) => {
         </div>
       )}
 
-        {/* 4. 创建新书弹窗 */}
-        {showCreateBookModal && (
-        <div className="writer-create-modal fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in slide-in-from-bottom-10 md:slide-in-from-bottom-0">
-                <h3 className="writer-create-title text-xl md:text-2xl font-bold mb-6 text-gray-900 flex items-center gap-2">
-                <Sparkles className="h-6 w-6 text-purple-500" /> 创建新作品
-                </h3>
-                <form onSubmit={handleCreateBook} className="space-y-4 md:space-y-6">
-
-                {/* 1. 封面上传区 */}
-                <div className="flex justify-center">
-                    <label className="relative cursor-pointer group">
-                        <div className="w-28 h-36 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden hover:border-blue-500 transition">
-                            {newBookCoverPreview ? (
-                                <BookCover priority sizes="160px" src={newBookCoverPreview} className="w-full h-full object-cover" />
-                            ) : (
-                                <div className="text-center text-gray-400">
-                                    <ImageIcon className="h-8 w-8 mx-auto mb-1" />
-                                    <span className="text-xs">上传封面</span>
-                                </div>
-                            )}
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
-                                <Upload className="h-6 w-6 text-white" />
-                            </div>
-                        </div>
-                        <input
-                            type="file"
-                            className="hidden"
-                            accept="image/jpeg,image/png,image/webp"
-                            aria-label="上传新书封面" disabled={uploading} onChange={(e) => onSelectFile(e, 'new')}
-                        />
-                    </label>
-                </div>
-
-                {/* 2. 书名输入 (已优化：添加字数统计与限制) */}
-                <div>
-                    <div className="flex justify-between items-center mb-2">
-                        <label className="block text-sm font-bold text-gray-700">书名</label>
-                        {/* 右侧计数器：平时灰色，超限变红 */}
-                        <span className={`text-xs font-mono transition-colors ${
-                            formBookTitle.length >= LIMITS.TITLE ? 'text-red-500 font-bold' : 'text-gray-400'
-                        }`}>
-                            {formBookTitle.length} / {LIMITS.TITLE}
-                        </span>
-                    </div>
-                    <input
-                        type="text"
-                        value={formBookTitle}
-                        maxLength={LIMITS.TITLE} // 🛡️ 硬限制
-                        onChange={(e) => setFormBookTitle(e.target.value)}
-                        // 👇 保持原有的 className 完全不变
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 font-bold placeholder-gray-400 transition-all"
-                        placeholder="请输入书名"
-                    />
-                </div>
-
-                {/* ... 中间的分类选择代码保持不变 ... */}
-
-                {/* 4. 简介输入 (已优化：添加字数统计与限制) */}
-                <div>
-                    <div className="flex justify-between items-center mb-2">
-                        <label className="block text-sm font-bold text-gray-700">简介</label>
-                        {/* 右侧计数器 */}
-                        <span className={`text-xs font-mono transition-colors ${
-                            formBookDescription.length >= LIMITS.DESC ? 'text-red-500 font-bold' : 'text-gray-400'
-                        }`}>
-                            {formBookDescription.length} / {LIMITS.DESC}
-                        </span>
-                    </div>
-                    <textarea
-                        value={formBookDescription}
-                        maxLength={LIMITS.DESC} // 🛡️ 硬限制
-                        onChange={(e) => setFormBookDescription(e.target.value)}
-                        // 👇 保持原有的 className 完全不变
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none resize-none text-gray-900 font-medium h-24 md:h-32 transition-all"
-                        placeholder="简单介绍一下你的故事..."
-                    ></textarea>
-                </div>
-                {/* 5. 底部按钮 */}
-                <div className="flex gap-4 mt-8 pb-safe md:pb-0">
-                    <button type="button" onClick={closeCreate} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl active:bg-gray-200">取消</button>
-                    <button type="submit" disabled={uploading} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl active:bg-blue-700 shadow-lg flex justify-center items-center gap-2">
-                        {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
-                        {uploading ? '上传中...' : '立即创建'}
-                    </button>
-                </div>
-            </form>
-            </div>
-        </div>
-        )}
+        {showCreateBookModal && <ManuscriptCreator key={bookCreationKey} draftKey={bookCreationKey} resume={resumingManuscript} embedded={standaloneCreate} onClose={closeCreate} onComplete={published => {
+          onWorksChanged?.();setManuscriptRefresh(n=>n+1);
+          if(standaloneCreate){onExit?.();return;}
+          closeCreate();setResumingManuscript(false);
+          setToast({msg:published?'作品与章节已提交':'作品草稿已保存，可在作品管理继续整理',type:'success'});
+          void fetchMyData();
+        }}/>}
 
       {/* 5. 章节删除确认弹窗 */}
       {chapterToDelete && (

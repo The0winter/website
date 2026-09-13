@@ -1,6 +1,7 @@
 import Media from '../models/Media.js';
 import Book from '../models/Book.js';
 import User from '../models/User.js';
+import Manuscript from '../models/Manuscript.js';
 
 export function mediaUrls(media) {
   const urls=[`/api/media/${media._id}`];
@@ -10,7 +11,7 @@ export function mediaUrls(media) {
 export async function hasMediaReferences(media,session) {
   const urls=mediaUrls(media);
   // Include removed books: restoring a book must keep its original cover working.
-  return !!(await Book.exists({cover_image:{$in:urls}}).session(session) || await User.exists({avatar:{$in:urls}}).session(session));
+  return !!(await Book.exists({cover_image:{$in:urls}}).session(session) || await User.exists({avatar:{$in:urls}}).session(session) || await Manuscript.exists({cover_image:{$in:urls},publishedBookId:null}).session(session));
 }
 
 export function mediaFilter(url, owner) {

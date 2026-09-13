@@ -61,6 +61,15 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
       timer = setTimeout(finish, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260);
     };
     const pop = () => {
+      const form = element.querySelector<HTMLElement>('.mw-view:not([inert]) .manuscript-form');
+      const viewId = form?.closest<HTMLElement>('.mw-view')?.dataset.viewId;
+      const removing = history.state?.mobileWriter !== marker || !historyWriterViews().some(view => view.id === viewId);
+      if (form && removing) {
+        if (form.dataset.busy === 'true' || (form.dataset.dirty === 'true' && !confirm('还有未保存的内容，确定关闭？可以先保存草稿，之后继续整理。'))) {
+          history.forward(); return;
+        }
+        form.dataset.dirty = 'false';
+      }
       if (history.state?.mobileWriter !== marker) { animateClose(); return; }
       const next = historyWriterViews();
       setViews(previous => [...next, ...previous.filter(view => !next.some(item => item.id === view.id)).map(view => ({ ...view, closing: true }))]);

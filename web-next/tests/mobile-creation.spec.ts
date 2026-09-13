@@ -8,6 +8,7 @@ const launch = (page: Page) => page.getByRole('button', { name: '创作', exact:
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**/api/manuscripts', route => route.fulfill({json:{drafts:[],remainingCharacters:100000}}));
   await page.route('**/api/auth/session', route => route.fulfill({ json: { user: account, profile: account } }));
   await page.route('**/api/books?**', route => new URL(route.request().url()).searchParams.get('author_id') === account.id ? route.fulfill({ json: [book] }) : route.continue());
   await page.route(`**/api/books/${book.id}/chapters**`, route => route.fulfill({ json: [] }));
@@ -78,10 +79,10 @@ for (const width of [320, 390]) test(`creator actions open the matching creation
   await page.setViewportSize({ width, height: 844 });
   await page.goto(base); await launch(page).click();
   await modal(page).getByRole('link', { name: /新建作品/ }).click();
-  await expect(page.getByPlaceholder('请输入书名')).toBeVisible();
+  await expect(page.getByLabel('书名', {exact:true})).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath(`create-${width}.png`) });
-  await page.getByRole('button', { name: '取消', exact: true }).click();
+  await page.getByRole('button', { name: '关闭新建作品', exact: true }).click();
   await expect(page.locator('.mw-view')).toHaveCount(0);
   await expect(modal(page)).toBeVisible();
   await modal(page).getByRole('link', { name: '写一章', exact: true }).click();
@@ -106,7 +107,7 @@ for (const width of [320, 390]) for (const action of ['新建作品', '作品管
     const marker = await page.evaluate(() => history.state.mobileWriter);
     await modal(page).getByRole('link', { name: new RegExp(action) }).click();
     await expect(page.getByRole('dialog', { name: action, exact: true })).toBeVisible();
-    if (action === '新建作品') await expect(page.getByPlaceholder('请输入书名')).toBeVisible();
+    if (action === '新建作品') await expect(page.getByLabel('书名', {exact:true})).toBeVisible();
     await page.goBack();
     await expect(page.locator('.mw-view')).toHaveCount(0);
     await expect(modal(page)).toBeVisible();
@@ -118,7 +119,7 @@ for (const width of [320, 390]) for (const action of ['新建作品', '作品管
     await expect(modal(page)).toBeVisible();
     // Reloading a child route must retain the same parent history entry.
     await page.reload();
-    if (action === '新建作品') await page.getByRole('button', { name: '取消', exact: true }).click();
+    if (action === '新建作品') await page.getByRole('button', { name: '关闭新建作品', exact: true }).click();
     else await page.getByRole('button', { name: '返回创作中心', exact: true }).click();
     await expect(page.locator('.mw-view')).toHaveCount(0);
     await expect(modal(page)).toBeVisible();
@@ -235,7 +236,7 @@ for (const width of [320, 390]) for (const action of ['新建作品', '作品管
     if (action === '新建作品') { expect(geometry.height).toBeLessThan(geometry.viewport); expect(geometry.top).toBeGreaterThan(0); }
     else expect(geometry.height).toBe(geometry.viewport);
     await page.screenshot({ path: info.outputPath(`loaded-${action}-${width}.png`) });
-    if (action === '新建作品') await page.getByRole('button', { name: '取消', exact: true }).click();
+    if (action === '新建作品') await page.getByRole('button', { name: '关闭新建作品', exact: true }).click();
     else await page.getByRole('button', { name: '返回创作中心', exact: true }).click();
     await expect(page.locator('.mw-view')).toHaveCount(0);
     const probe = await page.evaluate(() => {
@@ -291,7 +292,7 @@ test('new work opened from management returns to the same management layer befor
   await expect(page.locator('.mw-view-panel')).toHaveAttribute('data-ready', 'true');
   const id = await page.evaluate(() => history.state.mobileWriterViews[0].id);
   await page.getByRole('button', { name: '新建', exact: true }).click();
-  await expect(page.getByPlaceholder('请输入书名')).toBeVisible();
+  await expect(page.getByLabel('书名', {exact:true})).toBeVisible();
   await expect(page.locator('.mw-view')).toHaveCount(2);
   await page.getByRole('button', { name: '关闭新建作品', exact: true }).click();
   await expect(page.locator('.mw-view')).toHaveCount(1);
@@ -304,15 +305,20 @@ test('new work opened from management returns to the same management layer befor
 test('creating a work closes the sheet directly and refreshes the retained center', async ({ page }) => {
   let created = false;
   const newBook = { ...book, id: '000000000000000000000200', title: '新故事' };
-  await page.route('**/api/books', async route => {
-    if (route.request().method() !== 'POST') return route.continue();
-    created = true; await route.fulfill({ json: newBook });
+  await page.route('**/api/manuscripts/*', async route => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    created = true; await route.fulfill({ json: {status:'published',bookId:newBook.id,revision:1} });
   });
   await page.route('**/api/books?**', route => new URL(route.request().url()).searchParams.get('author_id') === account.id ? route.fulfill({ json: created ? [newBook, book] : [book] }) : route.continue());
   await page.goto(base); await launch(page).click();
   await modal(page).getByRole('link', { name: /新建作品/ }).click();
-  await page.getByPlaceholder('请输入书名').fill(newBook.title);
-  await page.getByRole('button', { name: '立即创建', exact: true }).click();
+  await page.getByLabel('书名', {exact:true}).fill(newBook.title);
+  await page.getByLabel('简介',{exact:true}).fill('新的故事简介');
+  await page.getByRole('button', {name:'直接码字',exact:true}).click();
+  await page.getByLabel('在线章节正文').fill('新的第一章正文。');
+  await page.getByRole('button',{name:'预览章节',exact:true}).click();
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button',{name:'提交作品',exact:true}).click();
   await expect(page.locator('.mw-view')).toHaveCount(0);
   await expect(modal(page).getByRole('heading', { name: newBook.title })).toBeVisible();
 });
@@ -321,8 +327,22 @@ test('direct desktop writer entry retains its creation form and management page'
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`${base}/writer`);
   await page.getByRole('button', { name: '创建新书', exact: true }).click();
-  await expect(page.getByPlaceholder('请输入书名')).toBeVisible();
-  await page.getByRole('button', { name: '取消', exact: true }).click();
-  await expect(page.locator('.writer-create-modal')).toHaveCount(0);
+  await expect(page.getByLabel('书名', {exact:true})).toBeVisible();
+  await page.getByRole('button', { name: '关闭新建作品', exact: true }).click();
+  await expect(page.locator('.manuscript-form')).toHaveCount(0);
   await expect(page.locator('.writer-work').getByRole('heading', { name: book.title })).toBeVisible();
+});
+
+test('unsaved manuscript survives cancelled native Back and closes after one confirmation', async ({page}) => {
+  await page.goto(base); await launch(page).click();
+  await modal(page).getByRole('link',{name:/新建作品/}).click();
+  await page.getByLabel('书名',{exact:true}).fill('未保存的故事');
+  let questions=0;
+  page.on('dialog',async dialog=>{questions++;if(questions===1)await dialog.dismiss();else await dialog.accept();});
+  await page.goBack();
+  await expect(page.getByLabel('书名',{exact:true})).toHaveValue('未保存的故事');
+  await expect.poll(()=>questions).toBe(1);
+  await page.getByRole('button',{name:'关闭新建作品',exact:true}).click();
+  await expect(page.locator('.mw-view')).toHaveCount(0);
+  expect(questions).toBe(2);
 });
