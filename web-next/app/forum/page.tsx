@@ -14,14 +14,15 @@ import {
 } from 'lucide-react';
 import { forumApi, ForumPost } from '@/lib/api';
 import HomeSearchHeader from '@/components/HomeSearchHeader';
+import {navigateMobileSection} from '@/lib/mobile-section-navigation';
 import './forum.css';
 
 type FeedTab = 'recommend' | 'hot' | 'follow';
 
 const TABS: Array<{ id: FeedTab; label: string }> = [
-  { id: 'follow', label: '关注' },
   { id: 'recommend', label: '推荐' },
-  { id: 'hot', label: '热榜' }
+  { id: 'hot', label: '热榜' },
+  { id: 'follow', label: '关注' }
 ];
 
 const HOT_TOPICS = [
@@ -70,6 +71,15 @@ export default function ForumPage() {
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [swipeDir, setSwipeDir] = useState<'h' | 'v' | null>(null);
+  const suppressSwipeClick = useRef(false);
+  const feed = useRef<HTMLDivElement>(null);
+  const horizontalSwipe = useRef(false);
+  useEffect(() => {
+    const host = feed.current;
+    const move = (event: TouchEvent) => {if (horizontalSwipe.current && event.touches.length === 1 && event.cancelable) event.preventDefault();};
+    host?.addEventListener('touchmove', move, {passive: false});
+    return () => host?.removeEventListener('touchmove', move);
+  }, []);
 
   // 1. 初始化静默预加载所有 Tab 的数据
   useEffect(() => {
@@ -89,6 +99,9 @@ export default function ForumPage() {
 
   // ====== 移动端滑动事件处理 ======
   const handleTouchStart = (e: React.TouchEvent) => {
+    handleTouchCancel();
+    suppressSwipeClick.current = false;
+    if (e.touches.length !== 1 || (e.target as Element).closest('button, input, select, textarea, [contenteditable], .mh-bottom, .forum-publish, dialog')) return;
     setTouchStartPos({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
     setIsDragging(true);
     setDragOffset(0);
@@ -96,6 +109,7 @@ export default function ForumPage() {
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) {handleTouchCancel(); return;}
     if (!touchStartPos) return;
     const currentX = e.targetTouches[0].clientX;
     const currentY = e.targetTouches[0].clientY;
@@ -112,6 +126,8 @@ export default function ForumPage() {
     }
 
     if (dir === 'h') {
+      horizontalSwipe.current = true;
+      suppressSwipeClick.current = true;
       let newOffset = diffX;
       // 边缘阻尼（首尾页拉拽时增加吃力感）
       if ((activeIndex === 0 && diffX > 0) || (activeIndex === TABS.length - 1 && diffX < 0)) {
@@ -121,18 +137,29 @@ export default function ForumPage() {
     }
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchCancel = () => {
+    horizontalSwipe.current = false;
+    setIsDragging(false);
+    setDragOffset(0);
+    setTouchStartPos(null);
+    setSwipeDir(null);
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent) => {
+    horizontalSwipe.current = false;
     setIsDragging(false);
     if (!touchStartPos || swipeDir !== 'h') {
       setTouchStartPos(null);
       return;
     }
 
-    // 滑动超过屏幕宽度 20% 触发翻页
-    const threshold = window.innerWidth * 0.1; 
-    if (dragOffset > threshold && activeIndex > 0) {
+    const distance = event.changedTouches[0]?.clientX - touchStartPos.x;
+    const threshold = Math.min(100, window.innerWidth * .25);
+    if (distance > threshold && activeIndex === 0) {
+      navigateMobileSection(event.currentTarget, 'home');
+    } else if (distance > threshold && activeIndex > 0) {
       setActiveTab(TABS[activeIndex - 1].id);
-    } else if (dragOffset < -threshold && activeIndex < TABS.length - 1) {
+    } else if (distance < -threshold && activeIndex < TABS.length - 1) {
       setActiveTab(TABS[activeIndex + 1].id);
     }
 
@@ -306,7 +333,12 @@ export default function ForumPage() {
   };
 
 return (
-    <div data-forum-theme="home" className={`forum-page min-h-screen ${currentTheme.bg} pb-24 md:pb-12 font-sans transition-colors duration-300`}>
+    <div ref={feed} data-forum-theme="home" className={`forum-page min-h-screen ${currentTheme.bg} pb-24 md:pb-12 font-sans transition-colors duration-300`}
+      onTouchStart={event => {if (matchMedia('(max-width: 767px)').matches) handleTouchStart(event);}}
+      onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} onTouchCancel={handleTouchCancel}
+      onClickCapture={event => {
+        if (suppressSwipeClick.current && event.nativeEvent.isTrusted) {event.preventDefault(); event.stopPropagation(); suppressSwipeClick.current = false;}
+      }}>
       <div className="forum-masthead">
         <HomeSearchHeader>
           <form className="forum-search book-search book-search--home" role="search" onSubmit={event => event.preventDefault()}>
@@ -322,6 +354,7 @@ return (
               return (
                 <button
                   key={tab.id}
+                  aria-current={isActive ? 'page' : undefined}
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex-1 md:flex-none flex justify-center items-center shrink-0 px-3 sm:px-4 h-11 border-b-2 text-[15px] font-semibold transition-colors ${isActive ? currentTheme.tabActive : currentTheme.tabIdle}`}
                 >
@@ -336,13 +369,10 @@ return (
       <div className="max-w-[1040px] mx-auto px-0 md:px-4 mt-0 md:mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px] gap-5 md:gap-6">
         
         {/* ================= 移动端独享：跟手轮播容器 ================= */}
-        <div className="md:hidden w-full relative overflow-hidden" style={{ touchAction: 'pan-y' }}>
+        <div className="forum-mobile-feed md:hidden w-full relative overflow-hidden" style={{ touchAction: 'pan-y pinch-zoom' }}>
           <div 
             className={`flex w-full ${isDragging ? '' : 'transition-transform duration-300 ease-out'}`}
             style={{ transform: `translateX(calc(-${activeIndex * 100}% + ${dragOffset}px))` }}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
           >
             {TABS.map(tab => (
               <div key={tab.id} className="w-full shrink-0" inert={tab.id!==activeTab} aria-hidden={tab.id!==activeTab}>

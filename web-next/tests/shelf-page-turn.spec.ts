@@ -23,10 +23,10 @@ async function setup(page: Page, width: number, historyGate?: Promise<void>) {
 
 async function swipe(page: Page, context: BrowserContext, direction: number) {
   const box = (await page.locator('.shelf-viewport').boundingBox())!;
-  const x = box.x + box.width * (direction > 0 ? .8 : .2), y = box.y + 65;
+  const x = box.x + box.width * (direction > 0 ? .2 : .8), y = box.y + 65;
   const cdp = await context.newCDPSession(page);
   await cdp.send('Input.dispatchTouchEvent', {type:'touchStart', touchPoints:[{x,y,id:1}]});
-  for(let i=1;i<=6;i++) await cdp.send('Input.dispatchTouchEvent', {type:'touchMove', touchPoints:[{x:x-direction*i*20,y,id:1}]});
+  for(let i=1;i<=6;i++) await cdp.send('Input.dispatchTouchEvent', {type:'touchMove', touchPoints:[{x:x+direction*i*20,y,id:1}]});
   await cdp.send('Input.dispatchTouchEvent', {type:'touchEnd', touchPoints:[]});
   await cdp.detach();
 }
@@ -63,10 +63,10 @@ for (const width of [320,390,1440]) for (const method of ['click','swipe']) {
       expect(frame.durations[0]).toBeGreaterThanOrEqual(120);
       expect(frame.opacities).toEqual(['1','1']);
       expect(frame.inert).toBe(true);
-      expect(Math.abs((frame.a-frame.b)*direction-frame.width)).toBeLessThan(1);
-      expect((frame.a-frame.left)*direction).toBeGreaterThan(0);
-      expect((frame.a-frame.left)*direction).toBeLessThan(frame.width);
-      expect((frame.b-frame.left)*direction).toBeLessThan(0);
+      expect(Math.abs((frame.b-frame.a)*direction-frame.width)).toBeLessThan(1);
+      expect((frame.left-frame.a)*direction).toBeGreaterThan(0);
+      expect((frame.left-frame.a)*direction).toBeLessThan(frame.width);
+      expect((frame.b-frame.left)*direction).toBeGreaterThan(0);
       expect(await page.locator('.mh-bottom').boundingBox()).toEqual(bottom);
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
       await page.screenshot({path:info.outputPath(`${direction>0?'history':'shelf'}-mid-turn.png`)});
@@ -130,10 +130,10 @@ test('both pages and the tab indicator track the finger before release, then a s
   await setup(page, 390);
   await expect(page.locator('#shelf-preview-history .shelf-row')).toHaveCount(3);
   const box = (await page.locator('.shelf-viewport').boundingBox())!;
-  const x = box.x + box.width * .85, y = box.y + 70;
+  const x = box.x + box.width * .15, y = box.y + 70;
   const cdp = await context.newCDPSession(page);
   await cdp.send('Input.dispatchTouchEvent', {type:'touchStart', touchPoints:[{x,y,id:1}]});
-  for (const dx of [-40, -80, -120, -60, -20]) {
+  for (const dx of [40, 80, 120, 60, 20]) {
     await cdp.send('Input.dispatchTouchEvent', {type:'touchMove', touchPoints:[{x:x+dx,y,id:1}]});
     // CDP acknowledges input before Chrome has necessarily dispatched its
     // pointer event. Observe the rendered frame before measuring the panes.
@@ -145,12 +145,12 @@ test('both pages and the tab indicator track the finger before release, then a s
         animations:host.getAnimations({subtree:true}).length, indicator:new DOMMatrix(getComputedStyle(tabs,'::after').transform).m41};
     });
     expect(Math.abs(frame.shelf - box.x - dx)).toBeLessThan(1);
-    expect(Math.abs(frame.history - frame.shelf - box.width)).toBeLessThan(1);
+    expect(Math.abs(frame.shelf - frame.history - box.width)).toBeLessThan(1);
     expect(frame.animations).toBe(0);
     expect(frame.indicator).toBeGreaterThan(0);
     await expect(page.getByRole('tab',{name:'书架',exact:true})).toHaveAttribute('aria-selected','true');
     await expect(page).toHaveURL(base+'/library?sort=updated&page=2');
-    if (dx === -120) await page.screenshot({path:info.outputPath('finger-down.png')});
+    if (dx === 120) await page.screenshot({path:info.outputPath('finger-down.png')});
   }
   await cdp.send('Input.dispatchTouchEvent', {type:'touchEnd', touchPoints:[]});
   await expect(page.locator('.shelf-viewport')).not.toHaveAttribute('data-switching','true');
@@ -171,9 +171,11 @@ test('a cancelled drag restores the selected page and an edge drag never changes
   await expect(page.locator('.shelf-viewport')).not.toHaveAttribute('data-switching','true');
   expect((await page.locator('#shelf-content').boundingBox())!.x).toBe(box.x);
   await cdp.detach();
-  await swipe(page,context,-1);
+  await page.getByRole('tab',{name:'浏览记录'}).click();
   await expect(page.locator('.shelf-viewport')).not.toHaveAttribute('data-switching','true');
-  await expect(page).toHaveURL(base+'/library?sort=updated&page=2');
+  await swipe(page,context,1);
+  await expect(page.locator('.shelf-viewport')).not.toHaveAttribute('data-switching','true');
+  await expect(page).toHaveURL(base+'/library?tab=history&sort=updated');
 });
 
 test.describe('mobile taps immediately after a swipe', () => {

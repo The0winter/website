@@ -38,7 +38,7 @@ export function useShelfPageTurn(tab: LibraryTab, enabled: boolean) {
     if (!enabled || !host) return;
     const width = host.clientWidth;
     if (!width) return;
-    const origin: Position = {shelf: currentTab.current === 'shelf' ? 0 : -width, history: currentTab.current === 'history' ? 0 : width};
+    const origin: Position = {shelf: currentTab.current === 'shelf' ? 0 : width, history: currentTab.current === 'history' ? 0 : -width};
     if (active.current) for (const panel of panels()) origin[panel.dataset.shelfTab as LibraryTab] = new DOMMatrix(getComputedStyle(panel).transform).m41;
     active.current?.animations.forEach(animation => animation.cancel());
     host.style.minHeight = `${host.getBoundingClientRect().height}px`;
@@ -55,7 +55,7 @@ export function useShelfPageTurn(tab: LibraryTab, enabled: boolean) {
     const motion = capture();
     if (!motion) {cancel(); commit(); return;}
     tabs.current?.removeAttribute('data-dragging');
-    const destination: Position = nextTab === 'shelf' ? {shelf: 0, history: motion.width} : {shelf: -motion.width, history: 0};
+    const destination: Position = nextTab === 'shelf' ? {shelf: 0, history: -motion.width} : {shelf: motion.width, history: 0};
     const remaining = Math.abs(destination.shelf - motion.origin.shelf);
     // Continue from the finger's position; a reversal retargets the current
     // frame immediately instead of waiting in a 400ms animation queue.
@@ -81,10 +81,10 @@ export function useShelfPageTurn(tab: LibraryTab, enabled: boolean) {
     const motion = active.current;
     if (!motion?.dragging) return;
     let x = motion.origin.shelf + distance;
-    if (x > 0) x *= .18;
-    if (x < -motion.width) x = -motion.width + (x + motion.width) * .18;
-    for (const panel of panels()) panel.style.transform = `translateX(${x + (panel.dataset.shelfTab === 'history' ? motion.width : 0)}px)`;
-    align(Math.max(0, Math.min(1, -x / motion.width)));
+    if (x < 0) x *= .18;
+    if (x > motion.width) x = motion.width + (x - motion.width) * .18;
+    for (const panel of panels()) panel.style.transform = `translateX(${x - (panel.dataset.shelfTab === 'history' ? motion.width : 0)}px)`;
+    align(Math.max(0, Math.min(1, x / motion.width)));
   }, [panels, align]);
 
   useLayoutEffect(() => {currentTab.current = tab; if (!enabled) cancel();}, [tab, enabled, cancel]);

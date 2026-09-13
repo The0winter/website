@@ -1,4 +1,4 @@
-.library-page { min-height:100svh; background:var(--home-background); color:var(--home-text); padding:28px 24px 48px; font-family:Arial,"Microsoft YaHei",sans-serif; }
+.library-page { min-height:100svh; background:var(--home-background); color:var(--home-text); padding:28px 24px 48px; font-family:Arial,"Microsoft YaHei",sans-serif; touch-action:pan-y pinch-zoom; }
 .library-inner { max-width:1080px; margin:auto; }
 @media (min-width:768px) {
   .library-page .mh-topbar { max-width:680px; margin-bottom:24px; }
@@ -16,8 +16,8 @@
 .shelf-viewport[data-switching] { overflow:clip; }
 .shelf-page { position:relative; width:100%; background:var(--home-surface); }
 .shelf-page[data-active=false] { display:none; position:absolute; top:0; left:0; }
-.shelf-page[data-active=false][data-shelf-tab=history] { transform:translateX(100%); }
-.shelf-page[data-active=false][data-shelf-tab=shelf] { transform:translateX(-100%); }
+.shelf-page[data-active=false][data-shelf-tab=history] { transform:translateX(-100%); }
+.shelf-page[data-active=false][data-shelf-tab=shelf] { transform:translateX(100%); }
 .shelf-viewport[data-switching] .shelf-page { display:block; will-change:transform; }
 .shelf-actions { gap:24px; font-size:14px; color:var(--home-muted); }
 .shelf-actions button { min-height:44px; white-space:nowrap; }

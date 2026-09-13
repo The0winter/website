@@ -11,6 +11,7 @@ import {BookOpen,LayoutGrid,Trophy,CalendarDays,ChevronRight,ArrowLeft} from 'lu
 import type {Book} from '@/lib/api';
 import {safeFetch} from '@/lib/request';
 import {navigateBookLink,syncBookRoute} from '@/lib/book-navigation';
+import {useMobileHomeSwipe} from '@/lib/useMobileHomeSwipe';
 import './mobile-home.css';
 
 const categories=['全部','玄幻','仙侠','都市','历史','科幻','奇幻','悬疑'];
@@ -26,6 +27,7 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
   const router=useRouter();
   const search=useSearchParams();
   const mode=search.get('view')==='new'?'new':search.get('view')==='category'?'category':'home';
+  const swipeRoot=useMobileHomeSwipe(mode==='home');
   const category=categories.find(name=>name===search.get('category'))||'全部';
   const requestedPage=Number(search.get('page')||1);
   const page=Number.isSafeInteger(requestedPage)&&requestedPage>0&&requestedPage<=100000?requestedPage:1;
@@ -69,7 +71,7 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
     window.scrollTo({top:0,behavior:'instant'});
   }
   function back(){if(navigateBookLink('/'))return;if(history.state?.homeBrowse)router.back();else router.replace('/');}
-  return <div className="mobile-home md:hidden" data-home-href={'/'+(query?`?${query}`:'')} aria-busy={loading}>
+  return <div ref={swipeRoot} className="mobile-home md:hidden" data-home-href={'/'+(query?`?${query}`:'')} aria-busy={loading}>
     <h1 className="sr-only">九天小说 · 精选</h1>
     <HomeSearchHeader/>
     {mode==='home'?<>

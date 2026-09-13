@@ -21,6 +21,7 @@ import {beginLibraryVisit} from '@/lib/book-visit';
 import {formatRelativeUpdate} from '@/lib/relative-update';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {useShelfPageTurn} from '@/lib/useShelfPageTurn';
+import {navigateMobileSection} from '@/lib/mobile-section-navigation';
 import type {Book} from '@/lib/api';
 import './library.css';
 
@@ -167,7 +168,7 @@ function Library() {
   const otherResult = useSyncExternalStore(subscribeLibrary, () => getLibrarySnapshot(otherQuery), serverLibrarySnapshot);
   const searchString = search.toString();
   useEffect(() => {
-    const panel = viewport.current?.closest<HTMLElement>('.shelf-panel');
+    const panel = viewport.current?.closest<HTMLElement>('.library-page');
     if (!panel) return;
     // Pointer capture moves our pages, but does not cancel the browser's touch
     // gesture. Consume horizontal touch moves so its tap suppression cannot
@@ -252,7 +253,7 @@ function Library() {
   function startSwipe(event: PointerEvent<HTMLElement>) {
     suppressSwipeClick.current = false;
     swipe.current = null;
-    if (!event.isPrimary || event.button !== 0 || targets || removing || (event.target as HTMLElement).closest('button, select, input, [role="menu"]')) return;
+    if (!event.isPrimary || event.button !== 0 || targets || removing || (event.target as HTMLElement).closest('button, select, input, [role="menu"], .mh-bottom, dialog')) return;
     setPages(current => current[otherTab] === 1 ? current : {...current, [otherTab]: 1});
     swipe.current = {id: event.pointerId, x: event.clientX, y: event.clientY, horizontal: false, lastX: event.clientX, lastAt: event.timeStamp, velocity: 0};
   }
@@ -284,8 +285,14 @@ function Library() {
     const quick = event.timeStamp - gesture.lastAt < 100 && Math.abs(gesture.velocity) > .5 && Math.sign(gesture.velocity) === Math.sign(dx);
     const distance = Math.min(100, (viewport.current?.clientWidth || 300) * .25);
     const switchTab = Math.abs(dx) >= distance || Math.abs(dx) >= 40 && quick;
-    if (switchTab && Math.abs(dx) >= Math.abs(dy) * 1.25 && (dx < 0 && tab === 'shelf' || dx > 0 && tab === 'history')) changeView(otherTab, 1);
-    else pageTurn.change(tab, () => {});
+    if (switchTab && Math.abs(dx) >= Math.abs(dy) * 1.25) {
+      if (dx > 0 && tab === 'shelf' || dx < 0 && tab === 'history') {changeView(otherTab, 1); return;}
+      if (dx < 0 && tab === 'shelf' && !managing && !menu) {
+        pageTurn.cancel();
+        if (navigateMobileSection(event.currentTarget, 'home')) return;
+      }
+    }
+    pageTurn.change(tab, () => {});
   }
 
   function cancelSwipe() {
@@ -325,20 +332,20 @@ function Library() {
   }
 
   if (authLoading || !user) return <AccountLoading checking={authLoading}/>;
-  return <div className="library-page" data-managing={managing} onKeyDown={event => {if (event.key === 'Escape' && managing && !targets) {event.preventDefault(); finishManaging();}}}>
+  return <div className="library-page" data-managing={managing} onKeyDown={event => {if (event.key === 'Escape' && managing && !targets) {event.preventDefault(); finishManaging();}}}
+    onPointerDownCapture={startSwipe} onPointerMove={moveSwipe} onPointerUp={endSwipe}
+    onPointerCancel={cancelSwipe} onLostPointerCapture={event => {if (event.target === event.currentTarget) cancelSwipe();}}
+    onClickCapture={event => {if (suppressSwipeClick.current && event.nativeEvent.isTrusted) {event.preventDefault(); event.stopPropagation(); suppressSwipeClick.current = false;}}}>
     <div className="library-inner">
       <h1 className="sr-only">我的书架</h1>
       <div inert={managing}><HomeSearchHeader/></div>
-      <section className="shelf-panel" aria-label="个人书架"
-        onPointerDownCapture={startSwipe} onPointerMove={moveSwipe} onPointerUp={endSwipe}
-        onPointerCancel={cancelSwipe} onLostPointerCapture={event => {if (event.target === event.currentTarget) cancelSwipe();}}
-        onClickCapture={event => {if (suppressSwipeClick.current) {event.preventDefault(); event.stopPropagation(); suppressSwipeClick.current = false;}}}>
+      <section className="shelf-panel" aria-label="个人书架">
         <header className="shelf-toolbar">
           <div ref={tabs} className="shelf-tabs" role="tablist" aria-label="书架与浏览记录">
-            {(['shelf', 'history'] as const).map(value => <button key={value} id={`tab-${value}`} role="tab" tabIndex={tab === value ? 0 : -1} aria-selected={tab === value} aria-controls={value === tab ? 'shelf-content' : `shelf-preview-${value}`} onClick={() => changeView(value, 1)} onKeyDown={event => {
+            {(['history', 'shelf'] as const).map(value => <button key={value} id={`tab-${value}`} role="tab" tabIndex={tab === value ? 0 : -1} aria-selected={tab === value} aria-controls={value === tab ? 'shelf-content' : `shelf-preview-${value}`} onClick={() => changeView(value, 1)} onKeyDown={event => {
               if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
               event.preventDefault();
-              const next = event.key === 'ArrowLeft' || event.key === 'Home' ? 'shelf' : 'history';
+              const next = event.key === 'ArrowLeft' || event.key === 'Home' ? 'history' : 'shelf';
               changeView(next, 1); document.getElementById(`tab-${next}`)?.focus();
             }}>{value === 'shelf' ? '书架' : '浏览记录'}</button>)}
           </div>
