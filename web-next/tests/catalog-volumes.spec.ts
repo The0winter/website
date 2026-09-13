@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 
 const base='http://127.0.0.1:3000';
 const book=new mongoose.Types.ObjectId(), extrasBook=new mongoose.Types.ObjectId();
+const noticesBook=new mongoose.Types.ObjectId();
 const ids=Array.from({length:373},()=>new mongoose.Types.ObjectId());
 let db: mongoose.Connection;
 const labels=['第一卷 原篇（作者：甲）','第二卷 续篇（作者：乙）','第三卷 番外篇'];
@@ -17,9 +18,11 @@ test.beforeAll(async()=>{
     return {_id,bookId:book,title:`${labels[group]} 第${local+1}章 第${index+1}次旅程`,chapter_number:index+1,content:'山间的风吹过树林，旅人继续前行。\n\n'.repeat(80),word_count:2000,deletedAt:null};
   }));
   await db.collection('chapters').insertMany(['番外一 重逢','番外二 出发','正文 第1章 开始','正文 第2章 继续'].map((title,index)=>({bookId:extrasBook,title,chapter_number:index+1,content:'隔离测试正文。'.repeat(100),deletedAt:null})));
+  await db.collection('books').insertOne({_id:noticesBook,title:'卷末通知仍属于正文',deletedAt:null,writeVersion:0});
+  await db.collection('chapters').insertMany(['第519章 道别之前','第520章 道别','第一卷 结束以及请假','拜个晚年，以及更新安排','第521章 新社区'].map((title,index)=>({bookId:noticesBook,title,chapter_number:index+1,content:'这是一段用于验证目录的合成正文。'.repeat(100),deletedAt:null})));
 });
 test.afterAll(async()=>{
-  if(db){await db.collection('chapters').deleteMany({bookId:{$in:[book,extrasBook]}});await db.collection('books').deleteMany({_id:{$in:[book,extrasBook]}});await db.close();}
+  if(db){await db.collection('chapters').deleteMany({bookId:{$in:[book,extrasBook,noticesBook]}});await db.collection('books').deleteMany({_id:{$in:[book,extrasBook,noticesBook]}});await db.close();}
 });
 test.beforeEach(async({page})=>{
   await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
@@ -33,6 +36,24 @@ const open = async(page: Page, origin: string, width: number)=>{
   }
   await expect(page.locator('.book-catalog-scroll-area')).toHaveAttribute('data-ready','true');
 };
+
+for(const width of [390,1440])test(`volume-ending notices remain in one body without duplicate links at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:844});
+  await page.goto(`${base}/book/${noticesBook}`);await open(page,'detail',width);
+  const dialog=page.getByRole('dialog',{name:'全部目录'});
+  const verify=async()=>{
+    await expect(dialog.locator('.book-catalog-volume-toggle')).toHaveCount(1);
+    await expect(dialog.locator('.book-catalog-volume-toggle')).toContainText('正文');
+    await expect(dialog.locator('.book-catalog-chapter')).toHaveCount(5);
+    const links=await dialog.locator('.book-catalog-chapter').evaluateAll(elements=>elements.map(e=>e.getAttribute('href')));
+    expect(new Set(links).size).toBe(5);
+    await expect(dialog.getByRole('link',{name:'第一卷 结束以及请假',exact:true})).toHaveCount(1);
+  };
+  await verify();
+  await dialog.getByRole('link',{name:'第521章 新社区',exact:true}).click();
+  await open(page,'reader',width);await verify();
+  await expect(dialog.locator('[aria-current="location"]')).toHaveText(/第521章 新社区/);
+});
 
 for(const width of [390,1440])for(const scenario of ['first-detail','saved-detail','reader'])test(`${scenario} folds volumes and restores the actual reading volume at ${width}px`,async({page},testInfo)=>{
   await page.setViewportSize({width,height:844});

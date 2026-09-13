@@ -11,6 +11,10 @@ export function splitCatalogTitle(title = '') {
   if (numbered) {
     const chapter = chapterStart.exec(text.slice(numbered[0].length));
     const boundary = chapter ? numbered[0].length + chapter.index : -1;
+    // A chapter titled “第一卷 结束以及请假” is not a source volume heading.
+    // Named standalone headings need explicit volume metadata; legacy titles
+    // may define a volume only with an actual chapter prefix or a bare marker.
+    if (boundary < 0 && text !== numbered[0]) return {volume: '', chapterTitle: text};
     return {volume: (boundary < 0 ? text : text.slice(0, boundary)).trim(), chapterTitle: boundary < 0 ? text : text.slice(boundary)};
   }
   const section = /^(正文(?:卷|篇)?|番外(?:卷|篇)?)(?=$|[\s:：、（(\d０-９一二三四五六七八九十]|第)/u.exec(text);

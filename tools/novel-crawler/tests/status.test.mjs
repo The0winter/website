@@ -69,7 +69,7 @@ test('status can be added to old downloads, refreshed and retained without re-fe
   assert.equal(completed.statusEvidence.matches[0].raw,label);
   assert.equal(chapterRequests,1);
   const exported = JSON.parse(fs.readFileSync(completed.exportFile));
-  const batches = prepareImport({...exported,chapters:Array.from({length:21},(_,i)=>({...exported.chapters[0],chapter_number:i+1}))});
+  const batches = prepareImport({...exported,chapters:Array.from({length:21},(_,i)=>({...exported.chapters[0],chapter_number:i+1,link:`${spec.sourceUrl}/chapter/${i+1}`,content:`第${i+1}段状态测试正文`}))});
   assert.ok(batches.every(b=>b.status==='完结'));
   label = '';
   const retained = await acquire(upgraded,options);

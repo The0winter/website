@@ -67,7 +67,7 @@ test('old downloads gain and refresh descriptions without requesting saved chapt
   assert.equal(chapterRequests, 1);
   const exported = JSON.parse(fs.readFileSync(second.exportFile));
   assert.equal(exported.description, second.description);
-  const batches = prepareImport({...exported, chapters: Array.from({length: 21}, (_, i) => ({...exported.chapters[0], chapter_number: i + 1}))});
+  const batches = prepareImport({...exported, chapters: Array.from({length: 21}, (_, i) => ({...exported.chapters[0], chapter_number: i + 1, link: `${spec.sourceUrl}/chapter/${i+1}`, content: `第${i+1}段简介测试正文`}))});
   assert.equal(batches.length, 2);
   assert.ok(batches.every(batch => batch.description === second.description));
   intro = '<p>更新后的简介。</p>';

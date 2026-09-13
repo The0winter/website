@@ -1,4 +1,6 @@
 // Pure validation: no connection or credentials needed.
+import {chapterDuplicateIssues} from '../shared/chapter-duplicates.mjs';
+
 export function prepareImport(book) {
   if(!book||!Array.isArray(book.chapters)||!book.chapters.length)throw Error('书籍必须包含章节');
   const validUrl=value=>{try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password&&value.length<=2000;}catch{return false;}};
@@ -18,6 +20,8 @@ export function prepareImport(book) {
     if(link!==undefined&&!validUrl(link))throw Error(`第 ${n} 章链接无效`);
     return {title:c.title.trim(),content:c.content,chapter_number:n,...(link===undefined?{}:{link})};
   }).sort((a,b)=>a.chapter_number-b.chapter_number);
+  const duplicates=chapterDuplicateIssues(chapters);
+  if(duplicates.length)throw Error(`章节疑似重复，暂停整本导入，须先核对：${duplicates.slice(0,5).map(issue=>`第 ${issue.chapter} 项与第 ${issue.otherChapter} 项（${issue.code}）`).join('；')}`);
   const metadata=Object.fromEntries(['sourceUrl','title','author','authorSourceUrl','category','description','cover_image','status'].filter(k=>book[k]!==undefined).map(k=>[k,book[k]]));
   const batches=[];
   for(let i=0;i<chapters.length;i+=20)batches.push({...metadata,chapters:chapters.slice(i,i+20)});

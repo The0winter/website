@@ -1,5 +1,6 @@
 import {hash} from './storage.mjs';
 import {normalizedIdentity} from './identity.mjs';
+import {chapterDuplicateIssues} from '../../shared/chapter-duplicates.mjs';
 
 export const normalizedTitle = value => String(value ?? '').normalize('NFKC').replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
 export const normalizedText = value => String(value).normalize('NFKC').replace(/\s+/gu, '');
@@ -55,8 +56,8 @@ function shingles(text) {
 }
 
 export function qualityReport(catalog, chapters, failures = [], mode = 'download') {
-  const issues = chapters.flatMap(chapterQuality);
-  const exact = new Map(), inverted = new Map();
+  const issues = [...chapters.flatMap(chapterQuality), ...chapterDuplicateIssues(chapters)];
+  const inverted = new Map();
   const lengths = chapters.map(c => c.content.trim().length).sort((a, b) => a - b);
   const medianLength = lengths[Math.floor(lengths.length / 2)] || 0;
   for (const chapter of chapters) {
@@ -65,8 +66,6 @@ export function qualityReport(catalog, chapters, failures = [], mode = 'download
     const text = normalizedText(chapter.content);
     if (text.length >= 100) {
       const key = hash(text);
-      if (exact.has(key)) issues.push({level: 'error', code: 'duplicate-body', chapter: chapter.chapter_number, otherChapter: exact.get(key), detail: '不同目录项正文完全重复，保留原文等待核对'});
-      else exact.set(key, chapter.chapter_number);
       const signature = shingles(text), candidates = new Map();
       for (const part of signature) for (const item of inverted.get(part) || []) candidates.set(item, (candidates.get(item) || 0) + 1);
       for (const [item, overlap] of candidates) {

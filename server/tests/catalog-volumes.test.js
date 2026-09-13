@@ -24,6 +24,16 @@ test('body and extras work with prefixes or standalone headings without dropping
   assert.equal(buildCatalogVolumes([{title:'第一卷 风起'}, {title:'第1章 初见'}])[0].count, 2);
 });
 
+test('a volume-ending notice is an ordinary chapter, never a new volume', () => {
+  const titles = ['第520章 道别', '第一卷 结束以及请假', '拜个晚年，以及更新安排', '第521章 新社区'];
+  assert.deepEqual(buildCatalogVolumes(titles.map(title => ({title}))), [{id:'0',title:'正文',start:0,count:4}]);
+  for (const title of ['第一卷 结束以及请假', '第二卷 完结感言', '卷三 更新说明', '第一卷 风起']) {
+    assert.deepEqual(splitCatalogTitle(title), {volume:'',chapterTitle:title});
+  }
+  assert.deepEqual(buildCatalogVolumes([{title:'第一卷'}, {title:'第1章 初见'}]), [{id:'0',title:'第一卷',start:0,count:2}]);
+  assert.deepEqual(buildCatalogVolumes([{title:'第一卷 风起',volume_title:'第一卷 风起',volume_number:1}, {title:'第1章 初见'}]), [{id:'0',title:'第一卷 风起',start:0,count:2}]);
+});
+
 test('ordinary chapter titles, notices and numbering resets never invent volume boundaries', () => {
   const chapters=['第1章 开始','第2章 番外故事','第一章 新的开始','番外的故事','关于第二卷的通知','请假条'].map(title=>({title}));
   assert.deepEqual(buildCatalogVolumes(chapters),[{id:'0',title:'正文',start:0,count:6}]);
