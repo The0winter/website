@@ -46,10 +46,17 @@ for (const width of [320,390,768,1440]) test(`review footer, compact stars and p
       rightAligned:Math.abs(actions.right-content.right)<1, separated:time.right+7<=actions.left};
   }));
   for (const row of layout) {
-    expect(row).toMatchObject({starsRight:true, bodyBelow:true, timeBelow:true, aligned:true, bottomAligned:true, rightAligned:true, separated:true,fontSize:18,dateSize:16});
+    expect(row).toMatchObject({starsRight:true, bodyBelow:true, timeBelow:true, aligned:true, bottomAligned:true, rightAligned:true, separated:true,fontSize:17,dateSize:15});
     expect(row.starSize).toBe(10); expect(row.starsWidth).toBeLessThanOrEqual(55);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect(first.locator('.book-review-avatar')).toHaveText('山');
+  await expect(rows.nth(1).locator('.book-review-avatar')).toHaveText('一');
+  if (width >= 768) {
+    const accountAvatar = page.locator('[data-site-chrome] .user-avatar').first();
+    await expect(accountAvatar).toHaveText('山');
+    expect(await first.locator('.book-review-avatar').evaluate(el=>getComputedStyle(el).backgroundColor)).toBe(await accountAvatar.evaluate(el=>getComputedStyle(el).backgroundColor));
+  }
   await page.locator('#reviews-section').screenshot({path:info.outputPath('comments.png')});
   await like.click(); await expect(like).toHaveAttribute('aria-pressed','true'); await expect(like).toHaveAccessibleName('喜欢，19 人');
   await page.reload(); await expect(like).toHaveAttribute('aria-pressed','true');

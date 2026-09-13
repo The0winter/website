@@ -41,6 +41,9 @@ for (const width of [320, 390, 1440]) test(`ten-point ratings preserve saved sta
   await expect(page.locator('.book-review-meta [role="img"]').first()).toHaveAttribute('aria-label','2.0 分');
   await expect(page.locator('.book-review-meta [role="img"]').nth(1)).toHaveAttribute('aria-label','10.0 分');
   await expect(page.locator('.book-review-meta > span')).toHaveCount(0);
+  const uploadedAvatar = page.locator('.book-review-avatar img').first();
+  await expect(uploadedAvatar).toHaveAttribute('src', reviews[1].user.avatar!);
+  await expect.poll(() => uploadedAvatar.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
   await page.getByRole('button', {name:'写书评', exact:true}).click();
   await expect(page.getByRole('button', {name:'发表评论', exact:true})).toBeDisabled();
   await expect(page.getByRole('group', {name:'选择评分，最低 2 分，最高 10 分'}).getByRole('button', {pressed:true})).toHaveCount(0);

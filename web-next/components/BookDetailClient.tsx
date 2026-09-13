@@ -1,6 +1,7 @@
 'use client';
 import {LoadingLogo, LoadingText} from './BrandLoading';
 import BookCover from '@/components/BookCover';
+import UserAvatar from './UserAvatar';
 import { safeFetch as fetch, type CatalogPage } from '@/lib/request';
 
 
@@ -17,7 +18,7 @@ import {beginChapterEntry} from '@/lib/chapter-entry';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, Heart, HeartCrack, User as UserIcon, X, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, Heart, HeartCrack, X, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import BookArticles from './BookArticles';
 import './book-detail.css';
 import { useAuth } from '@/contexts/AuthContext';
@@ -523,13 +524,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                             <article key={review._id} className="book-review">
                                 <div className="book-review-row">
                                     <div className="book-review-avatar-wrap">
-                                        {review.user?.avatar ? (
-                                            <img src={review.user.avatar} alt={review.user.username} className="book-review-avatar" />
-                                        ) : (
-                                            <div className="book-review-avatar bg-gray-200 flex items-center justify-center">
-                                                <UserIcon className="w-5 h-5 text-gray-500" />
-                                            </div>
-                                        )}
+                                        <UserAvatar user={review.user || {username:'书友'}} className="book-review-avatar"/>
                                     </div>
                                     <div className="book-review-body flex-1">
                                         <div className="book-review-heading">

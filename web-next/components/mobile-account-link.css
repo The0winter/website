@@ -1,7 +1,7 @@
 .mobile-account-link { display:none; }
 @media (max-width:767px) {
   .mobile-account-link { display:flex; flex:0 0 44px; width:44px; height:44px; align-items:center; justify-content:center; border-radius:50%; }
-  .mobile-account-initial { display:flex; align-items:center; justify-content:center; width:34px; height:34px; border:1px solid #eacfc7; border-radius:50%; background:#fae5df; color:#a64143; font-family:Arial,"Microsoft YaHei",sans-serif; font-size:16px; line-height:1; font-weight:600; overflow:hidden; }
+  .mobile-account-link .mobile-account-initial { width:34px; height:34px; }
   .mobile-account-link--dark .mobile-account-initial { background:#333; border-color:#555; color:#f3c4bd; }
   .mobile-account-link:focus-visible { outline:2px solid #c73c45; outline-offset:2px; }
   .mobile-account-link:has([data-link-pending]), .mobile-account-link[aria-busy=true] { opacity:.55; cursor:progress; }

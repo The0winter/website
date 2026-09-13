@@ -5,12 +5,13 @@ import { useState } from 'react';
 import Link from './PrefetchLink';
 import AccountLink from './AccountLink';
 import MobileAccountLink from './MobileAccountLink';
+import UserAvatar from './UserAvatar';
 import BookSearch from './BookSearch';
 import { useRouter, usePathname } from 'next/navigation';
 // 1. 引入 Next.js 的图片组件
 import Image from 'next/image';
 // 2. 去掉了 BookOpen，其他图标保持不变
-import { Search, User, LogOut, PenTool, Library, X } from 'lucide-react';
+import { Search, LogOut, PenTool, Library, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext'; 
 
@@ -94,9 +95,7 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
                   href="/profile" 
                   className={`flex items-center space-x-2 px-3 py-2 rounded-md transition-colors ${isDark ? 'hover:bg-[#333]' : 'hover:bg-gray-100'}`}
                 >
-                  <div className={`h-8 w-8 rounded-full flex items-center justify-center ${isDark ? 'bg-[#333]' : 'bg-gray-200'}`}>
-                    <User className={`h-5 w-5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
-                  </div>
+                  <UserAvatar user={user} dark={isDark}/>
                   <span className={`${textSecondary} font-medium`}>{user.username}</span>
                 </Link>
                 
