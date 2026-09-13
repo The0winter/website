@@ -1,6 +1,6 @@
 import {test, expect, type Page, type BrowserContext} from '@playwright/test';
 
-for (const width of [320, 390]) test(`${width}px every section follows each touch move and a slow release only settles the remaining distance`, async ({page, context}, info) => {
+for (const width of [320, 390]) test(`${width}px every section follows each touch move and settles the remaining distance over 400ms`, async ({page, context}, info) => {
   await page.setViewportSize({width, height: 844});
   await setup(page);
   for (const [path, direction] of [['/library', -1], ['/', 1], ['/forum', 1], ['/', -1]] as const) {
@@ -26,7 +26,7 @@ for (const width of [320, 390]) test(`${width}px every section follows each touc
     await cdp.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
     await cdp.detach();
     const frames = await pause(page);
-    for (const frame of frames) expect(frame.duration).toBeCloseTo(240 * (1 - 140 / width), 0);
+    expect(frames.map(frame => frame.duration)).toEqual([400, 400]);
     const initial = await page.locator('[data-section-pane=outgoing]').evaluate(element => (element.getAnimations()[0].effect as KeyframeEffect).getKeyframes()[0].transform);
     expect(await page.evaluate(transform => new DOMMatrix(transform as string).m41, initial)).toBe(-direction * 140);
     await expect(page).toHaveURL(base + path);
@@ -49,7 +49,7 @@ test('reversing through the start and cancelling returns home without navigating
   await expect(page).toHaveURL(base + '/');
 });
 
-test('a quick flick settles its remaining distance without a minimum total time', async ({page, context}) => {
+for (const distance of [55, 260, 380]) test(`a ${distance}px flick immediately starts a full 400ms settling motion`, async ({page, context}) => {
   await setup(page);
   // Warm the static forum route so this measures motion, not home SSR latency.
   await page.locator('.mh-bottom:visible [data-section=forum]').click();
@@ -66,8 +66,8 @@ test('a quick flick settles its remaining distance without a minimum total time'
   });
   await hold(page);
   const cdp = await context.newCDPSession(page);
-  await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x: 340, y: 320, id: 1}]});
-  await cdp.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: 80, y: 320, id: 1}]});
+  await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x: 385, y: 320, id: 1}]});
+  await cdp.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: 385 - distance, y: 320, id: 1}]});
   await cdp.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
   await cdp.detach();
   const frames = await pause(page);
@@ -76,9 +76,9 @@ test('a quick flick settles its remaining distance without a minimum total time'
     return state.flickAnimationAt - state.flickStarted;
   });
   expect(elapsed).toBeLessThan(300);
-  expect(frames[0].duration).toBeCloseTo(80, 0);
-  expect(Number(frames[0].duration) + elapsed).toBeLessThan(350);
-  expect(frames[0].duration).toBeLessThan(400);
+  expect(frames.map(frame => frame.duration)).toEqual([400, 400]);
+  const origin = await page.locator('[data-section-pane=outgoing]').evaluate(element => new DOMMatrix((element.getAnimations()[0].effect as KeyframeEffect).getKeyframes()[0].transform as string).m41);
+  expect(origin).toBe(-distance);
   await finish(page);
 });
 
@@ -91,7 +91,7 @@ test('a slow route does not stop a released swipe or replay motion when it arriv
     await hold(page);
     await swipe(page, context, 1);
     const frames = await pause(page, false);
-    expect(frames[0].duration).toBeCloseTo(240 * (1 - 138 / 390), 0);
+    expect(frames.map(frame => frame.duration)).toEqual([400, 400]);
     expect(await page.locator('[data-section-pane=outgoing]').evaluate(element => new DOMMatrix((element.getAnimations()[0].effect as KeyframeEffect).getKeyframes()[0].transform as string).m41)).toBe(-138);
     await page.locator('.mobile-section-snapshot').evaluateAll(elements => elements.forEach(element => element.getAnimations().forEach(animation => animation.finish())));
     await expect(page.locator('html')).toHaveAttribute('data-mobile-section-transition', 'loading');
@@ -250,8 +250,7 @@ for (const width of [320, 390]) for (const method of ['tap', 'swipe']) test(`${w
     else await swipe(page, context, direction);
     const frames = await pause(page);
     expect(frames).toHaveLength(2);
-    if (method === 'tap') expect(frames.map(frame => frame.duration)).toEqual([300, 300]);
-    else for (const frame of frames) {expect(frame.duration).toBeGreaterThan(0); expect(frame.duration).toBeLessThan(400);}
+    expect(frames.map(frame => frame.duration)).toEqual([400, 400]);
     expect(frames[0].x * direction).toBeLessThan(0);
     expect(frames[1].x * direction).toBeGreaterThan(0);
     expect(Math.abs((frames[1].x - frames[0].x) * direction - width)).toBeLessThan(1);
@@ -306,7 +305,7 @@ test('a tap slides immediately even while the destination is still loading', asy
     await hold(page);
     await page.locator('.mh-bottom:visible [data-section=forum]').click();
     const frames = await pause(page, false);
-    expect(frames.map(frame => frame.duration)).toEqual([300, 300]);
+    expect(frames.map(frame => frame.duration)).toEqual([400, 400]);
     expect(frames[0].x).toBeLessThan(0);
     await page.locator('.mobile-section-snapshot').evaluateAll(elements => elements.forEach(element => element.getAnimations().forEach(animation => animation.finish())));
     await expect(page.locator('html')).toHaveAttribute('data-mobile-section-transition', 'loading');

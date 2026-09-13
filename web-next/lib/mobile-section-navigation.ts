@@ -120,7 +120,7 @@ function createTransition(href: string, dragging = false): MobileSectionDrag | u
   const observer = new MutationObserver(check);
   const animate = (element: HTMLElement, x: number, destination: number, duration: number) => {
     animations.push(element.animate([{transform: `translate3d(${reduced ? 0 : x}px,0,0)`}, {transform: `translate3d(${reduced ? 0 : destination}px,0,0)`}],
-      {duration, easing: 'cubic-bezier(.22,.7,.25,1)', fill: 'forwards'}));
+      {duration, easing: 'cubic-bezier(.25,.5,.35,1)', fill: 'forwards'}));
   };
   const commit = () => {
     if (cancelled || committed || returning) return;
@@ -134,9 +134,9 @@ function createTransition(href: string, dragging = false): MobileSectionDrag | u
       input.placeholder = to === 2 ? '搜索问题或文章' : '搜索书名、作者';
       input.setAttribute('aria-label', to === 2 ? '搜索你想看的问题或文章' : '搜索书名或作者');
     }
-    // Match the inner tabs: settle only the remaining distance, with no minimum
-    // total gesture time. Motion starts immediately alongside route loading.
-    const duration = reduced ? 0 : dragging ? 240 * Math.max(0, 1 - Math.abs(offset) / width) : 300;
+    // Continue from the finger's position immediately, but keep the full 400ms
+    // settling motion even when only a short distance remains.
+    const duration = reduced ? 0 : 400;
     observer.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['aria-busy']});
     animate(outgoing, offset, -direction * width, duration);
     animate(incoming, direction * width + offset, 0, duration);
