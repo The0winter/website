@@ -44,6 +44,13 @@
 
 /* Include the full catalog and mobile detail surfaces in the reading journey. */
 .dark .book-detail { background:var(--home-background); color:var(--home-text); }
+.dark .book-detail .bg-white { background-color:var(--home-surface); }
+.dark .book-detail :is(.bg-gray-50,.bg-gray-100,.bg-blue-50) { background-color:var(--home-soft); }
+.dark .book-detail :is(.text-gray-700,.text-gray-800,.text-gray-900) { color:var(--home-text); }
+.dark .book-detail :is(.text-gray-400,.text-gray-500,.text-gray-600) { color:var(--home-muted); }
+.dark .book-detail :is(.border-gray-100,.border-gray-200,.border-gray-300) { border-color:var(--home-border); }
+.dark .book-detail .hover\:bg-gray-200:hover { background-color:var(--home-border); }
+.dark .book-detail .hover\:bg-blue-50:hover { background-color:var(--home-accent-soft); }
 .dark .book-intro,.dark .book-catalog,.dark .book-community,.dark .book-actions { background:var(--home-surface); border-color:var(--home-border); }
 .dark .book-intro .book-description,.dark .book-actions button { color:var(--home-muted); }
 .dark .mobile-catalog { border-color:var(--home-border); }

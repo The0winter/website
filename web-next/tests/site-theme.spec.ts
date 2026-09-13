@@ -59,6 +59,11 @@ for (const width of [320, 390, 1440]) {
     await page.evaluate(href => {const a=document.createElement('a');a.href=href;document.body.append(a);a.click();}, '/book/'+id);
     await expect(page.locator('.book-detail')).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    if (width >= 768) {
+      await expect(page.locator('.book-hero h1')).toHaveCSS('color','rgb(232, 223, 213)');
+      await expect(page.locator('.book-layout > .order-2')).toHaveCSS('background-color','rgb(36, 33, 30)');
+    }
+    await page.screenshot({path:testInfo.outputPath('detail-dark.png')});
     await page.getByRole('button',{name:width < 768 ? /^目录 / : /^查看完整目录/}).click();
     const catalog=page.getByRole('dialog',{name:'全部目录'});
     await expect(page.locator('.book-catalog-sheet:visible')).toHaveCSS('background-color','rgb(36, 33, 30)');
