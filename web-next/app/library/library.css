@@ -26,8 +26,8 @@
 .shelf-sort { position:relative; display:flex; align-items:center; gap:4px; min-height:44px; cursor:pointer; }
 .shelf-sort select { position:absolute; inset:0; opacity:0; width:100%; cursor:pointer; }
 .shelf-sort:focus-within { outline:2px solid #ce3b4260; outline-offset:3px; border-radius:4px; }
-.shelf-row { position:relative; display:flex; align-items:center; padding:24px 0; }
-.shelf-row + .shelf-row { border-top:1px solid color-mix(in srgb,var(--home-border) 65%,transparent); }
+.shelf-rows { display:flex; flex-direction:column; gap:19px; padding:24px 0; }
+.shelf-row { position:relative; display:flex; align-items:center; }
 .shelf-book { display:flex; align-items:center; gap:18px; min-width:0; flex:1; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; touch-action:pan-y; }
 .shelf-cover img { -webkit-user-drag:none; }
 .shelf-selection { width:0; flex-shrink:0; opacity:0; overflow:hidden; transition:width .22s ease,opacity .22s ease; }
@@ -39,7 +39,7 @@
 .library-page[data-managing=true] .shelf-book { cursor:pointer; }
 .shelf-info h2 { padding-right:38px; }
 .library-page[data-managing=true] .shelf-info h2 { padding-right:0; }
-.shelf-more { position:absolute; right:-8px; top:20px; z-index:2; }
+.shelf-more { position:absolute; right:-8px; top:-4px; z-index:2; }
 .shelf-more:has(.shelf-menu) { z-index:5; }
 .shelf-more-button { display:flex; align-items:center; justify-content:center; width:44px; height:44px; color:var(--home-muted); border-radius:10px; }
 .shelf-more-button:hover,.shelf-more-button[aria-expanded=true] { background:var(--home-background); color:var(--home-text); }
@@ -94,8 +94,8 @@
   .shelf-tabs button { font-size:16px; min-height:44px; }
   .shelf-tabs::after { bottom:1px; width:23px; height:3px; }
   .shelf-actions { gap:16px; font-size:12px; }
-  .shelf-row { padding:20px 0; }
-  .shelf-more { top:13px; }
+  .shelf-rows { padding:20px 0; }
+  .shelf-more { top:-7px; }
   .library-page[data-managing=true] .shelf-selection { width:36px; }
   .shelf-select { width:36px; }
   .shelf-management-bar { padding-left:26px; padding-right:26px; }
