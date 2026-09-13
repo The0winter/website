@@ -36,29 +36,31 @@ for (const width of [320, 390, 1440]) test(`ten-point ratings preserve saved sta
   page.on('dialog', dialog=>dialog.accept());
   await page.goto(`${base}/book/${book}`);
   const score = page.locator(width < 768 ? '.book-mobile-rating strong' : '.book-rating-score');
-  await expect(score).toHaveText(width < 768 ? '6.0 分' : '6.0');
-  await expect(page.locator('.book-review-meta > span')).toHaveText(['2.0 分','10.0 分']);
+  await expect(score).toHaveText('6.0');
+  await expect(page.locator('.book-review-meta [role="img"]').first()).toHaveAttribute('aria-label','2.0 分');
+  await expect(page.locator('.book-review-meta [role="img"]').nth(1)).toHaveAttribute('aria-label','10.0 分');
+  await expect(page.locator('.book-review-meta > span')).toHaveCount(0);
   await page.getByRole('button', {name:'写书评', exact:true}).click();
   await expect(page.getByRole('button', {name:'发表评论', exact:true})).toBeDisabled();
-  await expect(page.locator('.book-selected-rating')).toHaveText('请选择评分');
+  await expect(page.getByRole('group', {name:'选择评分，最低 2 分，最高 10 分'}).getByRole('button', {pressed:true})).toHaveCount(0);
   for (let star=1; star<=5; star++) {
     await page.getByRole('button', {name:`${star*2} 分（${star} 星）`, exact:true}).click();
-    await expect(page.locator('.book-selected-rating')).toHaveText(`${star*2} 分`);
+    await expect(page.getByRole('button', {name:`${star*2} 分（${star} 星）`, exact:true})).toHaveAttribute('aria-pressed','true');
   }
   await page.getByRole('button', {name:'2 分（1 星）', exact:true}).focus();
   await page.keyboard.press('Space');
   await page.getByPlaceholder('写下你的短评...').fill('先保存最低分，再修改为最高分。');
   await page.getByRole('button', {name:'发表评论', exact:true}).click();
-  await expect(score).toHaveText(width < 768 ? '4.7 分' : '4.7');
+  await expect(score).toHaveText('4.7');
   await page.reload();
   await page.getByRole('button', {name:'修改', exact:true}).click();
   await expect(page.getByRole('button', {name:'2 分（1 星）', exact:true})).toHaveAttribute('aria-pressed','true');
   await page.getByRole('button', {name:'10 分（5 星）', exact:true}).focus();
   await page.keyboard.press('Enter');
   await page.getByRole('button', {name:'发表评论', exact:true}).click();
-  await expect(score).toHaveText(width < 768 ? '7.3 分' : '7.3');
+  await expect(score).toHaveText('7.3');
   expect(writes).toEqual([1,5]);
-  await expect(page.locator('.book-review-meta > span').first()).toHaveText('10.0 分');
+  await expect(page.locator('.book-review-meta [role="img"]').first()).toHaveAttribute('aria-label','10.0 分');
   await page.locator('#reviews-section').screenshot({path:info.outputPath('comments.png')});
 });
 

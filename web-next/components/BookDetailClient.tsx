@@ -388,8 +388,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
                  <div className="book-mobile-rating md:hidden" aria-label={`书友评分：${ratingLabel(book.rating)}`}>
                     <Star size={13} aria-hidden="true" />
-                    <strong>{ratingLabel(book.rating)}</strong>
-                    {book.rating ? <small>/ 10</small> : null}
+                    <strong>{displayRating}</strong>
                  </div>
 
                  {/* 电脑端的大按钮组 (手机端已移除，改为常驻底栏) */}
@@ -418,15 +417,13 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
               {/* 电脑端评分栏 */}
               <div className="hidden md:block w-[280px] border-l border-gray-100 pl-6 pt-2">
                  <div className="flex items-end space-x-2 mb-2">
-                    <span className="text-gray-500 text-xs">书友评分 · 10 分制</span>
+                    <span className="text-gray-500 text-xs">书友评分</span>
                  </div>
-                 <div className="flex items-center space-x-3 mb-3">
+                 <div className="book-desktop-rating flex items-center gap-2 mb-2" aria-label={`书友评分：${ratingLabel(book.rating)}`}>
+                    <Star className="w-6 h-6 fill-yellow-400 text-yellow-400 shrink-0" aria-hidden="true" />
                     <strong className={`book-rating-score font-bold text-gray-900 ${book.rating ? 'text-4xl' : 'text-lg'}`}>{displayRating}</strong>
-                    <div className="flex flex-col">
-                        <StarRating rating={book.rating || 0} size={6} />
-                        <span className="text-xs text-blue-600 mt-1 hover:underline cursor-pointer">{book.numReviews || 0} 人评价</span>
-                    </div>
                  </div>
+                 <span className="text-xs text-gray-500">{book.numReviews || 0} 人评价</span>
                  <div className="mt-4 pt-4 border-t border-gray-100 text-right">
                      <span className="text-xs text-gray-400">评分来自真实用户</span>
                  </div>
@@ -479,14 +476,12 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                 <div className="mb-8 p-4 md:p-6 bg-gray-50 rounded-lg border border-blue-100 shadow-inner animation-fade-in relative">
                     <button onClick={() => setShowReviewForm(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
                     <form onSubmit={handleSubmitReview}>
-                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <div className="flex flex-wrap items-center gap-2 mb-4">
                             <span className="text-sm font-bold text-gray-700">评价:</span>
                             <div className="flex items-center space-x-2">
                                 <StarRating rating={myRating} interactive={true} onRate={setMyRating} size={6} />
-                                <span className="book-selected-rating text-sm text-yellow-600 font-medium ml-2" aria-live="polite">{myRating ? `${myRating * 2} 分` : '请选择评分'}</span>
                             </div>
                         </div>
-                        <p className="mb-4 text-xs text-gray-500">一至五星对应 2、4、6、8、10 分</p>
                         <textarea
                             value={myContent}
                             onChange={(e) => setMyContent(e.target.value)}
@@ -547,7 +542,6 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                                         </div>
                                         <div className="book-review-meta">
                                             <StarRating rating={review.rating} size={4} />
-                                            <span>{ratingLabel(review.rating)}</span>
                                             <time dateTime={review.createdAt}>{review.createdAt.slice(0, 10)}</time>
                                         </div>
                                         <p className="book-review-content">{review.content}</p>
