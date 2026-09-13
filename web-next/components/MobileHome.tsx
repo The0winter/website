@@ -82,7 +82,6 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
   }
   function back(){if(navigateBookLink('/'))return;if(history.state?.homeBrowse)router.back();else router.replace('/');}
   return <div ref={swipeRoot} className={`mobile-home md:hidden${mode==='home'?'':' mobile-home-browse'}`} data-home-href={'/'+(query?`?${query}`:'')} aria-busy={loading}>
-    <h1 className="sr-only">九天小说 · {mode==='home'?'精选':mode==='new'?'新书上架':'分类找书'}</h1>
     <HomeSearchHeader/>
     {mode==='home'?<>
       {hero&&<BookLink href={`/book/${hero.id}`} className="mh-banner"><div><span className="mh-kicker">九天精选 · 好书推荐</span><h2>{hero.title}</h2><span className="mh-banner-sub">{hero.author||'九天小说'} <ChevronRight size={13}/></span></div><Cover book={hero} priority/><div className="mh-banner-seal" aria-hidden="true">阅</div></BookLink>}

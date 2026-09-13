@@ -32,6 +32,7 @@ assert.match(robots, /^Allow: \/$/m);
 assert.doesNotMatch(robots, /^Disallow: \/$/m);
 assert.ok(robots.includes(`Sitemap: ${site}/sitemap.xml`));
 const home = await page('/');
+assert.equal([...home.matchAll(/<h1\b/gi)].length, 1, 'homepage has one shared primary heading across screen sizes');
 assert.match(home, /<title>[^<]*笔趣阁[^<]*<\/title>/);
 assert.ok(home.includes('G-DWMPP2NRQ1'), 'GA4 is included in the production HTML');
 for (const path of ['/ranking', '/forum']) await page(path);
