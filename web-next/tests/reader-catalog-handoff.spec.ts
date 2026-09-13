@@ -4,7 +4,7 @@ const base = 'http://127.0.0.1:3000', book = '000000000000000000000101';
 
 for (const mode of ['horizontal', 'vertical', 'scroll']) {
   test(`reader catalog slides without dimming while a ${mode} chapter starts loading immediately`, async ({browser}, testInfo) => {
-    const context = await browser.newContext({viewport: {width: mode === 'vertical' ? 320 : 390, height: 844}, isMobile: true, hasTouch: true});
+    const context = await browser.newContext({viewport: {width: mode === 'vertical' ? 320 : 390, height: 844}, isMobile: true, hasTouch: true, colorScheme:'light'});
     const page = await context.newPage(), target = '00000000000000000000010c';
     let release!: () => void;
     const gate = new Promise<void>(resolve => {release = resolve;});
@@ -20,7 +20,7 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
       const tools = page.locator('.reader-tools:visible');
       await expect(tools).toHaveAttribute('aria-hidden', 'false');
       await expect(tools.getByRole('link', {name: '详情', exact: true})).toHaveCount(0);
-      await expect(tools.getByRole('button')).toHaveText(['设置', '目录', '夜间']);
+      await expect(tools.getByRole('button')).toHaveText(['设置', '目录', '日间']);
       await tools.getByRole('button', {name: '目录', exact: true}).tap();
       const sheet = page.getByRole('dialog', {name: '全部目录'});
       await expect(sheet.getByRole('region')).toHaveAttribute('aria-busy', 'false');
