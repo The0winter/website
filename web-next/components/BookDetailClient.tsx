@@ -326,7 +326,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   };
   const displayRating = formatRating(book.rating);
   const compactCount = new Intl.NumberFormat('zh-CN', {notation: 'compact', maximumFractionDigits: 1});
-  const mobileWordCount = totalWords === null ? '暂无统计' : `${compactCount.format(totalWords)}字`;
+  const mobileWordCount = totalWords === null ? null : Math.floor(totalWords >= 10000 ? totalWords / 10000 : totalWords);
+  const mobileWordUnit = totalWords !== null && totalWords >= 10000 ? '万字' : '字';
   const viewCount = compactCount.format(book.views || 0);
 
   return (
@@ -435,14 +436,14 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                 <dl className="book-mobile-stats" aria-label="作品数据">
                   <div>
                     <dt>字数</dt>
-                    <dd>{mobileWordCount}</dd>
+                    <dd className="book-word-count">{mobileWordCount === null ? '暂无统计' : <><span className="book-word-count-value">{mobileWordCount}</span><small>{mobileWordUnit}</small></>}</dd>
                   </div>
                   <div>
                     <dt>浏览量</dt>
                     <dd>{viewCount}</dd>
                   </div>
                   <div>
-                    <dt>星级</dt>
+                    <dt>评分</dt>
                     <dd className="book-mobile-rating" data-rated={displayRating !== '暂无评分'} aria-label={`书友评分：${ratingLabel(book.rating)}`}>
                       <Star size={15} aria-hidden="true" />
                       <strong>{displayRating}</strong>

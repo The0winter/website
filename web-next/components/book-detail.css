@@ -129,6 +129,9 @@
   .book-mobile-stats>div+div { border-left:1px solid #f0ece5; }
   .book-mobile-stats dt { order:1; color:#9a9388; font-size:12px; line-height:1.5; }
   .book-mobile-stats dd { display:flex; align-items:center; justify-content:center; gap:4px; min-height:28px; margin:0; color:#332f2a; font-size:18px; font-weight:600; line-height:1.5; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .book-mobile-stats .book-word-count { align-items:baseline; gap:1px; }
+  .book-word-count-value { letter-spacing:-.04em; font-variant-numeric:proportional-nums; }
+  .book-word-count small { font-size:16px; font-weight:400; letter-spacing:normal; }
   .book-mobile-rating svg { color:#d8a74c; fill:currentColor; flex-shrink:0; }
   .book-mobile-rating strong { font-weight:inherit; }
   .book-mobile-rating[data-rated=false] { font-size:14px; font-weight:400; }
