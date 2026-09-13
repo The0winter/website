@@ -1,0 +1,77 @@
+/* The creator opens both as a mobile dialog and a standalone workspace.
+   Keep all of its surfaces on the global palette, including lazy-loaded views. */
+html.dark :is(.writer-page,.mw-dialog,.mw-view-panel,.writer-statistics,.manuscript-overlay) { color:var(--home-text); }
+html.dark :is(.writer-page,.mw-reveal,.mw-view-panel,.manuscript-page) { background:var(--home-background); }
+html.dark .mw-view[data-kind=new] .mw-view-panel { background:var(--home-surface); }
+html.dark :is(.mw-action:not(.mw-action-primary),.mw-book-list,.mw-empty,.mw-guest,.mw-view-loading) { background:var(--home-surface); color:var(--home-text); border-color:var(--home-border); }
+html.dark :is(.mw-book+.mw-book,.mw-view-header,.mw-view-header button,.mw-view-loading button,.writer-mobile-header>button) { border-color:var(--home-border); }
+html.dark :is(.mw-book-info>p,.mw-book-info a:last-child,.mw-empty p,.mw-guest p,.mw-note,.mw-status,.mw-view-header span,.writer-mobile-header span) { color:var(--home-muted); }
+html.dark :is(.mw-empty h4,.mw-guest h3) { color:var(--home-text); }
+html.dark :is(.mw-book-info a,.mw-status button,.mw-view-header>svg,.writer-mobile-header>svg) { color:var(--home-accent); }
+html.dark :is(.mw-back:hover,.mw-view-skeleton i,.mw-cover) { background:var(--home-soft); }
+html.dark .mw-cover { color:var(--home-muted); }
+html.dark .mw-pen { color:var(--home-accent); border-color:var(--home-border); background:repeating-linear-gradient(0deg,transparent 0 10px,#b3a69a20 10px 11px),var(--home-soft); box-shadow:2px 4px 0 #0003; }
+html.dark :is(.mw-view-scrim,.manuscript-overlay:not(.manuscript-page):not(.manuscript-embedded)) { background:#0009; }
+
+/* Older dashboard/editor components still use light Tailwind utilities. */
+html.dark .writer-page .bg-white { background-color:var(--home-surface); }
+html.dark .writer-page :is(.bg-gray-50,.bg-gray-50\/50,.bg-gray-50\/60,.bg-gray-100,.bg-gray-200) { background-color:var(--home-soft); }
+html.dark .writer-page :is(.bg-blue-50,.bg-blue-100,.bg-red-50,.bg-red-100,.bg-purple-50,.bg-purple-100,.bg-amber-50,.bg-amber-100) { background-color:var(--home-accent-soft); }
+html.dark .writer-page :is(.text-gray-700,.text-gray-800,.text-gray-900) { color:var(--home-text); }
+html.dark .writer-page :is(.text-gray-200,.text-gray-300,.text-gray-400,.text-gray-500,.text-gray-600) { color:var(--home-muted); }
+html.dark .writer-page :is(.text-blue-600,.text-blue-700,.text-red-600,.text-purple-600,.text-amber-600,.text-amber-700) { color:var(--home-accent); }
+html.dark .writer-page .text-green-600 { color:#a8c795; }
+html.dark .writer-page :is(.border-gray-100,.border-gray-200,.border-gray-300,.md\:border-gray-100,.border-blue-100,.border-red-100,.border-red-200,.border-purple-100) { border-color:var(--home-border); }
+html.dark .writer-page .divide-gray-100>:not(:last-child) { border-color:var(--home-border); }
+html.dark .writer-page :is(input,textarea)::placeholder { color:var(--home-muted); }
+html.dark .writer-page :is(.hover\:bg-white,.hover\:bg-gray-50,.hover\:bg-gray-100,.hover\:bg-gray-200,.hover\:bg-gray-300):hover { background-color:var(--home-soft); }
+html.dark .writer-page :is(.hover\:bg-blue-50,.hover\:bg-purple-50,.hover\:bg-amber-50,.hover\:bg-red-50,.hover\:bg-green-50):hover { background-color:var(--home-accent-soft); }
+html.dark .writer-page :is(.hover\:border-gray-300,.hover\:border-blue-200,.hover\:border-blue-300):hover { border-color:var(--home-accent); }
+html.dark .writer-page .focus\:bg-white:focus { background-color:var(--home-surface); }
+html.dark .writer-page .group[open] .group-open\:bg-blue-50\/50 { background-color:var(--home-accent-soft); }
+html.dark .writer-page .group:hover .group-hover\:text-blue-700 { color:var(--home-accent); }
+html.dark .writer-page :is(.hover\:text-gray-900,.hover\:text-white):hover { color:var(--home-text); }
+@media(min-width:768px) {
+  html.dark .writer-page .writer-editor { background-color:#0009; }
+}
+html.dark :is(.work-private,.work-management summary,.work-management-menu) { border-color:var(--home-border); color:var(--home-muted); }
+html.dark .work-private { background:var(--home-soft); }
+html.dark .work-management-menu { background:var(--home-surface); box-shadow:0 8px 25px #0005; }
+html.dark .work-management-menu button { color:var(--home-text); }
+html.dark .work-management-menu button:hover { background:var(--home-soft); }
+html.dark :is(.work-management-menu .work-delete,.work-management>p) { color:var(--home-accent); }
+
+/* New work, manuscript import, preview and saved drafts. */
+html.dark :is(.manuscript-form,.manuscript-drafts,.manuscript-page .manuscript-header,.manuscript-page .manuscript-details,.manuscript-page .manuscript-import) { background:var(--home-surface); color:var(--home-text); border-color:var(--home-border); }
+html.dark .manuscript-page .manuscript-form { background:transparent; }
+html.dark .manuscript-form :is(input:not([type]),textarea,select) { background:var(--home-background); color:var(--home-text); border-color:var(--home-border); }
+html.dark .manuscript-form :is(input,textarea)::placeholder { color:var(--home-muted); }
+html.dark :is(.manuscript-header,.manuscript-header button,.manuscript-steps i,.manuscript-import,.manuscript-preview nav,.manuscript-drafts>div) { border-color:var(--home-border); }
+html.dark .manuscript-steps b { background:var(--home-border); }
+html.dark :is(.manuscript-section-caption,.manuscript-steps,.manuscript-intro,.manuscript-field small,.manuscript-cover-field strong small,.manuscript-cover-field p,.manuscript-drop span,.manuscript-drop small,.manuscript-encoding,.manuscript-book-summary span,.manuscript-quota,.manuscript-footer small,.manuscript-back,.manuscript-drafts h3 span,.manuscript-drafts small,.manuscript-page .manuscript-eyebrow) { color:var(--home-muted); }
+html.dark :is(.manuscript-cover,.manuscript-guide,.manuscript-drop,.manuscript-book-summary,.manuscript-preview-tools,.manuscript-secondary,.manuscript-add) { background:var(--home-soft); border-color:var(--home-border); color:var(--home-text); }
+html.dark :is(.manuscript-guide pre,.manuscript-preview) { background:var(--home-background); color:var(--home-text); border-color:var(--home-border); }
+html.dark .manuscript-example-toggle { background:var(--home-soft); color:var(--home-accent); }
+html.dark .manuscript-modes button { color:var(--home-muted); }
+html.dark .manuscript-modes [aria-pressed=true] { background:var(--home-accent-soft); color:var(--home-accent); }
+html.dark :is(.manuscript-steps [aria-current],.manuscript-field small.is-error,.manuscript-cover-field button,.manuscript-guide a,.manuscript-drop svg,.manuscript-book-summary button,.manuscript-preview-tools button,.manuscript-chapter-editor>button,.manuscript-progress,.manuscript-drafts button) { color:var(--home-accent); }
+html.dark .manuscript-steps [aria-current] i { border-color:#b8424c; }
+html.dark .manuscript-form [aria-invalid=true] { border-color:var(--home-accent); }
+html.dark .manuscript-warnings { background:#342b1c; border-color:#59472b; color:#dfc597; }
+html.dark .manuscript-error { background:var(--home-accent-soft); border-color:#754349; color:var(--home-accent); }
+html.dark .manuscript-footer { background:color-mix(in srgb,var(--home-surface) 96%,transparent); border-color:var(--home-border); }
+
+/* Statistics cards, controls and SVG chart labels/grid. */
+html.dark :is(.ws-cards article,.ws-trend) { background:var(--home-surface); border-color:var(--home-border); }
+html.dark :is(.ws-intro p,.ws-cards span,.ws-cards small,.ws-history,.ws-status,.ws-empty,.ws-table,.ws-note,.ws-periods button) { color:var(--home-muted); }
+html.dark :is(.ws-cards svg,.ws-history button,.ws-status button) { color:var(--home-accent); }
+html.dark .ws-periods { background:var(--home-soft); }
+html.dark .ws-periods [aria-pressed=true] { background:var(--home-accent-soft); color:var(--home-accent); box-shadow:none; }
+html.dark .ws-table :is(th,td) { border-color:var(--home-border); }
+html.dark .ws-chart { scrollbar-color:var(--home-border) transparent; }
+html.dark .ws-chart line { stroke:var(--home-border); }
+html.dark .ws-chart text { fill:var(--home-muted); }
+html.dark .ws-chart path { stroke:var(--home-accent); }
+html.dark .ws-chart circle { fill:var(--home-accent); }
+html.dark :is(.mw-dialog,.writer-page,.writer-statistics,.manuscript-form,.work-management) :is(button,a,input,textarea,select,summary,[tabindex]):focus-visible { outline-color:var(--home-accent); }
+html.dark :is(.manuscript-cover,.manuscript-drop):focus-within { outline-color:var(--home-accent); }

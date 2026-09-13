@@ -1,3 +1,5 @@
+@import "./writer-theme.css";
+
 .site-account-actions { display:flex; align-items:center; gap:2px; flex-shrink:0; }
 .site-theme-toggle { position:relative; display:inline-flex; align-items:center; justify-content:center; flex:0 0 44px; width:44px; height:44px; border-radius:50%; color:#a97332; cursor:pointer; -webkit-tap-highlight-color:transparent; }
 /* Match the visible avatar while retaining its 44px touch target. */
@@ -38,6 +40,7 @@
 .dark .mh-categories [aria-pressed=true] { background:var(--home-accent-soft); color:var(--home-accent); border-color:var(--home-accent); }
 .dark .mh-categories button:active { background:var(--home-accent-soft); }
 .dark .mh-cover,.dark .shelf-cover { background:linear-gradient(145deg,#493d31,#302820); color:#c7b599; }
+.dark .shelf-panel { border-color:var(--home-border); }
 
 .dark .search-page { --search-bg:var(--home-background); --search-surface:var(--home-surface); --search-text:var(--home-text); --search-muted:var(--home-muted); --search-line:var(--home-border); --search-accent:var(--home-accent); }
 .dark .search-description { color:var(--home-muted); }
@@ -61,6 +64,7 @@
 .dark .book-intro,.dark .book-catalog,.dark .book-community,.dark .book-actions { background:var(--home-surface); border-color:var(--home-border); }
 .dark .book-intro .book-description,.dark .book-actions button { color:var(--home-muted); }
 .dark .mobile-catalog { border-color:var(--home-border); }
+.dark .book-mobile-stats>div+div { border-color:var(--home-border); }
 .dark .book-actions .read-now { color:#fff; }
 .dark .book-mobile-stats dd,.dark .community-tabs button[aria-selected=true],.dark .book-review-name,.dark .book-review-content { color:var(--home-text); }
 .dark .book-review-compose { background:var(--home-soft); color:var(--home-muted); }
@@ -73,9 +77,7 @@
 .dark .book-catalog-thumb { background:#9a876e; box-shadow:0 0 0 2px var(--catalog-paper); }
 .dark .book-catalog-chapter[aria-current],.dark .book-catalog-volume-toggle .book-catalog-progress { color:var(--home-accent); }
 .dark .book-catalog a[aria-current] { color:var(--home-accent); background:var(--home-accent-soft); border-color:var(--home-border); }
-@media (min-width:768px) {
-  .dark .book-hero { background:radial-gradient(ellipse at 8% 0,#304036,transparent 72%),var(--home-surface); }
-}
+.dark .book-detail .book-hero { background:var(--home-surface); }
 
 /* The server cannot see the OS preference. Cover its light reader markup
    immediately, before hydration supplies the matching reading settings. */
