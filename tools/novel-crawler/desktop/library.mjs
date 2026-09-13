@@ -112,7 +112,7 @@ export async function updateLibrary({stateDir, outputDir, sites, shouldStop = ()
       const bookStopped = () => stopped() || bookControl.skipped;
       let blocked = item.state === 'blocked' ? item.message : null;
       while (!bookStopped()) {
-        item.state = 'running'; item.message = '正在核对来源目录…'; delete item.failure;
+        item.state = 'running'; item.message = '正在核对来源目录…'; delete item.failure; delete item.interruption;
         onPhase('probe', item); onLibrary(snapshot());
         let client, failure;
         try {
@@ -124,6 +124,7 @@ export async function updateLibrary({stateDir, outputDir, sites, shouldStop = ()
             delayMs: spec.delayMs, retries: 2, retryNetworkErrors: true, timeoutMs: spec.timeoutMs, browser: spec.browser,
             signal: bookControl.controller.signal, shouldStop: bookStopped, onStatus: status => {
               item.state = status.kind === 'retrying' ? 'retrying' : 'running'; item.message = status.message;
+              item.interruption = ['login', 'verification', 'retrying'].includes(status.kind) ? failureDetails(Error(status.message), {url: status.url || item.url}) : null;
               onStatus?.(status); onLibrary(snapshot());
             }});
           onClient(client);
@@ -163,7 +164,7 @@ export async function updateLibrary({stateDir, outputDir, sites, shouldStop = ()
         if (refreshed && !blocked) Object.assign(item, refreshed, {controlId: bookControl.id});
       }
       const completed = ['updated', 'unchanged'].includes(item.state);
-      if (bookControl.skipped && !completed) { item.state = 'skipped'; item.message = `已手动跳过${item.failure ? `：${item.failure.error}` : '，已保存章节保留'}`; }
+      if (bookControl.skipped && !completed) { item.failure ||= item.interruption; item.state = 'skipped'; item.message = `已手动跳过${item.failure ? `：${item.failure.error}` : '，已保存章节保留'}`; }
       else if (!completed && (stopped() || item.state === 'waiting')) { item.state = 'stopped'; item.message = '已停止，已保存的章节可续传'; }
       control.end(bookControl);
       onLibrary(snapshot());

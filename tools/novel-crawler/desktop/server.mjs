@@ -20,7 +20,7 @@ function visibleReport(report) {
 }
 export async function createDesktop({stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads'), port = 0, sitesDirectory, loadSources = loadSites, open = openLocal, onFocus = () => {}, findBooks = searchBooks, prepareBook = resolveBook} = {}) {
   const token = randomBytes(32).toString('hex');
-  let worker, operation, stopRequested = false, closing = false, selectedBook = null, candidates = [], lastProgress = 0;
+  let worker, operation, operationClient, stopRequested = false, closing = false, selectedBook = null, candidates = [], lastProgress = 0;
   const resolvedSpecs = new Map();
   let task = readJson(path.join(stateDir, 'desktop-last-task.json'), {phase: 'idle', message: '准备好后，先查找你的书。'});
   // Older desktop summaries omitted failures; recover them from the original report.
@@ -50,7 +50,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
     update({phase: 'stopped', message: '已停止，采集页面已关闭；已保存的章节保留，下次会接着补齐。'});
   }
   const statusValues = status => ({message: status.message, action: status.kind, actionUrl: status.url || null, actionDeadline: status.deadline || null});
-  const controls = controller => ({signal: controller.signal, shouldStop: () => closing || controller.signal.aborted, onStatus: status => { if (!controller.signal.aborted) update(statusValues(status)); }});
+  const controls = controller => ({signal: controller.signal, shouldStop: () => closing || controller.signal.aborted, onClient: client => { operationClient = client; }, onStatus: status => { if (!controller.signal.aborted) update(statusValues(status)); }});
   const server = http.createServer(async (req, res) => {
     const address = server.address();
     if (!address) { res.writeHead(503); res.end('程序正在退出'); return; }
@@ -70,7 +70,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
       if (req.headers['x-desktop-token'] !== token || (req.headers.origin && req.headers.origin !== `http://${expectedHost}`)) return respond(403, {error: '窗口已过期，请重新打开程序'});
       if (pathname === '/api/state' && req.method === 'GET') {
         const loaded = sites();
-        return respond(200, {settings: readSettings(stateDir), sites: loaded.sites.map(({id, name, home, hosts, spec, search, book}) => ({id, name, home, hosts, remembersLogin: [spec.transport, search?.transport, book?.transport].includes('browser')})), adapterErrors: loaded.errors, task: {...task, busy: busy(task) || !!worker || !!operation, canShowBrowser: !!worker?.connected && busy(task) && ['login', 'verification'].includes(task.action)}, candidates, outputDir});
+        return respond(200, {settings: readSettings(stateDir), sites: loaded.sites.map(({id, name, home, hosts, spec, search, book}) => ({id, name, home, hosts, remembersLogin: [spec.transport, search?.transport, book?.transport].includes('browser')})), adapterErrors: loaded.errors, task: {...task, busy: busy(task) || !!worker || !!operation, canShowBrowser: !!(worker?.connected || operationClient) && busy(task) && ['login', 'verification'].includes(task.action)}, candidates, outputDir});
       }
       if (req.method !== 'POST') return respond(405, {error: '请求方式无效'});
       let raw = '';
@@ -202,13 +202,15 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         return respond(200, {ok: true});
       }
       if (pathname === '/api/show-browser') {
-        if (!worker?.connected || !busy(task) || !['login', 'verification'].includes(task.action)) throw Error('当前没有等待操作的采集窗口');
+        if (!busy(task) || !['login', 'verification'].includes(task.action)) throw Error('当前没有等待操作的采集窗口');
+        if (operationClient) { await operationClient.showBrowser(); return respond(200, {ok: true}); }
+        if (!worker?.connected) throw Error('当前没有等待操作的采集窗口');
         const current = worker, requestId = randomBytes(8).toString('hex');
         await new Promise((resolve, reject) => {
           const finish = error => { clearTimeout(timer); current.off('message', received); current.off('exit', exited); error ? reject(Error(error)) : resolve(); };
           const received = message => { if (message.type === 'browser-shown' && message.requestId === requestId) finish(message.error); };
           const exited = () => finish('采集任务已结束，请查看当前状态');
-          const timer = setTimeout(() => finish('未能唤起采集窗口，请检查窗口是否已关闭'), 5000);
+          const timer = setTimeout(() => finish('未能唤起采集窗口，请检查窗口是否已关闭'), 30000);
           current.on('message', received); current.once('exit', exited);
           current.send({type: 'show-browser', requestId}, error => { if (error) finish(error.message); });
         });

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {isDeepStrictEqual} from 'node:util';
 import {atomicWrite, readJson, hash, safeName, withLock} from './storage.mjs';
 import {makeClient, httpUrl} from './http.mjs';
 import {getCatalog, getChapter, getResource, refreshNextChapter} from './adapters.mjs';
@@ -327,7 +328,10 @@ async function acquireRaw(input, options = {}) {
           exportFile = exportPath(spec, id, options.outputDir);
           const exported = readJson(path.join(dir, 'export.json'));
           if (fs.existsSync(exportFile) && (!exported || exported.path !== exportFile || hash(fs.readFileSync(exportFile)) !== exported.hash)) throw Error(`输出文件已存在或被其他程序修改，拒绝覆盖：${exportFile}`);
-          reusedExport = fs.existsSync(exportFile) && hash(fs.readFileSync(exportFile)) === hash(JSON.stringify(book, null, 2) + '\n');
+          // After verifying the recorded byte hash, compare data rather than
+          // indentation or key order. Trusted metadata tools may format JSON
+          // differently; identical books must keep their bytes and timestamp.
+          reusedExport = fs.existsSync(exportFile) && isDeepStrictEqual(readJson(exportFile), book);
           if (!reusedExport) atomicWrite(exportFile, book);
           atomicWrite(path.join(dir, 'export.json'), {path: exportFile, hash: hash(fs.readFileSync(exportFile))});
         }

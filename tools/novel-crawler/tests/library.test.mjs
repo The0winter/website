@@ -300,3 +300,21 @@ test('manual skip aborts a pending source request and lets the next book finish'
     assert.equal(f.state.requests.filter(url => url === '/book/alpha').length, 1);
   } finally { await app.close(); }
 });
+
+test('skipping during verification retains the source and reason in the completed batch', async t => {
+  const f = await fixture(t); await f.seed('alpha');
+  const control = createLibraryControl();
+  let currentId;
+  const result = await updateLibrary({...f.options, control,
+    onLibrary: batch => { currentId = batch.items.find(item => item.state === 'running')?.controlId; },
+    createClient: options => ({status: options.onStatus, close: async () => {}}),
+    collect: async (_spec, {client}) => {
+      client.status({kind: 'verification', url: f.base + '/chapter/alpha/3', message: '网站要求人机验证，等待处理'});
+      assert.equal(control.act(currentId, 'skip'), true);
+      return {paused: true};
+    }});
+  assert.equal(result.skipped, 1);
+  assert.match(result.items[0].message, /已手动跳过.*人机验证/);
+  assert.equal(result.items[0].failure.code, 'verification-required');
+  assert.equal(result.items[0].failure.url, f.base + '/chapter/alpha/3');
+});

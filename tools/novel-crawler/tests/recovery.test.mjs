@@ -44,7 +44,7 @@ test('site CAPTCHA opens its form, refreshes a cached challenge and continues af
     if (!completed) { restrictedReads++; return res.end(restriction + '<form hidden><input name="code"><button>验证</button></form><script>function toggleCode(){ document.querySelector("form").hidden=false; fetch("/opened"); } document.querySelector("form").onsubmit=()=>fetch("/submitted"); setInterval(async()=>{if(await(await fetch("/session")).text()==="ready")location.reload()},100)</script>'); }
     res.end('<h1>第一章</h1><article>完整的合成正文。</article>');
   });
-  const browser = {headless: false, minimized: true, responseMode: 'source', manualCaptcha: captcha};
+  const browser = {headless: true, minimized: true, responseMode: 'source', manualCaptcha: captcha};
   const url = f.base + '/a', cacheDir = path.join(f.dir, 'cache'), key = hash({url, request: undefined, render: true, browser});
   atomicWrite(path.join(cacheDir, key + '.bin'), Buffer.from(restriction));
   atomicWrite(path.join(cacheDir, key + '.json'), {url, original: url, fetchedAt: new Date().toISOString(), hash: hash(Buffer.from(restriction))});

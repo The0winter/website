@@ -6,10 +6,10 @@ export function failureDetails(error, context = {}) {
   if (!nextStep) {
     if (/验证|验证码/.test(message)) {
       code = error.code || 'verification-required';
-      nextStep = '继续采集后，在弹出的采集浏览器中手动完成验证；若验证反复失败，先停止并稍后再试。';
+      nextStep = '继续采集后，方便时点击“显示采集窗口”并手动完成验证；若验证反复失败，先停止并稍后再试。';
     } else if (/登录/.test(message)) {
       code = error.code || 'login-required';
-      nextStep = '继续采集后，在弹出的采集浏览器中手动登录，再返回并刷新当前章节。';
+      nextStep = '继续采集后，方便时点击“显示采集窗口”并手动登录，再返回并刷新当前章节。';
     } else if (/429|Retry-After|限制访问/.test(message)) {
       code = error.code || 'rate-limited';
       nextStep = '先等待网站解除限速再继续；若反复出现，可调大来源配置中的 delayMs 请求间隔。';

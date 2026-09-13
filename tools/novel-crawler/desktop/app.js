@@ -52,7 +52,7 @@ function renderDiagnostics(task) {
   const waiting = active && ['login', 'verification'].includes(task.action);
   attention.hidden = !waiting;
   const seconds = task.actionDeadline ? Math.max(0, Math.ceil((task.actionDeadline - Date.now()) / 1000)) : null;
-  attentionText.textContent = waiting ? `需要你操作：${task.action === 'login' ? '请在采集窗口手动登录' : '请在采集窗口手动完成验证码'}。完成后自动继续，已保存章节保留。${seconds === null ? '' : `剩余等待 ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒。`}` : '';
+  attentionText.textContent = waiting ? `需要你操作：方便时点击“显示采集窗口”，${task.action === 'login' ? '手动登录' : '手动完成验证码'}。完成后自动继续，已保存章节保留。${seconds === null ? '' : `剩余等待 ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒。`}` : '';
   showBrowser.hidden = !task.canShowBrowser;
   const failures = task.report?.failures?.length ? task.report.failures : task.failure ? [task.failure] : task.phase === 'error' ? [{error: task.message}] : [];
   const visible = !active && failures.length && !['ready', 'idle'].includes(task.phase);

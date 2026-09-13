@@ -118,7 +118,7 @@ export function applyVerifiedBookStatus(book, stateDir, identityNormalization) {
   return verified ? {...book, status: '完结', statusDetection: 'verified', statusEvidence: verified.evidence} : book;
 }
 
-export async function searchBooks({website, title, author = '', stateDir = defaultStateDir, sites = loadSites().sites, onStatus, shouldStop, signal}) {
+export async function searchBooks({website, title, author = '', stateDir = defaultStateDir, sites = loadSites().sites, onStatus, shouldStop, signal, onClient = () => {}}) {
   website = normalizeWebsite(website);
   if (typeof title !== 'string' || !title.trim() || title.length > 200 || typeof author !== 'string' || author.length > 200) throw Error('请输入书名，书名和作者各不超过 200 字');
   const site = siteFor(website, sites);
@@ -126,6 +126,7 @@ export async function searchBooks({website, title, author = '', stateDir = defau
   const query = normalize(title), requestedAuthor = normalize(author);
   if (!query) throw Error('请输入有效的书名或关键词');
   const client = makeSiteClient(site, stateDir, {onStatus, shouldStop, signal});
+  onClient(client);
   try {
     if (new URL(website).pathname !== '/') {
       bookUrl(website, site);
@@ -152,14 +153,15 @@ export async function searchBooks({website, title, author = '', stateDir = defau
       url = parsed.next;
     }
     return [];
-  } finally { await client.close(); }
+  } finally { try { await client.close(); } finally { onClient(null); } }
 }
 
-export async function resolveBook({url, title, author, stateDir = defaultStateDir, sites = loadSites().sites, reuseSaved = false, onStatus, shouldStop, signal}) {
+export async function resolveBook({url, title, author, stateDir = defaultStateDir, sites = loadSites().sites, reuseSaved = false, onStatus, shouldStop, signal, onClient = () => {}}) {
   url = normalizeWebsite(url);
   const site = siteFor(url, sites);
   bookUrl(url, site);
   const client = makeSiteClient(site, stateDir, {onStatus, shouldStop, signal});
+  onClient(client);
   try {
     const response = await client.get(url, {encoding: site.spec.encoding, fresh: true, render: (site.book.transport || site.spec.transport) === 'browser', readySelector: site.book.readySelector});
     if (response.url !== url) throw Error('书籍详情页地址发生跳转，需要核实适配');
@@ -177,5 +179,5 @@ export async function resolveBook({url, title, author, stateDir = defaultStateDi
       }
     }
     return applyVerifiedBookStatus(specForBook({url, ...actual}, sites), stateDir, site.spec.identityNormalization);
-  } finally { await client.close(); }
+  } finally { try { await client.close(); } finally { onClient(null); } }
 }

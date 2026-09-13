@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import axios from 'axios';
 import iconv from 'iconv-lite';
 import {load} from 'cheerio';
@@ -27,7 +28,7 @@ export function decode(bytes, contentType = '', encoding) {
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, retries = 2, retryNetworkErrors = false, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal}) {
+export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, retries = 2, retryNetworkErrors = false, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal, launchBrowser}) {
   const hosts = new Set(allowedHosts.map(h => h.toLowerCase()));
   const resourceHosts = new Set(browserOptions.resourceHosts || []);
   const actions = [
@@ -43,7 +44,8 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
   let lastRequest = Date.now();
   const stats = {requests: 0, cacheHits: 0, retries: 0, bytes: 0};
   let browser, page, closingBrowser, launchPromise, releaseProfile, sessionReady = false, manualAction = false;
-  const savedCookies = profileDir ? sessionCookies(profileDir, [...hosts, ...resourceHosts]) : null;
+  let temporaryProfile, visibleRequested = false, visibleWaiter, isHeadless = true;
+  let savedCookies = profileDir ? sessionCookies(profileDir, [...hosts, ...resourceHosts]) : null;
   const stopped = () => {
     if (signal?.aborted || shouldStop?.()) throw Object.assign(Error(`任务已${signal?.aborted ? '停止' : '暂停'}，已完成的章节保留。`), {stopSource: true});
   };
@@ -66,7 +68,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
   const abort = () => { void closeBrowser().catch(() => {}); };
   signal?.addEventListener('abort', abort, {once: true});
   async function windowState(state) {
-    if (browserOptions.headless !== false) return;
+    if (isHeadless) return;
     const cdp = await page.createCDPSession();
     try {
       const {windowId} = await cdp.send('Browser.getWindowForTarget');
@@ -76,7 +78,21 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
   }
   async function showBrowser() {
     if (!manualAction || !browser?.connected || page?.isClosed()) throw Error('当前没有等待操作的采集窗口');
+    // Explicit headless clients (including automated checks) never open a window.
+    if (browserOptions.headless !== false) return;
+    if (isHeadless) {
+      if (!visibleWaiter) {
+        visibleRequested = true;
+        let resolve, reject;
+        const promise = new Promise((ok, fail) => { resolve = ok; reject = fail; });
+        visibleWaiter = {promise, resolve, reject};
+      }
+      return visibleWaiter.promise;
+    }
     await windowState('normal');
+  }
+  function checkVisibilityRequest() {
+    if (visibleRequested && isHeadless) throw Object.assign(Error('正在显示采集窗口'), {reopenVisible: true});
   }
   async function ensureBrowser() {
     stopped();
@@ -90,8 +106,15 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
     const executablePath = candidates.find(file => fs.existsSync(file));
     if (!executablePath) throw Error('未找到浏览器；用 NOVEL_CRAWLER_BROWSER 指定 Chrome/Edge');
     stopped();
-    if (profileDir) releaseProfile = lockBrowserProfile(profileDir);
-    launchPromise = puppeteer.launch({headless: browserOptions.headless ?? true, executablePath, ...(profileDir ? {userDataDir: profileDir} : {}), args: browserOptions.minimized ? ['--start-minimized'] : []}).then(instance => { browser = instance; return instance; });
+    if (!profileDir) {
+      profileDir = temporaryProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'novel-browser-'));
+      savedCookies = sessionCookies(profileDir, [...hosts, ...resourceHosts]);
+    }
+    releaseProfile = lockBrowserProfile(profileDir);
+    // Starting minimized can still activate a Chrome window on Windows. Start
+    // without any window; only the user's Show button may enable visible mode.
+    isHeadless = !visibleRequested || browserOptions.headless !== false;
+    launchPromise = (launchBrowser || puppeteer.launch.bind(puppeteer))({headless: isHeadless, executablePath, userDataDir: profileDir}).then(instance => { browser = instance; return instance; });
     try { await launchPromise; }
     catch (error) { releaseProfile?.(); releaseProfile = null; throw error; }
     stopped();
@@ -105,7 +128,6 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
     browser.on('targetcreated', target => {
       if (target.type() === 'page' && target !== page.target()) void target.page().then(extra => extra?.close()).catch(() => {});
     });
-    if (browserOptions.minimized) await windowState('minimized');
     if (browserOptions.responseMode === 'source') await page.setCacheEnabled(false);
     await page.setRequestInterception(true);
     page.on('request', req => {
@@ -121,6 +143,10 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
         return req.continue();
       } catch { return req.abort(); }
     });
+    if (!isHeadless) {
+      await windowState('normal');
+      visibleWaiter?.resolve(); visibleWaiter = null;
+    }
   }
   async function wait(ms) {
     const end = Date.now() + ms;
@@ -173,11 +199,11 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
             const limit = browserOptions.manualVerificationMs;
             if (!limit) throw Object.assign(Error('网站要求人机验证，采集已停止；请使用支持手动验证的浏览器来源配置。'), {stopSource: true});
             manualAction = true;
-            await windowState('normal');
-            onStatus?.({kind: 'verification', url: original, deadline: Date.now() + limit, message: `网站要求人机验证：请在弹出的采集浏览器中手动完成，完成后自动继续。最多等待 ${Math.round(limit / 60000 * 10) / 10} 分钟。`});
+            onStatus?.({kind: 'verification', url: original, deadline: Date.now() + limit, message: `网站要求人机验证：方便时点击“显示采集窗口”并手动完成，完成后自动继续。最多等待 ${Math.round(limit / 60000 * 10) / 10} 分钟。`});
             const deadline = Date.now() + limit;
             while (true) {
               stopped();
+              checkVisibilityRequest();
               if (page.isClosed()) throw Object.assign(Error('验证窗口已关闭，已停止采集并保留进度。'), {stopSource: true});
               assertUrl(page.url());
               if (documentResponse?.headers()['cf-mitigated'] !== 'challenge' && documentResponse?.status() === 200) break;
@@ -232,7 +258,6 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
           const actionDeadline = Date.now() + Math.max(0, ...actions.map(item => item.timeoutMs));
           while (action) {
             manualAction = true;
-            await windowState('normal');
             if (action.openSelector) {
               const links = await page.$$(action.openSelector);
               try {
@@ -246,10 +271,11 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
             }
             const deadline = Math.min(actionDeadline, Date.now() + action.timeoutMs);
             const instruction = action.kind === 'login' ? '网站需要登录：请在该窗口手动登录；如有验证码请自行完成' : '网站提示访问异常，需要输入验证码：请在该窗口手动完成验证';
-            onStatus?.({kind: action.kind, url: original, deadline, message: `${instruction}。采集浏览器已显示，完成后返回并刷新当前章节，程序会自动继续。最多等待 ${Math.round((deadline - Date.now()) / 60000 * 10) / 10} 分钟。`});
+            onStatus?.({kind: action.kind, url: original, deadline, message: `${instruction}。方便时点击“显示采集窗口”，完成后返回并刷新当前章节，程序会自动继续。最多等待 ${Math.round((deadline - Date.now()) / 60000 * 10) / 10} 分钟。`});
             let checkedResponse = documentResponse;
             while (true) {
               stopped();
+              checkVisibilityRequest();
               if (page.isClosed()) throw windowClosed();
               assertUrl(page.url());
               if (Date.now() >= deadline) throw Object.assign(Error(`等待手动${action.label}超时，已结束本次采集；已保存章节保留，继续采集时会重新显示${action.label}窗口。`), {stopSource: true, code: action.kind === 'login' ? 'login-timeout' : 'verification-timeout', url: original});
@@ -334,6 +360,17 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
           return {...meta, body};
         } catch (error) {
           stopped();
+          if (error.reopenVisible) {
+            // Reload the original request in the same profile. The normal checks
+            // run again, so a previous preview can never become accepted prose.
+            if (responseListener) page.off('response', responseListener);
+            responseListener = null;
+            await closeBrowser();
+            browser = page = launchPromise = closingBrowser = null;
+            sessionReady = false;
+            attempt--;
+            continue;
+          }
           if (!browser.connected || page.isClosed()) throw windowClosed();
           if (retryNetworkErrors && !error.stopSource && (error.name === 'TimeoutError' || /^net::ERR_(CONNECTION|TIMED_OUT|NAME_NOT_RESOLVED|NETWORK|INTERNET_DISCONNECTED)/.test(error.message))) {
             // A goto timeout does not cancel Chromium's pending navigation. Stop it
@@ -405,7 +442,16 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
   }
   async function get(input, options) {
     try { return await getPage(input, options); }
-    catch (error) { error.url ||= String(input); throw error; }
+    catch (error) { visibleWaiter?.reject(error); visibleWaiter = null; error.url ||= String(input); throw error; }
   }
-  return {get, assertUrl, stats, showBrowser, close: async () => { signal?.removeEventListener('abort', abort); await closeBrowser(); }};
+  return {get, assertUrl, stats, showBrowser, close: async () => {
+    signal?.removeEventListener('abort', abort);
+    visibleWaiter?.reject(windowClosed()); visibleWaiter = null;
+    await closeBrowser();
+    if (temporaryProfile) {
+      const target = path.resolve(temporaryProfile);
+      if (path.dirname(target) !== path.resolve(os.tmpdir()) || !path.basename(target).startsWith('novel-browser-')) throw Error('临时采集目录无效');
+      fs.rmSync(target, {recursive: true, force: true}); temporaryProfile = null;
+    }
+  }};
 }

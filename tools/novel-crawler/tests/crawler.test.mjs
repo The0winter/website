@@ -100,6 +100,27 @@ test('wrong author is rejected before any chapter is fetched', async t => {
   assert.match(report.failures[0].error, /身份不匹配/);
 });
 
+test('trusted JSON formatting does not count as a book update; unrecorded edits remain protected', async t => {
+  const f = await fixture(t, (req, res) => res.end(req.url === '/book' ? heading + '<div id="catalog"><a href="/a">第一章</a></div>' : '<h1>第一章</h1><div id="content">完整的合成正文。</div>'));
+  const spec = specFor(f.base), first = await acquire(spec, f.options);
+  assert.ok(first.exportFile);
+  const recordFile = path.join(f.options.stateDir, 'jobs', first.jobId, 'export.json');
+  const original = readJson(first.exportFile);
+  const reformatted = JSON.stringify(Object.fromEntries(Object.entries(original).reverse()), null, 4);
+  fs.writeFileSync(first.exportFile, reformatted);
+  atomicWrite(recordFile, {path: first.exportFile, hash: hash(reformatted)});
+  const before = fs.statSync(first.exportFile).mtimeMs;
+  const repeated = await acquire(spec, f.options);
+  assert.equal(repeated.reusedExport, true);
+  assert.equal(fs.readFileSync(first.exportFile, 'utf8'), reformatted);
+  assert.equal(fs.statSync(first.exportFile).mtimeMs, before);
+  assert.equal(f.counts.get('/a'), 1);
+  fs.appendFileSync(first.exportFile, ' ');
+  const protectedResult = await acquire(spec, f.options);
+  assert.equal(protectedResult.exportFile, null);
+  assert.match(protectedResult.failures.at(-1).error, /拒绝覆盖/);
+});
+
 test('catalog mutation stops continuation and preserves accepted chapter checkpoints', async t => {
   let changed = false;
   const f = await fixture(t, (req, res) => {
