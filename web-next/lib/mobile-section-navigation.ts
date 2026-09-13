@@ -1,14 +1,21 @@
 'use client';
 
+import {sectionSwipeThreshold} from './section-swipe';
 import {captureMobileSection, captureMobileSectionShell} from './mobile-section-snapshot';
 
 type Section = 'library' | 'home' | 'forum';
 export type MobileSectionDrag = {update: (dx: number) => void; release: (commit: boolean) => void; cancel: () => void};
 const sections = ['/library', '/', '/forum'];
 const selectors = ['.library-page', '.mobile-home', '.forum-page'];
-let active: {href: string; commit: () => void; cancel: () => void; interrupt: () => boolean} | undefined;
+let active: {href: string; commit: () => void; cancel: () => void; interrupt: () => boolean; pending: () => boolean; index: number; pane: HTMLElement} | undefined;
 const previews = new Map<number, {element: HTMLElement; key: string}>();
 let previewUser: string | undefined;
+let navigate: ((href: string) => void) | undefined;
+export function setMobileSectionNavigator(callback: (href: string) => void) {
+  navigate = callback;
+  return () => {if (navigate === callback) navigate = undefined;};
+}
+export function invalidateMobileSectionPreview(path: string) {previews.delete(sections.indexOf(path));}
 
 export function setMobileSectionPreviewUser(user: string) {
   if (user !== previewUser) {previews.clear(); previewUser = user;}
@@ -30,11 +37,12 @@ function sectionLink(source: Element | null, section: Section) {
 function createTransition(href: string, dragging = false): MobileSectionDrag | undefined {
   if (!matchMedia('(max-width: 767px)').matches) return;
   const target = new URL(href, location.origin);
-  const from = sections.indexOf(location.pathname), to = sections.indexOf(target.pathname);
+  const previous = active?.pending() ? active : undefined;
+  const from = previous?.index ?? sections.indexOf(location.pathname), to = sections.indexOf(target.pathname);
   active?.cancel();
   if (target.origin !== location.origin || from < 0 || to < 0 || from === to ||
     (from === 1 && new URLSearchParams(location.search).has('view')) || (to === 1 && target.searchParams.has('view'))) return;
-  const source = [...document.querySelectorAll<HTMLElement>(selectors[from])].find(page => page.getBoundingClientRect().width > 0);
+  const source = [...document.querySelectorAll<HTMLElement>(selectors[sections.indexOf(location.pathname)] || selectors[from])].find(page => page.getBoundingClientRect().width > 0);
   const nav = source?.querySelector<HTMLElement>('.mh-bottom'), bar = source?.querySelector<HTMLElement>('.mh-topbar');
   if (!source || !nav || !bar || !nav.getBoundingClientRect().height) return;
 
@@ -43,17 +51,18 @@ function createTransition(href: string, dragging = false): MobileSectionDrag | u
   const height = nav.getBoundingClientRect().top - top, width = root.clientWidth;
   const direction = to > from ? 1 : -1;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const key = `${previewUser}:${width}:${innerHeight}:${top}:${root.className}:${getComputedStyle(root).getPropertyValue('--home-background')}`;
+  const key = `${previewUser}:${width}:${top}:${root.className}:${getComputedStyle(root).getPropertyValue('--home-background')}`;
   const animations: Animation[] = [];
   let frame = 0, cancelled = false, committed = false, returning = false, motionDone = false, offset = 0;
   // Entry routes start at the top and select the first inner tab.
-  const cacheSource = scrollY === 0 && (from === 1 || (from === 0
+  const cacheSource = previous || scrollY === 0 && (from === 1 || (from === 0
     ? source.querySelector('#tab-shelf[aria-selected="true"]')
     : source.querySelector('[aria-label="论坛内容分类"] [aria-current="page"]')?.textContent === '推荐'));
-  const outgoing = captureMobileSection(source, top, height).element;
+  const outgoing = previous?.pane ?? captureMobileSection(source, top, height).element;
+  if (previous) previews.delete(from);
   outgoing.dataset.sectionPane = 'outgoing';
   const header = captureMobileSection(bar, 0, top, true);
-  const cached = previews.get(to);
+  const cached = to === 0 ? undefined : previews.get(to);
   const incoming = cached?.key === key ? cached.element : captureMobileSectionShell(target.pathname, top, height);
   if (!incoming) return;
   if (cached?.key === key) previews.delete(to);
@@ -87,6 +96,12 @@ function createTransition(href: string, dragging = false): MobileSectionDrag | u
     document.removeEventListener('click', click, true);
     document.removeEventListener('touchmove', preventScroll, true);
     document.removeEventListener('wheel', preventScroll, true);
+    document.removeEventListener('pointerdown', pendingPointer, true);
+    document.removeEventListener('touchstart', pendingStart, true);
+    document.removeEventListener('touchmove', pendingMove, true);
+    document.removeEventListener('touchend', pendingEnd, true);
+    document.removeEventListener('touchcancel', pendingCancel, true);
+    gesture?.preview?.remove();
     if (active?.cancel === cancel) {active = undefined; delete root.dataset.mobileSectionTransition;}
   };
   const clear = () => {cancel(); previews.clear();};
@@ -94,7 +109,6 @@ function createTransition(href: string, dragging = false): MobileSectionDrag | u
     // Browser chrome and system overlays can change height during a pending
     // request. Keep its destination visible; a breakpoint/width change resets it.
     if (root.clientWidth !== width) {clear(); return;}
-    previews.clear();
     const bottom = document.querySelector<HTMLElement>('.mh-bottom')?.getBoundingClientRect().top;
     if (bottom) [outgoing, incoming, backdrop].forEach(element => {element.style.height = `${Math.max(0, bottom - top)}px`;});
   };
@@ -117,7 +131,7 @@ function createTransition(href: string, dragging = false): MobileSectionDrag | u
   const check = () => {
     if (cancelled || !committed) return;
     if (!sections.includes(location.pathname)) {cancel(); return;}
-    if (!motionDone || !ready()) return;
+    if (gesture || !motionDone || !ready()) return;
     // Reveal the real route in place after it has laid out. No incoming clone,
     // style walk, or second slide interrupts an already-running animation.
     cancelAnimationFrame(frame);
@@ -149,12 +163,76 @@ function createTransition(href: string, dragging = false): MobileSectionDrag | u
     void Promise.allSettled(animations.map(animation => animation.finished)).then(() => {
       if (cancelled) return;
       motionDone = true;
-      if (!ready()) root.dataset.mobileSectionTransition = 'loading';
+      if (!ready() && !gesture) root.dataset.mobileSectionTransition = 'loading';
       check();
     });
     check();
   };
-  active = {href: target.href, commit, cancel, interrupt: () => {
+  // While a route request is pending, the visible destination owns gestures.
+  // The underlying page may still be the previous section and must not interpret
+  // this touch or cancel the new navigation when its component unmounts.
+  let gesture: {x: number; y: number; dx: number; next?: number; preview?: HTMLElement} | undefined;
+  const pending = () => committed && !cancelled && (!ready() || Boolean(gesture));
+  const pendingPointer = (event: PointerEvent) => {
+    if ((pending() || gesture) && !(event.target as Element).closest('.mh-bottom, .mh-topbar')) event.stopPropagation();
+  };
+  const pendingStart = (event: TouchEvent) => {
+    if (!pending() && !gesture) return;
+    if ((event.target as Element).closest('.mh-bottom, .mh-topbar')) return;
+    event.stopPropagation();
+    if (event.touches.length !== 1) {pendingCancel(); return;}
+    gesture = {x: event.touches[0].clientX, y: event.touches[0].clientY, dx: 0};
+  };
+  const pendingMove = (event: TouchEvent) => {
+    if (!gesture) return;
+    event.stopPropagation();
+    if (event.touches.length !== 1) {pendingCancel(); return;}
+    const dx = event.touches[0].clientX - gesture.x, dy = event.touches[0].clientY - gesture.y;
+    if (gesture.next === undefined && (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.25)) return;
+    const next = to + (dx > 0 ? -1 : 1);
+    if (next < 0 || next >= sections.length) {pendingCancel(); return;}
+    if (gesture.next !== next) {
+      gesture.preview?.remove();
+      const cached = previews.get(next);
+      gesture.preview = cached?.key === key ? cached.element : captureMobileSectionShell(sections[next], top, height);
+      if (!gesture.preview) return;
+      gesture.next = next;
+      gesture.preview.dataset.sectionPane = 'preview';
+      gesture.preview.style.visibility = '';
+      gesture.preview.style.height = incoming.style.height;
+      document.body.append(gesture.preview);
+    }
+    animations.forEach(animation => animation.cancel());
+    motionDone = true;
+    position(outgoing, -direction * width);
+    gesture.dx = Math.max(-width, Math.min(width, dx));
+    position(incoming, gesture.dx);
+    position(gesture.preview!, (next > to ? width : -width) + gesture.dx);
+    root.dataset.mobileSectionTransition = 'dragging';
+    if (event.cancelable) event.preventDefault();
+  };
+  const pendingCancel = () => {
+    gesture?.preview?.remove();
+    gesture = undefined;
+    if (cancelled) return;
+    if (motionDone) {position(incoming, 0); position(outgoing, -direction * width);}
+    root.dataset.mobileSectionTransition = motionDone ? 'loading' : 'animating';
+    check();
+  };
+  const pendingEnd = (event: TouchEvent) => {
+    if (!gesture) return;
+    event.stopPropagation();
+    const {next, dx} = gesture;
+    if (next === undefined || Math.abs(dx) < sectionSwipeThreshold(width) || !navigate) {pendingCancel(); return;}
+    const href = sections[next];
+    // Preserve the visible pane as the outgoing frame. router.push also
+    // supersedes an older request when returning to the currently mounted URL.
+    const drag = createTransition(href, true);
+    drag?.update(dx);
+    drag?.release(true);
+    navigate(href);
+  };
+  active = {href: target.href, commit, cancel, pending, index: to, pane: incoming, interrupt: () => {
     if (!committed) return true;
     if (!ready()) return false;
     cancel();
@@ -166,6 +244,11 @@ function createTransition(href: string, dragging = false): MobileSectionDrag | u
   document.addEventListener('click', click, true);
   document.addEventListener('touchmove', preventScroll, {capture: true, passive: false});
   document.addEventListener('wheel', preventScroll, {capture: true, passive: false});
+  document.addEventListener('pointerdown', pendingPointer, true);
+  document.addEventListener('touchstart', pendingStart, {capture: true, passive: true});
+  document.addEventListener('touchmove', pendingMove, {capture: true, passive: false});
+  document.addEventListener('touchend', pendingEnd, true);
+  document.addEventListener('touchcancel', pendingCancel, true);
 
   if (!dragging) commit();
   return {

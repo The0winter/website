@@ -1,23 +1,23 @@
 'use client';
 import MobileBottomNav from '@/components/MobileBottomNav';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import {
   Feather,
   HelpCircle,
-  MessageCircle,
   Plus,
   Scroll,
   Search,
-  ThumbsUp,
 } from 'lucide-react';
-import { forumApi, ForumPost } from '@/lib/api';
+import {useAuth} from '@/contexts/AuthContext';
+import {getForumSnapshot, serverForumSnapshot, subscribeForum, loadForum} from '@/lib/forum-cache';
 import HomeSearchHeader from '@/components/HomeSearchHeader';
 import {interruptMobileSectionTransition, navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from '@/lib/mobile-section-navigation';
 import {sectionSwipeThreshold} from '@/lib/section-swipe';
 import './forum.css';
 
+import ForumPostList from '@/components/ForumPostList';
 import ForumTabs, {FORUM_TABS as TABS, type FeedTab} from '@/components/ForumTabs';
 
 const HOT_TOPICS = [
@@ -53,12 +53,8 @@ export default function ForumPage() {
   
   const [activeTab, setActiveTab] = useState<FeedTab>('recommend');
   
-  // ====== 状态升级：缓存多页数据与加载状态 ======
-  const [postsCache, setPostsCache] = useState<Record<string, ForumPost[]>>({});
-  const [loadingState, setLoadingState] = useState<Record<string, boolean>>({
-    follow: true, recommend: true, hot: true
-  });
-  const initializedRef = useRef(false);
+  const {user, loading: authLoading} = useAuth();
+  const {posts: postsCache, loading: loadingState} = useSyncExternalStore(subscribeForum, getForumSnapshot, serverForumSnapshot);
 
   // ====== 滑动轮播专属状态 ======
   const activeIndex = TABS.findIndex(t => t.id === activeTab);
@@ -78,21 +74,7 @@ export default function ForumPage() {
     return () => host?.removeEventListener('touchmove', move);
   }, []);
 
-  // 1. 初始化静默预加载所有 Tab 的数据
-  useEffect(() => {
-    if (initializedRef.current) return;
-    initializedRef.current = true;
-
-    TABS.forEach(tab => {
-      forumApi.getPosts(tab.id).then(data => {
-        setPostsCache(prev => ({ ...prev, [tab.id]: data || [] }));
-        setLoadingState(prev => ({ ...prev, [tab.id]: false }));
-      }).catch(error => {
-        console.error(`Failed to fetch forum posts for ${tab.id}:`, error);
-        setLoadingState(prev => ({ ...prev, [tab.id]: false }));
-      });
-    });
-  }, []);
+  useEffect(() => {if (!authLoading) loadForum();}, [authLoading, user?.id]);
 
   // ====== 移动端滑动事件处理 ======
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -177,89 +159,8 @@ export default function ForumPage() {
     setSwipeDir(null);
   };
 
-  // ====== 提取单页内容渲染器（复用） ======
-  const renderPostList = (tabId: string) => {
-    const tabPosts = postsCache[tabId] || [];
-    const isTabLoading = loadingState[tabId];
-
-    return (
-      // 移动端：去圆角(rounded-none)，只留上下边框(border-y, border-x-0)；PC端：恢复圆角和全边框
-      <div className={`overflow-hidden rounded-none md:rounded-2xl border-y border-x-0 md:border ${currentTheme.border} ${currentTheme.card} w-full min-h-[50vh]`}>
-        {isTabLoading && (
-          <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>加载中...</div>
-        )}
-
-        {!isTabLoading && tabPosts.length === 0 && (
-          <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>暂无内容</div>
-        )}
-
-        {!isTabLoading && tabPosts.map((post, index) => {
-          const realId = post.id;
-          if (!realId) return null;
-
-          const topReply = post.topReply || null;
-          const answerLink = topReply?.id ? `/forum/${topReply.id}?fromQuestion=${realId}` : `/forum/question/${realId}`;
-          const answerVotes = topReply?.votes ?? post.votes ?? 0;
-          const answerComments = topReply?.comments ?? post.comments ?? 0;
-          const authorName = topReply?.author?.name || '暂无回答';
-          const excerpt = topReply?.content || '这个问题还没有回答，点击查看并参与讨论。';
-
-          return (
-            <article
-              key={realId}
-              className={`px-4 md:px-6 py-4 md:py-5 ${index < tabPosts.length - 1 ? `border-b ${currentTheme.border}` : ''}`}
-            >
-              <Link href={`/forum/question/${realId}`} className="block">
-                <h2
-                  className={`font-bold leading-[1.42] tracking-tight ${currentTheme.textMain} hover:text-[var(--home-accent)] transition-colors`}
-                  style={{ fontSize: `${fontSize + 4}px` }}
-                >
-                  {post.title}
-                </h2>
-              </Link>
-
-              <div className="mt-3 flex items-center gap-2">
-                <div className={`w-7 h-7 rounded-full overflow-hidden flex items-center justify-center bg-[var(--home-soft)]`}>
-                  {topReply?.author?.avatar ? (
-                    <img src={topReply.author.avatar} alt="avatar" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className={`text-[11px] font-semibold ${currentTheme.textSub}`}>
-                      {authorName.slice(0, 1)}
-                    </span>
-                  )}
-                </div>
-                <span className={`text-sm font-medium ${currentTheme.textMain}`}>{authorName}</span>
-              </div>
-
-              <Link href={answerLink} className="block">
-                <p
-                  className={`mt-2 leading-[1.65] line-clamp-2 md:line-clamp-3 ${currentTheme.textSub} hover:text-[var(--home-text)] transition-colors`}
-                  style={{ fontSize: `${fontSize}px` }}
-                >
-                  {excerpt}
-                </p>
-              </Link>
-
-              <div className={`mt-3 flex items-center gap-5 text-[13px] ${currentTheme.textSub}`}>
-                <span className="inline-flex items-center gap-1.5">
-                  <ThumbsUp className="w-3.5 h-3.5" />
-                  {formatCount(answerVotes)}
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <MessageCircle className="w-3.5 h-3.5" />
-                  {formatCount(answerComments)}
-                </span>
-                <span className="ml-auto text-xs">{topReply ? '查看回答' : '去回答'}</span>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    );
-  };
-
 // ====== 提取热榜页内容渲染器（纯文字版） ======
-  const renderHotList = (tabId: string) => {
+  const renderHotList = (tabId: FeedTab) => {
     const tabPosts = postsCache[tabId] || [];
     const isTabLoading = loadingState[tabId];
 
@@ -368,8 +269,7 @@ return (
           >
             {TABS.map(tab => (
               <div key={tab.id} className="w-full shrink-0" inert={tab.id!==activeTab} aria-hidden={tab.id!==activeTab}>
-                {/* 替换原有的 {renderPostList(tab.id)} */}
-                {tab.id === 'hot' ? renderHotList(tab.id) : renderPostList(tab.id)}
+                {tab.id === 'hot' ? renderHotList(tab.id) : <ForumPostList posts={postsCache[tab.id]} loading={loadingState[tab.id]}/>}
               </div>
             ))}
           </div>
@@ -377,8 +277,7 @@ return (
 
 {/* ================= PC端独享：传统单页直出，不参与任何滑动逻辑 ================= */}
         <div className="hidden md:block w-full">
-          {/* 替换原有的 {renderPostList(activeTab)} */}
-          {activeTab === 'hot' ? renderHotList(activeTab) : renderPostList(activeTab)}
+          {activeTab === 'hot' ? renderHotList(activeTab) : <ForumPostList posts={postsCache[activeTab]} loading={loadingState[activeTab]}/>}
         </div>
 
         <aside className="hidden md:flex flex-col gap-6">

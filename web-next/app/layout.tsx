@@ -51,11 +51,11 @@ export default function RootLayout({
   return (
     <html lang="zh">
       <body className={inter.className}>
-        <MobileSectionShells />
         <BookPrefetchSession />
         <BookNavigation />
         <Suspense fallback={null}><LoginNavigation /></Suspense>
         <AuthProvider>
+          <MobileSectionShells />
           <LibraryPrefetch />
           {/* ✅ Provider 结构正确 */}
           <ReadingSettingsProvider>

@@ -2,6 +2,8 @@
 
 import {useEffect} from 'react';
 import {usePathname, useRouter} from 'next/navigation';
+import {refreshForum} from '@/lib/forum-cache';
+import {setMobileSectionNavigator} from '@/lib/mobile-section-navigation';
 import {useAuth} from '@/contexts/AuthContext';
 import {refreshLibrary, prefetchLibrary, type LibrarySort} from '@/lib/library-cache';
 
@@ -20,6 +22,11 @@ export default function LibraryPrefetch() {
   const userId = user?.id;
   const pathname = usePathname();
   const router = useRouter();
+  useEffect(() => setMobileSectionNavigator(href => router.push(href)), [router]);
+  useEffect(() => {
+    window.addEventListener('forum-changed', refreshForum);
+    return () => window.removeEventListener('forum-changed', refreshForum);
+  }, []);
   useEffect(() => {
     if (!userId) return;
     const warm = () => {

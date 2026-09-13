@@ -1,5 +1,5 @@
 'use client';
-import BookCover from '@/components/BookCover';
+import ShelfBookContent from '@/components/ShelfBookContent';
 
 import {Suspense, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type PointerEvent} from 'react';
 import {usePathname, useRouter, useSearchParams} from 'next/navigation';
@@ -19,19 +19,12 @@ import {getLibrarySnapshot, loadLibrary, prepareLibraryRead, removeLibraryEntrie
 import {syncBookRoute} from '@/lib/book-navigation';
 import {beginChapterEntry} from '@/lib/chapter-entry';
 import {beginLibraryVisit} from '@/lib/book-visit';
-import {formatRelativeUpdate} from '@/lib/relative-update';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {useShelfPageTurn} from '@/lib/useShelfPageTurn';
 import {interruptMobileSectionTransition, navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from '@/lib/mobile-section-navigation';
 import {sectionSwipeThreshold} from '@/lib/section-swipe';
-import type {Book} from '@/lib/api';
 import './library.css';
 
-
-function Cover({book}: {book: Book | null}) {
-  const [failed, setFailed] = useState(false);
-  return <div className="shelf-cover">{book?.cover_image && !failed ? <BookCover src={book.cover_image} alt={`${book.title}封面`} onError={() => setFailed(true)}/> : <><BookOpen size={24}/><span>{book?.title || '作品暂不可用'}</span></>}</div>;
-}
 
 function RemoveDialog({entries, tab, busy, error, onClose, onRemove}: {entries: Entry[]; tab: Tab; busy: boolean; error: string; onClose: () => void; onRemove: () => void}) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -101,12 +94,7 @@ function ShelfRow({entry, tab, managing, selected, menuOpen, onMenu, onManage, o
         else if (!entry.book) event.preventDefault();
         else if (!readingChapter) {event.preventDefault(); setReadingError('暂无可读章节');}
       }}>
-      <Cover book={entry.book}/>
-      <div className="shelf-info"><h2>{title}</h2>
-        <p>{entry.book ? `${entry.book.author || '未知作者'} · ${['完结', 'completed'].includes(entry.book.status || '') ? '完结' : '连载'}` : '原记录已保留，可稍后重试或移除'}</p>
-        {entry.book && <><p className="shelf-progress">{entry.chapterTitle ? `读至 · ${entry.chapterTitle}` : tab === 'history' ? '已浏览 · 还未开始阅读' : '还未开始阅读'}</p><p className="shelf-update">{formatRelativeUpdate(entry.book.lastUpdated)}{entry.latestChapterTitle ? ` · ${entry.latestChapterTitle}` : ''}</p></>}
-        {readingError && <p role="status">{readingError}</p>}
-      </div>
+      <ShelfBookContent entry={entry} tab={tab} readingError={readingError}/>
     </PrefetchLink>
     {!managing && <div className="shelf-more">
       <button ref={menuButton} className="shelf-more-button" aria-label={`更多：${title}`} aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuOpen ? `shelf-menu-${entry.bookId}` : undefined} onClick={event => {
