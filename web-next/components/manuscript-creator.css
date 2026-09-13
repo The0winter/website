@@ -50,6 +50,12 @@
 .manuscript-form textarea {
   resize: vertical;
 }
+.manuscript-eyebrow { display:none; }
+.manuscript-section-title { font-size:21px; font-weight:650; margin-bottom:5px; }
+.manuscript-section-caption { font-size:14px; color:#917562; margin-bottom:26px; }
+@media(max-width:767px) {
+  .manuscript-section-title,.manuscript-section-caption { display:none; }
+}
 .manuscript-form [aria-invalid="true"] {
   border-color: #b8424c;
 }
@@ -718,4 +724,53 @@
   .manuscript-progress svg {
     animation: none;
   }
+}
+
+body:has(.manuscript-page) [data-site-chrome] { display:none; }
+/* A dedicated workspace fills the desktop instead of a modal floating over works. */
+@media(min-width:768px) {
+  body:has(.manuscript-page) [data-site-chrome] { display:none; }
+  .manuscript-page { position:relative; display:block; min-height:100dvh; padding:0; background:#f5eee7; backdrop-filter:none; z-index:auto; }
+  .manuscript-page .manuscript-form { display:flex; flex-direction:column; max-width:none; min-height:100dvh; max-height:none; overflow:visible; border:0; border-radius:0; background:transparent; box-shadow:none; font-size:17px; }
+  .manuscript-page .manuscript-header { padding:24px max(40px,calc((100% - 1280px)/2)); background:#fffbf7; }
+  .manuscript-page .manuscript-header h2 { font-size:29px; letter-spacing:1px; }
+  .manuscript-page .manuscript-header .manuscript-eyebrow { display:block; font-size:12px; letter-spacing:2px; color:#967e6a; margin-bottom:4px; }
+  .manuscript-page .manuscript-header>div { gap:18px; }
+  .manuscript-page .manuscript-header button { width:46px; height:46px; }
+  .manuscript-page .manuscript-steps { padding:28px 40px; font-size:16px; gap:24px; }
+  .manuscript-page .manuscript-steps i { width:32px; height:32px; }
+  .manuscript-page .manuscript-steps b { width:110px; }
+  .manuscript-page .manuscript-content { flex:1; width:100%; max-width:1360px; margin:0 auto; padding:0 40px 36px; }
+  .manuscript-page .manuscript-step-1 { display:grid; grid-template-columns:minmax(300px,.85fr) minmax(0,1.15fr); gap:28px; align-content:start; align-items:start; }
+  .manuscript-page .manuscript-details,.manuscript-page .manuscript-import { padding:30px; border:1px solid #e5d6ca; border-radius:18px; background:#fffaf6; min-width:0; }
+  .manuscript-page .manuscript-meta { flex-wrap:wrap; margin-bottom:0; }
+  .manuscript-page .manuscript-category { width:100%; display:flex; justify-content:space-between; align-items:center; }
+  .manuscript-page .manuscript-category select { width:160px; }
+  .manuscript-page .manuscript-field { margin-bottom:26px; }
+  .manuscript-page .manuscript-field label { margin-bottom:10px; }
+  .manuscript-page .manuscript-field textarea { min-height:160px; }
+  .manuscript-page :is(input:not([type]),textarea,select) { font-size:17px; padding:13px 14px; }
+  .manuscript-page .manuscript-cover { flex-basis:90px; width:90px; height:120px; font-size:13px; }
+  .manuscript-page .manuscript-import-heading h4 { font-size:21px; }
+  .manuscript-page .manuscript-drop { min-height:300px; margin-top:18px; padding:30px; }
+  .manuscript-page .manuscript-drop strong { font-size:19px; margin-top:12px; }
+  .manuscript-page :is(.manuscript-field small,.manuscript-cover-field p,.manuscript-category,.manuscript-category select,.manuscript-example-toggle,.manuscript-guide,.manuscript-drop span,.manuscript-drop small,.manuscript-encoding,.manuscript-encoding select,.manuscript-book-summary span,.manuscript-quota,.manuscript-footer small) { font-size:14px; }
+  .manuscript-page :is(.manuscript-modes button,.manuscript-book-summary button,.manuscript-chapter-select,.manuscript-preview-tools,.manuscript-preview-tools button,.manuscript-preview nav,.manuscript-chapter-editor label,.manuscript-confirm,.manuscript-add,.manuscript-error,.manuscript-progress,.manuscript-back,.manuscript-intro,.manuscript-warnings) { font-size:16px; }
+  .manuscript-page .manuscript-modes button { min-height:48px; }
+  .manuscript-page .manuscript-chapter-editor { padding:14px 0 0; }
+  .manuscript-page .manuscript-chapter-editor textarea { min-height:340px; font-size:18px; line-height:1.9; }
+  .manuscript-page .manuscript-preview .manuscript-chapter-editor { padding:28px; }
+  .manuscript-page .manuscript-step-1>:is(.manuscript-error,.manuscript-progress) { grid-column:1/-1; }
+  .manuscript-page .manuscript-step-2 { max-width:1200px; }
+  .manuscript-page .manuscript-preview article { padding:36px 48px; max-height:560px; min-height:350px; }
+  .manuscript-page .manuscript-preview article h4 { font-size:26px; }
+  .manuscript-page .manuscript-preview article>div { font-size:20px; }
+  .manuscript-page .manuscript-footer { padding:18px max(40px,calc((100% - 1280px)/2)); text-align:right; }
+  .manuscript-page .manuscript-footer>div { justify-content:flex-end; }
+  .manuscript-page .manuscript-footer>div button { flex:0 1 220px; min-height:50px; font-size:17px; }
+}
+@media(min-width:768px) and (max-width:1023px) {
+  .manuscript-page .manuscript-content { padding:0 24px 28px; }
+  .manuscript-page .manuscript-step-1 { grid-template-columns:1fr; }
+  .manuscript-page .manuscript-drop { min-height:220px; }
 }

@@ -1,6 +1,9 @@
 'use client';
 import BookCover from '@/components/BookCover';
-import ManuscriptCreator, {ManuscriptDraftList} from './ManuscriptCreator';
+import ManuscriptCreator from './ManuscriptCreator';
+import WorkActions from './WorkActions';
+import WriterStatistics from './WriterStatistics';
+import './writer-desktop.css';
 import {LoadingLogo, LoadingText} from './BrandLoading';
 import { safeFetch as fetch } from '@/lib/request';
 
@@ -11,7 +14,7 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, PenTool, BookOpen, BarChart3,
   Plus, Upload, X, Edit3, Save, Settings, AlertCircle, CheckCircle2, Sparkles, Trash2,
-  Shield, LogIn, Image as ImageIcon, Loader2, Ban, Unlock, Search, LayoutDashboard
+  Shield, Image as ImageIcon, Loader2, Ban, Unlock, Search, LayoutDashboard
 } from 'lucide-react';
 import { booksApi, chaptersApi, Book, Chapter } from '@/lib/api';
 import Cropper from 'react-easy-crop';
@@ -61,7 +64,7 @@ export default function WriterDashboard({ entry, embedded = false, onExit, onOpe
   // ================= State 定义区域 =================
 
 // 核心：视图控制 'works' | 'admin' | 'adminBooks'
-  const [currentView, setCurrentView] = useState<'works' | 'admin' | 'adminBooks'>('works');
+  const [currentView, setCurrentView] = useState<'works' | 'statistics' | 'admin' | 'adminBooks'>(entryAction === 'statistics' ? 'statistics' : 'works');
 
   // 作品相关
   const [myBooks, setMyBooks] = useState<Book[]>([]);
@@ -73,9 +76,8 @@ export default function WriterDashboard({ entry, embedded = false, onExit, onOpe
 
   // 弹窗控制
   const [showCreateBookModal, setShowCreateBookModal] = useState(entryAction === 'new');
-  const [bookCreationKey,setBookCreationKey]=useState(()=>crypto.randomUUID());
-  const [resumingManuscript,setResumingManuscript]=useState(false);
-  const [manuscriptRefresh,setManuscriptRefresh]=useState(0);
+  const [bookCreationKey,setBookCreationKey]=useState(()=>entryParams.get('draft') || crypto.randomUUID());
+  const [resumingManuscript,setResumingManuscript]=useState(Boolean(entryParams.get('draft')));
   const [showChapterEditor, setShowChapterEditor] = useState(entryAction === 'write' && Boolean(entryBook));
   const [showBookManager, setShowBookManager] = useState(entryAction === 'manage' && Boolean(entryBook));
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
@@ -163,7 +165,7 @@ export default function WriterDashboard({ entry, embedded = false, onExit, onOpe
         } else {
             setToast({ msg: '获取用户列表失败', type: 'error' });
         }
-    } catch (e) {
+    } catch {
         setToast({ msg: '网络错误', type: 'error' });
     } finally {
         setAdminLoading(false);
@@ -195,7 +197,6 @@ export default function WriterDashboard({ entry, embedded = false, onExit, onOpe
     setAdminBookSearchLoading(true);
     try {
       const books = await booksApi.getAll({ orderBy: 'daily_views', order: 'desc', q: keyword });
-      const hotBookIds = new Set(adminHotBooks.map((book) => book.id));
       const filtered = books.filter((book) => {
         const authorName = typeof book.author === 'string'
             ? book.author
@@ -212,7 +213,7 @@ export default function WriterDashboard({ entry, embedded = false, onExit, onOpe
     } finally {
       setAdminBookSearchLoading(false);
     }
-  }, [user, adminHotBooks]);
+  }, [user]);
 
   // 监听搜索词变化 (防抖)
   useEffect(() => {
@@ -342,7 +343,7 @@ const handleSaveCrop = async () => {
         } else {
             setToast({ msg: '操作失败', type: 'error' });
         }
-    } catch (e) { setToast({ msg: '网络错误', type: 'error' }); }
+    } catch { setToast({ msg: '网络错误', type: 'error' }); }
   };
 
   // 书籍章节逻辑 (省略重复代码，逻辑与之前一致) ...
@@ -365,12 +366,11 @@ const handleSaveCrop = async () => {
             });
               if(!res.ok) throw new Error('err');
               const data = await res.json(); setFormChapterContent(data.content || '');
-          } catch(e) { setFormChapterContent('加载失败'); }
+          } catch { setFormChapterContent('加载失败'); }
       }
   };
   const saveChapterCore = async (status: 'ongoing' | 'completed') => {
       if(savingChapter)return false;
-      if (!formChapterTitle.trim()) { setToast({msg:'标题为空', type:'error'}); return false;}
       if (formChapterTitle.length > LIMITS.TITLE) { setToast({msg:'标题过长', type:'error'}); return false;}
       if (formChapterContent.length > LIMITS.CONTENT) { setToast({msg:'正文过长', type:'error'}); return false;}
       setSavingChapter(true);
@@ -406,7 +406,7 @@ const handleSaveCrop = async () => {
     if(!confirm('确定放弃此作品的未发布草稿？已发布章节不受影响。'))return;
     try{const response=await fetch(`/api/books/${currentBookId}/draft`,{method:'DELETE'});if(!response.ok)throw new Error('草稿删除失败');setPublishDraftId(null);setToast({msg:'已放弃草稿',type:'success'});}catch(e){setToast({msg:e instanceof Error?e.message:'草稿删除失败',type:'error'});}
   };
-  const handlePublishTrigger = () => { if(!formChapterTitle.trim()) return; setShowPublishConfirm(true); };
+  const handlePublishTrigger = () => { setShowPublishConfirm(true); };
   const handleConfirmPublish = async () => { if(await saveChapterCore('completed')) { setShowPublishConfirm(false); setShowChapterEditor(false); setToast({msg:'发布成功', type:'success'}); }};
   const handleDeleteChapter = (cid: string) => setChapterToDelete(cid);
   const executeDeleteChapter = async () => { if(!chapterToDelete) return; await chaptersApi.delete(chapterToDelete); setActiveChapters(prev => prev.filter(c => c.id !== chapterToDelete)); setChapterToDelete(null); setToast({msg:'删除成功', type:'success'}); };
@@ -496,11 +496,20 @@ const openBookManager = (book: Book) => {
     if (!authLoading && user && (standaloneCreate || !loading)) onReady?.();
   }, [authLoading, user, standaloneCreate, loading, onReady]);
 
+  const creator = <ManuscriptCreator key={bookCreationKey} draftKey={bookCreationKey} resume={resumingManuscript} embedded={embedded && standaloneCreate} fullPage={!embedded} onClose={closeCreate} onComplete={published => {
+          onWorksChanged?.();
+          if(standaloneCreate){onExit?.();return;}
+          closeCreate();setResumingManuscript(false);
+          setToast({msg:published?'作品与章节已提交':'作品已保存为私密，可在我的作品继续创作',type:'success'});
+          void fetchMyData();
+        }}/>;
+  if (user && !embedded && showCreateBookModal) return creator;
+
   if (authLoading || !user) return <div className="writer-page min-h-screen flex flex-col gap-4 items-center justify-center" role="status"><LoadingLogo/><p><LoadingText>正在准备创作中心</LoadingText></p></div>;
 
   return (
     <div className={`writer-page min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans${embedded ? ' writer-embedded' : ''}${standaloneCreate ? ' writer-embedded-new' : ''}`}>
-      <header className="writer-mobile-header"><button type="button" aria-label={fromCreationCenter ? '返回创作中心' : '返回阅读'} onClick={() => onExit ? onExit() : fromCreationCenter ? router.back() : router.push('/')}><ArrowLeft size={20}/></button><div><span>九天 · 创作者空间</span><h1>作品管理</h1></div><PenTool size={23} aria-hidden="true"/></header>
+      <header className="writer-mobile-header"><button type="button" aria-label={fromCreationCenter ? '返回创作中心' : '返回阅读'} onClick={() => onExit ? onExit() : fromCreationCenter ? router.back() : router.push('/')}><ArrowLeft size={20}/></button><div><span>九天 · 创作者空间</span><h1>{currentView === 'statistics' ? '作品数据' : '作品管理'}</h1></div><PenTool size={23} aria-hidden="true"/></header>
       {/* Toast */}
       {toast && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[110] animate-in fade-in slide-in-from-top-4">
@@ -528,6 +537,7 @@ const openBookManager = (book: Book) => {
             <BookOpen className="h-5 w-5" /> 作品管理
           </button>
 
+          <button onClick={() => setCurrentView('statistics')} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-600"><BarChart3 className="h-5 w-5"/>作品数据</button>
           {/* 切换到控制台 (仅管理员) */}
           {user.role === 'admin' && (
             <button
@@ -562,7 +572,7 @@ const openBookManager = (book: Book) => {
       {/* ================= 主内容区域 ================= */}
       <main className="writer-main flex-1 md:ml-64 p-4 md:p-8 pb-20 md:pb-8">
 
-        {currentView==='works'&&!standaloneCreate&&<ManuscriptDraftList refreshVersion={manuscriptRefresh+refreshVersion} onOpen={key=>{setBookCreationKey(key);setResumingManuscript(true);setShowCreateBookModal(true);}}/>}
+        {currentView === 'statistics' && <WriterStatistics/>}
         {/* 1. 作品管理视图 */}
         {currentView === 'works' && (
             <div className="writer-works-shell bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[80vh] md:min-h-0 animate-in fade-in">
@@ -588,20 +598,14 @@ const openBookManager = (book: Book) => {
                                 <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
                                     <div>
                                         <div className="flex justify-between items-start">
-                                            <h4 className="text-base md:text-xl font-bold text-gray-900 mb-1 line-clamp-1">{book.title}</h4>
+                                            <h4 className="text-base md:text-xl font-bold text-gray-900 mb-1 line-clamp-1">{book.title}{book.visibility === 'private' && <span className="work-private ml-3">私密</span>}</h4>
                                             <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full md:hidden">{book.category || '未分类'}</span>
                                         </div>
                                         <p className="text-xs md:text-sm text-gray-500 mt-1 line-clamp-2">{book.description || '暂无简介'}</p>
                                     </div>
-                                    <div className="flex gap-2 md:gap-3 mt-3">
-                                        <button onClick={() => { setCurrentBookId(book.id); openChapterEditor('new'); }} className="w-32 flex items-center justify-center gap-1 px-3 py-2 bg-white text-blue-600 text-sm font-bold rounded-lg border border-blue-100 shadow-sm hover:bg-blue-50 hover:border-blue-300 hover:shadow-md active:scale-95 transition-all cursor-pointer"
-                                        >
-                                            <Upload className="h-3 w-3 md:h-4 md:w-4" /> <span>快速发布</span>
-                                        </button>
-                                        <button onClick={() => openBookManager(book)} className="w-32 flex items-center justify-center gap-1 px-3 py-2 bg-white text-gray-700 text-sm font-bold rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 hover:border-gray-300 hover:shadow-md active:scale-95 transition-all cursor-pointer"
-                                        >
-                                            <Settings className="h-3 w-3 md:h-4 md:w-4" /> <span>管理</span>
-                                        </button>
+                                    <div className="writer-work-actions">
+                                        <button onClick={() => { if (book.manuscriptKey) {setBookCreationKey(book.manuscriptKey); setResumingManuscript(true); setShowCreateBookModal(true);} else openBookManager(book); }} className="writer-continue">继续创作</button>
+                                        <WorkActions book={book} onChanged={() => {onWorksChanged?.(); if(myBooks.length === 1 && worksPage > 1) setWorksPage(worksPage - 1); else void fetchMyData();}}/>
                                     </div>
                                 </div>
                             </div>
@@ -786,7 +790,7 @@ const openBookManager = (book: Book) => {
                                     <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
                                         <div>
                                             <div className="flex justify-between items-start gap-3">
-                                                <h4 className="text-base md:text-xl font-bold text-gray-900 mb-1 line-clamp-1">{book.title}</h4>
+                                                <h4 className="text-base md:text-xl font-bold text-gray-900 mb-1 line-clamp-1">{book.title}{book.visibility === 'private' && <span className="work-private ml-3">私密</span>}</h4>
                                                 <span className="text-[11px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">今日热度 {book.daily_views || 0}</span>
                                             </div>
                                             <p className="text-xs md:text-sm text-gray-500 mt-1 line-clamp-2">{book.description || '暂无简介'}</p>
@@ -824,7 +828,7 @@ const openBookManager = (book: Book) => {
                                     </div>
                                     <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
                                         <div>
-                                            <h4 className="text-base md:text-xl font-bold text-gray-900 mb-1 line-clamp-1">{book.title}</h4>
+                                            <h4 className="text-base md:text-xl font-bold text-gray-900 mb-1 line-clamp-1">{book.title}{book.visibility === 'private' && <span className="work-private ml-3">私密</span>}</h4>
                                             <p className="text-xs md:text-sm text-gray-500 mt-1 line-clamp-2">{book.description || '暂无简介'}</p>
                                             <p className="text-xs text-gray-400 mt-1">作者：{getBookAuthorName(book)} / 今日热度：{book.daily_views || 0}</p>
                                         </div>
@@ -985,6 +989,7 @@ const openBookManager = (book: Book) => {
                  {/* 章节列表标题与操作区 */}
                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between px-1 mb-4 gap-3">
                     <h4 className="font-bold text-gray-900 text-lg shrink-0">章节列表 ({activeChapters.length})</h4>
+                    <button onClick={() => void openChapterEditor('new')} className="writer-continue">新建章节</button>
                     <button onClick={continueDraft} className="text-sm text-blue-600">继续草稿</button>
                     <button onClick={discardDraft} className="text-sm text-gray-500">放弃草稿</button>
                     <div className="flex items-center gap-2 w-full md:w-auto">
@@ -1053,6 +1058,7 @@ const openBookManager = (book: Book) => {
                  })()}
               </div>
 
+              {activeBook?.visibility === 'private' && <div className="p-4"><button className="writer-continue" onClick={async () => {try {await booksApi.update(currentBookId, {visibility:'public'});setBookManagerBook(book => book ? {...book, visibility:'public'} : book);void fetchMyData();onWorksChanged?.();setToast({msg:'作品已公开',type:'success'});} catch(e) {setToast({msg:e instanceof Error?e.message:'公开失败',type:'error'});}}}>公开作品</button></div>}
               {/* 底部危险区 */}
               <div className="p-4 bg-red-50 border-t border-red-100 flex justify-between items-center pb-8 md:pb-4 shrink-0">
                  <span className="text-xs text-red-600 font-bold flex items-center gap-1">
@@ -1179,13 +1185,7 @@ const openBookManager = (book: Book) => {
         </div>
       )}
 
-        {showCreateBookModal && <ManuscriptCreator key={bookCreationKey} draftKey={bookCreationKey} resume={resumingManuscript} embedded={standaloneCreate} onClose={closeCreate} onComplete={published => {
-          onWorksChanged?.();setManuscriptRefresh(n=>n+1);
-          if(standaloneCreate){onExit?.();return;}
-          closeCreate();setResumingManuscript(false);
-          setToast({msg:published?'作品与章节已提交':'作品草稿已保存，可在作品管理继续整理',type:'success'});
-          void fetchMyData();
-        }}/>}
+        {showCreateBookModal && embedded && creator}
 
       {/* 5. 章节删除确认弹窗 */}
       {chapterToDelete && (

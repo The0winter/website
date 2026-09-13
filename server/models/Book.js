@@ -6,6 +6,7 @@ const bookSchema = new mongoose.Schema({
   importManaged:{type:Boolean,default:false},
   author_profile_id:{type:mongoose.Schema.Types.ObjectId,ref:'Author'},
   deletedAt: {type:Date,default:null},
+  visibility: {type:String,enum:['public','private'],default:'public'},
   writeVersion: {type:Number,default:0},
   // --- 截图中的字段 ---
   title: { type: String, required: true, maxlength:200 },

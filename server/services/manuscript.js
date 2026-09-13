@@ -227,8 +227,8 @@ export function validateManuscript(body, publish = false) {
       invalid(
         `第 ${index + 1} 项标题最多 100 字、正文最多 6 万字符，请拆分过长章节`,
       );
-    if (publish && (!chapter.title.trim() || !chapter.content.trim()))
-      invalid(`第 ${index + 1} 项标题或正文为空，请补全或移除空章`);
+    if (publish && !chapter.content.trim())
+      invalid(`第 ${index + 1} 项正文为空，请补全或移除空章`);
     if (
       chapter.volumeTitle !== undefined &&
       (typeof chapter.volumeTitle !== "string" ||
@@ -247,7 +247,7 @@ export function validateManuscript(body, publish = false) {
     return {
       volumeTitle: chapter.volumeTitle?.trim() || "第一卷",
       volumeNumber: chapter.volumeNumber ?? 1,
-      title: chapter.title.trim(),
+      title: chapter.title.trim() || `第${index + 1}章`,
       content: chapter.content,
       sourceNumber: Number.isSafeInteger(chapter.sourceNumber)
         ? chapter.sourceNumber

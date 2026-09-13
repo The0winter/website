@@ -17,7 +17,7 @@ export function libraryRoutes(app, auth) {
   app.post('/api/users/:userId/history', auth.authenticate, own, asyncRoute(async (req, res) => {
     const bookId = objectId(req.body.bookId);
     const chapterId = req.body.chapterId ? objectId(req.body.chapterId) : null;
-    if (!await Book.exists({_id: bookId, deletedAt: null})) fail(404, '作品不可用');
+    if (!await Book.exists({_id: bookId, deletedAt: null, visibility: {$ne: 'private'}})) fail(404, '作品不可用');
     if (chapterId && !await Chapter.exists({_id: chapterId, bookId, deletedAt: null})) fail(404, '章节不可用');
     const now = new Date();
     const fields = {lastVisitedAt: now, ...(chapterId ? {chapterId, lastReadAt: now} : {})};
@@ -62,18 +62,18 @@ export function libraryRoutes(app, auth) {
     const [rows, total] = await Promise.all([
       model.aggregate(pipeline).option({maxTimeMS: 5000}), model.countDocuments(filter).maxTimeMS(3000),
     ]);
-    const bookIds = rows.filter(row => row.book && !row.book.deletedAt).map(row => row.book._id);
+    const bookIds = rows.filter(row => row.book && !row.book.deletedAt && row.book.visibility !== 'private').map(row => row.book._id);
     const chapterIds = rows.map(row => row.history?.chapterId).filter(Boolean);
     const [latest, progress] = await Promise.all([
       Chapter.aggregate([{$match: {bookId: {$in: bookIds}, deletedAt: null}}, {$sort: {bookId: 1, chapter_number: -1}}, {$group: {_id: '$bookId', title: {$first: '$title'}, firstChapterId: {$last: '$_id'}}}]).option({maxTimeMS: 5000}),
-      Chapter.find({_id: {$in: chapterIds}, deletedAt: null}).select('_id title').maxTimeMS(3000).lean(),
+      Chapter.find({_id: {$in: chapterIds}, bookId: {$in: bookIds}, deletedAt: null}).select('_id title').maxTimeMS(3000).lean(),
     ]);
     const latestByBook = new Map(latest.map(row => [String(row._id), row.title]));
     const firstByBook = new Map(latest.map(row => [String(row._id), String(row.firstChapterId)]));
     const progressById = new Map(progress.map(row => [String(row._id), row.title]));
     res.set('Cache-Control', 'no-store').set('X-Total-Count', String(total)).json(rows.map(row => ({
       bookId: String(row.bookId),
-      book: row.book && !row.book.deletedAt ? {id: String(row.book._id), title: row.book.title, author: row.book.author, cover_image: row.book.cover_image, status: row.book.status, category: row.book.category, lastUpdated: row.book.lastUpdated || row.book.updatedAt} : null,
+      book: row.book && !row.book.deletedAt && row.book.visibility !== 'private' ? {id: String(row.book._id), title: row.book.title, author: row.book.author, cover_image: row.book.cover_image, status: row.book.status, category: row.book.category, lastUpdated: row.book.lastUpdated || row.book.updatedAt} : null,
       lastReadAt: row.history?.lastReadAt,
       lastVisitedAt: row.history?.lastVisitedAt,
       chapterId: progressById.has(String(row.history?.chapterId)) ? String(row.history.chapterId) : null,

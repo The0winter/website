@@ -148,12 +148,14 @@ export default function ManuscriptCreator({
   draftKey,
   resume = false,
   embedded = false,
+  fullPage = false,
   onClose,
   onComplete,
 }: {
   draftKey: string;
   resume?: boolean;
   embedded?: boolean;
+  fullPage?: boolean;
   onClose: () => void;
   onComplete: (published: boolean) => void;
 }) {
@@ -206,7 +208,6 @@ export default function ManuscriptCreator({
   const total = draft.chapters.reduce((n, c) => n + c.content.length, 0);
   const invalidChapters = draft.chapters
     .map((c, i) =>
-      !c.title.trim() ||
       !c.content.trim() ||
       c.title.length > 100 ||
       c.content.length > 60000
@@ -284,7 +285,7 @@ export default function ManuscriptCreator({
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
   useEffect(() => {
-    if (embedded) return;
+    if (embedded || fullPage) return;
     const opener = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -331,7 +332,7 @@ export default function ManuscriptCreator({
       document.body.style.overflow = previousOverflow;
       if (opener?.isConnected) opener.focus({ preventScroll: true });
     };
-  }, [embedded]);
+  }, [embedded, fullPage]);
   useEffect(() => {
     form.current
       ?.querySelector<HTMLElement>("[data-step-heading], #manuscript-title")
@@ -461,15 +462,15 @@ export default function ManuscriptCreator({
 
   return (
     <div
-      className={`manuscript-overlay${embedded ? " manuscript-embedded" : ""}`}
+      className={`manuscript-overlay${embedded ? " manuscript-embedded" : ""}${fullPage ? " manuscript-page" : ""}`}
     >
       <form
         ref={form}
         className="manuscript-form"
         data-dirty={dirty}
         data-busy={Boolean(busy)}
-        role={embedded ? undefined : "dialog"}
-        aria-modal={embedded ? undefined : true}
+        role={embedded || fullPage ? undefined : "dialog"}
+        aria-modal={embedded || fullPage ? undefined : true}
         aria-label="创建新作品"
         onSubmit={(e) => e.preventDefault()}
       >
@@ -477,7 +478,7 @@ export default function ManuscriptCreator({
           <header className="manuscript-header">
             <div>
               <LoadingLogo size={32} />
-              <h2>创建新作品</h2>
+<div><span className="manuscript-eyebrow">九天 · 创作者空间</span><h2>创建新作品</h2></div>
             </div>
             <button
               type="button"
@@ -498,7 +499,7 @@ export default function ManuscriptCreator({
             <i>2</i>检查并提交
           </span>
         </div>
-        <div className="manuscript-content">
+        <div className={`manuscript-content manuscript-step-${step}`}>
           {busy === "loading" ? (
             <p role="status">正在读取作品草稿…</p>
           ) : loadFailed ? (
@@ -517,6 +518,7 @@ export default function ManuscriptCreator({
               )}
               {step === 1 ? (
                 <>
+                  <section className="manuscript-details"><h3 className="manuscript-section-title">作品资料</h3><p className="manuscript-section-caption">为故事写下第一印象</p>
                   <div className="manuscript-field">
                     <label htmlFor="manuscript-title">
                       书名{" "}
@@ -645,6 +647,7 @@ export default function ManuscriptCreator({
                       </select>
                     </label>
                   </div>
+                  </section>
                   <section className="manuscript-import">
                     <div className="manuscript-import-heading">
                       <h4>导入正文</h4>
@@ -844,7 +847,7 @@ export default function ManuscriptCreator({
                         <optgroup key={v.number} label={v.title}>
                           {v.chapters.map((c) => (
                             <option key={c.index} value={c.index}>
-                              {c.title || "未命名章节"}
+                              {c.title || `第${c.index + 1}章`}
                               {invalidChapters.includes(c.index)
                                 ? "（待修正）"
                                 : ""}
@@ -914,7 +917,7 @@ export default function ManuscriptCreator({
                         </div>
                       ) : (
                         <article>
-                          <h4>{chapter.title}</h4>
+                          <h4>{chapter.title || `第${selected + 1}章`}</h4>
                           <div>
                             {chapter.content ||
                               "本章没有正文，请点击「修正本章」补全或移除。"}

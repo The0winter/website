@@ -108,9 +108,9 @@ for (const width of [320, 390, 1440])
     await expect(page).toHaveURL(base + "/writer");
     await page.reload();
     const row = page
-      .locator(".manuscript-drafts>div")
+      .locator(".writer-work")
       .filter({ hasText: title });
-    await row.getByRole("button", { name: "继续整理" }).click();
+    await row.getByRole("button", { name: "继续创作" }).click();
     await page.getByRole("combobox", { name: "选择章节" }).selectOption("1");
     await expect(page.locator(".manuscript-preview article")).toContainText(
       "修正后保留下来的第二章正文。",
@@ -229,9 +229,9 @@ test("whole text in the writing tab preserves volumes through editing, resume an
   await expect(page).toHaveURL(base + "/writer");
   await page.reload();
   await page
-    .locator(".manuscript-drafts>div")
+    .locator(".writer-work")
     .filter({ hasText: title })
-    .getByRole("button", { name: "继续整理" })
+    .getByRole("button", { name: "继续创作" })
     .click();
   await expect(page.locator("optgroup")).toHaveCount(2);
   await page.getByRole("checkbox").check();

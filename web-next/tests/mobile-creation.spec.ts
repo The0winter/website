@@ -8,9 +8,10 @@ const launch = (page: Page) => page.getByRole('button', { name: '创作', exact:
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**/api/writer/statistics?**', route => route.fulfill({json:{points:[],totalViews:0,bestChapter:null,historyStart:'2026-09-13',hasPrevious:false,hasNext:false}}));
   await page.route('**/api/manuscripts', route => route.fulfill({json:{drafts:[],remainingCharacters:100000}}));
   await page.route('**/api/auth/session', route => route.fulfill({ json: { user: account, profile: account } }));
-  await page.route('**/api/books?**', route => new URL(route.request().url()).searchParams.get('author_id') === account.id ? route.fulfill({ json: [book] }) : route.continue());
+  await page.route('**/api/writer/works?**', route => route.fulfill({ json: [book] }));
   await page.route(`**/api/books/${book.id}/chapters**`, route => route.fulfill({ json: [] }));
   await page.route(`**/api/books/${book.id}/draft`, route => route.fulfill({ json: { id: 'private-draft', title: '第一章 风起', content: '留给自己的未发布草稿。' } }));
   await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
@@ -92,20 +93,21 @@ for (const width of [320, 390]) test(`creator actions open the matching creation
   await page.getByRole('button', { name: '关闭新建作品', exact: true }).click();
   await expect(page.locator('.mw-view')).toHaveCount(0);
   await expect(modal(page)).toBeVisible();
-  await modal(page).getByRole('link', { name: '写一章', exact: true }).click();
+  await modal(page).getByRole('link', { name: '继续创作', exact: true }).click();
+  await page.getByRole('button',{name:'新建章节',exact:true}).click();
   await expect(page.getByPlaceholder('请输入章节标题')).toBeVisible();
   await expect(page.getByRole('button', { name: '存草稿', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath(`editor-${width}.png`) });
   await page.goBack(); await expect(page.locator('.mw-view')).toHaveCount(0); await expect(modal(page)).toBeVisible();
-  await modal(page).getByRole('link', { name: '目录与草稿', exact: true }).click();
+  await modal(page).getByRole('link', { name: '继续创作', exact: true }).click();
   await expect(page.getByText('目录与设置', { exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath(`manager-${width}.png`) });
   await page.getByRole('button', { name: '继续草稿', exact: true }).click();
   await expect(page.getByPlaceholder('在这里开始你的创作...')).toHaveValue('留给自己的未发布草稿。');
 });
 
-for (const width of [320, 390]) for (const action of ['新建作品', '作品管理']) {
+for (const width of [320, 390]) for (const action of ['新建作品', '作品数据']) {
   test(`${action} returns to the creation center with browser and page Back at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await page.goto(base);
@@ -143,7 +145,7 @@ for (const width of [320, 390]) for (const action of ['新建作品', '作品管
 test('returning from work management restores the creation center over its forum entry', async ({ page }) => {
   await page.goto(`${base}/forum`);
   await launch(page).click();
-  await modal(page).getByRole('link', { name: /作品管理/ }).click();
+  await modal(page).getByRole('link', { name: /作品数据/ }).click();
   await page.getByRole('button', { name: '返回创作中心', exact: true }).click();
   await expect(page.locator('.mw-view')).toHaveCount(0);
   await expect(page).toHaveURL(`${base}/forum`);
@@ -163,7 +165,7 @@ test('guest login, failed works retry and reduced motion remain usable', async (
   await expect(modal(page)).toHaveCount(0);
   await page.route('**/api/auth/session', route => route.fulfill({ json: { user: account, profile: account } }));
   let failed = true;
-  await page.route('**/api/books?**', route => new URL(route.request().url()).searchParams.get('author_id') === account.id ? route.fulfill(failed ? { status: 503, json: { error: 'test unavailable' } } : { json: [book] }) : route.continue());
+  await page.route('**/api/writer/works?**', route => route.fulfill(failed ? { status: 503, json: { error: 'test unavailable' } } : { json: [book] }));
   await page.reload(); await launch(page).click();
   await expect(modal(page).getByRole('alert')).toBeVisible(); failed = false;
   await modal(page).getByRole('button', { name: '重新加载' }).click();
@@ -205,7 +207,7 @@ test('Back during the reveal closes from its current size without flashing full-
   await expect(launch(page)).toBeFocused();
 });
 
-for (const width of [320, 390]) for (const action of ['新建作品', '作品管理']) {
+for (const width of [320, 390]) for (const action of ['新建作品', '作品数据']) {
   test(`${action} keeps the center mounted and loads inside a 400ms sliding panel at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 844 });
     await page.goto(base); await launch(page).click();
@@ -270,12 +272,11 @@ test('slow management data keeps its loading panel visible and Back cancels an u
   const gate = new Promise<void>(resolve => { release = resolve; });
   let started!: () => void;
   const requested = new Promise<void>(resolve => { started = resolve; });
-  await page.route('**/api/books?**', async route => {
-    if (new URL(route.request().url()).searchParams.get('author_id') !== account.id) return route.continue();
+  await page.route('**/api/writer/statistics?**', async route => {
     started(); await gate; await route.fulfill({ json: [book] });
   });
   try {
-    await modal(page).getByRole('link', { name: /作品管理/ }).click();
+    await modal(page).getByRole('link', { name: /作品数据/ }).click();
     await requested;
     await expect(page.locator('.mw-view-loading')).toBeVisible();
     await expect(page.locator('.mw-view-panel')).toHaveAttribute('data-ready', 'false');
@@ -295,8 +296,9 @@ test('slow management data keeps its loading panel visible and Back cancels an u
 
 test('new work opened from management returns to the same management layer before the center', async ({ page }) => {
   await page.goto(base); await launch(page).click();
-  await modal(page).getByRole('link', { name: /作品管理/ }).click();
+  await modal(page).getByRole('link', { name: '继续创作', exact:true }).click();
   await expect(page.locator('.mw-view-panel')).toHaveAttribute('data-ready', 'true');
+  await page.getByRole('button',{name:'关闭作品管理',exact:true}).click();
   const id = await page.evaluate(() => history.state.mobileWriterViews[0].id);
   await page.getByRole('button', { name: '新建', exact: true }).click();
   await expect(page.getByLabel('书名', {exact:true})).toBeVisible();
@@ -317,7 +319,7 @@ test('creating a work closes the sheet directly and refreshes the retained cente
     if (route.request().method() !== 'PUT') return route.continue();
     created = true; await route.fulfill({ json: {status:'published',bookId:newBook.id,revision:1} });
   });
-  await page.route('**/api/books?**', route => new URL(route.request().url()).searchParams.get('author_id') === account.id ? route.fulfill({ json: created ? [newBook, book] : [book] }) : route.continue());
+  await page.route('**/api/writer/works?**', route => route.fulfill({ json: created ? [newBook, book] : [book] }));
   await page.goto(base); await launch(page).click();
   await modal(page).getByRole('link', { name: /新建作品/ }).click();
   await page.getByLabel('书名', {exact:true}).fill(newBook.title);

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, BookOpen, X } from 'lucide-react';
 import {LoadingLogo, LoadingText} from './BrandLoading';
+import WriterStatistics from './WriterStatistics';
 import type WriterDashboard from './WriterDashboard';
 import '@/app/writer/writer-mobile.css';
 import './mobile-writer-view.css';
@@ -17,6 +18,8 @@ export function historyWriterViews(): WriterView[] {
 export default function MobileWriterView({ view, covered, refreshVersion, onBack, onExited, onOpenNew, onChanged }: {
   view: WriterView; covered: boolean; refreshVersion: number; onBack: () => void; onExited: (id: string) => void; onOpenNew: () => void; onChanged: () => void;
 }) {
+  const statistics = new URLSearchParams(view.entry).get('action') === 'statistics';
+  const title = statistics ? '作品数据' : '继续创作';
   const create = new URLSearchParams(view.entry).get('action') === 'new';
   const [Dashboard, setDashboard] = useState<typeof WriterDashboard>();
   const [elapsed, setElapsed] = useState(false);
@@ -57,18 +60,19 @@ export default function MobileWriterView({ view, covered, refreshVersion, onBack
   };
   return <div className="mw-view" data-view-id={view.id} data-kind={create ? 'new' : 'works'} data-closing={view.closing || undefined} inert={covered} aria-hidden={covered || undefined}>
     <div className="mw-view-scrim" aria-hidden="true"/>
-    <div ref={panel} className="mw-view-panel" role="dialog" aria-modal="true" aria-label={create ? '新建作品' : '作品管理'} tabIndex={-1} data-ready={loaded}>
+    <div ref={panel} className="mw-view-panel" role="dialog" aria-modal="true" aria-label={create ? '新建作品' : title} tabIndex={-1} data-ready={loaded}>
       <header className="mw-view-header">
         {create ? <LoadingLogo size={32}/> : <button type="button" aria-label="返回创作中心" onClick={onBack}><ArrowLeft size={20}/></button>}
-        <div>{!create && <span>九天 · 创作者空间</span>}<h2>{create ? '创建新作品' : '作品管理'}</h2></div>
+        <div>{!create && <span>九天 · 创作者空间</span>}<h2>{create ? '创建新作品' : title}</h2></div>
         {create ? <button type="button" aria-label="关闭新建作品" onClick={closeNew}><X size={22}/></button> : <BookOpen size={23}/>}
       </header>
       <div className="mw-view-content">
         {!loaded && <div className="mw-view-loading" role={failed ? 'alert' : 'status'} aria-live="polite">
-          {failed ? <><p>页面暂时加载失败</p><button type="button" onClick={() => { setFailed(false); setAttempt(value => value + 1); }}>重新加载</button></> : <><LoadingLogo/><p><LoadingText>{create ? '正在准备新作品' : '正在加载作品管理'}</LoadingText></p><div className="mw-view-skeleton" aria-hidden="true"><i/><i/><i/></div></>}
+          {failed ? <><p>页面暂时加载失败</p><button type="button" onClick={() => { setFailed(false); setAttempt(value => value + 1); }}>重新加载</button></> : <><LoadingLogo/><p><LoadingText>{create ? '正在准备新作品' : `正在加载${title}`}</LoadingText></p><div className="mw-view-skeleton" aria-hidden="true"><i/><i/><i/></div></>}
         </div>}
         <div className="mw-view-body" inert={!loaded} aria-hidden={!loaded || undefined}>
-          {Dashboard && elapsed && <Dashboard entry={view.entry} embedded onExit={onBack} onOpenNew={onOpenNew} onReady={markReady} refreshVersion={refreshVersion} onWorksChanged={onChanged}/>}
+          {statistics && elapsed && <WriterStatistics onReady={markReady}/>}
+          {!statistics && Dashboard && elapsed && <Dashboard entry={view.entry} embedded onExit={onBack} onOpenNew={onOpenNew} onReady={markReady} refreshVersion={refreshVersion} onWorksChanged={onChanged}/>}
         </div>
       </div>
     </div>

@@ -1,0 +1,43 @@
+.writer-statistics { max-width:1120px; margin:0 auto; padding:24px; color:#493b32; font-size:16px; }
+.ws-intro h2 { font-size:28px; font-weight:700; }
+.ws-intro p { margin-top:8px; color:#927a68; font-size:15px; }
+.ws-cards { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin:28px 0; }
+.ws-cards article { position:relative; display:flex; flex-direction:column; padding:24px; min-width:0; border:1px solid #e5d6ca; border-radius:18px; background:#fffaf6; }
+.ws-cards svg { color:#b8424c; margin-bottom:18px; }
+.ws-cards span { color:#816955; font-size:15px; }
+.ws-cards strong { font-size:36px; font-weight:600; font-variant-numeric:tabular-nums; margin:7px 0; overflow-wrap:anywhere; }
+.ws-cards small { color:#9a8270; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ws-trend { border:1px solid #e5d6ca; border-radius:20px; background:#fffaf6; overflow:hidden; }
+.ws-trend-heading { display:flex; flex-wrap:wrap; gap:18px; justify-content:space-between; align-items:center; padding:24px; }
+.ws-trend h3 { font-size:19px; font-weight:600; }
+.ws-periods { display:flex; gap:3px; border-radius:10px; background:#f1e7dd; padding:4px; }
+.ws-periods button { min-height:40px; padding:6px 16px; border-radius:7px; font-size:14px; color:#826b59; cursor:pointer; }
+.ws-periods [aria-pressed=true] { background:#fffaf6; color:#ac3d48; box-shadow:0 1px 4px #75533f16; }
+.ws-chart { overflow-x:auto; overscroll-behavior-x:contain; scrollbar-color:#d5bfae transparent; margin:4px 18px 0; }
+.ws-chart svg { max-width:none; display:block; }
+.ws-history { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 18px; font-size:12px; color:#9c8370; }
+.ws-history button { display:flex; align-items:center; min-height:44px; padding:0 8px; color:#ad414b; font-size:14px; cursor:pointer; }
+.ws-history button:disabled { opacity:.35; cursor:default; }
+.ws-status { display:flex; min-height:270px; justify-content:center; align-items:center; flex-direction:column; gap:16px; color:#927a68; }
+.ws-status button { min-height:44px; color:#b8424c; }
+.ws-empty { padding:0 24px 16px; font-size:14px; color:#937b67; }
+.ws-table { margin:0 24px 20px; color:#806650; font-size:14px; }
+.ws-table summary { padding:10px 0; cursor:pointer; }
+.ws-table table { width:100%; text-align:left; border-collapse:collapse; }
+.ws-table :is(th,td) { padding:10px; border-bottom:1px solid #eadecf; }
+.ws-note { font-size:12px; line-height:1.9; color:#9a8270; margin-top:18px; }
+.writer-statistics :is(button,summary,[tabindex]):focus-visible { outline:2px solid #b8424c; outline-offset:2px; }
+@media(max-width:767px) {
+  .writer-statistics { padding:18px 16px 30px; }
+  .ws-intro h2 { display:none; }
+  .ws-intro p { margin:0; font-size:14px; }
+  .ws-cards { gap:10px; margin:20px 0; }
+  .ws-cards article { padding:17px 14px; }
+  .ws-cards span { font-size:13px; }
+  .ws-cards strong { font-size:30px; }
+  .ws-cards small { font-size:11px; }
+  .ws-trend-heading { padding:18px 14px; gap:12px; }
+  .ws-periods button { padding:4px 11px; }
+  .ws-trend h3 { font-size:17px; }
+  .ws-chart { margin:0 10px; }
+}

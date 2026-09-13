@@ -1,3 +1,5 @@
+import {publicWork} from '../services/work-access.js';
+import ChapterRead from '../models/ChapterRead.js';
 import Author from '../models/Author.js';
 import {libraryRoutes} from './library.js';
 import {paragraphCommentRoutes} from './paragraph-comments.js';
@@ -32,7 +34,7 @@ export function readingRoutes(app,auth) {
   }));
   app.get('/api/sitemap-books',asyncRoute(async(req,res)=>{
     const page=integer(req.query.page,1,100000);
-    const books=await Book.find({deletedAt:null}).select('_id updatedAt').sort({_id:1}).skip((page-1)*100).limit(100).lean();
+    const books=await Book.find({deletedAt:null,...publicWork}).select('_id updatedAt').sort({_id:1}).skip((page-1)*100).limit(100).lean();
     const counts=await Chapter.aggregate([{$match:{bookId:{$in:books.map(b=>b._id)},deletedAt:null}},{$group:{_id:'$bookId',count:{$sum:1}}}]).option({maxTimeMS:5000});
     const byId=new Map(counts.map(c=>[String(c._id),c.count]));res.json(books.map(b=>({...b,chapters:byId.get(String(b._id))||0})));
   }));
@@ -40,7 +42,7 @@ export function readingRoutes(app,auth) {
     const {orderBy='views',order='desc',author_id,q,category}=req.query;
     if(!['views','weekly_views','daily_views','monthly_views','updatedAt','createdAt','rating','composite',...Object.keys(rankingViewFields)].includes(orderBy)||!['asc','desc'].includes(order))fail(400,'排序参数无效');
     const limit=integer(req.query.limit,20,100),page=integer(req.query.page,1,100000);
-    const filter={deletedAt:null};
+    const filter={deletedAt:null,...publicWork};
     if(author_id){if(typeof author_id!=='string'||!/^[a-f0-9]{24}$/i.test(author_id))fail(400,'作者ID无效');filter.$and=[{$or:[{author_id:new mongoose.Types.ObjectId(author_id)},{author_profile_id:new mongoose.Types.ObjectId(author_id)}]}];}
     if(category)filter.category=String(category).slice(0,80);
     if(q){if(typeof q!=='string'||q.length>100)fail(400,'搜索关键词过长');const escaped=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');filter.$or=[{title:{$regex:escaped,$options:'i'}},{author:{$regex:escaped,$options:'i'}}];}
@@ -53,7 +55,7 @@ export function readingRoutes(app,auth) {
   }));
   app.get('/api/books/sitemap-pool',asyncRoute(async(req,res)=>{
     const page=integer(req.query.page,1,100000);
-    const books=await Book.find({deletedAt:null}).select('_id updatedAt').sort({_id:1}).skip((page-1)*100).limit(100).lean();res.json(books);
+    const books=await Book.find({deletedAt:null,...publicWork}).select('_id updatedAt').sort({_id:1}).skip((page-1)*100).limit(100).lean();res.json(books);
   }));
   app.get('/api/books/:bookId/statistics',asyncRoute(async(req,res)=>{
     const [book,statistics]=await Promise.all([
@@ -93,9 +95,10 @@ export function readingRoutes(app,auth) {
     await mongoose.connection.transaction(async session=>{
       counted=false;
       if(await Receipt.exists({_id:id}).session(session))return;
-      if(!await Book.findOneAndUpdate({_id:bookId,deletedAt:null},{$inc:{views:1},$set:{statisticsVersion:2}},{session}))fail(404,'作品不可用');
+      if(!await Book.findOneAndUpdate({_id:bookId,deletedAt:null,...publicWork},{$inc:{views:1},$set:{statisticsVersion:2}},{session}))fail(404,'作品不可用');
+      await ChapterRead.updateOne({_id:chapter._id},{$setOnInsert:{bookId,startedAt:new Date()},$inc:{views:1}},{session,upsert:true});
       await Receipt.create([{_id:id,bookId,chapterId:chapter._id,day,expiresAt:new Date(Date.now()+8*86400000)}],{session});
-      await Daily.updateOne({_id:`${bookId}:${day}`},{$setOnInsert:{bookId,day,expiresAt:new Date(Date.now()+62*86400000)},$inc:{views:1}},{session,upsert:true});counted=true;
+      await Daily.updateOne({_id:`${bookId}:${day}`},{$setOnInsert:{bookId,day},$unset:{expiresAt:1},$inc:{views:1}},{session,upsert:true});counted=true;
       if(userId)await UserDaily.updateOne({_id:`${userId}:${day}`},{$setOnInsert:{userId,day,expiresAt:new Date(Date.now()+62*86400000)},$inc:{views:1}},{session,upsert:true});
     });res.json({success:true,counted});
   }));

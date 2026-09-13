@@ -7,17 +7,22 @@ import {claimMedia,retireUnreferencedCover} from '../services/media-reference.js
 import {finishCoverRetirement} from '../services/cover-retention.js';
 import User from '../models/User.js';
 import Operation from '../models/Operation.js';
+import {workAccess} from '../services/work-access.js';
+import {writerRoutes} from './writer.js';
 import {pagination} from '../services/pagination.js';
 import {asyncRoute} from '../security.js';
 import {createChapter,lockBook,chargeQuota,validateChapter,fail,jsonDoc,contentHash} from '../services/content.js';
 
 const fields=(body,allowed)=>{if(Object.keys(body).some(k=>!allowed.includes(k)))fail(400,'包含不可修改字段');};
 function bookFields(body){
-  fields(body,['title','description','cover_image','category','status']);
+  fields(body,['title','description','cover_image','category','status','visibility']);
+  if(body.visibility!==undefined&&!['public','private'].includes(body.visibility))fail(400,'作品可见范围无效');
   for(const [key,max] of [['title',200],['description',5000],['cover_image',2000],['category',80],['status',20]])if(body[key]!==undefined&&(typeof body[key]!=='string'||body[key].length>max))fail(400,'作品字段类型或长度无效');
   if(body.title!==undefined&&!body.title.trim())fail(400,'标题不能为空');
 }
 export function contentRoutes(app,auth) {
+  workAccess(app,auth);
+  writerRoutes(app,auth);
   app.get('/api/books/:id/reviews/mine',auth.authenticate,asyncRoute(async(req,res)=>{
     if(!await Book.exists({_id:req.params.id,deletedAt:null}))fail(404,'作品不可用');
     res.set('Cache-Control','private, no-store');
@@ -106,11 +111,11 @@ export function contentRoutes(app,auth) {
     const bookmarks=await Bookmark.find(filter).sort({_id:-1}).skip(skip).limit(limit).populate('bookId').maxTimeMS(3000);
     res.set('X-Total-Count',String(await Bookmark.countDocuments(filter).maxTimeMS(3000)));
     res.set('Cache-Control','private, no-store');
-    res.json(bookmarks.map(b=>({...b.toObject(),unavailableBookId:String(b.populated('bookId')||''),bookId:b.bookId?.deletedAt?null:b.bookId})));
+    res.json(bookmarks.map(b=>({...b.toObject(),unavailableBookId:String(b.populated('bookId')||''),bookId:(b.bookId?.deletedAt||b.bookId?.visibility==='private')?null:b.bookId})));
   }));
   app.get('/api/users/:userId/bookmarks/:bookId/check',auth.authenticate,own,asyncRoute(async(req,res)=>res.json({isBookmarked:!!await Bookmark.exists({user_id:req.user.id,bookId:req.params.bookId})})));
   app.post('/api/users/:userId/bookmarks',auth.authenticate,own,asyncRoute(async(req,res)=>{
-    if(!await Book.exists({_id:req.body.bookId,deletedAt:null}))fail(404,'作品不可用');
+    if(!await Book.exists({_id:req.body.bookId,deletedAt:null,visibility:{$ne:'private'}}))fail(404,'作品不可用');
     const b=await Bookmark.findOneAndUpdate({user_id:req.user.id,bookId:req.body.bookId},{$setOnInsert:{user_id:req.user.id,bookId:req.body.bookId}},{new:true,upsert:true});res.json(b);
   }));
   app.delete('/api/users/:userId/bookmarks/:bookId',auth.authenticate,own,asyncRoute(async(req,res)=>{await Bookmark.deleteOne({user_id:req.user.id,bookId:req.params.bookId});res.json({success:true});}));

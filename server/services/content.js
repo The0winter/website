@@ -11,8 +11,8 @@ export const dayKey = (date=new Date()) => new Intl.DateTimeFormat('en-CA',{time
 export const contentHash = data => crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
 export function validateChapter(body) {
   const number=body.chapter_number ?? body.chapterNumber;
-  if (typeof body.title!=='string' || !body.title.trim() || body.title.length>100 || typeof body.content!=='string' || !body.content.trim() || body.content.length>60000 || !Number.isSafeInteger(number) || number<1) fail(400,'章节标题、正文或编号无效');
-  return {title:body.title.trim(),content:body.content,chapter_number:number,word_count:body.content.length};
+  if ((body.title!==undefined && (typeof body.title!=='string' || body.title.length>100)) || typeof body.content!=='string' || !body.content.trim() || body.content.length>60000 || !Number.isSafeInteger(number) || number<1) fail(400,'章节标题、正文或编号无效');
+  return {title:body.title?.trim() || `第${number}章`,content:body.content,chapter_number:number,word_count:body.content.length};
 }
 export async function lockBook(bookId,actor,session,{includeDeleted=false}={}) {
   const filter={_id:bookId};

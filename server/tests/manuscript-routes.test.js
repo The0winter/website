@@ -320,6 +320,56 @@ test("whole manuscript drafts are private, transactional, revision protected and
         assert.equal(content.data.content, "启程正文。");
       },
     );
+    await t.test('unified private works, publication without chapter names, privacy and reader trends', async () => {
+      const draftKey = crypto.randomUUID();
+      const payload = {...data, title:'私密管理验证', chapters:[{title:'',content:'没有章名的完整正文。'}], revision:0, action:'draft'};
+      assert.equal((await owner.save(draftKey,payload)).status,200);
+      const owned = await owner.request('/api/writer/works');
+      assert.equal(owned.status,200);
+      const saved = owned.data.find(b=>b.manuscriptKey===draftKey);
+      assert.equal(saved.visibility,'private');
+      assert.ok(!(await stranger.request('/api/writer/works')).data.some(b=>b.manuscriptKey===draftKey));
+      assert.equal((await guest.request('/api/writer/works')).status,401);
+      const published = await owner.save(draftKey,{...payload,revision:1,action:'publish'});
+      assert.equal(published.status,200);
+      const bid=published.data.bookId;
+      const chapters=(await guest.request(`/api/books/${bid}/chapters`)).data;
+      assert.equal(chapters[0].title,'第1章');
+      const chapter=chapters[0];
+      const draft=(await owner.request(`/api/books/${bid}/draft`,'PUT',{title:'',content:'第二章无标题正文'}));
+      assert.equal(draft.status,200);
+      assert.equal(draft.data.title,'第2章');
+      assert.equal((await owner.request(`/api/books/${bid}/draft/publish`,'POST',{draftId:draft.data.id})).status,200);
+      const reports=await Promise.all([1,2,3].map(()=>stranger.request(`/api/books/${bid}/views`,'POST',{chapterId:chapter.id})));
+      assert.equal(reports.filter(r=>r.data.counted).length,1);
+      const daily=mongoose.connection.collection('readdailies');
+      await daily.insertMany([{_id:`${bid}:2026-01-05`,bookId:new mongoose.Types.ObjectId(bid),day:'2026-01-05',views:7},{_id:`${bid}:2026-01-06`,bookId:new mongoose.Types.ObjectId(bid),day:'2026-01-06',views:3}]);
+      const stats=await owner.request('/api/writer/statistics?period=week&end=2026-01-31');
+      assert.equal(stats.status,200);
+      assert.equal(stats.data.points.find(p=>p.date==='2026-01-05').views,10);
+      assert.equal(stats.data.bestChapter.views,1);
+      assert.ok(stats.data.points.some(p=>p.views===null));
+      const month=await owner.request('/api/writer/statistics?period=month&end=2026-01-31');
+      assert.equal(month.data.points.at(-1).views,10);
+      assert.equal((await stranger.request('/api/writer/statistics')).data.totalViews,0);
+      assert.equal((await owner.request('/api/writer/statistics?period=year')).status,400);
+      assert.equal((await owner.request('/api/writer/statistics?end=2026-02-30')).status,400);
+      assert.equal((await owner.request(`/api/books/${bid}`,'PATCH',{visibility:'private'})).status,200);
+      for(const route of [`/api/books/${bid}`,`/api/books/${bid}/catalog`,`/api/books/${bid}/chapters`,`/api/books/${bid}/statistics`,`/api/books/${bid}/reviews`,`/api/chapters/${chapter.id}`,`/api/chapters/${chapter.id}/paragraph-comments`]) {
+        assert.equal((await guest.request(route)).status,404,route);
+        assert.equal((await stranger.request(route)).status,404,route);
+        assert.equal((await owner.request(route)).status,200,route);
+      }
+      for(const route of ['/api/books','/api/books?orderBy=rank_total',`/api/books?author_id=${user.id}`,'/api/sitemap-books','/api/books/sitemap-pool']) {
+        const list=await guest.request(route);
+        assert.ok(!list.data.some(b=>String(b.id||b._id)===bid),route);
+      }
+      assert.equal((await stranger.request(`/api/books/${bid}`,'PATCH',{visibility:'public'})).status,404);
+      assert.equal((await owner.request(`/api/books/${bid}`,'PATCH',{visibility:'public'})).status,200);
+      assert.equal((await guest.request(`/api/chapters/${chapter.id}`)).status,200);
+      assert.equal((await owner.request(`/api/books/${bid}`,'DELETE')).status,200);
+      assert.ok(!(await owner.request('/api/writer/works')).data.some(b=>b.id===bid));
+    });
   } finally {
     await new Promise((r) => server.close(r));
     await mongoose.disconnect();

@@ -74,6 +74,8 @@ export interface Profile {
 }
 
 export interface Book {
+  visibility?: 'public' | 'private';
+  manuscriptKey?: string;
   writeVersion?:number;
   lastUpdated?:string;
   coverImage?:string;
@@ -179,7 +181,7 @@ export const booksApi = {
   getMyBooks: async (authorId?: string, page = 1): Promise<Book[]> => {
     const targetId = authorId || (typeof window !== 'undefined' ? localStorage.getItem('novelhub_user') : null);
     if (!targetId) return [];
-    return apiCall<Book[]>(`/books?author_id=${encodeURIComponent(targetId)}&limit=20&page=${page}&orderBy=updatedAt`);
+    return apiCall<Book[]>(`/writer/works?limit=20&page=${page}`);
   },
 
   delete: async (id: string): Promise<void> => {

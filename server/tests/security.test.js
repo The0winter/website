@@ -257,7 +257,7 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       assert.equal(activity.views,1);assert.equal(activity.uploads,3);
       const accountStats=await User.findById(a._id);assert.equal(accountStats.stats.today_views,1);assert.equal(accountStats.weekly_score,151);
       const daily=await mongoose.connection.collection('readdailies').findOne({_id:`${book._id}:${day}`});
-      assert.ok(daily.expiresAt > new Date(Date.now()+60*86400000));
+      assert.equal(daily.expiresAt, undefined); // Writer trends retain daily totals.
       // A later month must clear period counters without clearing lifetime views.
       const nextMonth=new Date(day.slice(0,7)+'-01T12:00:00Z');nextMonth.setUTCMonth(nextMonth.getUTCMonth()+2);
       assert.equal((await updateStatistics(nextMonth)).claimed,true);
