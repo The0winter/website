@@ -17,7 +17,7 @@ import {beginChapterEntry} from '@/lib/chapter-entry';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, Heart, HeartCrack, User as UserIcon, Pencil, X, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, Heart, HeartCrack, User as UserIcon, X, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import BookArticles from './BookArticles';
 import './book-detail.css';
 import { useAuth } from '@/contexts/AuthContext';
@@ -262,12 +262,11 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   };
 
   // --- 操作：评论相关 ---
-  const handleEditClick = () => {
-    if (myReview) {
-        setMyRating(myReview.rating);
-        setMyContent(myReview.content);
-        setShowReviewForm(true);
-    }
+  const openReviewForm = () => {
+    if (!user) return router.push('/login');
+    setMyRating(myReview?.rating || 0);
+    setMyContent(myReview?.content || '');
+    setShowReviewForm(true);
   };
 
   const handleSubmitReview = async (e: React.FormEvent) => {
@@ -466,28 +465,15 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
         {/* === 第三部分：书友评价区 (⚠️ 利用 order-3 md:order-4 在手机端提到目录前面，电脑端仍为第4) === */}
         <div id="reviews-section" className="book-community bg-white rounded-lg shadow-sm p-4 md:p-8 order-4">
+            <div className="book-community-header">
             <div className="community-tabs" role="tablist" aria-label="书友交流">
               <button id="reviews-tab" role="tab" aria-selected={communityTab === 'reviews'} aria-controls="reviews-panel" onClick={() => setCommunityTab('reviews')}>评论 <small>{reviewTotal}</small></button>
               <button id="articles-tab" role="tab" aria-selected={communityTab === 'articles'} aria-controls="articles-panel" onClick={() => setCommunityTab('articles')}>文章</button>
             </div>
+            {communityTab === 'reviews' && !showReviewForm && <button className="book-review-compose" onClick={openReviewForm}>写书评</button>}
+            </div>
             {communityTab === 'articles' && <div id="articles-panel" role="tabpanel" aria-labelledby="articles-tab"><BookArticles bookId={book.id} title={book.title} /></div>}
             <div id="reviews-panel" role="tabpanel" aria-labelledby="reviews-tab" hidden={communityTab !== 'reviews'}>
-            <div className="flex items-center justify-between mb-4 md:mb-6">
-                <h2 className="text-base md:text-xl font-bold text-gray-900 flex items-center space-x-2 border-l-4 border-blue-600 pl-3">
-                    <span className="hidden md:inline">书友评价 ({reviewTotal})</span>
-                </h2>
-                {!showReviewForm && !myReview && (
-                     <button 
-                        onClick={() => {
-                            if (!user) router.push('/login');
-                            else setShowReviewForm(true);
-                        }}
-                        className="text-xs md:text-sm text-blue-600 hover:bg-blue-50 px-3 py-1 rounded transition-colors border border-blue-600"
-                     >
-                        写书评
-                     </button>
-                )}
-            </div>
             
             {/* 评论表单 */}
             {showReviewForm && (
@@ -524,7 +510,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             {feedback.error && <p className="book-review-error" role="alert">{feedback.error} <button onClick={feedback.retry}>重试</button></p>}
             <nav hidden={reviewTotal <= 20} aria-label="评价分页" className="flex gap-4 justify-center my-4"><button disabled={reviewPage===1} onClick={()=>setReviewPage(reviewPage-1)}>上一页</button><span>第 {reviewPage} 页</span><button disabled={reviewPage*20>=reviewTotal} onClick={()=>setReviewPage(reviewPage+1)}>下一页</button></nav>
             {/* 评论列表 */}
-            <div className="space-y-6 md:space-y-8">
+            <div className="book-review-list">
                 {reviews.length === 0 ? (
                     <div className="text-gray-500 text-sm text-center py-4">还没有人评价，快来抢沙发！</div>
                 ) : (
@@ -535,8 +521,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
                         return (
                             <article key={review._id} className="book-review">
-                                <div className="flex items-start space-x-3">
-                                    <div className="flex-shrink-0 pt-1">
+                                <div className="book-review-row">
+                                    <div className="book-review-avatar-wrap">
                                         {review.user?.avatar ? (
                                             <img src={review.user.avatar} alt={review.user.username} className="book-review-avatar" />
                                         ) : (
@@ -547,24 +533,16 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                                     </div>
                                     <div className="book-review-body flex-1">
                                         <div className="book-review-heading">
-                                            <span className="book-review-name">
+                                            <span className="book-review-name" title={review.user?.username || '书友'}>
                                                 {review.user?.username || '书友'} {isMyReview && '(我)'}
                                             </span>
-                                            {isMyReview && (
-                                                <button 
-                                                    onClick={handleEditClick}
-                                                    className="ml-auto text-xs text-gray-400 hover:text-blue-600 flex items-center space-x-1"
-                                                >
-                                                    <Pencil className="w-3 h-3" /> <span>修改</span>
-                                                </button>
-                                            )}
-                                        </div>
-                                        <div className="book-review-meta">
+                                            <div className="book-review-meta">
                                             <StarRating rating={review.rating} size={4} />
+                                            </div>
                                         </div>
                                         <p className="book-review-content">{review.content}</p>
                                         <footer className="book-review-footer">
-                                            <time dateTime={review.createdAt}>{review.createdAt.slice(0, 10)}</time>
+                                            <time dateTime={review.createdAt} title={review.createdAt.slice(0, 10)}>{review.createdAt.slice(0, 4) === String(new Date().getFullYear()) ? review.createdAt.slice(5, 10) : review.createdAt.slice(0, 10)}</time>
                                             <div className="book-review-reactions" role="group" aria-label="评论反馈">
                                                 {(['like', 'dislike'] as const).map(choice => {
                                                     const label = choice === 'like' ? '喜欢' : '不喜欢';

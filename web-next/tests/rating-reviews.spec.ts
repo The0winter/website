@@ -36,7 +36,7 @@ for (const width of [320, 390, 1440]) test(`ten-point ratings preserve saved sta
   });
   page.on('dialog', dialog=>dialog.accept());
   await page.goto(`${base}/book/${book}`);
-  const score = page.locator(width < 768 ? '.book-mobile-rating strong' : '.book-rating-score');
+  const score = page.locator(width < 768 ? '.book-mobile-rating strong:visible' : '.book-rating-score:visible');
   await expect(score).toHaveText('6.0');
   await expect(page.locator('.book-review-meta [role="img"]').first()).toHaveAttribute('aria-label','2.0 分');
   await expect(page.locator('.book-review-meta [role="img"]').nth(1)).toHaveAttribute('aria-label','10.0 分');
@@ -54,7 +54,8 @@ for (const width of [320, 390, 1440]) test(`ten-point ratings preserve saved sta
   await page.getByRole('button', {name:'发表评论', exact:true}).click();
   await expect(score).toHaveText('4.7');
   await page.reload();
-  await page.getByRole('button', {name:'修改', exact:true}).click();
+  await expect(page.getByRole('button', {name:'修改', exact:true})).toHaveCount(0);
+  await page.getByRole('button', {name:'写书评', exact:true}).click();
   await expect(page.getByRole('button', {name:'2 分（1 星）', exact:true})).toHaveAttribute('aria-pressed','true');
   await page.getByRole('button', {name:'10 分（5 星）', exact:true}).focus();
   await page.keyboard.press('Enter');
@@ -62,7 +63,7 @@ for (const width of [320, 390, 1440]) test(`ten-point ratings preserve saved sta
   await expect(score).toHaveText('7.3');
   expect(writes).toEqual([1,5]);
   await expect(page.locator('.book-review-meta [role="img"]').first()).toHaveAttribute('aria-label','10.0 分');
-  await page.locator('#reviews-section').screenshot({path:info.outputPath('comments.png')});
+  await page.locator('#reviews-section:visible').screenshot({path:info.outputPath('comments.png')});
 });
 
 test('an unrated work has no numeric zero score', async ({page}) => {

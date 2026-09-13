@@ -39,13 +39,14 @@ for (const width of [320,390,768,1440]) test(`review footer, compact stars and p
   const layout = await rows.evaluateAll(elements => elements.map(row => {
     const rect = (selector:string) => row.querySelector(selector)!.getBoundingClientRect();
     const name = rect('.book-review-name'), stars = rect('.book-review-stars'), content = rect('.book-review-content'), time = rect('time'), actions = rect('.book-review-reactions');
-    return {starsBelow:stars.top >= name.bottom, bodyBelow:content.top >= stars.bottom, timeBelow:time.top >= content.bottom,
-      aligned:Math.abs(name.left-stars.left)<1 && Math.abs(name.left-content.left)<1 && Math.abs(name.left-time.left)<1,
+    return {starsRight:Math.abs(stars.right-content.right)<1 && stars.left>name.right && Math.abs(stars.top+stars.height/2-name.top-name.height/2)<1, bodyBelow:content.top >= name.bottom, timeBelow:time.top >= content.bottom,
+      aligned:Math.abs(name.left-content.left)<1 && Math.abs(name.left-time.left)<1,
+      fontSize:parseFloat(getComputedStyle(row.querySelector('.book-review-content')!).fontSize),dateSize:parseFloat(getComputedStyle(row.querySelector('time')!).fontSize),
       starsWidth:stars.width, starSize:rect('.book-review-stars svg').width, bottomAligned:Math.abs(time.top+time.height/2-actions.top-actions.height/2)<1,
       rightAligned:Math.abs(actions.right-content.right)<1, separated:time.right+7<=actions.left};
   }));
   for (const row of layout) {
-    expect(row).toMatchObject({starsBelow:true, bodyBelow:true, timeBelow:true, aligned:true, bottomAligned:true, rightAligned:true, separated:true});
+    expect(row).toMatchObject({starsRight:true, bodyBelow:true, timeBelow:true, aligned:true, bottomAligned:true, rightAligned:true, separated:true,fontSize:18,dateSize:16});
     expect(row.starSize).toBe(10); expect(row.starsWidth).toBeLessThanOrEqual(55);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
