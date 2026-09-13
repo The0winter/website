@@ -70,8 +70,7 @@ export default function AuthorProfile() {
         <div className="author-avatar">{profile?.avatar && avatarFailed !== profile.avatar
           ? <img src={profile.avatar} alt="作者头像" onError={() => setAvatarFailed(profile.avatar!)}/>
           : <UserRound size={32} aria-hidden="true"/>}</div>
-        <div className="author-identity"><p>作者</p><h1>{profile?.username || (loading ? '正在加载作者…' : '作者信息')}</h1><p>在这里阅读作者的公开作品</p></div>
-        {profile && <div className="author-count"><strong>{total}</strong><span>部作品</span></div>}
+        <div className="author-identity"><p>作者</p><h1>{profile?.username || (loading ? '正在加载作者…' : '作者信息')}</h1></div>
       </section>
       <section className="author-works" aria-label="作者作品" aria-busy={loading}>
         <header className="author-works-heading"><h2><BookOpen size={20}/>全部作品{profile && <span>（{total}）</span>}</h2><span>最近更新</span></header>
