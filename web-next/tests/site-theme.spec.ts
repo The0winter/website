@@ -1,4 +1,7 @@
-import {test, expect, type Page} from '@playwright/test';
+import {test, expect as baseExpect, type Page} from '@playwright/test';
+
+// The same read-only suite runs over an SSH preview and the public CDN.
+const expect = baseExpect.configure({timeout:15000});
 
 const base = process.env.THEME_TEST_BASE || 'http://127.0.0.1:3000';
 const toggle = (page: Page) => page.locator('.site-theme-toggle:visible').first();
@@ -14,6 +17,7 @@ async function prepare(page: Page) {
   const account={id:'000000000000000000000001', username:'主题验收', role:'reader'};
   await page.route('**/api/auth/session', route => route.fulfill({json: {user:account,profile:account}}));
   await page.route('**/api/users/*/library**', route => route.fulfill({json: []}));
+  await page.route('**/api/books/*/reviews/mine', route => route.fulfill({json: null}));
 }
 
 for (const width of [320, 390, 1440]) {
@@ -58,6 +62,7 @@ for (const width of [320, 390, 1440]) {
     // Use an ordinary internal document link to also test full page navigation.
     await page.evaluate(href => {const a=document.createElement('a');a.href=href;document.body.append(a);a.click();}, '/book/'+id);
     await expect(page.locator('.book-detail')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => history.state?.bookNavigation?.bookId)).toBe(id);
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     if (width >= 768) {
       await expect(page.locator('.book-hero h1')).toHaveCSS('color','rgb(232, 223, 213)');
