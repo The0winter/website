@@ -1,7 +1,14 @@
 .site-account-actions { display:flex; align-items:center; gap:2px; flex-shrink:0; }
-.site-theme-toggle { display:inline-flex; align-items:center; justify-content:center; flex:0 0 44px; width:44px; height:44px; border-radius:50%; color:#a97332; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-.site-theme-toggle:hover { background:var(--home-soft); }
-.site-theme-toggle:focus-visible { outline:2px solid var(--home-accent); outline-offset:1px; }
+.site-theme-toggle { position:relative; display:inline-flex; align-items:center; justify-content:center; flex:0 0 44px; width:44px; height:44px; border-radius:50%; color:#a97332; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+/* Match the visible avatar while retaining its 44px touch target. */
+.site-theme-toggle::before { content:''; position:absolute; width:32px; height:32px; border-radius:50%; }
+.site-theme-toggle>svg { position:relative; }
+.site-theme-toggle:hover::before { background:var(--home-soft); }
+.site-theme-toggle:focus-visible { outline:none; }
+.site-theme-toggle:focus-visible::before { outline:2px solid var(--home-accent); outline-offset:1px; }
+@media (max-width:767px) {
+  .site-theme-toggle::before { width:34px; height:34px; }
+}
 .site-theme-toggle:active { transform:scale(.94); }
 .site-theme-moon,.dark .site-theme-sun { display:none; }
 .dark .site-theme-moon { display:block; }
