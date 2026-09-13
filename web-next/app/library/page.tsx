@@ -4,12 +4,13 @@ import BookCover from '@/components/BookCover';
 import {Suspense, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type PointerEvent} from 'react';
 import {usePathname, useRouter, useSearchParams} from 'next/navigation';
 import Link from 'next/link';
-import {ArrowUpDown, BookOpen, Check, ChevronRight, History, MoreHorizontal, Trash2} from 'lucide-react';
+import {BookOpen, Check, ChevronRight, History, MoreHorizontal, Trash2} from 'lucide-react';
 import BookLink from '@/components/BookLink';
 import PrefetchLink from '@/components/PrefetchLink';
 import HomeSearchHeader from '@/components/HomeSearchHeader';
 import MobileBottomNav from '@/components/MobileBottomNav';
 import AccountLoading from '@/components/AccountLoading';
+import LibraryToolbar, {sorts} from '@/components/LibraryToolbar';
 import {useAuth} from '@/contexts/AuthContext';
 import {useReadingSettings} from '@/contexts/ReadingSettingsContext';
 import {useStoredState} from '@/lib/useStoredState';
@@ -21,12 +22,11 @@ import {beginLibraryVisit} from '@/lib/book-visit';
 import {formatRelativeUpdate} from '@/lib/relative-update';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {useShelfPageTurn} from '@/lib/useShelfPageTurn';
-import {navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from '@/lib/mobile-section-navigation';
+import {interruptMobileSectionTransition, navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from '@/lib/mobile-section-navigation';
 import {sectionSwipeThreshold} from '@/lib/section-swipe';
 import type {Book} from '@/lib/api';
 import './library.css';
 
-const sorts = {combined: '综合排序（默认）', read: '按最近阅读排序', updated: '按最近更新排序'};
 
 function Cover({book}: {book: Book | null}) {
   const [failed, setFailed] = useState(false);
@@ -253,6 +253,7 @@ function Library() {
   }
 
   function startSwipe(event: PointerEvent<HTMLElement>) {
+    if (!event.isPrimary) {cancelSwipe(); return;}
     suppressSwipeClick.current = false;
     swipe.current?.section?.cancel();
     swipe.current = null;
@@ -268,6 +269,7 @@ function Library() {
     if (!gesture.horizontal) {
       if (Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx)) {swipe.current = null; return;}
       if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
+      if (!interruptMobileSectionTransition()) {swipe.current = null; return;}
       if (!pageTurn.startDrag()) {swipe.current = null; return;}
       gesture.horizontal = true;
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -360,20 +362,9 @@ function Library() {
       <h1 className="sr-only">我的书架</h1>
       <div inert={managing}><HomeSearchHeader/></div>
       <section className="shelf-panel" aria-label="个人书架">
-        <header className="shelf-toolbar">
-          <div ref={tabs} className="shelf-tabs" role="tablist" aria-label="书架与浏览记录">
-            {(['history', 'shelf'] as const).map(value => <button key={value} id={`tab-${value}`} role="tab" tabIndex={tab === value ? 0 : -1} aria-selected={tab === value} aria-controls={value === tab ? 'shelf-content' : `shelf-preview-${value}`} onClick={() => changeView(value, 1)} onKeyDown={event => {
-              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-              event.preventDefault();
-              const next = event.key === 'ArrowLeft' || event.key === 'Home' ? 'history' : 'shelf';
-              changeView(next, 1); document.getElementById(`tab-${next}`)?.focus();
-            }}>{value === 'shelf' ? '书架' : '浏览记录'}</button>)}
-          </div>
-          <div className="shelf-actions">
-            <button aria-pressed={managing} disabled={!managing && !rows.length} onClick={() => managing ? finishManaging() : startManaging()}>{managing ? '返回' : '管理'}</button>
-            <label className="shelf-sort" title={sorts[sort]}><span>排序</span><ArrowUpDown size={13}/><select aria-label="书架排序" value={sort} onChange={event => {const value = event.target.value as Sort; setSort(value); changeView(tab, 1, value);}}>{Object.entries(sorts).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          </div>
-        </header>
+        <LibraryToolbar tabs={tabs} tab={tab} sort={sort} managing={managing} empty={!rows.length}
+          onTab={value => changeView(value, 1)} onManage={() => managing ? finishManaging() : startManaging()}
+          onSort={value => {setSort(value); changeView(tab, 1, value);}}/>
         <div ref={viewport} className="shelf-viewport">
         {(['shelf', 'history'] as const).map(viewTab => {
           const active = viewTab === query.tab;

@@ -14,17 +14,11 @@ import {
 } from 'lucide-react';
 import { forumApi, ForumPost } from '@/lib/api';
 import HomeSearchHeader from '@/components/HomeSearchHeader';
-import {navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from '@/lib/mobile-section-navigation';
+import {interruptMobileSectionTransition, navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from '@/lib/mobile-section-navigation';
 import {sectionSwipeThreshold} from '@/lib/section-swipe';
 import './forum.css';
 
-type FeedTab = 'recommend' | 'hot' | 'follow';
-
-const TABS: Array<{ id: FeedTab; label: string }> = [
-  { id: 'recommend', label: '推荐' },
-  { id: 'hot', label: '热榜' },
-  { id: 'follow', label: '关注' }
-];
+import ForumTabs, {FORUM_TABS as TABS, type FeedTab} from '@/components/ForumTabs';
 
 const HOT_TOPICS = [
   '春招和秋招，哪个窗口更值得冲？',
@@ -129,6 +123,7 @@ export default function ForumPage() {
     }
 
     if (dir === 'h') {
+      if (!horizontalSwipe.current && !interruptMobileSectionTransition()) {handleTouchCancel(); return;}
       horizontalSwipe.current = true;
       suppressSwipeClick.current = true;
       let newOffset = diffX;
@@ -360,24 +355,7 @@ return (
           </form>
         </HomeSearchHeader>
       </div>
-      <div className={`forum-feed-toolbar ${currentTheme.card} ${currentTheme.border}`}>
-          {/* 移动端: 选项卡均分宽度; PC端(md): 恢复靠左排布 */}
-          <nav aria-label="论坛内容分类" className="-mb-px flex flex-1 min-w-0 justify-around md:justify-start items-center md:gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {TABS.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  aria-current={isActive ? 'page' : undefined}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 md:flex-none flex justify-center items-center shrink-0 px-3 sm:px-4 h-11 border-b-2 text-[15px] font-semibold transition-colors ${isActive ? currentTheme.tabActive : currentTheme.tabIdle}`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </nav>
-      </div>
+      <ForumTabs activeTab={activeTab} onSelect={setActiveTab}/>
 
       {/* 移动端: px-0 满屏, mt-1 缩短间隙; PC端(md): 恢复内边距和外边距 */}
       <div className="max-w-[1040px] mx-auto px-0 md:px-4 mt-0 md:mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px] gap-5 md:gap-6">

@@ -1,17 +1,23 @@
 'use client';
 
-import {captureMobileSection} from './mobile-section-snapshot';
+import {captureMobileSection, captureMobileSectionShell} from './mobile-section-snapshot';
 
 type Section = 'library' | 'home' | 'forum';
 export type MobileSectionDrag = {update: (dx: number) => void; release: (commit: boolean) => void; cancel: () => void};
 const sections = ['/library', '/', '/forum'];
 const selectors = ['.library-page', '.mobile-home', '.forum-page'];
-let active: {href: string; commit: () => void; cancel: () => void} | undefined;
+let active: {href: string; commit: () => void; cancel: () => void; interrupt: () => boolean} | undefined;
 const previews = new Map<number, {element: HTMLElement; key: string}>();
 let previewUser: string | undefined;
 
 export function setMobileSectionPreviewUser(user: string) {
   if (user !== previewUser) {previews.clear(); previewUser = user;}
+}
+
+// Touch-down may be the start of a system screenshot or a pinch. Only a
+// deliberate single-finger swipe on the arrived route can take over its motion.
+export function interruptMobileSectionTransition() {
+  return active?.interrupt() ?? true;
 }
 
 function sectionLink(source: Element | null, section: Section) {
@@ -48,22 +54,9 @@ function createTransition(href: string, dragging = false): MobileSectionDrag | u
   outgoing.dataset.sectionPane = 'outgoing';
   const header = captureMobileSection(bar, 0, top, true);
   const cached = previews.get(to);
-  const incoming = cached?.key === key ? cached.element : document.createElement('div');
+  const incoming = cached?.key === key ? cached.element : captureMobileSectionShell(target.pathname, top, height);
+  if (!incoming) return;
   if (cached?.key === key) previews.delete(to);
-  else {
-    incoming.className = 'mobile-section-snapshot mobile-section-preview';
-    incoming.setAttribute('aria-hidden', 'true');
-    incoming.inert = true;
-    const title = document.createElement('div');
-    title.className = 'mobile-section-preview-title';
-    title.textContent = ['浏览记录　　书架', '精选', '推荐　　热榜　　关注'][to];
-    const loading = document.createElement('p');
-    loading.textContent = '加载中';
-    const dots = document.createElement('span');
-    dots.className = 'loading-dots'; dots.setAttribute('aria-hidden', 'true');
-    loading.append(dots);
-    incoming.append(title, loading);
-  }
   incoming.dataset.sectionPane = 'preview';
   incoming.dataset.sectionPath = target.pathname;
   incoming.style.top = `${top}px`;
@@ -90,22 +83,35 @@ function createTransition(href: string, dragging = false): MobileSectionDrag | u
     if (cached?.element === incoming) {incoming.style.transform = ''; previews.set(to, cached);}
     window.removeEventListener('popstate', cancel);
     window.removeEventListener('pagehide', clear);
-    window.removeEventListener('resize', clear);
-    document.removeEventListener('pointerdown', cancel, true);
+    window.removeEventListener('resize', resize);
     document.removeEventListener('click', click, true);
     document.removeEventListener('touchmove', preventScroll, true);
     document.removeEventListener('wheel', preventScroll, true);
     if (active?.cancel === cancel) {active = undefined; delete root.dataset.mobileSectionTransition;}
   };
   const clear = () => {cancel(); previews.clear();};
+  const resize = () => {
+    // Browser chrome and system overlays can change height during a pending
+    // request. Keep its destination visible; a breakpoint/width change resets it.
+    if (root.clientWidth !== width) {clear(); return;}
+    previews.clear();
+    const bottom = document.querySelector<HTMLElement>('.mh-bottom')?.getBoundingClientRect().top;
+    if (bottom) [outgoing, incoming, backdrop].forEach(element => {element.style.height = `${Math.max(0, bottom - top)}px`;});
+  };
   const click = (event: MouseEvent) => {
+    // Once the route exists, a real tap may use its controls immediately. Touch
+    // start alone is deliberately insufficient to dismiss the transition.
+    if (event.isTrusted && committed && ready()) {cancel(); return;}
     if ((event.target as Element).closest('.mh-bottom, .mh-topbar')) {
       if (event.isTrusted) cancel();
       return;
     }
     event.preventDefault(); event.stopPropagation();
   };
-  const preventScroll = (event: Event) => {if (event.cancelable) event.preventDefault();};
+  const preventScroll = (event: Event) => {
+    if ('touches' in event && (event as TouchEvent).touches.length > 1) return;
+    if (event.cancelable) event.preventDefault();
+  };
   const ready = () => location.pathname === target.pathname && [...document.querySelectorAll<HTMLElement>(selectors[to])]
     .some(page => page.getBoundingClientRect().width > 0);
   const check = () => {
@@ -148,11 +154,15 @@ function createTransition(href: string, dragging = false): MobileSectionDrag | u
     });
     check();
   };
-  active = {href: target.href, commit, cancel};
+  active = {href: target.href, commit, cancel, interrupt: () => {
+    if (!committed) return true;
+    if (!ready()) return false;
+    cancel();
+    return true;
+  }};
   window.addEventListener('popstate', cancel);
   window.addEventListener('pagehide', clear);
-  window.addEventListener('resize', clear);
-  document.addEventListener('pointerdown', cancel, true);
+  window.addEventListener('resize', resize);
   document.addEventListener('click', click, true);
   document.addEventListener('touchmove', preventScroll, {capture: true, passive: false});
   document.addEventListener('wheel', preventScroll, {capture: true, passive: false});

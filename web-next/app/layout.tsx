@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ReadingSettingsProvider } from "@/contexts/ReadingSettingsContext"; 
+import MobileSectionShells from "@/components/MobileSectionShells";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import BookPrefetchSession from "@/components/BookPrefetchSession";
@@ -50,6 +51,7 @@ export default function RootLayout({
   return (
     <html lang="zh">
       <body className={inter.className}>
+        <MobileSectionShells />
         <BookPrefetchSession />
         <BookNavigation />
         <Suspense fallback={null}><LoginNavigation /></Suspense>

@@ -6,6 +6,12 @@
 const styles = new WeakMap<CSSStyleSheet, {length: number; text: string; sheet?: CSSStyleSheet}>();
 const reset = '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}';
 let resetSheet: CSSStyleSheet | undefined;
+let shells: ShadowRoot | undefined;
+
+export function registerMobileSectionShells(root: ShadowRoot) {
+  shells = root;
+  return () => {if (shells === root) shells = undefined;};
+}
 
 function snapshotStyles() {
   return [...document.styleSheets].flatMap(original => {
@@ -36,6 +42,24 @@ export function warmMobileSectionStyles() {
   return () => clearTimeout(timer);
 }
 
+export function captureMobileSectionShell(path: string, top: number, height: number) {
+  const source = shells?.querySelector(`[data-mobile-section-shell="${path}"]`)?.cloneNode(true) as HTMLElement | undefined;
+  if (!source) return;
+  const measure = document.createElement('div');
+  Object.assign(measure.style, {position: 'fixed', top: '0', left: '0', width: '100%', visibility: 'hidden', pointerEvents: 'none'});
+  measure.inert = true;
+  measure.append(source);
+  document.body.append(measure);
+  try {
+    const spacer = source.querySelector<HTMLElement>('[data-section-shell-header]')!;
+    spacer.style.height = `${Math.max(0, top - spacer.getBoundingClientRect().top)}px`;
+    const tabs = source.querySelector<HTMLElement>('.shelf-tabs');
+    const selected = tabs?.querySelector<HTMLElement>('[aria-selected=true]');
+    if (selected) tabs!.style.setProperty('--shelf-tab-offset', `${selected.offsetLeft}px`);
+    return captureMobileSection(source, top, height).element;
+  } finally {measure.remove();}
+}
+
 export function captureMobileSection(source: HTMLElement, top: number, height: number, header = false) {
   const element = document.createElement('div');
   element.className = header ? 'mobile-section-header' : 'mobile-section-snapshot';
@@ -55,6 +79,9 @@ export function captureMobileSection(source: HTMLElement, top: number, height: n
   }
   const box = source.getBoundingClientRect();
   const content = source.cloneNode(true) as HTMLElement;
+  // Root-scoped font variables do not resolve identically inside a shadow
+  // tree. Preserve the source font so the frame and real route use the same face.
+  content.style.fontFamily = getComputedStyle(source).fontFamily;
   content.querySelectorAll('.mh-bottom, script, iframe').forEach(child => child.remove());
   if (!header) content.querySelectorAll<HTMLElement>('.mh-topbar').forEach(bar => {bar.style.visibility = 'hidden';});
   Object.assign(content.style, {position: 'relative', top: `${box.top - top}px`, left: `${box.left}px`, width: `${box.width}px`, margin: '0'});

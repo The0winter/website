@@ -5,15 +5,15 @@ import {LoadingText} from './BrandLoading';
 import {useEffect,useLayoutEffect,useState} from 'react';
 import {useRouter,useSearchParams} from 'next/navigation';
 import HomeSearchHeader from './HomeSearchHeader';
-import Link from './PrefetchLink';
 import MobileBottomNav from './MobileBottomNav';
 import BookLink from './BookLink';
-import {BookOpen,LayoutGrid,Trophy,CalendarDays,ChevronRight,ArrowLeft,Flame,Mountain,Building2,ScrollText,Orbit,Sparkles,ScanSearch,Check} from 'lucide-react';
+import {BookOpen,LayoutGrid,ChevronRight,ArrowLeft,Flame,Mountain,Building2,ScrollText,Orbit,Sparkles,ScanSearch,Check} from 'lucide-react';
 import type {Book} from '@/lib/api';
 import {safeFetch} from '@/lib/request';
 import {navigateBookLink,syncBookRoute} from '@/lib/book-navigation';
 import {useMobileHomeSwipe} from '@/lib/useMobileHomeSwipe';
 import './mobile-home.css';
+import {MobileHomeSection, MobileHomeShortcuts} from './MobileHomeFrame';
 
 const categories=[
   {name:'全部',icon:LayoutGrid},
@@ -86,10 +86,10 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
     <HomeSearchHeader/>
     {mode==='home'?<>
       {hero&&<BookLink href={`/book/${hero.id}`} className="mh-banner"><div><span className="mh-kicker">九天精选 · 好书推荐</span><h2>{hero.title}</h2><span className="mh-banner-sub">{hero.author||'九天小说'} <ChevronRight size={13}/></span></div><Cover book={hero} priority/><div className="mh-banner-seal" aria-hidden="true">阅</div></BookLink>}
-      <nav className="mh-shortcuts" aria-label="找书入口"><button onClick={()=>browse('category')}><span className="mh-icon coral"><LayoutGrid/></span>分类</button><button onClick={()=>browse('new')}><span className="mh-icon rose"><CalendarDays/></span>新书</button><Link href="/ranking"><span className="mh-icon purple"><Trophy/></span>排行</Link></nav>
-      <section className="mh-section"><header><h2>热门精选</h2><Link href="/ranking">更多 <ChevronRight size={14}/></Link></header><BookRows books={featured.slice(0,3)}/></section>
-      <section className="mh-section"><header><h2>精选推荐</h2><Link href="/ranking">更多 <ChevronRight size={14}/></Link></header><BookRows books={recommended.slice(0,3)}/></section>
-      <section className="mh-section"><header><h2>新书上架</h2><button onClick={()=>browse('new')}>更多 <ChevronRight size={14}/></button></header><BookRows books={newBooks.slice(0,3)}/></section>
+      <MobileHomeShortcuts onCategory={()=>browse('category')} onNew={()=>browse('new')}/>
+      <MobileHomeSection title="热门精选"><BookRows books={featured.slice(0,3)}/></MobileHomeSection>
+      <MobileHomeSection title="精选推荐"><BookRows books={recommended.slice(0,3)}/></MobileHomeSection>
+      <MobileHomeSection title="新书上架" onMore={()=>browse('new')}><BookRows books={newBooks.slice(0,3)}/></MobileHomeSection>
     </>:<section className="mh-section mh-browse">
       <header className="mh-browse-header"><button type="button" className="mh-back" onClick={back} aria-label="返回精选"><ArrowLeft size={20} aria-hidden="true"/></button><h2>{mode==='new'?'新书上架':'分类找书'}</h2></header>
       {mode==='category'&&<>

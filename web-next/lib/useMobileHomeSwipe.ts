@@ -1,7 +1,7 @@
 'use client';
 
 import {useEffect, useRef} from 'react';
-import {navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from './mobile-section-navigation';
+import {interruptMobileSectionTransition, navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from './mobile-section-navigation';
 import {sectionSwipeThreshold} from './section-swipe';
 
 export function useMobileHomeSwipe(enabled: boolean) {
@@ -27,6 +27,7 @@ export function useMobileHomeSwipe(enabled: boolean) {
       if (!gesture.horizontal) {
         if (Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx)) {cancel(); return;}
         if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
+        if (!interruptMobileSectionTransition()) {cancel(); return;}
         gesture.horizontal = true;
       }
       gesture.dx = dx;
