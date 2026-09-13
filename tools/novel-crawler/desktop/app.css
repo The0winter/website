@@ -71,8 +71,9 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 16
 .input-tag { position: absolute; right: 12px; top: 14px; color: var(--muted); font-size: 12px; }
 .input-tag.supported { color: #1d4ed8; }
 .input-tag.unsupported { color: #8c5a12; }
-.login-memory { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-top: 7px; color: var(--muted); font-size: 12px; }
-.book-fields { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-top: 18px; }
+.login-memory { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; color: var(--muted); font-size: 12px; }
+.login-memory .text-button { padding: 2px 0; }
+.book-fields { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-top: 8px; }
 .form-footer { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
 .form-footer > span { flex: 1; min-width: 160px; font-size: 12px; line-height: 1.7; color: #8c5a12; }
 .primary, .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 16px; min-height: 40px; padding: 9px 17px; border-radius: 7px; font-weight: 600; white-space: nowrap; }
@@ -148,7 +149,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 16
 }
 @media (max-width: 420px) {
   .card { padding: 18px 16px; }
-  .book-fields { grid-template-columns: 1fr; gap: 14px; margin-top: 16px; }
+  .book-fields { grid-template-columns: 1fr; gap: 14px; }
   .stats strong { font-size: 19px; }
   .stats div { padding: 0 9px; }
   .stats div:first-child { padding-left: 0; }
