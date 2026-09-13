@@ -129,7 +129,7 @@ export async function searchBooks({website, title, author = '', stateDir = defau
   try {
     if (new URL(website).pathname !== '/') {
       bookUrl(website, site);
-      const response = await client.get(website, {fresh: true, render: (site.book.transport || site.spec.transport) === 'browser', readySelector: site.book.readySelector});
+      const response = await client.get(website, {encoding: site.spec.encoding, fresh: true, render: (site.book.transport || site.spec.transport) === 'browser', readySelector: site.book.readySelector});
       const $ = load(decode(response.body, response.contentType, site.spec.encoding));
       const book = {title: selectValue($, site.book.metadata.title), author: selectValue($, site.book.metadata.author), url: response.url, site: site.name};
       checkIdentity({title, author: author || book.author, identityNormalization: site.spec.identityNormalization}, book);
@@ -143,7 +143,7 @@ export async function searchBooks({website, title, author = '', stateDir = defau
     for (let page = 0; url && page < Math.min(site.search.maxPages || 3, 20); page++) {
       if (seen.has(url)) throw Error('搜索翻页循环，需要更新适配');
       seen.add(url);
-      const response = await client.get(url, {fresh: true, render: (site.search.transport || site.spec.transport) === 'browser', readySelector: site.search.readySelector, ...(page === 0 && site.search.form ? {searchForm: {...site.search.form, value: title.trim()}} : {})});
+      const response = await client.get(url, {encoding: site.spec.encoding, fresh: true, render: (site.search.transport || site.spec.transport) === 'browser', readySelector: site.search.readySelector, ...(page === 0 && site.search.form ? {searchForm: {...site.search.form, value: title.trim()}} : {})});
       const parsed = parseSearch(decode(response.body, response.contentType, site.spec.encoding), response.url, site);
       // Search accepts title fragments; collection still verifies the selected book's full identity.
       const matches = parsed.results.filter(b => normalize(b.title).includes(query) && (!author.trim() || normalize(b.author) === requestedAuthor));
@@ -161,7 +161,7 @@ export async function resolveBook({url, title, author, stateDir = defaultStateDi
   bookUrl(url, site);
   const client = makeSiteClient(site, stateDir, {onStatus, shouldStop, signal});
   try {
-    const response = await client.get(url, {fresh: true, render: (site.book.transport || site.spec.transport) === 'browser', readySelector: site.book.readySelector});
+    const response = await client.get(url, {encoding: site.spec.encoding, fresh: true, render: (site.book.transport || site.spec.transport) === 'browser', readySelector: site.book.readySelector});
     if (response.url !== url) throw Error('书籍详情页地址发生跳转，需要核实适配');
     const $ = load(decode(response.body, response.contentType, site.spec.encoding));
     const actual = {title: selectValue($, site.book.metadata.title), author: selectValue($, site.book.metadata.author)};

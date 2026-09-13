@@ -19,7 +19,10 @@ export function decode(bytes, contentType = '', encoding) {
   const selected = encoding || (bytes[0] === 0xff && bytes[1] === 0xfe ? 'utf16-le' : bytes[0] === 0xfe && bytes[1] === 0xff ? 'utf16-be' : /charset\s*=\s*["']?([\w-]+)/i.exec(contentType)?.[1] || /charset\s*=\s*["']?([\w-]+)/i.exec(prefix)?.[1] || 'utf8');
   if (!iconv.encodingExists(selected)) throw Error(`未知编码：${selected}`);
   const text = iconv.decode(bytes, selected).replace(/^\uFEFF/u, '');
-  if (text.includes('\uFFFD')) throw Error('解码产生替换字符；需在来源配置中明确正确编码，未猜测或替换原文');
+  if (text.includes('\uFFFD')) throw Object.assign(Error(`按 ${selected} 读取页面时出现乱码（替换字符），已停止以保护正文`), {
+    code: 'decode-error',
+    nextStep: '页面能打开不代表程序使用了正确编码。请将失败章节和此提示交给 Codex 检查来源编码设置；已有章节保留。',
+  });
   return text;
 }
 
@@ -31,9 +34,9 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
     {...browserOptions.manualCaptcha, kind: 'verification', label: '验证码', configured: !!browserOptions.manualCaptcha},
     {...browserOptions.manualLogin, kind: 'login', label: '登录', configured: !!browserOptions.manualLogin},
   ].filter(action => action.configured);
-  const requiredAction = (body, contentType) => {
+  const requiredAction = (body, contentType, encoding) => {
     if (!actions.length) return null;
-    const $ = load(decode(body, contentType));
+    const $ = load(decode(body, contentType, encoding));
     return actions.find(action => $(action.selector).length);
   };
   // Also space out search, detail lookup and a new worker's first request.
@@ -129,14 +132,14 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
     if (!hosts.has(new URL(url).hostname.toLowerCase())) throw Error(`地址不在该来源配置的域名范围内：${url}`);
     return url;
   }
-  async function get(input, {fresh = false, request, render = false, readySelector, rejectSelectors = [], searchForm, selectPages} = {}) {
+  async function getPage(input, {fresh = false, request, render = false, encoding, readySelector, rejectSelectors = [], searchForm, selectPages} = {}) {
     stopped();
     if ((searchForm || selectPages) && (!render || request || browserOptions.responseMode === 'source')) throw Error('搜索表单和目录下拉分页需要浏览器 DOM 模式');
     if (searchForm && (!searchForm.input || !searchForm.submit || typeof searchForm.value !== 'string' || !searchForm.value.trim())) throw Error('搜索表单需要输入框、提交按钮和检索词');
     if (selectPages && (!selectPages.selector || !selectPages.content || !Number.isInteger(selectPages.maxPages) || selectPages.maxPages < 1 || selectPages.maxPages > 100)) throw Error('目录下拉分页配置无效');
-    const rejectedSelector = (body, contentType) => {
+    const rejectedSelector = (body, contentType, rendered = false) => {
       if (!rejectSelectors.length) return null;
-      const $ = load(decode(body, contentType));
+      const $ = load(decode(body, contentType, rendered ? 'utf8' : encoding));
       return rejectSelectors.find(selector => $(selector).length);
     };
     const original = assertUrl(input), key = hash({url: original, request, render, browser: render ? browserOptions : undefined, ...(searchForm ? {searchForm} : {}), ...(selectPages ? {selectPages} : {})});
@@ -146,7 +149,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
       assertUrl(cached.url);
       const body = fs.readFileSync(bodyPath);
       // Never replay cached login, CAPTCHA or unsupported restriction pages.
-      if (hash(body) === cached.hash && !requiredAction(body, cached.contentType) && !rejectedSelector(body, cached.contentType)) { stats.cacheHits++; return {...cached, body}; }
+      if (hash(body) === cached.hash && !requiredAction(body, cached.contentType, cached.rendered ? 'utf8' : encoding) && !rejectedSelector(body, cached.contentType, cached.rendered)) { stats.cacheHits++; return {...cached, body}; }
     }
     if (render) {
       if (request) throw Error('浏览器模式只支持网页导航');
@@ -223,7 +226,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
             }
           }
           if (!documentResponse || documentResponse.status() !== 200) throw Error(`浏览器未取得有效页面（HTTP ${documentResponse?.status() || '未知'}）；如需人工验证，请在普通浏览器中核实网站是否可用`);
-          let action = actions.length ? requiredAction(Buffer.from(await documentResponse.buffer()), documentResponse.headers()['content-type']) : null;
+          let action = actions.length ? requiredAction(Buffer.from(await documentResponse.buffer()), documentResponse.headers()['content-type'], encoding) : null;
           // Login may lead to a site CAPTCHA (or vice versa). Handle each fresh
           // restriction in this same browser without accepting an intermediate preview.
           const actionDeadline = Date.now() + Math.max(0, ...actions.map(item => item.timeoutMs));
@@ -255,7 +258,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
               if (documentResponse !== checkedResponse && page.url() === original && documentResponse?.status() === 200) {
                 checkedResponse = documentResponse;
                 const body = Buffer.from(await checkedResponse.buffer());
-                const nextAction = requiredAction(body, checkedResponse.headers()['content-type']);
+                const nextAction = requiredAction(body, checkedResponse.headers()['content-type'], encoding);
                 if (!nextAction || nextAction.kind !== action.kind) {
                   if (readySelector) await page.waitForSelector(readySelector, {timeout: Math.min(timeoutMs, Math.max(1, deadline - Date.now()))});
                   action = nextAction;
@@ -320,7 +323,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
             combined(content).html(fragments.join('\n'));
             body = Buffer.from(combined.html());
           }
-          const rejected = rejectedSelector(body, sourceMode ? documentResponse.headers()['content-type'] : 'text/html; charset=utf-8');
+          const rejected = rejectedSelector(body, sourceMode ? documentResponse.headers()['content-type'] : 'text/html; charset=utf-8', !sourceMode);
           if (rejected) throw rejectedPage(rejected, original);
           await savedCookies?.save(browser.defaultBrowserContext());
           if (body.length > maxBytes) throw Error('渲染页面超过大小限制');
@@ -399,6 +402,10 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
       return {...meta, body};
     }
     throw Error('重定向次数超过限制');
+  }
+  async function get(input, options) {
+    try { return await getPage(input, options); }
+    catch (error) { error.url ||= String(input); throw error; }
   }
   return {get, assertUrl, stats, showBrowser, close: async () => { signal?.removeEventListener('abort', abort); await closeBrowser(); }};
 }

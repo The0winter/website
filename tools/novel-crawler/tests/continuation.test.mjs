@@ -73,6 +73,19 @@ test('switching checks three ending bodies, appends in the original file and rem
   assert.equal(readJson(f.file).chapters.length, 7);
 });
 
+test('an anchor decode failure retains the actual chapter URL and encoding advice without changing the old book', async t => {
+  const f = await fixture(t), original = fs.readFileSync(f.file);
+  f.state.bodies[2] = '\uFFFD';
+  const report = await f.run({mode: 'probe'});
+  assert.equal(report.structuralPass, false);
+  const failure = report.failures[0];
+  assert.equal(failure.chapter, 2); assert.equal(failure.title, title(2));
+  assert.equal(failure.link, f.base + '/new/c/2'); assert.equal(failure.url, failure.link);
+  assert.equal(failure.code, 'decode-error'); assert.match(failure.nextStep, /编码/);
+  assert.deepEqual(f.state.requests, ['/new/book', '/new/c/2']);
+  assert.deepEqual(fs.readFileSync(f.file), original);
+});
+
 test('old notices stay in place; equal new-source notices are not appended twice', async t => {
   const f = await fixture(t);
   f.book.chapters.push({chapter_number: 5, title: '2026一月月票抽奖活动！', content: '感谢各位读者支持本书。月票抽奖活动开始了。', link: 'https://old.example/notice'});
@@ -270,6 +283,11 @@ test('title, body, author, missing chapter and split chapter conflicts leave ori
       if (scenario === 'unknown-notice') f.state.titles[5] = '不明内容';
       const report = await f.run();
       assert.equal(report.structuralPass, false); assert.equal(report.exportFile, null);
+      if (scenario === 'anchor-body') {
+        assert.equal(report.failures[0].code, 'continuation-body-conflict');
+        assert.equal(report.failures[0].url, f.base + '/new/c/4');
+        assert.equal(report.failures[0].chapter, 4); assert.match(report.failures[0].nextStep, /版本差异/);
+      }
       assert.deepEqual(fs.readFileSync(f.file), original); assert.equal(fs.existsSync(path.join(f.dir, 'binding.json')), false);
     });
   }

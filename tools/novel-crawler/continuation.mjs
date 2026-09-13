@@ -6,6 +6,7 @@ import {qualityReport} from './quality.mjs';
 import {getCatalog, getChapter} from './adapters.mjs';
 import {makeClient} from './http.mjs';
 import {browserProfile} from './browser-session.mjs';
+import {failureDetails} from './diagnostics.mjs';
 import {formatChapterForExport} from './titles.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
 
@@ -263,7 +264,7 @@ export async function acquireContinuation(spec, options) {
   const initialStats = {...client.stats}, started = Date.now();
   const failures = [], anchors = [], tail = [], {skipped, resolutions} = reviewer;
   let catalog = [], evidence, added = 0, paused = false, exportFile = null, reusedExport = false, quality = {issues: []}, nextBook = book, fetched = 0;
-  async function chapter(entry, links) {
+  async function readChapter(entry, links) {
     if (stopped()) throw Error('采集已暂停');
     const checkpoint = path.join(sourceDir, 'chapters', hash(entry.link) + '.json'), saved = readJson(checkpoint);
     if (saved && (saved.hash !== hash(saved.chapter) || saved.chapter.link !== entry.link || saved.chapter.chapter_number !== entry.chapter_number || saved.catalogTitle !== entry.title)) throw Error(`新来源检查点与目录不匹配：${entry.title}`);
@@ -273,6 +274,13 @@ export async function acquireContinuation(spec, options) {
     const report = qualityReport([entry], [value], [], 'probe');
     if (report.issues.some(issue => issue.level !== 'info' && issue.code !== 'short-outlier')) throw Object.assign(Error(`新来源章节需核对「${entry.title}」：${report.issues.map(issue => issue.code).join('、')}`), {continuationConflict: true});
     return value;
+  }
+  async function chapter(entry, links) {
+    try { return await readChapter(entry, links); }
+    catch (error) {
+      Object.assign(error, {chapter: entry.chapter_number, title: entry.title, link: entry.link, url: error.url || entry.link});
+      throw error;
+    }
   }
   try {
     options.onStatus?.({kind: 'continuation', message: switching ? '正在对齐新旧目录并核对末尾正文…' : '正在检查当前续更来源的新增目录…'});
@@ -294,7 +302,13 @@ export async function acquireContinuation(spec, options) {
           const value = await chapter(catalog[candidate.index], links);
           if (oldBody.length >= 100 && oldBody === bodyKey(value.content, value.title)) { actual = value; match = candidate; break; }
         }
-        if (!actual) throw Error(`衔接正文不一致「${previous.title}」，旧书已保留，请核对是否删文或拆合章`);
+        if (!actual) {
+          const entry = catalog[matches[0].index];
+          throw Object.assign(Error(`衔接正文不一致「${previous.title}」，旧书已保留，请核对版本差异`), {
+            code: 'continuation-body-conflict', chapter: entry.chapter_number, title: entry.title, link: entry.link, url: entry.link,
+            nextStep: '来源正文与本地末尾章节不完全一致，原书保留。可先跳过这本，将失败章节交给 Codex 核对具体文字或版本差异。',
+          });
+        }
         anchors.push({oldPosition: old.index + 1, sourcePosition: match.index + 1, oldLink: previous.link, newLink: actual.link, oldHash: hash(previous.content), newHash: hash(actual.content)});
         boundary = match.index;
       }
@@ -348,7 +362,7 @@ export async function acquireContinuation(spec, options) {
     }
   } catch (error) {
     paused ||= !!stopped();
-    if (!paused) failures.push({error: error.message, nextStep: '原文件和已取得的新来源检查点均保留；核对衔接目录、正文或文件变更后重新查找续更。'});
+    if (!paused) failures.push(failureDetails(error, error.chapter ? {chapter: error.chapter, title: error.title, link: error.link} : {}));
   } finally { if (!options.client) await client.close(); }
   const issues = quality.issues.filter(issue => issue.chapter > lastOrdinal);
   const errors = failures.length + issues.filter(issue => issue.level === 'error').length;

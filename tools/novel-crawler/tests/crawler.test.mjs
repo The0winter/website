@@ -329,6 +329,42 @@ test('browser source mode uses the full catalog and preserves server text despit
   } finally { await client.close(); }
 });
 
+test('browser source restriction checks and cached pages use the configured UTF-8 encoding despite a GBK declaration', async t => {
+  const f = await fixture(t, (req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=gbk');
+    const page = req.url === '/book' ? heading + '<div id="catalog"><a href="/a">第一章 开始</a></div>' :
+      `<h1>第一章 开始</h1><div id="content">${prose('完整正文')}</div>${req.url === '/restricted' ? '<div id="cfts">需要验证</div>' : ''}`;
+    res.end(iconv.encode('<meta charset="gbk">' + page, 'gbk'));
+  });
+  const spec = {...specFor(f.base), transport: 'browser', encoding: 'utf8', browser: {responseMode: 'source', manualCaptcha: {selector: '#captcha', timeoutMs: 1000}},
+    chapter: {title: 'h1', content: '#content', rejectSelectors: ['#cfts']}};
+  const report = await acquire(spec, f.options);
+  assert.equal(report.completeAgainstSource, true, JSON.stringify(report.failures));
+  assert.equal(readJson(report.exportFile).chapters[0].content, prose('完整正文'));
+  const client = makeClient({cacheDir: path.join(f.options.stateDir, 'cache'), allowedHosts: ['127.0.0.1'], delayMs: 200, retries: 0, browser: spec.browser});
+  try {
+    const options = {render: true, encoding: spec.encoding, readySelector: '#content', rejectSelectors: ['#cfts']};
+    const cached = await client.get(f.base + '/a', options);
+    assert.equal(client.stats.cacheHits, 1); assert.equal(f.counts.get('/a'), 1);
+    assert.throws(() => decode(cached.body, cached.contentType), /替换字符/);
+    assert.match(decode(cached.body, cached.contentType, spec.encoding), /完整正文/);
+    await assert.rejects(client.get(f.base + '/restricted', options), error => error.code === 'page-restricted' && error.url === f.base + '/restricted');
+  } finally { await client.close(); }
+});
+
+test('HTTP restriction checks honor explicit encoding and still reject invalid bytes with the failed URL', async t => {
+  const f = await fixture(t, (req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=gbk');
+    res.end(req.url === '/broken' ? Buffer.from([0xff]) : Buffer.from('<meta charset="gbk"><article>正文内容完整。</article>'));
+  });
+  const client = makeClient({cacheDir: path.join(f.dir, 'encoding'), allowedHosts: ['127.0.0.1'], delayMs: 200});
+  try {
+    const options = {encoding: 'utf8', rejectSelectors: ['#cfts']};
+    assert.match(decode((await client.get(f.base + '/ok', options)).body, '', 'utf8'), /正文内容完整/);
+    await assert.rejects(client.get(f.base + '/broken', options), error => error.code === 'decode-error' && error.url === f.base + '/broken' && /utf8/.test(error.message));
+  } finally { await client.close(); }
+});
+
 test('library browser requests retry navigation timeouts twice without retrying restricted pages', async t => {
   const f = await fixture(t, (req, res, counts) => {
     if (req.url === '/slow' && counts.get('/slow') < 3) return;

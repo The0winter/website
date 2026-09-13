@@ -89,7 +89,7 @@ function nextPage($, selector, base, client) {
 
 export async function getCatalog(spec, client) {
   const inlinePages = spec.catalog?.selectPages && (!spec.catalog.url || httpUrl(spec.catalog.url, spec.sourceUrl) === spec.sourceUrl);
-  const first = await client.get(spec.sourceUrl, {fresh: true, render: inlinePages || spec.transport === 'browser', readySelector: spec.metadata.readySelector, ...(inlinePages ? {selectPages: spec.catalog.selectPages} : {})});
+  const first = await client.get(spec.sourceUrl, {encoding: spec.encoding, fresh: true, render: inlinePages || spec.transport === 'browser', readySelector: spec.metadata.readySelector, ...(inlinePages ? {selectPages: spec.catalog.selectPages} : {})});
   const $ = load(decode(first.body, first.contentType, spec.encoding));
   const actual = {title: selectValue($, spec.metadata.title), author: selectValue($, spec.metadata.author)};
   checkIdentity(spec, actual);
@@ -99,7 +99,7 @@ export async function getCatalog(spec, client) {
   let url = spec.catalog?.url ? client.assertUrl(httpUrl(spec.catalog.url, spec.sourceUrl)) : first.url;
   const config = spec.catalog;
   if (config?.json) {
-    const page = await client.get(url, {fresh: true, request: config.request});
+    const page = await client.get(url, {encoding: spec.encoding, fresh: true, request: config.request});
     const parsed = JSON.parse(decode(page.body, page.contentType, spec.encoding));
     const field = (item, key) => key.split('.').reduce((result, part) => result?.[part], item);
     const items = field(parsed, config.json.items);
@@ -130,7 +130,7 @@ export async function getCatalog(spec, client) {
     if (seenPages.has(url)) throw Error('目录翻页形成循环，未使用不完整目录');
     if (seenPages.size >= (config.maxPages || 100)) throw Error('目录页数超过配置上限');
     seenPages.add(url);
-    const page = url === first.url ? first : await client.get(url, {fresh: true, render: !!config.selectPages || (config.transport || spec.transport) === 'browser', readySelector: config.readySelector, selectPages: config.selectPages});
+    const page = url === first.url ? first : await client.get(url, {encoding: spec.encoding, fresh: true, render: !!config.selectPages || (config.transport || spec.transport) === 'browser', readySelector: config.readySelector, selectPages: config.selectPages});
     if (page.url !== url) throw Error('目录页面跳转，需核实来源配置');
     const doc = load(decode(page.body, page.contentType, spec.encoding));
     const links = doc(config.links);
@@ -190,7 +190,7 @@ function nextChapter($, spec, pageUrl, client) {
 // today's latest list. Previously validated prose is not downloaded again.
 export async function refreshNextChapter(spec, chapter, client) {
   const url = chapter.provenance.at(-1).url;
-  const response = await client.get(url, {fresh: true, render: (spec.chapter.transport || spec.transport) === 'browser', readySelector: spec.chapter.content, rejectSelectors: spec.chapter.rejectSelectors});
+  const response = await client.get(url, {encoding: spec.encoding, fresh: true, render: (spec.chapter.transport || spec.transport) === 'browser', readySelector: spec.chapter.content, rejectSelectors: spec.chapter.rejectSelectors});
   if (response.url !== url) throw Error('续传末页发生跳转，已停止');
   const $ = load(decode(response.body, response.contentType, spec.encoding));
   if (normalizedTitle(selectValue($, spec.chapter.title)) !== normalizedTitle(chapter.title) || nextPage($, spec.chapter.next, url, client)) throw Error('已保存章节的标题或分页变化，需核对后继续');
@@ -208,7 +208,7 @@ export async function getChapter(spec, chapter, catalogLinks, client) {
     if (url !== chapter.link && catalogLinks.has(url)) throw Error('章节下一页指向另一章，拒绝拼接');
     if (walkId && walkChapterIdentity(spec, url, true) !== walkId) throw Error('章节下一页指向另一章，拒绝拼接');
     seen.add(url);
-    const response = await client.get(url, {render: (config.transport || spec.transport) === 'browser', readySelector: config.content, rejectSelectors: config.rejectSelectors});
+    const response = await client.get(url, {encoding: spec.encoding, render: (config.transport || spec.transport) === 'browser', readySelector: config.content, rejectSelectors: config.rejectSelectors});
     if (response.url !== url) throw Error('章节页面发生跳转，拒绝错配正文');
     const $ = load(decode(response.body, response.contentType, spec.encoding));
     const rejected = config.rejectSelectors?.find(selector => $(selector).length);
@@ -271,7 +271,7 @@ export function splitText(text, spec) {
 }
 
 export async function getResource(spec, client, jobDir) {
-  const evidence = await client.get(spec.sourceUrl, {fresh: true});
+  const evidence = await client.get(spec.sourceUrl, {encoding: spec.encoding, fresh: true});
   const $ = load(decode(evidence.body, evidence.contentType, spec.encoding));
   const actual = {title: selectValue($, spec.metadata.title), author: selectValue($, spec.metadata.author)};
   checkIdentity(spec, actual);
