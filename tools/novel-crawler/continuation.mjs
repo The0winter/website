@@ -317,7 +317,8 @@ export async function acquireContinuation(spec, options) {
         // Transport/access and checkpoint failures must stop the batch. Only
         // complete source bodies with reviewable content conflicts may continue.
         if (paused || stopped() || (!loaded && !error.continuationConflict)) throw error;
-        failures.push({chapter: entry.chapter_number, title: entry.title, link: entry.link, error: error.message, nextStep: '已保存完整正文可供核对，其他章节继续采集；全部冲突解决后才更新原书。'});
+        failures.push({chapter: entry.chapter_number, title: entry.title, link: entry.link, error: error.message, nextStep: options.stopOnFailure ? '本书已暂停，请核对完整正文；已有章节和原文件保留。' : '已保存完整正文可供核对，其他章节继续采集；全部冲突解决后才更新原书。'});
+        if (options.stopOnFailure) break;
       }
       options.onProgress?.({jobId: id, mode, downloaded: tail.length + skipped.length, total: targets.length, failed: failures.length});
     }

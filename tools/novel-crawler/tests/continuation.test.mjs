@@ -146,6 +146,18 @@ test('similar versions, deleted paragraphs and reworded prose are not silently d
   });
 });
 
+test('library continuation stops at the first content conflict and preserves the original file', async t => {
+  const f = await fixture(t), original = fs.readFileSync(f.file);
+  f.state.count = 7;
+  f.state.titles[6] = title(5); f.state.bodies[6] = body(5) + '需要人工核对的不同版本。';
+  f.state.titles[7] = title(6); f.state.bodies[7] = body(6);
+  const failed = await f.run({stopOnFailure: true});
+  assert.equal(failed.exportFile, null); assert.deepEqual(fs.readFileSync(f.file), original);
+  assert.equal(failed.failures[0].link, f.base + '/new/c/6');
+  assert.match(failed.failures[0].nextStep, /本书已暂停/);
+  assert.equal(f.state.requests.includes('/new/c/7'), false);
+});
+
 test('conflicts retain later chapters, and a reviewed incoming version resumes without downloading bodies again', async t => {
   const f = await fixture(t), original = fs.readFileSync(f.file);
   f.state.count = 7;

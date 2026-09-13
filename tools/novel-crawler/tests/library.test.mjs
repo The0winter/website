@@ -10,16 +10,22 @@ import {atomicWrite, hash, readJson} from '../storage.mjs';
 import {planLibrary, updateLibrary} from '../desktop/library.mjs';
 import {specForBook} from '../desktop/sources.mjs';
 import {createDesktop} from '../desktop/server.mjs';
+import {createLibraryControl} from '../desktop/library-control.mjs';
 
 const title = n => `第${n}章 山间故事${n}`;
 const body = n => Array.from({length: 180}, (_, i) => String.fromCodePoint(0x4e00 + n * 200 + i)).join('').repeat(4);
 async function fixture(t) {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'novel-library-')), outputDir = path.join(stateDir, 'downloads');
-  const state = {counts: {alpha: 3, beta: 3}, requests: [], fail: null, hold: null};
+  const state = {counts: {alpha: 3, beta: 3}, requests: [], fail: null, hold: null, failures: {}, retryAfter: null};
   const server = http.createServer((req, res) => {
     state.requests.push(req.url);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     if (state.hold === req.url) return;
+    if (state.failures[req.url] > 0) {
+      state.failures[req.url]--; res.statusCode = 503;
+      if (state.retryAfter) res.setHeader('Retry-After', state.retryAfter);
+      return res.end('temporary read failure');
+    }
     const [, kind, id, number] = req.url.split('/');
     if (id === state.fail) { res.statusCode = 503; return res.end('source unavailable'); }
     if (kind === 'book') return res.end(`<h1>${id}故事</h1><b>测试作者</b><nav>${Array.from({length: state.counts[id] || 3}, (_, i) => `<a href="/chapter/${id}/${i+1}">${title(i+1)}</a>`).join('')}</nav>`);
@@ -36,7 +42,7 @@ async function fixture(t) {
     book: {urlPattern: '^/book/(?<bookId>[a-z]+)$', metadata: {title: 'h1', author: 'b'}},
     spec: {version: 1, kind: 'html', variant: 'library-v1', title: '${title}', author: '${author}', sourceUrl: '${sourceUrl}',
       delayMs: 200, retries: 0, timeoutMs: 1000, metadata: {title: 'h1', author: 'b'}, catalog: {links: 'nav a'}, chapter: {title: 'h1', content: 'article'}}};
-  const options = {stateDir, outputDir, sites: [site]};
+  const options = {stateDir, outputDir, sites: [site], onFailure: async () => 'skip'};
   const spec = id => specForBook({url: base + '/book/' + id, title: `${id}故事`, author: '测试作者'}, [site]);
   const seed = async id => {
     const report = await acquire(spec(id), {...options, mode: 'download'});
@@ -56,7 +62,7 @@ async function until(check) {
   assert.fail('timed out');
 }
 
-test('batch appends only new raw chapters, continues after failure, and reuses unchanged exports', async t => {
+test('batch appends only new raw chapters, continues after manual skip, and reuses unchanged exports', async t => {
   const f = await fixture(t), alpha = await f.seed('alpha'), beta = await f.seed('beta');
   const original = readJson(alpha), betaBytes = fs.readFileSync(beta), betaTime = fs.statSync(beta).mtimeMs;
   f.legacy('aaa'); f.state.fail = 'aaa';
@@ -65,7 +71,8 @@ test('batch appends only new raw chapters, continues after failure, and reuses u
   f.state.counts.alpha = 5; f.state.requests = [];
   const result = await updateLibrary(f.options);
   assert.equal(result.total, 4); assert.equal(result.updated, 1); assert.equal(result.unchanged, 1);
-  assert.equal(result.failed, 1); assert.equal(result.skipped, 1); assert.equal(result.added, 2);
+  assert.equal(result.failed, 0); assert.equal(result.skipped, 2); assert.equal(result.added, 2);
+  assert.equal(f.state.requests.filter(url => url === '/book/aaa').length, 3);
   assert.deepEqual(readJson(alpha).chapters.slice(0, 3), original.chapters);
   assert.deepEqual(fs.readFileSync(beta), betaBytes); assert.equal(fs.statSync(beta).mtimeMs, betaTime);
   assert.deepEqual(f.state.requests.filter(url => url.startsWith('/chapter/')), ['/chapter/alpha/4', '/chapter/alpha/5']);
@@ -112,7 +119,7 @@ test('reading bindings select the reviewed file once and keep old raw exports un
   assert.equal(result.added, 1, JSON.stringify(result.items)); assert.equal(readJson(readingFile).chapters.length, 4);
   assert.deepEqual(fs.readFileSync(rawFile), originalRaw);
   f.site.spec.variant = 'library-v2';
-  assert.equal(planLibrary(f.options)[0].state, 'skipped');
+  assert.equal(planLibrary(f.options)[0].state, 'blocked');
 });
 
 test('modified exports, duplicate versions and damaged bindings are protected before source requests', async t => {
@@ -135,7 +142,7 @@ test('queue detects edits after scanning and abort stops remaining books without
   const first = await updateLibrary({...f.options, onLibrary: batch => {
     if (!changed && batch.items.some(item => item.state === 'running')) { changed = true; fs.appendFileSync(alpha, '\n'); }
   }});
-  assert.equal(first.failed, 1); assert.equal(first.unchanged, 1); assert.match(first.items[0].message, /排队期间/);
+  assert.equal(first.skipped, 1); assert.equal(first.unchanged, 1); assert.match(first.items[0].message, /排队期间/);
   const controller = new AbortController(); f.state.requests = [];
   const stopped = await updateLibrary({...f.options, signal: controller.signal, onLibrary: () => controller.abort()});
   assert.equal(stopped.stopped, true); assert.deepEqual(f.state.requests, []);
@@ -196,4 +203,100 @@ test('empty libraries complete and interrupted saved batches restart as stopped'
   const app = await createDesktop({...f.options, loadSources: () => ({sites: [f.site], errors: []})});
   try { assert.equal(app.state().phase, 'paused'); assert.equal(app.state().batch.items[0].state, 'stopped'); assert.match(app.state().message, /更新书库/); }
   finally { await app.close(); }
+});
+
+test('two automatic retries recover a temporary chapter failure without asking for help', async t => {
+  const f = await fixture(t), file = await f.seed('alpha'), before = readJson(file);
+  f.state.counts.alpha = 4; f.state.failures['/chapter/alpha/4'] = 2; f.state.requests = [];
+  const statuses = [];
+  const result = await updateLibrary({...f.options, onStatus: status => statuses.push(status), onFailure: () => assert.fail('should recover automatically')});
+  assert.equal(result.added, 1); assert.equal(result.updated, 1);
+  assert.deepEqual(readJson(file).chapters.slice(0, 3), before.chapters);
+  assert.equal(f.state.requests.filter(url => url === '/chapter/alpha/4').length, 3);
+  assert.equal(statuses.filter(status => status.kind === 'retrying').length, 2);
+  assert.match(statuses.find(status => status.kind === 'retrying').message, /1\/2/);
+});
+
+test('long Retry-After and protected files ask for help without automatic retry loops', async t => {
+  const f = await fixture(t), file = await f.seed('alpha'), original = fs.readFileSync(file);
+  f.state.failures['/book/alpha'] = 10; f.state.retryAfter = '120'; f.state.requests = [];
+  let asked = 0;
+  const limited = await updateLibrary({...f.options, onFailure: book => { asked++; assert.match(book.message, /Retry-After=120/); return 'skip'; }});
+  assert.equal(asked, 1); assert.equal(limited.skipped, 1); assert.equal(f.state.requests.length, 1);
+  f.state.failures = {}; f.state.retryAfter = null; f.state.requests = [];
+  fs.appendFileSync(file, '\n');
+  const restored = await updateLibrary({...f.options, onFailure: book => {
+    assert.match(book.message, /已被修改/); assert.deepEqual(f.state.requests, []); fs.writeFileSync(file, original); return 'retry';
+  }});
+  assert.equal(restored.unchanged, 1);
+});
+
+test('stop and gentle pause release an indefinite help wait without reading the next book', async t => {
+  for (const mode of ['stop', 'pause']) {
+    const f = await fixture(t), file = await f.seed('alpha'); await f.seed('beta');
+    fs.appendFileSync(file, '\n'); f.state.requests = [];
+    const controller = new AbortController(); let paused = false;
+    const control = createLibraryControl({signal: controller.signal, shouldStop: () => paused});
+    const result = await updateLibrary({...f.options, onFailure: undefined, signal: controller.signal, shouldStop: () => paused, control,
+      onLibrary: batch => { if (batch.items.some(item => item.state === 'waiting')) { if (mode === 'stop') controller.abort(); else { paused = true; control.interrupt(); } } }});
+    assert.equal(result.stopped, true); assert.deepEqual(f.state.requests, []);
+    assert.ok(result.items.every(item => item.state === 'stopped'));
+  }
+});
+
+test('desktop waits after three failed reads, survives refresh, retries and skips only the selected book', async t => {
+  const f = await fixture(t), file = await f.seed('alpha'); await f.seed('beta');
+  f.state.counts.alpha = 6; f.state.failures['/chapter/alpha/4'] = 20; f.state.requests = [];
+  const app = await createDesktop({...f.options, loadSources: () => ({sites: [f.site], errors: []})});
+  const browser = await puppeteer.launch({headless: true, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe'});
+  try {
+    const page = await browser.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message));
+    await page.setViewport({width: 1180, height: 920}); await page.goto(app.url);
+    await page.waitForSelector('.site-choice'); await page.click('#update-library');
+    await page.waitForSelector('#library-help', {visible: true});
+    assert.equal(app.state().phase, 'library-wait');
+    const alphaId = app.state().batch.items.find(item => item.state === 'waiting').controlId;
+    assert.equal(f.state.requests.filter(url => url === '/chapter/alpha/4').length, 3);
+    assert.equal(f.state.requests.includes('/chapter/alpha/5'), false, 'a failed page must wait for help before later chapters');
+    assert.equal(f.state.requests.includes('/book/beta'), false);
+    assert.equal(readJson(file).chapters.length, 3);
+    assert.match(await page.$eval('#library-help', el => el.textContent), /第 4 项/);
+    assert.match(await page.title(), /需要你处理/);
+    const saved = readJson(path.join(f.options.stateDir, 'desktop-last-task.json'));
+    assert.equal(saved.phase, 'library-wait');
+    const count = f.state.requests.length;
+    await page.reload(); await page.waitForSelector('#library-retry', {visible: true});
+    assert.equal(f.state.requests.length, count, 'refresh must not retry or advance');
+    const images = path.resolve('.novel-crawler/library-help-qa'); fs.mkdirSync(images, {recursive: true});
+    for (const width of [1180, 390, 320]) {
+      await page.setViewport({width, height: 920});
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await page.screenshot({path: path.join(images, `waiting-${width}.png`), fullPage: true});
+    }
+    f.state.failures = {}; f.state.fail = 'beta';
+    await page.click('#library-retry');
+    await until(() => app.state().phase === 'library-wait' && app.state().title === 'beta故事');
+    await page.waitForFunction(() => document.querySelector('#library-help').textContent.includes('beta故事'));
+    assert.equal(readJson(file).chapters.length, 6);
+    assert.equal((await request(app, 'library-action', {controlId: alphaId, action: 'skip'})).status, 409);
+    await page.click('#library-skip');
+    await until(() => app.state().phase === 'complete');
+    assert.equal(app.state().batch.updated, 1); assert.equal(app.state().batch.skipped, 1);
+    assert.match(app.state().batch.items.find(item => item.title === 'beta故事').message, /手动跳过/);
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); await app.close(); }
+});
+
+test('manual skip aborts a pending source request and lets the next book finish', async t => {
+  const f = await fixture(t); await f.seed('alpha'); await f.seed('beta');
+  f.state.hold = '/book/alpha'; f.state.requests = [];
+  const app = await createDesktop({...f.options, loadSources: () => ({sites: [f.site], errors: []})});
+  try {
+    await request(app, 'update-library'); await until(() => f.state.requests.includes('/book/alpha'));
+    const current = app.state().batch.items.find(item => item.state === 'running');
+    assert.equal((await request(app, 'library-action', {controlId: current.controlId, action: 'skip'})).status, 200);
+    await until(() => app.state().phase === 'complete');
+    assert.equal(app.state().batch.skipped, 1); assert.equal(app.state().batch.unchanged, 1);
+    assert.equal(f.state.requests.filter(url => url === '/book/alpha').length, 1);
+  } finally { await app.close(); }
 });

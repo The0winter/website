@@ -307,7 +307,7 @@ async function acquireRaw(input, options = {}) {
           if (shouldStop()) { paused = true; break; }
           failures.push(failureDetails(error, {chapter: entry?.chapter_number || index + 1, title: entry?.title, link: entry?.link}));
           // Three consecutive failing pages usually mean the source has stopped serving us.
-          if (walk || error.stopSource || ++consecutiveFailures >= 3) break;
+          if (options.stopOnFailure || walk || error.stopSource || ++consecutiveFailures >= 3) break;
         }
         options.onProgress?.({jobId: id, mode, downloaded: chapters.length, total, failed: failures.length});
       }

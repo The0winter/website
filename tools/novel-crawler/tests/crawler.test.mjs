@@ -329,6 +329,25 @@ test('browser source mode uses the full catalog and preserves server text despit
   } finally { await client.close(); }
 });
 
+test('library browser requests retry navigation timeouts twice without retrying restricted pages', async t => {
+  const f = await fixture(t, (req, res, counts) => {
+    if (req.url === '/slow' && counts.get('/slow') < 3) return;
+    if (req.url === '/denied') { res.statusCode = 403; return res.end('forbidden'); }
+    res.end('<h1>已恢复</h1><div id="content">合成测试正文</div>');
+  });
+  const statuses = [];
+  const client = makeClient({allowedHosts: ['127.0.0.1'], cacheDir: path.join(f.dir, 'browser-retry'), delayMs: 200, timeoutMs: 300,
+    retries: 2, retryNetworkErrors: true, onStatus: status => statuses.push(status)});
+  try {
+    const result = await client.get(f.base + '/slow', {render: true, readySelector: '#content'});
+    assert.match(result.body.toString(), /合成测试正文/);
+    assert.equal(f.counts.get('/slow'), 3); assert.equal(client.stats.retries, 2);
+    assert.equal(statuses.filter(status => status.kind === 'retrying').length, 2);
+    await assert.rejects(client.get(f.base + '/denied', {render: true}), /HTTP 403/);
+    assert.equal(f.counts.get('/denied'), 1);
+  } finally { await client.close(); }
+});
+
 test('sparse probes stop after three failed requests instead of requiring adjacent chapter numbers', async t => {
   const f = await fixture(t, (req, res) => {
     if (req.url === '/book') res.end(heading + `<div id="catalog">${Array.from({length: 100}, (_, i) => `<a href="/a${i + 1}">第${i + 1}章</a>`).join('')}</div>`);

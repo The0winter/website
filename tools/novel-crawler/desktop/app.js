@@ -3,7 +3,7 @@ const token = location.hash.slice(1) || sessionStorage.getItem('desktop-token');
 if (token) sessionStorage.setItem('desktop-token', token);
 history.replaceState(null, '', '/');
 let data, selectedUrl = '', initialized = false, pollRunning = false, active = false, resultsKey = '', sitesKey = '';
-let diagnosticKey = '', interruptionKey = '', libraryKey = '', librarySubmitting = false;
+let diagnosticKey = '', interruptionKey = '', libraryKey = '', libraryHelpKey = '', librarySubmitting = false, libraryDecisionPending = false;
 const diagnostics = document.createElement('div');
 diagnostics.id = 'task-diagnostics';
 $('report-stats').after(diagnostics);
@@ -12,8 +12,15 @@ attention.id = 'manual-attention'; attention.className = 'attention-box'; attent
 const attentionText = document.createElement('p'), showBrowser = document.createElement('button');
 showBrowser.id = 'show-browser'; showBrowser.type = 'button'; showBrowser.className = 'secondary'; showBrowser.textContent = '显示采集窗口 ↗';
 attention.append(attentionText, showBrowser); diagnostics.before(attention);
-const phases = {idle: '等待开始', library: '整理书库', search: '查找中', ready: '等待选择', resolving: '读取目录', probe: '抽样检查', download: '正在下载', pausing: '正在暂停', paused: '已暂停', stopping: '正在停止', stopped: '已停止', probed: '试采通过', complete: '已完成', error: '采集中断'};
-const working = phase => ['library', 'search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(phase);
+const libraryHelp = document.createElement('div'); libraryHelp.id = 'library-help'; libraryHelp.className = 'attention-box'; libraryHelp.hidden = true; libraryHelp.setAttribute('role', 'alert');
+attention.after(libraryHelp);
+const retryBook = document.createElement('button'), skipBook = document.createElement('button');
+retryBook.id = 'library-retry'; retryBook.type = 'button'; retryBook.className = 'primary'; retryBook.textContent = '处理好了，重试这本'; retryBook.hidden = true;
+skipBook.id = 'library-skip'; skipBook.type = 'button'; skipBook.className = 'secondary'; skipBook.textContent = '跳过，更新下一本'; skipBook.hidden = true;
+const libraryDecisionBar = document.createElement('div'); libraryDecisionBar.className = 'task-actions';
+libraryDecisionBar.append(retryBook, skipBook); libraryHelp.after(libraryDecisionBar);
+const phases = {idle: '等待开始', library: '整理书库', 'library-wait': '等待你处理', search: '查找中', ready: '等待选择', resolving: '读取目录', probe: '抽样检查', download: '正在下载', pausing: '正在暂停', paused: '已暂停', stopping: '正在停止', stopped: '已停止', probed: '试采通过', complete: '已完成', error: '采集中断'};
+const working = phase => ['library', 'library-wait', 'search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(phase);
 async function api(action, body) {
   const response = await fetch(`/api/${action}`, {method: body === undefined ? 'GET' : 'POST', headers: {'x-desktop-token': token || '', 'Content-Type': 'application/json'}, ...(body === undefined ? {} : {body: JSON.stringify(body)})});
   const result = await response.json();
@@ -130,14 +137,15 @@ function render() {
   active = task.busy || working(task.phase);
   const isLibrary = task.kind === 'library', batch = isLibrary ? task.batch : null;
   $('update-library').disabled = active || librarySubmitting;
-  $('update-library').dataset.running = String(isLibrary && active);
-  $('update-library-label').textContent = isLibrary && active ? '正在更新' : '更新书库';
+  $('update-library').dataset.running = String(isLibrary && active && task.phase !== 'library-wait');
+  $('update-library-label').textContent = task.phase === 'library-wait' ? '等待处理' : isLibrary && active ? '正在更新' : '更新书库';
+  document.title = task.phase === 'library-wait' ? '需要你处理 · 拾页' : '拾页 · 小说采集';
   for (const id of ['website', 'title', 'author', 'search', 'probe-only', 'clear-login']) $(id).disabled = active;
   for (const button of document.querySelectorAll('.site-choice')) button.disabled = active;
   $('search').textContent = task.phase === 'search' ? '正在查找…' : '查找书籍 →';
-  const actionLabel = active && {login: '等待登录', verification: '等待验证'}[task.action];
+  const actionLabel = active && {login: '等待登录', verification: '等待验证', retrying: '自动重试'}[task.action];
   $('phase').textContent = actionLabel || phases[task.phase] || '等待开始';
-  $('phase').className = `status-pill ${active ? 'running' : task.phase}`;
+  $('phase').className = `status-pill ${task.phase === 'library-wait' ? 'attention' : active ? 'running' : task.phase}`;
   $('stop').hidden = !active;
   $('stop').disabled = task.phase === 'stopping';
   $('stop').textContent = task.phase === 'stopping' ? '正在停止…' : '停止';
@@ -154,8 +162,8 @@ function render() {
   const progress = !active && report ? {downloaded: report.downloaded, total: report.expected, failed: report.failures?.filter(item => item.chapter).length || 0, mode: report.mode || task.progress?.mode} : task.progress;
   const percent = progress?.total ? Math.min(100, progress.downloaded / progress.total * 100) : batch?.total ? batch.checked / batch.total * 100 : task.phase === 'complete' || task.phase === 'probed' ? 100 : 0;
   $('progress-bar').style.width = `${percent}%`;
-  $('progress-bar').className = active && !progress?.total && !batch?.total ? 'indeterminate' : '';
-  $('progress-text').textContent = progress?.total ? `${progress.mode === 'probe' ? '抽样' : '采集'} ${progress.downloaded} / ${progress.total} 章${progress.failed ? ` · ${progress.failed} 章失败` : ''}` : active ? '正在连接来源…' : '';
+  $('progress-bar').className = active && task.phase !== 'library-wait' && !progress?.total && !batch?.total ? 'indeterminate' : '';
+  $('progress-text').textContent = task.phase === 'library-wait' ? '等待处理期间不会读取下一本书' : progress?.total ? `${progress.mode === 'probe' ? '抽样' : '采集'} ${progress.downloaded} / ${progress.total} 章${progress.failed ? ` · ${progress.failed} 章失败` : ''}` : active ? '正在连接来源…' : '';
   $('pause').hidden = !['probe', 'download', 'pausing'].includes(task.phase);
   $('pause').disabled = task.phase === 'pausing';
   $('pause').textContent = task.phase === 'pausing' ? '正在保存…' : '暂停采集';
@@ -186,13 +194,29 @@ function render() {
   if (data.adapterErrors.length) feedback(`有站点配置需要修复：${data.adapterErrors.join('；')}`);
 }
 function renderLibrary(batch) {
+  const current = batch?.items.find(item => ['running', 'retrying', 'waiting'].includes(item.state));
+  const waiting = data.task.phase === 'library-wait' && current?.state === 'waiting';
+  retryBook.hidden = !waiting;
+  skipBook.hidden = !current || !active;
+  retryBook.disabled = skipBook.disabled = libraryDecisionPending || ['pausing', 'stopping'].includes(data.task.phase);
+  libraryHelp.hidden = !waiting;
+  const helpKey = waiting ? JSON.stringify([current.controlId, current.failure]) : '';
+  if (helpKey !== libraryHelpKey) {
+    libraryHelpKey = helpKey; libraryHelp.replaceChildren();
+    if (waiting) {
+      const heading = document.createElement('h4'); heading.textContent = `《${current.title}》需要你处理`;
+      const note = document.createElement('p'); note.textContent = '这本书已暂停，已有章节保留。处理后点击“重试这本”；暂时处理不了，可以手动跳过。';
+      libraryHelp.append(heading, failureNode(current.failure || {error: current.message}), note);
+      libraryHelp.scrollIntoView({block: 'nearest'});
+    }
+  }
   $('library-summary').hidden = !batch;
   $('library-results').hidden = !batch?.items.length;
-  $('library-summary').textContent = batch ? `已处理 ${batch.checked} / ${batch.total} 本 · 更新 ${batch.updated} 本 · 最新 ${batch.unchanged} 本 · 新增 ${batch.added} 章${batch.failed || batch.skipped ? ` · ${batch.failed + batch.skipped} 本需处理` : ''}` : '';
+  $('library-summary').textContent = batch ? `已处理 ${batch.checked} / ${batch.total} 本 · 更新 ${batch.updated} 本 · 最新 ${batch.unchanged} 本 · 新增 ${batch.added} 章${batch.skipped ? ` · 跳过 ${batch.skipped} 本` : ''}` : '';
   const key = JSON.stringify(batch?.items);
   if (key === libraryKey) return;
   libraryKey = key;
-  const labels = {pending: '等待检查', running: '检查中', updated: '已更新', unchanged: '已是最新', failed: '更新失败', skipped: '需先核对', stopped: '已停止'};
+  const labels = {pending: '等待检查', blocked: '需先核对', running: '检查中', retrying: '自动重试', waiting: '等待处理', updated: '已更新', unchanged: '已是最新', failed: '更新失败', skipped: '已手动跳过', stopped: '已停止'};
   $('library-results').replaceChildren(...(batch?.items || []).map(item => {
     const row = document.createElement('div'); row.className = 'library-row'; row.dataset.state = item.state;
     const heading = document.createElement('div'); heading.className = 'library-row-heading';
@@ -217,6 +241,16 @@ async function search(event) {
   } catch (error) { feedback(error.message); await poll(); }
 }
 $('search-form').addEventListener('submit', search);
+async function libraryDecision(action) {
+  const current = data.task.batch?.items.find(item => ['running', 'retrying', 'waiting'].includes(item.state));
+  if (!current || libraryDecisionPending) return;
+  libraryDecisionPending = true; retryBook.disabled = skipBook.disabled = true;
+  try { await api('library-action', {controlId: current.controlId, action}); }
+  catch (error) { feedback(error.message); }
+  finally { libraryDecisionPending = false; await poll(); }
+}
+retryBook.onclick = () => libraryDecision('retry');
+skipBook.onclick = () => libraryDecision('skip');
 $('update-library').onclick = async () => {
   if (active || librarySubmitting) return;
   librarySubmitting = true; $('update-library').disabled = true; feedback();

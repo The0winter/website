@@ -13,7 +13,7 @@ import {openLocal} from './open-local.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const publicFiles = {'/': ['index.html', 'text/html'], '/app.css': ['app.css', 'text/css'], '/app.js': ['app.js', 'text/javascript'], '/icon.svg': ['icon.svg', 'image/svg+xml']};
-const busy = task => ['library', 'search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(task.phase);
+const busy = task => ['library', 'library-wait', 'search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(task.phase);
 function visibleReport(report) {
   if (!report) return null;
   return {...Object.fromEntries(['title', 'author', 'description', 'descriptionStatus', 'status', 'statusDetection', 'jobId', 'mode', 'checkedAt', 'downloaded', 'expected', 'errors', 'warnings', 'structuralPass', 'completeAgainstSource', 'exportFile', 'summaryFile', 'reportFile', 'limitation', 'reusedExport', 'readingEdition', 'readingAdded', 'sourceExpected', 'sourceDownloaded', 'rawReportFile', 'continuation', 'switching', 'continuationAdded', 'originalCount', 'originalSourceUrl', 'automaticResolutions'].map(key => [key, report[key]])), failures: (report.failures || []).map(item => failureDetails(item, item))};
@@ -37,7 +37,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
   }
   // An interrupted process can be resumed from crawler checkpoints, never shown as running.
   if (busy(task)) task = {...task, phase: 'paused', message: task.kind === 'library' ? '上次书库更新已停止。再次点击“更新书库”即可重新检查，已保存章节会复用。' : '上次任务已停止。重新查找这本书即可继续。',
-    ...(task.batch ? {batch: {...task.batch, stopped: true, items: task.batch.items.map(item => ['pending', 'running'].includes(item.state) ? {...item, state: 'stopped', message: '上次任务中断，等待重新检查'} : item)}} : {})};
+    ...(task.batch ? {batch: {...task.batch, stopped: true, items: task.batch.items.map(item => ['pending', 'blocked', 'running', 'retrying', 'waiting'].includes(item.state) ? {...item, state: 'stopped', message: '上次任务中断，等待重新检查'} : item)}} : {})};
   function save() { atomicWrite(path.join(stateDir, 'desktop-last-task.json'), task); }
   function update(values) { task = {...task, ...(Object.hasOwn(values, 'phase') ? {action: null, actionUrl: null, actionDeadline: null, failure: null} : {}), ...values}; save(); }
   function sites() { return loadSources(sitesDirectory); }
@@ -99,7 +99,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         current.on('message', message => {
           if (message.type === 'library') update({batch: message.batch});
           if (message.type === 'library-phase' && !['pausing', 'stopping'].includes(task.phase)) update({phase: message.phase, title: message.title, author: message.author, sourceUrl: message.sourceUrl,
-            message: message.phase === 'probe' ? '正在核对目录与已有章节…' : '正在补齐新章节并更新本地文件…', progress: null});
+            message: message.phase === 'library-wait' ? '这本书暂时无法更新，已暂停等待你处理。可以重试这本，或手动跳过更新下一本。' : message.phase === 'probe' ? '正在核对目录与已有章节…' : '正在补齐新章节并更新本地文件…', progress: null});
           if (message.type === 'status' && !['pausing', 'stopping'].includes(task.phase)) update(statusValues(message));
           if (message.type === 'progress') {
             task.progress = message;
@@ -109,7 +109,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
             completed = true;
             const batch = message.batch;
             update({batch, phase: stopRequested || message.stopped ? 'stopped' : message.paused ? 'paused' : 'complete', progress: null,
-              message: batch.total === 0 ? '下载目录里还没有可更新的书籍。' : `${batch.stopped ? '书库更新已停止' : '书库检查完成'}：${batch.updated} 本已更新，${batch.unchanged} 本已是最新，新增 ${batch.added} 章。${batch.failed || batch.skipped ? ` ${batch.failed} 本失败，${batch.skipped} 本需核对，原因见下方列表。` : ''}`});
+              message: batch.total === 0 ? '下载目录里还没有可更新的书籍。' : `${batch.stopped ? '书库更新已停止' : '书库检查完成'}：${batch.updated} 本已更新，${batch.unchanged} 本已是最新，新增 ${batch.added} 章。${batch.skipped ? ` ${batch.skipped} 本手动跳过，原因见下方列表。` : ''}`});
           }
           if (message.type === 'error') { if (stopRequested) stoppedTask(); else update({phase: 'error', message: message.error, failure: message.failure || failureDetails(message)}); }
         });
@@ -120,6 +120,20 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         });
         current.send({type: 'start', library: true, stateDir, outputDir, sites: librarySites});
         return respond(202, {ok: true});
+      }
+      if (pathname === '/api/library-action') {
+        const book = task.kind === 'library' && task.batch?.items.find(item => item.controlId === input.controlId && ['running', 'retrying', 'waiting'].includes(item.state));
+        if (!book || !worker?.connected || !busy(task) || ['pausing', 'stopping'].includes(task.phase) || !['retry', 'skip'].includes(input.action) || (input.action === 'retry' && book.state !== 'waiting')) return respond(409, {error: '这本书的状态已变化，请查看当前进度后再操作'});
+        const current = worker, requestId = randomBytes(8).toString('hex');
+        await new Promise((resolve, reject) => {
+          const finish = error => { clearTimeout(timer); current.off('message', received); current.off('exit', exited); error ? reject(Error(error)) : resolve(); };
+          const received = message => { if (message.type === 'library-action-done' && message.requestId === requestId) finish(message.error); };
+          const exited = () => finish('书库更新已结束，请查看当前进度');
+          const timer = setTimeout(() => finish('操作响应超时，请查看当前进度后再试'), 5000);
+          current.on('message', received); current.once('exit', exited);
+          current.send({type: 'library-action', requestId, controlId: input.controlId, action: input.action}, error => { if (error) finish(error.message); });
+        });
+        return respond(200, {ok: true});
       }
       if (pathname === '/api/search') {
         if (busy(task) || worker) return respond(409, {error: '请先停止当前任务，等待进度保存完成'});

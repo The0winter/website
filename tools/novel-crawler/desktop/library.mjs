@@ -7,6 +7,7 @@ import {failureDetails} from '../diagnostics.mjs';
 import {makeClient} from '../http.mjs';
 import {browserProfile} from '../browser-session.mjs';
 import {applyVerifiedBookStatus, loadSites, specForBook} from './sources.mjs';
+import {createLibraryControl} from './library-control.mjs';
 
 const entries = dir => fs.existsSync(dir) ? fs.readdirSync(dir, {withFileTypes: true}) : [];
 function sealed(file) {
@@ -31,7 +32,7 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites}) {
         count: book.chapters.length, hash: hash(raw), description: book.description, status: book.status};
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(item);
-    } catch (error) { invalid.push({file: entry.name, title: entry.name, state: 'skipped', message: `无法读取下载文件：${error.message}`}); }
+    } catch (error) { invalid.push({file: entry.name, title: entry.name, state: 'blocked', message: `无法读取下载文件：${error.message}`}); }
   }
   for (const entry of entries(path.join(stateDir, 'jobs'))) {
     if (!entry.isDirectory() || !/^[a-f0-9]{20}$/.test(entry.name)) continue;
@@ -83,7 +84,7 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites}) {
       if (continuation && (spec.kind !== 'html' || spec.catalog?.walk)) throw Error('此旧下载需要先补齐完整目录适配，暂不能自动衔接');
       plans.push({...book, spec, continuation, state: 'pending', message: '等待检查来源'});
     } catch (error) {
-      plans.push({...files[0], ...(book || {}), state: 'skipped', message: error.message});
+      plans.push({...files[0], ...(book || {}), state: 'blocked', message: error.message});
     }
   }
   return [...plans, ...invalid];
@@ -95,54 +96,80 @@ export function librarySummary(items) {
   return {total: items.length, checked: updated + unchanged + failed + skipped, updated, unchanged, failed, skipped,
     added: items.reduce((sum, item) => sum + (item.added || 0), 0)};
 }
-const publicItem = ({file, title, author, url, count, state, message, added, failure}) => ({file, title, author, url, count, state, message, added, failure});
+const publicItem = ({file, title, author, url, count, state, message, added, failure, controlId}) => ({file, title, author, url, count, state, message, added, failure, controlId});
 
 export async function updateLibrary({stateDir, outputDir, sites, shouldStop = () => false, signal, onLibrary = () => {}, onPhase = () => {},
-  onStatus, onProgress, onClient = () => {}, collect = acquire, createClient = makeClient}) {
+  onStatus, onProgress, onClient = () => {}, onFailure, control = createLibraryControl({signal, shouldStop}), collect = acquire, createClient = makeClient}) {
   const plans = planLibrary({stateDir, outputDir, sites}), startedAt = new Date().toISOString();
   const stopped = () => signal?.aborted || shouldStop();
   const snapshot = () => ({startedAt, ...librarySummary(plans), items: plans.map(publicItem)});
   onLibrary(snapshot());
-  for (const item of plans) {
-    if (stopped()) break;
-    if (item.state !== 'pending') continue;
-    item.state = 'running'; item.message = '正在核对来源目录…';
-    onLibrary(snapshot());
-    let client;
-    try {
-      const file = path.resolve(outputDir, item.file);
-      if (!fs.lstatSync(file).isFile() || fs.lstatSync(file).isSymbolicLink() || hash(fs.readFileSync(file)) !== item.hash) throw Error('排队期间下载文件被修改或移走，请重新检查；原文件保留');
-      const spec = item.spec;
-      client = createClient({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts,
-        delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, browser: spec.browser, signal, shouldStop: stopped, onStatus});
-      onClient(client);
-      const options = {stateDir, outputDir, continuation: item.continuation, client, signal, shouldStop: stopped, onStatus, onProgress};
-      onPhase('probe', item);
-      let report = await collect(spec, {...options, mode: 'probe'});
-      if (!stopped() && !report.paused && report.structuralPass) {
-        onPhase('download', item);
-        report = await collect(spec, {...options, mode: 'download'});
+  try {
+    for (const item of plans) {
+      if (stopped()) break;
+      const bookControl = control.begin();
+      item.controlId = bookControl.id;
+      const bookStopped = () => stopped() || bookControl.skipped;
+      let blocked = item.state === 'blocked' ? item.message : null;
+      while (!bookStopped()) {
+        item.state = 'running'; item.message = '正在核对来源目录…'; delete item.failure;
+        onPhase('probe', item); onLibrary(snapshot());
+        let client, failure;
+        try {
+          if (blocked) throw Error(blocked);
+          const file = path.resolve(outputDir, item.file);
+          if (!fs.lstatSync(file).isFile() || fs.lstatSync(file).isSymbolicLink() || hash(fs.readFileSync(file)) !== item.hash) throw Error('排队期间下载文件被修改或移走，请重新检查；原文件保留');
+          const spec = item.spec;
+          client = createClient({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts,
+            delayMs: spec.delayMs, retries: 2, retryNetworkErrors: true, timeoutMs: spec.timeoutMs, browser: spec.browser,
+            signal: bookControl.controller.signal, shouldStop: bookStopped, onStatus: status => {
+              item.state = status.kind === 'retrying' ? 'retrying' : 'running'; item.message = status.message;
+              onStatus?.(status); onLibrary(snapshot());
+            }});
+          onClient(client);
+          const options = {stateDir, outputDir, continuation: item.continuation, client, signal: bookControl.controller.signal, shouldStop: bookStopped, stopOnFailure: true, onStatus, onProgress};
+          let report = await collect(spec, {...options, mode: 'probe'});
+          if (!bookStopped() && !report.paused && report.structuralPass) {
+            onPhase('download', item);
+            report = await collect(spec, {...options, mode: 'download'});
+          }
+          if (report.exportFile && report.completeAgainstSource) {
+            if (path.resolve(report.exportFile) !== file) throw Error('更新输出与原文件不一致，请核对来源绑定');
+            item.added = Math.max(0, report.expected - item.count);
+            item.state = report.reusedExport ? 'unchanged' : 'updated';
+            item.message = item.added ? `新增 ${item.added} 章，现有 ${report.expected} 章` : report.reusedExport ? '已是最新' : '章节无新增，书籍信息已更新';
+          } else if (bookStopped() || report.paused) {
+            item.state = 'stopped'; item.message = '已停止，已保存的章节可续传';
+          } else throw Object.assign(Error(report.failures?.[0]?.error || '来源检查未通过，原文件保留'), report.failures?.[0]);
+        } catch (error) {
+          failure = failureDetails(error, {url: error.url || error.link || item.url, ...(error.chapter ? {chapter: error.chapter, title: error.title, link: error.link} : {})});
+        } finally {
+          try { await client?.close(); }
+          catch (error) { failure = failureDetails(Error(`采集窗口关闭失败：${error.message}`)); }
+          onClient(null);
+        }
+        if (bookStopped()) break;
+        if (!failure) break;
+        item.state = 'waiting'; item.message = failure.error; item.failure = failure;
+        const decision = control.wait(bookControl);
+        onPhase('library-wait', item); onLibrary(snapshot());
+        if (onFailure) control.act(bookControl.id, await onFailure(publicItem(item)));
+        const action = await decision;
+        if (action !== 'retry') break;
+        // Refresh only this selected file's plan after the user repairs its source or
+        // restores a protected file. Never accept a different edition implicitly.
+        const refreshed = planLibrary({stateDir, outputDir, sites}).find(book => book.file === item.file && book.title === item.title && book.author === item.author);
+        blocked = !refreshed ? '原文件被移走或身份发生变化，请恢复后重试' : refreshed.state === 'blocked' ? refreshed.message : null;
+        if (refreshed && !blocked) Object.assign(item, refreshed, {controlId: bookControl.id});
       }
-      if (report.exportFile && report.completeAgainstSource) {
-        if (path.resolve(report.exportFile) !== file) throw Error('更新输出与原文件不一致，请核对来源绑定');
-        item.added = Math.max(0, report.expected - item.count);
-        item.state = report.reusedExport ? 'unchanged' : 'updated';
-        item.message = item.added ? `新增 ${item.added} 章，现有 ${report.expected} 章` : report.reusedExport ? '已是最新' : '章节无新增，书籍信息已更新';
-      } else if (stopped() || report.paused) {
-        item.state = 'stopped'; item.message = '已停止，已保存的章节可续传';
-      } else throw Error(report.failures?.[0]?.error || '来源检查未通过，原文件保留');
-    } catch (error) {
-      item.state = stopped() ? 'stopped' : 'failed';
-      item.message = stopped() ? '已停止，已保存的章节可续传' : error.message;
-      if (!stopped()) item.failure = failureDetails(error);
-    } finally {
-      try { await client?.close(); }
-      catch (error) { item.state = 'failed'; item.message = `采集窗口关闭失败：${error.message}`; item.failure = failureDetails(error); }
-      onClient(null);
+      const completed = ['updated', 'unchanged'].includes(item.state);
+      if (bookControl.skipped && !completed) { item.state = 'skipped'; item.message = `已手动跳过${item.failure ? `：${item.failure.error}` : '，已保存章节保留'}`; }
+      else if (!completed && (stopped() || item.state === 'waiting')) { item.state = 'stopped'; item.message = '已停止，已保存的章节可续传'; }
+      control.end(bookControl);
+      onLibrary(snapshot());
     }
-    onLibrary(snapshot());
-  }
-  for (const item of plans) if (item.state === 'pending') { item.state = 'stopped'; item.message = '尚未检查，下次更新时继续核对'; }
+  } finally { control.close(); }
+  for (const item of plans) if (['pending', 'blocked'].includes(item.state)) { item.state = 'stopped'; item.message = '尚未检查，下次更新时继续核对'; }
   const result = {...snapshot(), finishedAt: new Date().toISOString(), stopped: !!stopped()};
   onLibrary(result);
   return result;

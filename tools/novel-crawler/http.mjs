@@ -24,7 +24,7 @@ export function decode(bytes, contentType = '', encoding) {
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, retries = 2, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal}) {
+export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, retries = 2, retryNetworkErrors = false, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal}) {
   const hosts = new Set(allowedHosts.map(h => h.toLowerCase()));
   const resourceHosts = new Set(browserOptions.resourceHosts || []);
   const actions = [
@@ -332,11 +332,19 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
         } catch (error) {
           stopped();
           if (!browser.connected || page.isClosed()) throw windowClosed();
+          if (retryNetworkErrors && !error.stopSource && (error.name === 'TimeoutError' || /^net::ERR_(CONNECTION|TIMED_OUT|NAME_NOT_RESOLVED|NETWORK|INTERNET_DISCONNECTED)/.test(error.message))) {
+            // A goto timeout does not cancel Chromium's pending navigation. Stop it
+            // before changing cache settings or attempting the same URL again.
+            const navigation = await page.createCDPSession();
+            try { await navigation.send('Page.stopLoading'); }
+            finally { await navigation.detach(); }
+            error.retryAfterMs = Math.max(delayMs, 1000 * 2 ** attempt);
+          }
           if (attempt === retries || !Number.isFinite(error.retryAfterMs)) throw error;
           retryAfterMs = error.retryAfterMs;
           stats.retries++;
         } finally { manualAction = false; if (responseListener) page.off('response', responseListener); }
-        onStatus?.({kind: 'waiting', message: `网站暂时限制访问，等待 ${Math.ceil(retryAfterMs / 1000)} 秒后重试；已完成的章节保留。`});
+        onStatus?.({kind: 'retrying', url: original, message: `读取暂时失败，${Math.ceil(retryAfterMs / 1000)} 秒后自动重试（${attempt + 1}/${retries}）；已完成的章节保留。`});
         await wait(retryAfterMs);
         onStatus?.({kind: 'active', message: '正在重试读取网页…'});
       }
@@ -355,7 +363,10 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
           stopped();
           if (attempt === retries || error.code === 'ERR_BAD_RESPONSE') throw Error(`下载失败：${url}（${error.code || error.message}）`);
           stats.retries++;
-          await wait(Math.min(10000, 1000 * 2 ** attempt));
+          const backoff = Math.max(delayMs, Math.min(10000, 1000 * 2 ** attempt));
+          onStatus?.({kind: 'retrying', url, message: `网络读取失败，${Math.ceil(backoff / 1000)} 秒后自动重试（${attempt + 1}/${retries}）；已完成的章节保留。`});
+          await wait(backoff);
+          onStatus?.({kind: 'active', message: '正在重试读取网页…'});
           continue;
         }
         if (response.status === 429 || response.status >= 500) {
@@ -364,7 +375,10 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
           if (backoff > 60000) throw Object.assign(Error(`服务器要求稍后再试：${url}；Retry-After=${raw}`), {stopSource: true});
           if (attempt === retries) break;
           stats.retries++;
-          await wait(Math.max(delayMs, Number.isFinite(backoff) ? backoff : 1000));
+          const retryDelay = Math.max(delayMs, Number.isFinite(backoff) ? backoff : 1000);
+          onStatus?.({kind: 'retrying', url, message: `HTTP ${response.status}，${Math.ceil(retryDelay / 1000)} 秒后自动重试（${attempt + 1}/${retries}）；已完成的章节保留。`});
+          await wait(retryDelay);
+          onStatus?.({kind: 'active', message: '正在重试读取网页…'});
           continue;
         }
         break;
