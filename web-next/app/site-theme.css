@@ -1,0 +1,75 @@
+.site-account-actions { display:flex; align-items:center; gap:2px; flex-shrink:0; }
+.site-theme-toggle { display:inline-flex; align-items:center; justify-content:center; flex:0 0 44px; width:44px; height:44px; border-radius:50%; color:#a97332; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.site-theme-toggle:hover { background:var(--home-soft); }
+.site-theme-toggle:focus-visible { outline:2px solid var(--home-accent); outline-offset:1px; }
+.site-theme-toggle:active { transform:scale(.94); }
+.site-theme-moon,.dark .site-theme-sun { display:none; }
+.dark .site-theme-moon { display:block; }
+.dark .site-theme-toggle { color:#e2c898; }
+.dark nav[data-site-chrome] { background:var(--home-surface); border-color:var(--home-border); }
+
+/* Desktop home cards predate the shared palette. Keep their existing layout. */
+.dark .desktop-home .bg-white { background-color:var(--home-surface); }
+.dark .desktop-home :is(.bg-gray-50,.bg-gray-100,.bg-gray-200,.bg-blue-50,.bg-yellow-50) { background-color:var(--home-soft); }
+.dark .desktop-home #ranking :is(.bg-gradient-to-b,.bg-gradient-to-r) { background-image:linear-gradient(135deg,var(--home-soft),var(--home-surface)); }
+.dark .desktop-home :is(.text-gray-700,.text-gray-800,.text-gray-900) { color:var(--home-text); }
+.dark .desktop-home :is(.text-gray-400,.text-gray-500,.text-gray-600) { color:var(--home-muted); }
+.dark .desktop-home :is(.border-gray-50,.border-gray-100,.border-gray-200) { border-color:var(--home-border); }
+.dark .desktop-home .hover\:bg-gray-50:hover { background-color:var(--home-soft); }
+
+/* Shared navigation and the custom warm surfaces use the same site palette. */
+.dark .book-search { --suggest-bg:var(--home-surface); --suggest-text:var(--home-text); --suggest-muted:var(--home-muted); --suggest-line:var(--home-border); --suggest-accent:var(--home-accent); }
+.dark .mh-bottom { background:color-mix(in srgb,var(--home-surface) 96%,transparent); border-color:var(--home-border); }
+.dark .mh-bottom a { color:var(--home-muted); }
+.dark .mh-bottom [aria-current=page] { color:var(--home-accent); }
+.dark .mh-shortcuts,.dark .mh-section { background:var(--home-surface); }
+.dark .mh-shortcuts>a,.dark .mh-shortcuts>button { color:var(--home-text); }
+.dark .mh-shortcuts>*+*::before { border-color:var(--home-border); }
+.dark .mh-section header>a,.dark .mh-section header>button { border-color:var(--home-border); color:var(--home-muted); }
+.dark .mh-book p,.dark .mh-book-meta,.dark .mh-empty { color:var(--home-muted); }
+.dark .mh-book-meta small,.dark .mh-categories button { background:var(--home-soft); color:var(--home-muted); }
+.dark .mh-categories [aria-pressed=true] { background:var(--home-accent-soft); color:var(--home-accent); border-color:var(--home-accent); }
+.dark .mh-categories button:active { background:var(--home-accent-soft); }
+.dark .mh-cover,.dark .shelf-cover { background:linear-gradient(145deg,#493d31,#302820); color:#c7b599; }
+
+.dark .search-page { --search-bg:var(--home-background); --search-surface:var(--home-surface); --search-text:var(--home-text); --search-muted:var(--home-muted); --search-line:var(--home-border); --search-accent:var(--home-accent); }
+.dark .search-description { color:var(--home-muted); }
+.dark .search-book-meta span { background:var(--home-soft); }
+.dark .search-book-meta span.is-complete { background:#293426; color:#bdcda9; }
+
+.dark [data-profile-theme]:not(.profile-theme-option) { --profile-surface:#24211e; --profile-soft:#302820; --profile-accent:#d8b48b; --profile-accent-soft:#433529; --profile-text:#e8dfd5; --profile-muted:#b3a69a; --profile-border:#443a31; --profile-cover:#4a3928; --profile-cover-ink:#c19b6d; }
+.dark [data-profile-theme=sage]:not(.profile-theme-option) { --profile-soft:#252e22; --profile-accent:#b3c9a4; --profile-accent-soft:#33402c; --profile-cover:#37462f; --profile-cover-ink:#93ae80; }
+.dark [data-profile-theme=mist]:not(.profile-theme-option) { --profile-soft:#222d33; --profile-accent:#a3c4d7; --profile-accent-soft:#2d3c45; --profile-cover:#304754; --profile-cover-ink:#85a9bd; }
+.dark [data-profile-theme=rose]:not(.profile-theme-option) { --profile-soft:#332528; --profile-accent:#dcaeb5; --profile-accent-soft:#453036; --profile-cover:#51343c; --profile-cover-ink:#c08e9b; }
+
+/* Include the full catalog and mobile detail surfaces in the reading journey. */
+.dark .book-detail { background:var(--home-background); color:var(--home-text); }
+.dark .book-intro,.dark .book-catalog,.dark .book-community,.dark .book-actions { background:var(--home-surface); border-color:var(--home-border); }
+.dark .book-intro .book-description,.dark .book-actions button { color:var(--home-muted); }
+.dark .mobile-catalog { border-color:var(--home-border); }
+.dark .book-actions .read-now { color:#fff; }
+.dark .book-mobile-stats dd,.dark .community-tabs button[aria-selected=true],.dark .book-review-name,.dark .book-review-content { color:var(--home-text); }
+.dark .book-review-compose { background:var(--home-soft); color:var(--home-muted); }
+.dark .book-catalog-sheet { --catalog-paper:#24211e; --catalog-border:#3b342e; background:var(--catalog-paper); color:var(--home-text); }
+.dark .book-catalog-header { background:var(--catalog-paper); border-color:var(--catalog-border); }
+.dark .book-catalog-header p,.dark .book-catalog-volume-count,.dark .book-catalog-loading { color:var(--home-muted); }
+.dark .book-catalog-volume-toggle,.dark .book-catalog-back:hover,.dark .book-catalog-chapter:hover { background:var(--home-soft); color:var(--home-text); }
+.dark .book-catalog-volume-toggle:hover { background:var(--home-border); }
+.dark .book-catalog-scrollbar::before { background:var(--home-border); }
+.dark .book-catalog-thumb { background:#9a876e; box-shadow:0 0 0 2px var(--catalog-paper); }
+.dark .book-catalog-chapter[aria-current],.dark .book-catalog-volume-toggle .book-catalog-progress { color:var(--home-accent); }
+.dark .book-catalog a[aria-current] { color:var(--home-accent); background:var(--home-accent-soft); border-color:var(--home-border); }
+@media (min-width:768px) {
+  .dark .book-hero { background:radial-gradient(ellipse at 8% 0,#304036,transparent 72%),var(--home-surface); }
+}
+
+/* The server cannot see the OS preference. Cover its light reader markup
+   immediately, before hydration supplies the matching reading settings. */
+html.dark .reader-pages-root[data-dark=false] { --reader-paper:#1a1a1a !important; --reader-ink:#a0a0a0 !important; --reader-panel:#252525 !important; --reader-muted:#999084; }
+html.dark .reader-pages-root[data-dark=false] .reader-frame,
+html.dark .reader-pages-root[data-dark=false] .reader-page-window,
+html.dark .reader-pages-root[data-dark=false] .reader-page-surface { background-image:none !important; }
+html.dark .reader-entry-content { background-color:#1a1a1a !important; }
+@media (min-width:1024px) {
+  html.dark .reader-entry-content { background-color:#121212 !important; }
+}

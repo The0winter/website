@@ -12,7 +12,6 @@ import MobileBottomNav from '@/components/MobileBottomNav';
 import AccountLoading from '@/components/AccountLoading';
 import LibraryToolbar, {sorts} from '@/components/LibraryToolbar';
 import {useAuth} from '@/contexts/AuthContext';
-import {useReadingSettings} from '@/contexts/ReadingSettingsContext';
 import {useStoredState} from '@/lib/useStoredState';
 import {safeFetch} from '@/lib/request';
 import {getLibrarySnapshot, loadLibrary, prepareLibraryRead, removeLibraryEntries, serverLibrarySnapshot, subscribeLibrary, type LibraryEntry as Entry, type LibrarySort as Sort, type LibraryTab as Tab} from '@/lib/library-cache';
@@ -124,7 +123,6 @@ export default function LibraryPage() {
 
 function Library() {
   const {user, loading: authLoading} = useAuth();
-  const {setTheme} = useReadingSettings();
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams();
@@ -180,7 +178,6 @@ function Library() {
     observer.observe(tablist);
     return () => observer.disconnect();
   }, [tab, userId, authLoading, tabs]);
-  useEffect(() => {setTheme('light');}, [setTheme]);
   useEffect(() => {if (!authLoading && !user) router.replace('/login');}, [authLoading, user, router]);
   useEffect(() => {
     if (userId && pathname === '/library') void loadLibrary({userId, tab, sort, page});

@@ -84,12 +84,11 @@ test('saved typography stays selected and paragraph spacing scales with large te
 });
 
 test('desktop defaults and night paper remain quiet', async ({browser}) => {
-  const context = await browser.newContext({viewport: {width: 1440, height: 900}});
+  const context = await browser.newContext({viewport: {width: 1440, height: 900}, colorScheme:'dark'});
   const page = await context.newPage();
   try {
     await page.addInitScript(() => {
       localStorage.setItem('has-seen-reading-hint', 'true');
-      localStorage.setItem('novelhub_theme', '"dark"');
     });
     await page.goto(url);
     const root = page.locator('.reader-pages-root:visible');

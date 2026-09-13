@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@import "./site-theme.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --background: #ffffff;
@@ -33,11 +36,17 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root.dark {
+  --background: #181614;
+  --foreground: #e8dfd5;
+  --home-background: #181614;
+  --home-surface: #24211e;
+  --home-text: #e8dfd5;
+  --home-muted: #b3a69a;
+  --home-border: #3b342e;
+  --home-accent: #ee9297;
+  --home-soft: #2e2823;
+  --home-accent-soft: #432a2b;
 }
 
 body {

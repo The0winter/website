@@ -14,6 +14,7 @@ import { Suspense } from 'react';
 
 import { GoogleAnalytics } from '@next/third-parties/google';
 import {siteOrigin} from '@/lib/seo';
+import {siteThemeScript} from '@/lib/site-theme';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -51,7 +52,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh">
+    <html lang="zh" suppressHydrationWarning>
+      <head><script id="site-theme-init" dangerouslySetInnerHTML={{__html: siteThemeScript}} /></head>
       <body className={inter.className}>
         <BookPrefetchSession />
         <BookNavigation />

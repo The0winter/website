@@ -1,6 +1,7 @@
 import {flushSync} from 'react-dom';
 import {mobileReaderCream, readerPaperPosition} from './reader-paper';
 import {freezeBookPage} from './book-transition';
+import {currentSiteTheme} from './site-theme';
 
 type ChapterEntry = {
   token: string; href: string; chapterId: string; title: string; error?: string; position: 'start' | 'resume'; minimumVisibleMs: number;
@@ -43,13 +44,14 @@ export function beginChapterEntry(href: string, title: string, position: 'start'
   let theme = 'cream', width = 1000;
   let paperPage = 0;
   try {
-    theme = JSON.parse(localStorage.getItem('novelhub_theme') || 'null') === 'dark' ? 'dark' : JSON.parse(localStorage.getItem('reader_themeColor') || '"cream"');
+    theme = JSON.parse(localStorage.getItem('reader_themeColor') || '"cream"');
     const saved = JSON.parse(localStorage.getItem('reader_pageWidth') || 'null');
     if (typeof saved === 'number' && saved > 0 && saved < 3000) width = saved;
     if (position === 'resume' && JSON.parse(localStorage.getItem('reader_turnMode') || '"horizontal"') !== 'scroll') {
       paperPage = JSON.parse(localStorage.getItem(`reader-page:${chapterId}`) || 'null')?.paperPage || 0;
     }
   } catch { /* A chapter can still be opened without browser storage. */ }
+  if (currentSiteTheme() === 'dark') theme = 'dark';
   try {
     if (position === 'start') sessionStorage.setItem(`reader-entry:${chapterId}`, 'start');
     else sessionStorage.removeItem(`reader-entry:${chapterId}`);

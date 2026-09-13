@@ -10,13 +10,12 @@ for (const [theme, mode, width, pageWidth] of [
   ['cream', 'scroll', 768, 500],
 ] as const) {
   test(`the paper and ink stay visually stable as loading becomes ${theme} ${mode} text at ${width}px`, async ({browser}, testInfo) => {
-    const context = await browser.newContext({viewport: {width, height: 844}, isMobile: width < 768, hasTouch: true});
+    const context = await browser.newContext({viewport: {width, height: 844}, isMobile: width < 768, hasTouch: true, colorScheme: theme === 'dark' ? 'dark' : 'light'});
     const page = await context.newPage();
     try {
       await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
       await page.addInitScript(({theme, mode, pageWidth}) => {
         localStorage.setItem('has-seen-reading-hint', 'true');
-        localStorage.setItem('novelhub_theme', JSON.stringify(theme === 'dark' ? 'dark' : 'light'));
         localStorage.setItem('reader_themeColor', JSON.stringify(theme === 'dark' ? 'cream' : theme));
         localStorage.setItem('reader_turnMode', JSON.stringify(mode));
         localStorage.setItem('reader_pageWidth', JSON.stringify(pageWidth));

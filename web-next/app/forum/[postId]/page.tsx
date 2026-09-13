@@ -1,5 +1,6 @@
 'use client';
 import { useAuth } from '@/contexts/AuthContext';
+import {useReadingSettings} from '@/contexts/ReadingSettingsContext';
 import {useForumView} from '@/lib/useForumView';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
@@ -19,8 +20,6 @@ import {
   X
 } from 'lucide-react';
 import { forumApi, ForumComment, ForumPost, ForumReply } from '@/lib/api';
-
-type ThemeMode = 'light' | 'dark';
 
 const READER_SETTINGS_KEY = 'forum_reader_settings_v1';
 
@@ -72,7 +71,7 @@ function PostContent() {
   const postId = (Array.isArray(rawId) ? rawId[0] : rawId) as string;
   const fromQuestionId = searchParams.get('fromQuestion');
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
+  const {theme: themeMode, setTheme: setThemeMode} = useReadingSettings();
   const [fontSize, setFontSize] = useState(17);
   const [showSettings, setShowSettings] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -116,9 +115,6 @@ function PostContent() {
       const raw = localStorage.getItem(READER_SETTINGS_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (parsed?.themeMode === 'light' || parsed?.themeMode === 'dark') {
-        setThemeMode(parsed.themeMode);
-      }
       if (typeof parsed?.fontSize === 'number' && parsed.fontSize >= 14 && parsed.fontSize <= 24) {
         setFontSize(parsed.fontSize);
       }
@@ -129,11 +125,11 @@ function PostContent() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify({ themeMode, fontSize }));
+      localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify({ fontSize }));
     } catch {
       // ignore write failure
     }
-  }, [themeMode, fontSize]);
+  }, [fontSize]);
 
   useEffect(() => {
     const fetchData = async () => {

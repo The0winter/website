@@ -5,6 +5,7 @@ import { useState } from 'react';
 import Link from './PrefetchLink';
 import AccountLink from './AccountLink';
 import MobileAccountLink from './MobileAccountLink';
+import ThemeToggle from './ThemeToggle';
 import UserAvatar from './UserAvatar';
 import BookSearch from './BookSearch';
 import { useRouter, usePathname } from 'next/navigation';
@@ -91,6 +92,7 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
                     <span>创作管理</span>
                   </Link>
                 
+                <ThemeToggle/>
                 <Link 
                   href="/profile" 
                   className={`flex items-center space-x-2 px-3 py-2 rounded-md transition-colors ${isDark ? 'hover:bg-[#333]' : 'hover:bg-gray-100'}`}
@@ -105,6 +107,7 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
               </div>
             ) : (
               <div className="flex items-center space-x-2">
+                <ThemeToggle/>
                 <Link href="/login" className={`${textSecondary} ${hoverText} px-3 py-2 rounded-md text-sm font-medium`}>登录</Link>
                 <Link href="/register" className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700">注册</Link>
               </div>
@@ -146,7 +149,7 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
                    <AccountLink href="/library" aria-label="书架"><Library className="w-5 h-5" /></AccountLink>
                    
                    {/* 用户头像 */}
-                   <MobileAccountLink dark={isDark}/>
+                   <div className="site-account-actions"><ThemeToggle/><MobileAccountLink dark={isDark}/></div>
                 </div>
             </div>
 

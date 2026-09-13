@@ -359,11 +359,12 @@ if (loading) return (
           {/* 夜间模式 */}
           <button 
             onClick={() => setTheme(isActuallyDark ? 'light' : 'dark')}
+            aria-label={isActuallyDark ? '当前夜间模式，切换到日间模式' : '当前日间模式，切换到夜间模式'}
             className="flex flex-col items-center gap-1 opacity-80 active:opacity-100"
           >
-             {isActuallyDark ? <Sun className="w-5 h-5"/> : <Moon className="w-5 h-5"/>}
+             {isActuallyDark ? <Moon className="w-5 h-5"/> : <Sun className="w-5 h-5"/>}
              <span className="text-[10px]">
-                {isActuallyDark ? '日间' : '夜间'}
+                {isActuallyDark ? '夜间' : '日间'}
              </span>
           </button>
       </div>
@@ -411,8 +412,8 @@ if (loading) return (
           <button onClick={toggleBookmark} className="p-3 hover:bg-black/5 rounded-lg" title="书签">
             {isBookmarked ? <BookmarkCheck className="text-red-500 w-5 h-5" /> : <Bookmark style={{ color: activeTheme.text }} className="w-5 h-5" />}
           </button>
-          <button onClick={() => setTheme(isActuallyDark ? 'light' : 'dark')} className="p-3 hover:bg-black/5 rounded-lg" title="夜间模式">
-            {isActuallyDark ? <Sun className="text-yellow-500 w-5 h-5" /> : <Moon style={{ color: activeTheme.text }} className="w-5 h-5" />}
+          <button onClick={() => setTheme(isActuallyDark ? 'light' : 'dark')} className="p-3 hover:bg-black/5 rounded-lg" title={isActuallyDark ? '切换到日间模式' : '切换到夜间模式'}>
+            {isActuallyDark ? <Moon style={{ color: activeTheme.text }} className="w-5 h-5" /> : <Sun className="text-yellow-600 w-5 h-5" />}
           </button>
           <button onClick={() => setShowSettings(true)} className="p-3 hover:bg-black/5 rounded-lg" title="设置">
             <Settings style={{ color: activeTheme.text }} className="w-5 h-5" />
