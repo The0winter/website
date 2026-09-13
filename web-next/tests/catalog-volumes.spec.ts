@@ -17,7 +17,7 @@ test.beforeAll(async()=>{
     const group=index<86?0:index<332?1:2, local=index-[0,86,332][group];
     return {_id,bookId:book,title:`${labels[group]} 第${local+1}章 第${index+1}次旅程`,chapter_number:index+1,content:'山间的风吹过树林，旅人继续前行。\n\n'.repeat(80),word_count:2000,deletedAt:null};
   }));
-  await db.collection('chapters').insertMany(['番外一 重逢','番外二 出发','正文 第1章 开始','正文 第2章 继续'].map((title,index)=>({bookId:extrasBook,title,chapter_number:index+1,content:'隔离测试正文。'.repeat(100),deletedAt:null})));
+  await db.collection('chapters').insertMany(['第287章 日常','番外 没有主角的一天','第288章 出发','第289章 归来'].map((title,index)=>({bookId:extrasBook,title,chapter_number:index+1,content:'隔离测试正文。'.repeat(100),deletedAt:null})));
   await db.collection('books').insertOne({_id:noticesBook,title:'卷末通知仍属于正文',deletedAt:null,writeVersion:0});
   await db.collection('chapters').insertMany(['第519章 道别之前','第520章 道别','第一卷 结束以及请假','拜个晚年，以及更新安排','第521章 新社区'].map((title,index)=>({bookId:noticesBook,title,chapter_number:index+1,content:'这是一段用于验证目录的合成正文。'.repeat(100),deletedAt:null})));
 });
@@ -37,13 +37,12 @@ const open = async(page: Page, origin: string, width: number)=>{
   await expect(page.locator('.book-catalog-scroll-area')).toHaveAttribute('data-ready','true');
 };
 
-for(const width of [390,1440])test(`volume-ending notices remain in one body without duplicate links at ${width}px`,async({page})=>{
+for(const width of [390,1440])test(`volume-ending notices remain flat without duplicate links at ${width}px`,async({page})=>{
   await page.setViewportSize({width,height:844});
   await page.goto(`${base}/book/${noticesBook}`);await open(page,'detail',width);
   const dialog=page.getByRole('dialog',{name:'全部目录'});
   const verify=async()=>{
-    await expect(dialog.locator('.book-catalog-volume-toggle')).toHaveCount(1);
-    await expect(dialog.locator('.book-catalog-volume-toggle')).toContainText('正文');
+    await expect(dialog.locator('.book-catalog-volume-heading')).toHaveCount(0);
     await expect(dialog.locator('.book-catalog-chapter')).toHaveCount(5);
     const links=await dialog.locator('.book-catalog-chapter').evaluateAll(elements=>elements.map(e=>e.getAttribute('href')));
     expect(new Set(links).size).toBe(5);
@@ -105,16 +104,18 @@ for(const width of [390,1440])for(const scenario of ['first-detail','saved-detai
   expect(errors).toEqual([]);
 });
 
-test('without reading progress the body is preferred, while extras remain independently expandable',async({page})=>{
-  await page.setViewportSize({width:390,height:844});
-  await page.goto(`${base}/book/${extrasBook}`);await open(page,'detail',390);
+for(const width of [390,1440])test(`one extra followed by normal chapters stays in original order without section headings at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:844});
+  await page.goto(`${base}/book/${extrasBook}`);await open(page,'detail',width);
   const dialog=page.getByRole('dialog',{name:'全部目录'});
-  const body=dialog.getByRole('button',{name:/^正文 /}),extras=dialog.getByRole('button',{name:/^番外 /});
-  await expect(body).toHaveAttribute('aria-expanded','true');await expect(extras).toHaveAttribute('aria-expanded','false');
-  await expect(dialog.getByRole('link',{name:'第1章 开始',exact:true})).toBeVisible();
-  await extras.click();await expect(extras).toHaveAttribute('aria-expanded','true');await expect(body).toHaveAttribute('aria-expanded','true');
-  await expect(dialog.getByRole('link',{name:'番外一 重逢',exact:true})).toBeVisible();
-  await extras.click();await expect(extras).toHaveAttribute('aria-expanded','false');await expect(body).toHaveAttribute('aria-expanded','true');
+  const titles=['第287章 日常','番外 没有主角的一天','第288章 出发','第289章 归来'];
+  await expect(dialog.locator('.book-catalog-volume-heading')).toHaveCount(0);
+  await expect(dialog.locator('.book-catalog-chapter')).toHaveText(titles);
+  await dialog.getByRole('link',{name:'第288章 出发',exact:true}).click();
+  await open(page,'reader',width);
+  await expect(dialog.locator('.book-catalog-volume-heading')).toHaveCount(0);
+  await expect(dialog.locator('.book-catalog-chapter > span:first-child')).toHaveText(titles);
+  await expect(dialog.locator('[aria-current="location"]')).toContainText('第288章 出发');
 });
 
 for(const width of [320,390,768,1440])test(`folding stays visible and reuses cached rows even with a pending volume at ${width}px`,async({page,context},testInfo)=>{

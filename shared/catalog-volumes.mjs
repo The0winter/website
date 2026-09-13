@@ -3,8 +3,8 @@ const digits = '0-9０-９零〇一二三四五六七八九十百千万萬两兩
 const volumeStart = new RegExp(`^(?:第[${digits}]+卷|卷[${digits}]+)`, 'u');
 const chapterStart = new RegExp(`第[${digits}]+[章回节節]`, 'u');
 
-// Only explicit volume labels define boundaries. Chapter-number resets and
-// words such as “番外” inside an ordinary chapter title are not volume markers.
+// Only numbered volume prefixes define legacy title boundaries. “正文”,
+// “番外” and numbering resets are chapter text, never sticky classifications.
 export function splitCatalogTitle(title = '') {
   const text = title.trim();
   const numbered = volumeStart.exec(text);
@@ -17,11 +17,6 @@ export function splitCatalogTitle(title = '') {
     if (boundary < 0 && text !== numbered[0]) return {volume: '', chapterTitle: text};
     return {volume: (boundary < 0 ? text : text.slice(0, boundary)).trim(), chapterTitle: boundary < 0 ? text : text.slice(boundary)};
   }
-  const section = /^(正文(?:卷|篇)?|番外(?:卷|篇)?)(?=$|[\s:：、（(\d０-９一二三四五六七八九十]|第)/u.exec(text);
-  if (section) {
-    const chapter = chapterStart.exec(text.slice(section[0].length));
-    return {volume: section[0].startsWith('正文') ? '正文' : '番外', chapterTitle: chapter ? text.slice(section[0].length + chapter.index) : text};
-  }
   return {volume: '', chapterTitle: text};
 }
 
@@ -29,7 +24,7 @@ export function splitCatalogTitle(title = '') {
 export function buildCatalogVolumes(chapters) {
   /** @type {CatalogVolume[]} */
   const volumes = [];
-  let title = '正文';
+  let title = '';
   let number;
   chapters.forEach((chapter, index) => {
     const explicit = typeof chapter.volume_title === 'string' && chapter.volume_title.trim();
@@ -43,5 +38,8 @@ export function buildCatalogVolumes(chapters) {
     volume.count++;
     number = newNumber;
   });
+  // An empty array means a flat catalog, not an empty book. Keep an unlabelled
+  // preface before real volumes as rows without inventing another volume name.
+  if (!volumes.some(volume => volume.title) || (volumes.length === 1 && /^(正文(?:卷|篇)?|番外(?:卷|篇)?)$/u.test(volumes[0].title))) return [];
   return volumes;
 }

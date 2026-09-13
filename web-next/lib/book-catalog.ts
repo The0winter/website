@@ -128,14 +128,15 @@ export class BookCatalog {
       if (epoch !== this.epoch || controller.signal.aborted) return;
       if (!Array.isArray(data.rows) || !Number.isSafeInteger(data.total) || data.total < 0 || !Number.isSafeInteger(data.offset) || data.offset < 0 || data.offset + data.rows.length > data.total || data.rows.some(row => !row.id || typeof row.title !== 'string' || !Number.isFinite(row.chapter_number))) throw Error('目录数据无效，请重试');
       if (this.snapshot.version !== undefined && this.snapshot.version !== data.version) throw Error('目录版本不一致，请重试');
-      const volumes = data.volumes ?? (data.offset === 0 && data.rows.length === data.total ? buildCatalogVolumes(data.rows) : [{id: 'body', title: '正文', start: 0, count: data.total}]);
+      const volumes = data.volumes ?? (data.offset === 0 && data.rows.length === data.total ? buildCatalogVolumes(data.rows) : []);
+      if (!Array.isArray(volumes)) throw Error('分卷数据无效，请重试');
       let covered = 0;
       const volumeIds = new Set<string>();
       for (const volume of volumes) {
-        if (!volume.id || volumeIds.has(volume.id) || typeof volume.title !== 'string' || !volume.title.trim() || volume.start !== covered || !Number.isSafeInteger(volume.count) || volume.count < 1) throw Error('分卷数据无效，请重试');
+        if (!volume.id || volumeIds.has(volume.id) || typeof volume.title !== 'string' || volume.start !== covered || !Number.isSafeInteger(volume.count) || volume.count < 1) throw Error('分卷数据无效，请重试');
         covered += volume.count; volumeIds.add(volume.id);
       }
-      if (covered !== data.total) throw Error('分卷数据不完整，请重试');
+      if (volumes.length && covered !== data.total) throw Error('分卷数据不完整，请重试');
       const rows = new Map(this.snapshot.rows), indices = new Map(this.snapshot.indices), resolved = new Set(this.snapshot.resolved);
       for (let i = 0; i < data.rows.length; i++) {rows.set(data.offset + i, data.rows[i]); indices.set(data.rows[i].id, data.offset + i);}
       if (job.anchor && data.activeIndex === null && !indices.has(job.anchor)) resolved.add(job.anchor);

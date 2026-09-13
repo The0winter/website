@@ -46,7 +46,7 @@ test('catalog pages and full-book statistics stay complete, bounded and metadata
     const window = await windowResponse.json();
     assert.equal(windowResponse.status, 200);
     assert.equal(window.total, 404); assert.equal(window.activeIndex, 348);
-    assert.deepEqual(window.volumes, [{id: all[0].id, title: '正文', start: 0, count: 404}]);
+    assert.deepEqual(window.volumes, []);
     assert.equal(window.rows[window.activeIndex - window.offset].id, anchor.id);
     assert.deepEqual(window.rows.map(row => row.id), all.slice(window.offset, window.offset + window.rows.length).map(row => row.id));
     for (const row of window.rows) assert.deepEqual(Object.keys(row).sort(), ['chapter_number','id','title']);

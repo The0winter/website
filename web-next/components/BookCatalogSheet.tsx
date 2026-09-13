@@ -96,12 +96,13 @@ type ContentsProps = Omit<Props, 'open' | 'onClose' | 'bookTitle'> & {columns: n
 function CatalogContents(props: ContentsProps) {
   const {catalog, activeChapterId} = props;
   const activeIndex = catalog.indices.get(activeChapterId ?? '') ?? -1;
+  const volumes = useMemo(() => catalog.volumes?.length ? catalog.volumes : [{id:'chapters',title:'',start:0,count:catalog.total ?? 0}], [catalog.volumes, catalog.total]);
   const waiting = !catalog.volumes || (activeChapterId ? activeIndex < 0 && !catalog.resolved.has(activeChapterId) : catalog.total === null || (catalog.total > 0 && !catalog.rows.has(0)));
   if (waiting || !catalog.total) return <div role="region" aria-label="阅读目录" aria-busy={waiting} className="book-catalog-body">
     {catalog.error ? <p role="alert" className="book-catalog-message">{catalog.error} <button onClick={props.onRetry}>重试</button></p>
       : <p role="status" className="book-catalog-message book-catalog-loading">{waiting ? '加载目录…' : '暂无章节'}</p>}
   </div>;
-  return <VolumeCatalog {...props} volumes={catalog.volumes!} activeIndex={activeIndex}/>;
+  return <VolumeCatalog {...props} volumes={volumes} activeIndex={activeIndex}/>;
 }
 
 type VolumeProps = ContentsProps & {volumes: readonly CatalogVolume[]; activeIndex: number};
@@ -111,7 +112,7 @@ function VolumeCatalog(props: VolumeProps) {
   const [view, setView] = useState<View>(() => {
     const initial = volumes.find(volume => activeIndex >= volume.start && activeIndex < volume.start + volume.count)
       ?? volumes.find(volume => volume.title === '正文') ?? volumes[0];
-    return {expanded: new Set([initial.id]), targetVolume: activeIndex < 0 ? initial.id : undefined};
+    return {expanded: new Set([initial.id]), targetVolume: activeIndex < 0 && initial.title ? initial.id : undefined};
   });
   const toggle = (id: string) => setView(previous => {
     const expanded = new Set(previous.expanded);
@@ -129,26 +130,27 @@ function CatalogVolumeRows({bookId, catalog, onRange, onRetry, activeChapterId, 
   const [ready, setReady] = useState(false);
   const scrollerRef = useCallback((element: HTMLElement | Window | null) => setScroller(element instanceof HTMLElement ? element : null), []);
   const layout = useMemo(() => catalogLayout(volumes, view.expanded, columns), [volumes, view.expanded, columns]);
-  const [initialLocation] = useState(() => ({index: view.targetVolume ? layout.groups.find(group => group.volume.id === view.targetVolume)?.header ?? 0 : layout.chapter(activeIndex), align: view.targetVolume ? 'start' as const : 'center' as const}));
+  const atStart = activeIndex < 0;
+  const [initialLocation] = useState(() => ({index: view.targetVolume ? layout.groups.find(group => group.volume.id === view.targetVolume)?.header ?? 0 : layout.chapter(activeIndex), align: atStart ? 'start' as const : 'center' as const}));
   const itemKey = useCallback((rowIndex: number) => {
     const {group, chapterStart} = layout.at(rowIndex);
     return chapterStart === null ? `volume:${group.volume.id}` : `chapter:${chapterStart}`;
   }, [layout]);
   const rangeChanged = useCallback(({startIndex, endIndex}: {startIndex: number; endIndex: number}) => {
     for (const group of layout.groups) {
-      const start = Math.max(startIndex, group.header + 1), end = Math.min(endIndex, group.header + group.rows);
-      if (start <= end) onRange(group.volume.start + (start - group.header - 1) * columns,
-        Math.min(group.volume.start + group.volume.count - 1, group.volume.start + (end - group.header) * columns - 1));
+      const start = Math.max(startIndex, group.start), end = Math.min(endIndex, group.start + group.rows - 1);
+      if (start <= end) onRange(group.volume.start + (start - group.start) * columns,
+        Math.min(group.volume.start + group.volume.count - 1, group.volume.start + (end - group.start + 1) * columns - 1));
     }
   }, [layout, onRange, columns]);
   useLayoutEffect(() => {
     if (!scroller || ready) return;
     let frame = 0, stableFrames = 0, previousTop = -1, previousHeight = -1;
     const revealWhenLocated = () => {
-      const target = scroller.querySelector<HTMLElement>(view.targetVolume ? `[data-volume-id="${CSS.escape(view.targetVolume)}"]` : '[aria-current="location"]');
+      const target = scroller.querySelector<HTMLElement>(view.targetVolume ? `[data-volume-id="${CSS.escape(view.targetVolume)}"]` : atStart ? '.book-catalog-chapter' : '[aria-current="location"]');
       const viewport = scroller.getBoundingClientRect(), item = (target?.closest('.book-catalog-row') ?? target)?.getBoundingClientRect();
       const maximum = scroller.scrollHeight - scroller.clientHeight;
-      const desiredTop = item ? Math.max(0, Math.min(maximum, scroller.scrollTop + item.top - viewport.top - (view.targetVolume ? 0 : (viewport.height - item.height) / 2))) : -1;
+      const desiredTop = item ? Math.max(0, Math.min(maximum, scroller.scrollTop + item.top - viewport.top - (atStart ? 0 : (viewport.height - item.height) / 2))) : -1;
       const located = target && getComputedStyle(target).visibility === 'visible' && item && listHeight > 0 && viewport.height > 0 && item.bottom > viewport.top && item.top < viewport.bottom
         && Math.abs(desiredTop - scroller.scrollTop) < 2;
       stableFrames = located && scroller.scrollTop === previousTop && scroller.scrollHeight === previousHeight ? stableFrames + 1 : 0;
@@ -159,7 +161,7 @@ function CatalogVolumeRows({bookId, catalog, onRange, onRetry, activeChapterId, 
     };
     frame = requestAnimationFrame(revealWhenLocated);
     return () => cancelAnimationFrame(frame);
-  }, [scroller, ready, listHeight, view.targetVolume, view.focusVolume]);
+  }, [scroller, ready, listHeight, view.targetVolume, view.focusVolume, atStart]);
   useEffect(() => {
     if (!ready || !view.focusVolume) return;
     const id = view.focusVolume;
