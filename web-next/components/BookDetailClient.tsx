@@ -323,6 +323,9 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
      return book.author_id;
   };
   const displayRating = formatRating(book.rating);
+  const compactCount = new Intl.NumberFormat('zh-CN', {notation: 'compact', maximumFractionDigits: 1});
+  const mobileWordCount = totalWords === null ? '暂无统计' : `${compactCount.format(totalWords)}字`;
+  const viewCount = compactCount.format(book.views || 0);
 
   return (
     // 修改1：增加手机端底部 padding (pb-24)，防止被常驻底栏遮挡内容
@@ -349,7 +352,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
               {/* 右侧信息 */}
               <div className="flex-1 flex flex-col justify-between md:justify-start">
-                 {/* 标题与手机端评分 */}
+                 {/* 书名 */}
                  <div className="flex items-start justify-between mb-1 md:mb-4">
                      <h1 className="text-lg md:text-3xl font-bold text-gray-900 line-clamp-2">{book.title}</h1>
                  </div>
@@ -366,7 +369,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                         <span className="text-gray-500 w-12 md:w-16">分类:</span>
                         <span className="text-gray-900">{categoryDisplay || '综合'}</span>
                      </div>
-                     <div className="flex items-center">
+                     <div className="hidden md:flex items-center">
                         <span className="text-gray-500 w-12 md:w-16">状态:</span>
                         <span className="text-gray-900">{statusText}{wordCount !== null && ` | ${wordCount}`}</span>
                      </div>
@@ -384,11 +387,6 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                         <span className="text-gray-500 w-16">更新时间:</span>
                         <span className="text-gray-900">{updatedLabel}</span>
                      </div>
-                 </div>
-
-                 <div className="book-mobile-rating md:hidden" aria-label={`书友评分：${ratingLabel(book.rating)}`}>
-                    <Star size={13} aria-hidden="true" />
-                    <strong>{displayRating}</strong>
                  </div>
 
                  {/* 电脑端的大按钮组 (手机端已移除，改为常驻底栏) */}
@@ -430,8 +428,25 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
               </div>
             </div>
 
-            {/* 🔥 新增：手机端专属作品简介 (紧贴封面下方，支持折叠) */}
+            {/* 手机端统计与简介卡片 */}
             <div className="book-intro md:hidden mt-4 pt-3 border-t border-gray-100">
+                <dl className="book-mobile-stats" aria-label="作品数据">
+                  <div>
+                    <dt>字数</dt>
+                    <dd>{mobileWordCount}</dd>
+                  </div>
+                  <div>
+                    <dt>浏览量</dt>
+                    <dd>{viewCount}</dd>
+                  </div>
+                  <div>
+                    <dt>星级</dt>
+                    <dd className="book-mobile-rating" data-rated={displayRating !== '暂无评分'} aria-label={`书友评分：${ratingLabel(book.rating)}`}>
+                      <Star size={15} aria-hidden="true" />
+                      <strong>{displayRating}</strong>
+                    </dd>
+                  </div>
+                </dl>
                 <BookDescription description={book.description}/>
             </div>
         </div>

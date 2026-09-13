@@ -98,20 +98,26 @@
   body:has(.book-detail) [data-site-chrome] { display:none; }
   .book-detail { background:#f7f5f2; color:#292724; padding-bottom:calc(100px + env(safe-area-inset-bottom)); }
   .book-layout { padding:0; gap:0; }
-  .book-hero { padding:24px 20px 0; border-radius:0; box-shadow:none; background:radial-gradient(ellipse at -10% -15%,var(--cover-glow),transparent 62%),radial-gradient(ellipse at 110% 15%,var(--cover-mid),transparent 58%),linear-gradient(145deg,var(--cover-mid),var(--cover-base) 75%); }
-  .book-hero>div:first-child { gap:20px; padding-bottom:32px; }
+  .book-hero { padding:20px 20px 0; border-radius:0; box-shadow:none; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; background:radial-gradient(ellipse at -10% -15%,var(--cover-glow),transparent 62%),radial-gradient(ellipse at 110% 15%,var(--cover-mid),transparent 58%),linear-gradient(145deg,var(--cover-mid),var(--cover-base) 75%); }
+  .book-hero>div:first-child { gap:20px; padding-bottom:20px; }
   .book-hero img,.book-hero>div:first-child>div:first-child>div { width:102px; height:140px; border-radius:5px; box-shadow:0 5px 18px #0004; }
-  .book-hero h1 { color:#fffaf0; font-size:24px; font-weight:500; line-height:1.35; padding-top:8px; }
+  .book-hero h1 { color:#fffaf0; font-size:20px; font-weight:500; line-height:1.4; padding-top:4px; }
   .book-hero>div:first-child>div:nth-child(2) { min-width:0; justify-content:flex-start; gap:9px; }
   .book-meta { gap:5px; margin:0; font-size:13px; }
   .book-meta>div>span:first-child { display:none; }
   .book-meta a,.book-meta span { color:#eeeae2; }
   .book-meta a { font-size:16px; font-weight:400; }
   .book-meta a::after { content:' ›'; margin-left:6px; color:#d1cdc5; }
-  .book-mobile-rating { display:flex; align-items:center; gap:5px; color:#f2ce80; font-size:13px; line-height:1.5; }
-  .book-mobile-rating svg { fill:currentColor; flex-shrink:0; }
-  .book-intro { margin:0 -20px; padding:25px 20px 16px; border:0; border-radius:24px 24px 0 0; background:#fffdf9; }
-  .book-intro .relative>div { font-size:16px; line-height:1.85; color:#625e56; }
+  .book-intro { margin:0 -20px; padding:18px 20px 16px; border:0; border-radius:24px 24px 0 0; background:#fffdf9; }
+  .book-mobile-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); margin:0 0 16px; }
+  .book-mobile-stats>div { display:flex; flex-direction:column; align-items:center; min-width:0; gap:3px; padding:0 4px; }
+  .book-mobile-stats>div+div { border-left:1px solid #f0ece5; }
+  .book-mobile-stats dt { order:1; color:#9a9388; font-size:12px; line-height:1.5; }
+  .book-mobile-stats dd { display:flex; align-items:center; justify-content:center; gap:4px; min-height:28px; margin:0; color:#332f2a; font-size:18px; font-weight:600; line-height:1.5; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .book-mobile-rating svg { color:#d8a74c; fill:currentColor; flex-shrink:0; }
+  .book-mobile-rating strong { font-weight:inherit; }
+  .book-mobile-rating[data-rated=false] { font-size:14px; font-weight:400; }
+  .book-intro .book-description { font-size:14px; line-height:1.6; letter-spacing:normal; color:#625e56; }
   .book-intro button { background:none; color:#978369; justify-content:flex-end; width:auto; margin-left:auto; padding:4px 0; font-size:13px; }
   .book-catalog { border-radius:0; box-shadow:none; background:#fffdf9; margin-bottom:10px; }
   .mobile-catalog { width:100%; display:flex; align-items:center; gap:8px; min-height:52px; padding:12px 20px; border-top:1px solid #f0ece5; text-align:left; }
