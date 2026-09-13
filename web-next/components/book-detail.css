@@ -85,6 +85,15 @@
 .community-tabs button[aria-selected=true] { color:#262321; font-weight:700; }
 .community-tabs button[aria-selected=true]::after { content:''; position:absolute; bottom:-1px; left:50%; transform:translateX(-50%); width:24px; height:3px; border-radius:4px; background:#df343b; }
 .community-tabs small { font-size:12px; font-weight:400; color:#aaa; }
+.book-review { text-align:left; }
+.book-review-avatar { width:36px; height:36px; border-radius:50%; object-fit:cover; overflow:hidden; }
+.book-review-body { min-width:0; }
+.book-review-heading { display:flex; align-items:baseline; gap:10px; margin-bottom:4px; }
+.book-review-name { min-width:0; color:#000; font-family:"Noto Serif SC","Songti SC",SimSun,serif; font-size:16px; font-weight:700; line-height:1.6; overflow-wrap:anywhere; }
+.book-review-heading button { flex-shrink:0; }
+.book-review-meta { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:6px; font-size:12px; line-height:1.5; color:#9b824f; }
+.book-review-meta time { color:#9ca3af; }
+.book-review-content { margin:0; padding:0; color:#374151; font-family:Arial,"PingFang SC","Microsoft YaHei",sans-serif; font-size:14px; line-height:1.8; white-space:pre-wrap; overflow-wrap:anywhere; text-align:left; text-indent:0; }
 @media (max-width:767px) {
   body:has(.book-detail) [data-site-chrome] { display:none; }
   .book-detail { background:#f7f5f2; color:#292724; padding-bottom:calc(100px + env(safe-area-inset-bottom)); }
@@ -99,6 +108,9 @@
   .book-meta a,.book-meta span { color:#eeeae2; }
   .book-meta a { font-size:16px; font-weight:400; }
   .book-meta a::after { content:' ›'; margin-left:6px; color:#d1cdc5; }
+  .book-mobile-rating { display:flex; align-items:center; gap:5px; color:#f2ce80; font-size:13px; line-height:1.5; }
+  .book-mobile-rating svg { fill:currentColor; flex-shrink:0; }
+  .book-mobile-rating small { font-size:11px; color:#eeeae2; }
   .book-intro { margin:0 -20px; padding:25px 20px 16px; border:0; border-radius:24px 24px 0 0; background:#fffdf9; }
   .book-intro .relative>div { font-size:16px; line-height:1.85; color:#625e56; }
   .book-intro button { background:none; color:#978369; justify-content:flex-end; width:auto; margin-left:auto; padding:4px 0; font-size:13px; }
@@ -118,7 +130,6 @@
   #reviews-panel nav[hidden] { display:none; }
   #reviews-panel p { overflow-wrap:anywhere; }
   #reviews-panel .flex-1 { min-width:0; }
-  #reviews-panel .flex.items-center.space-x-2.mb-1 { flex-wrap:wrap; row-gap:6px; }
   .book-actions { background:#fffdf9; box-shadow:none; border-color:#eee8df; }
   .book-actions>div { height:48px; max-width:600px; gap:20px; }
   .book-actions button { background:transparent; border:0; color:#625e56; font-size:15px; font-weight:400; flex:1; }

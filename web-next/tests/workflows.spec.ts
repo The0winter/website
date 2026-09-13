@@ -122,7 +122,7 @@ test('bookmarks and ratings persist through the public detail and personal shelf
   await page.getByRole('button',{name:'加入书架',exact:true}).first().click();
   await expect(page.getByRole('button',{name:'已在书架',exact:true}).first()).toBeVisible();
   await page.getByRole('button',{name:/^(写书评|修改)$/}).first().click();
-  await page.getByRole('button',{name:'5 星',exact:true}).click();
+  await page.getByRole('button',{name:'10 分（5 星）',exact:true}).click();
   const review=`浏览器评分与书架回归 ${Date.now()}`;
   await page.getByPlaceholder('写下你的短评...').fill(review);
   const saved=page.waitForResponse(r=>r.url().endsWith('/reviews')&&r.request().method()==='POST');

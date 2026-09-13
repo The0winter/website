@@ -1,5 +1,6 @@
 'use client';
 import BookCover from '@/components/BookCover';
+import {ratingLabel} from '@/lib/rating';
 import MobileHome from './MobileHome';
 import type {LucideIcon} from 'lucide-react';
 
@@ -99,7 +100,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
 
                         <div className="flex-shrink-0">
                             {showRating ? (
-                                <span className="text-yellow-500 font-bold text-sm">{book.rating?.toFixed(1) || '0.0'}分</span>
+                                <span className="text-yellow-500 font-bold text-sm">{ratingLabel(book.rating)}</span>
                             ) : (
                                 <ChevronRight className="w-5 h-5 text-gray-300" />
                             )}
@@ -719,7 +720,7 @@ export default function HomePageClient({
                             )}
                             <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1">
                               <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                              {book.rating?.toFixed(1) || '0.0'}
+                              {ratingLabel(book.rating)}
                             </div>
                         </div>
                         <div>

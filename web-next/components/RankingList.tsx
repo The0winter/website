@@ -1,5 +1,6 @@
 'use client';
 import BookCover from '@/components/BookCover';
+import {ratingLabel} from '@/lib/rating';
 import type { Book } from '@/lib/api';
 import type {LucideIcon} from 'lucide-react';
 
@@ -94,7 +95,7 @@ const RankingList = ({
 
                         <div className="flex-shrink-0">
                             {showRating ? (
-                                <span className="text-yellow-500 font-bold text-sm">{book.rating?.toFixed(1) || '0.0'}分</span>
+                                <span className="text-yellow-500 font-bold text-sm">{ratingLabel(book.rating)}</span>
                             ) : (
                                 <ChevronRight className="w-5 h-5 text-gray-300" />
                             )}

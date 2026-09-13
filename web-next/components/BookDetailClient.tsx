@@ -11,6 +11,7 @@ import RecordBookVisit from './RecordBookVisit';
 import BookCatalogSheet from './BookCatalogSheet';
 import {useBookCatalog} from '@/lib/useBookCatalog';
 import {formatChapterTitle} from '@/lib/catalog-title';
+import {formatRating, ratingLabel} from '@/lib/rating';
 import {beginChapterEntry} from '@/lib/chapter-entry';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
@@ -25,12 +26,14 @@ const StarRating = ({ rating, size = 5, interactive = false, onRate }: { rating:
   const [hoverRating, setHoverRating] = useState(0);
 
   return (
-    <div className="flex space-x-1" onMouseLeave={() => interactive && setHoverRating(0)}>
+    <div className="flex shrink-0 space-x-1" role={interactive ? 'group' : 'img'} aria-label={interactive ? '选择评分，最低 2 分，最高 10 分' : ratingLabel(rating)} onMouseLeave={() => interactive && setHoverRating(0)}>
       {[1, 2, 3, 4, 5].map((star) => (
         <Star
           key={star}
           role={interactive ? 'button' : undefined}
-          aria-label={interactive ? `${star} 星` : undefined}
+          aria-label={interactive ? `${star * 2} 分（${star} 星）` : undefined}
+          aria-pressed={interactive ? rating === star : undefined}
+          aria-hidden={!interactive || undefined}
           tabIndex={interactive ? 0 : undefined}
           onKeyDown={(event) => {if(interactive && (event.key==='Enter'||event.key===' ')){event.preventDefault();onRate?.(star);}}}
           onClick={() => interactive && onRate && onRate(star)}
@@ -268,7 +271,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return router.push('/login');
-    if (submittingReview) return;
+    if (submittingReview || myRating < 1 || myRating > 5) return;
 
     setSubmittingReview(true);
     
@@ -319,7 +322,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
      if (typeof book.author_id === 'object') return book.author_id?.id || book.author_id?._id;
      return book.author_id;
   };
-  const displayRating = book.rating ? (book.rating * 2).toFixed(1) : '0.0';
+  const displayRating = formatRating(book.rating);
 
   return (
     // 修改1：增加手机端底部 padding (pb-24)，防止被常驻底栏遮挡内容
@@ -349,11 +352,6 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                  {/* 标题与手机端评分 */}
                  <div className="flex items-start justify-between mb-1 md:mb-4">
                      <h1 className="text-lg md:text-3xl font-bold text-gray-900 line-clamp-2">{book.title}</h1>
-                     {/* 🔥 新增：手机端评分角标 */}
-                     <div className="hidden flex-shrink-0 items-center bg-yellow-50 px-2 py-0.5 rounded border border-yellow-100 text-yellow-600 text-xs font-bold whitespace-nowrap ml-2 mt-0.5">
-                         <Star className="w-3 h-3 fill-yellow-400 text-yellow-400 mr-1" />
-                         {displayRating}分
-                     </div>
                  </div>
 
                  {/* 信息列表 */}
@@ -388,6 +386,12 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                      </div>
                  </div>
 
+                 <div className="book-mobile-rating md:hidden" aria-label={`书友评分：${ratingLabel(book.rating)}`}>
+                    <Star size={13} aria-hidden="true" />
+                    <strong>{ratingLabel(book.rating)}</strong>
+                    {book.rating ? <small>/ 10</small> : null}
+                 </div>
+
                  {/* 电脑端的大按钮组 (手机端已移除，改为常驻底栏) */}
                  <div className="hidden md:flex flex-wrap gap-4 mt-auto">
                     {firstChapterId ? (
@@ -414,10 +418,10 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
               {/* 电脑端评分栏 */}
               <div className="hidden md:block w-[280px] border-l border-gray-100 pl-6 pt-2">
                  <div className="flex items-end space-x-2 mb-2">
-                    <span className="text-gray-500 text-xs">书友评分</span>
+                    <span className="text-gray-500 text-xs">书友评分 · 10 分制</span>
                  </div>
                  <div className="flex items-center space-x-3 mb-3">
-                    <strong className="text-4xl font-bold text-gray-900">{displayRating}</strong>
+                    <strong className={`book-rating-score font-bold text-gray-900 ${book.rating ? 'text-4xl' : 'text-lg'}`}>{displayRating}</strong>
                     <div className="flex flex-col">
                         <StarRating rating={book.rating || 0} size={6} />
                         <span className="text-xs text-blue-600 mt-1 hover:underline cursor-pointer">{book.numReviews || 0} 人评价</span>
@@ -475,13 +479,14 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                 <div className="mb-8 p-4 md:p-6 bg-gray-50 rounded-lg border border-blue-100 shadow-inner animation-fade-in relative">
                     <button onClick={() => setShowReviewForm(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
                     <form onSubmit={handleSubmitReview}>
-                        <div className="flex items-center space-x-2 mb-4">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
                             <span className="text-sm font-bold text-gray-700">评价:</span>
                             <div className="flex items-center space-x-2">
                                 <StarRating rating={myRating} interactive={true} onRate={setMyRating} size={6} />
-                                <span className="text-sm text-yellow-600 font-medium ml-2">{myRating * 2} 分</span>
+                                <span className="book-selected-rating text-sm text-yellow-600 font-medium ml-2" aria-live="polite">{myRating ? `${myRating * 2} 分` : '请选择评分'}</span>
                             </div>
                         </div>
+                        <p className="mb-4 text-xs text-gray-500">一至五星对应 2、4、6、8、10 分</p>
                         <textarea
                             value={myContent}
                             onChange={(e) => setMyContent(e.target.value)}
@@ -492,7 +497,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                         <div className="mt-3 flex justify-end">
                             <button 
                                 type="submit" 
-                                disabled={submittingReview}
+                                disabled={submittingReview || !myRating}
                                 className="bg-green-600 text-white px-6 py-2 rounded text-sm hover:bg-green-700 disabled:opacity-50 transition-colors"
                             >
                                 {submittingReview ? '保存中...' : '发表评论'}
@@ -515,25 +520,21 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                         if (isMyReview && showReviewForm) return null;
 
                         return (
-                            <div key={review._id} className={`border-t border-gray-100 pt-4 ${isMyReview ? 'bg-blue-50/30 -mx-4 px-4 pb-4 rounded' : ''}`}>
+                            <div key={review._id} className={`book-review border-t border-gray-100 pt-4 ${isMyReview ? 'bg-blue-50/30 -mx-4 px-4 pb-4 rounded' : ''}`}>
                                 <div className="flex items-start space-x-3">
                                     <div className="flex-shrink-0 pt-1">
                                         {review.user?.avatar ? (
-                                            <img src={review.user.avatar} alt={review.user.username} className="w-8 h-8 rounded-sm object-cover" />
+                                            <img src={review.user.avatar} alt={review.user.username} className="book-review-avatar" />
                                         ) : (
-                                            <div className="w-8 h-8 rounded-sm bg-gray-200 flex items-center justify-center">
+                                            <div className="book-review-avatar bg-gray-200 flex items-center justify-center">
                                                 <UserIcon className="w-5 h-5 text-gray-500" />
                                             </div>
                                         )}
                                     </div>
-                                    <div className="flex-1">
-                                        <div className="flex items-center space-x-2 mb-1">
-                                            <span className="text-blue-600 text-sm hover:bg-blue-600 hover:text-white px-1 rounded cursor-pointer transition-colors">
+                                    <div className="book-review-body flex-1">
+                                        <div className="book-review-heading">
+                                            <span className="book-review-name">
                                                 {review.user?.username || '书友'} {isMyReview && '(我)'}
-                                            </span>
-                                            <StarRating rating={review.rating} size={4} />
-                                            <span className="text-xs text-gray-400">
-                                                {new Date(review.createdAt).toISOString().split('T')[0]}
                                             </span>
                                             {isMyReview && (
                                                 <button 
@@ -544,7 +545,12 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                                                 </button>
                                             )}
                                         </div>
-                                        <p className="text-gray-700 text-sm leading-relaxed">{review.content}</p>
+                                        <div className="book-review-meta">
+                                            <StarRating rating={review.rating} size={4} />
+                                            <span>{ratingLabel(review.rating)}</span>
+                                            <time dateTime={review.createdAt}>{review.createdAt.slice(0, 10)}</time>
+                                        </div>
+                                        <p className="book-review-content">{review.content}</p>
                                     </div>
                                 </div>
                             </div>
