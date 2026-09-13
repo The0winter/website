@@ -155,7 +155,7 @@ function Library() {
   const [removeError, setRemoveError] = useState('');
   const management = useRef<{token: string; afterClose?: () => void} | null>(null);
   const removalVersion = useRef({value: 0});
-  const swipe = useRef<{id: number; x: number; y: number; horizontal: boolean; lastX: number; lastAt: number; velocity: number; startedAt: number; section?: MobileSectionDrag} | null>(null);
+  const swipe = useRef<{id: number; x: number; y: number; horizontal: boolean; lastX: number; lastAt: number; velocity: number; section?: MobileSectionDrag} | null>(null);
   useEffect(() => () => swipe.current?.section?.cancel(), []);
   const suppressSwipeClick = useRef(false);
   const pageTurn = useShelfPageTurn(tab, pathname === '/library' && Boolean(user) && !authLoading);
@@ -255,9 +255,9 @@ function Library() {
     suppressSwipeClick.current = false;
     swipe.current?.section?.cancel();
     swipe.current = null;
-    if (!event.isPrimary || event.button !== 0 || targets || removing || (event.target as HTMLElement).closest('button, select, input, [role="menu"], .mh-bottom, dialog')) return;
+    if (!event.isPrimary || event.button !== 0 || targets || removing || (event.target as HTMLElement).closest('button, select, input, [role="menu"], .mh-bottom, .mh-topbar, dialog')) return;
     setPages(current => current[otherTab] === 1 ? current : {...current, [otherTab]: 1});
-    swipe.current = {id: event.pointerId, x: event.clientX, y: event.clientY, horizontal: false, lastX: event.clientX, lastAt: event.timeStamp, velocity: 0, startedAt: performance.now()};
+    swipe.current = {id: event.pointerId, x: event.clientX, y: event.clientY, horizontal: false, lastX: event.clientX, lastAt: event.timeStamp, velocity: 0};
   }
 
   function moveSwipe(event: PointerEvent<HTMLElement>) {
@@ -279,7 +279,7 @@ function Library() {
     if (dx < 0 && tab === 'shelf' && !managing && !menu && matchMedia('(max-width: 767px)').matches) {
       if (!gesture.section) {
         pageTurn.cancel();
-        gesture.section = startMobileSectionDrag(event.currentTarget, 'home', gesture.startedAt);
+        gesture.section = startMobileSectionDrag(event.currentTarget, 'home');
       }
       gesture.section?.update(dx);
       if (gesture.section) return;

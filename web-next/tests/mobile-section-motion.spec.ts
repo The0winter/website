@@ -28,7 +28,7 @@ for (const width of [320, 390]) test(`${width}px every section follows each touc
     const frames = await pause(page);
     for (const frame of frames) expect(frame.duration).toBeCloseTo(240 * (1 - 140 / width), 0);
     const initial = await page.locator('[data-section-pane=outgoing]').evaluate(element => (element.getAnimations()[0].effect as KeyframeEffect).getKeyframes()[0].transform);
-    expect(initial).toBe(`translateX(${-direction * 140}px)`);
+    expect(await page.evaluate(transform => new DOMMatrix(transform as string).m41, initial)).toBe(-direction * 140);
     await expect(page).toHaveURL(base + path);
     await finish(page);
   }
@@ -49,7 +49,7 @@ test('reversing through the start and cancelling returns home without navigating
   await expect(page).toHaveURL(base + '/');
 });
 
-test('a quick flick counts finger travel towards the 400ms minimum', async ({page, context}) => {
+test('a quick flick settles its remaining distance without a minimum total time', async ({page, context}) => {
   await setup(page);
   // Warm the static forum route so this measures motion, not home SSR latency.
   await page.locator('.mh-bottom:visible [data-section=forum]').click();
@@ -76,13 +76,13 @@ test('a quick flick counts finger travel towards the 400ms minimum', async ({pag
     return state.flickAnimationAt - state.flickStarted;
   });
   expect(elapsed).toBeLessThan(300);
-  expect(Number(frames[0].duration) + elapsed).toBeGreaterThanOrEqual(395);
-  expect(Number(frames[0].duration) + elapsed).toBeLessThan(425);
+  expect(frames[0].duration).toBeCloseTo(80, 0);
+  expect(Number(frames[0].duration) + elapsed).toBeLessThan(350);
   expect(frames[0].duration).toBeLessThan(400);
   await finish(page);
 });
 
-test('a slow route retains the released drag position without jumping back to the start', async ({page, context}) => {
+test('a slow route does not stop a released swipe or replay motion when it arrives', async ({page, context}) => {
   await setup(page);
   let release!: () => void;
   const gate = new Promise<void>(resolve => {release = resolve;});
@@ -90,15 +90,17 @@ test('a slow route retains the released drag position without jumping back to th
   try {
     await hold(page);
     await swipe(page, context, 1);
+    const frames = await pause(page, false);
+    expect(frames[0].duration).toBeCloseTo(240 * (1 - 138 / 390), 0);
+    expect(await page.locator('[data-section-pane=outgoing]').evaluate(element => new DOMMatrix((element.getAnimations()[0].effect as KeyframeEffect).getKeyframes()[0].transform as string).m41)).toBe(-138);
+    await page.locator('.mobile-section-snapshot').evaluateAll(elements => elements.forEach(element => element.getAnimations().forEach(animation => animation.finish())));
     await expect(page.locator('html')).toHaveAttribute('data-mobile-section-transition', 'loading');
-    await page.waitForTimeout(450);
-    expect(await page.locator('[data-section-pane=outgoing]').evaluate(element => element.getBoundingClientRect().x)).toBe(-138);
-    expect(await page.locator('[data-section-pane=preview]').evaluate(element => element.getBoundingClientRect().x)).toBe(252);
+    expect(await page.locator('[data-section-pane=outgoing]').evaluate(element => element.getBoundingClientRect().x)).toBe(-390);
+    expect(await page.locator('[data-section-pane=incoming]').evaluate(element => element.getBoundingClientRect().x)).toBe(0);
     release();
-    const frames = await pause(page);
-    expect(frames[0].duration).toBeLessThan(240);
-    expect(await page.locator('[data-section-pane=outgoing]').evaluate(element => (element.getAnimations()[0].effect as KeyframeEffect).getKeyframes()[0].transform)).toBe('translateX(-138px)');
-    await finish(page);
+    // Any second animation would pause again and leave an overlay behind.
+    await expect(page.locator('.mobile-section-snapshot, .mobile-section-header')).toHaveCount(0);
+    await expect(page).toHaveURL(base + '/forum');
   } finally {release();}
 });
 
@@ -140,8 +142,13 @@ async function swipe(page: Page, context: BrowserContext, direction: number, opt
   await cdp.detach();
 }
 
-async function pause(page: Page) {
+async function pause(page: Page, waitForRoute = true) {
   await expect(page.locator('html')).toHaveAttribute('data-mobile-section-transition', 'animating');
+  if (waitForRoute) {
+    const path = await page.locator('[data-section-pane=incoming]').getAttribute('data-section-path');
+    await expect.poll(() => new URL(page.url()).pathname).toBe(path);
+    await expect(page.locator(path === '/library' ? '.library-page' : path === '/forum' ? '.forum-page' : '.mobile-home')).toBeVisible();
+  }
   return page.locator('.mobile-section-snapshot').evaluateAll(elements => elements.map(element => {
     const animation = element.getAnimations()[0];
     animation.pause(); animation.currentTime = Number(animation.effect!.getTiming().duration) / 2;
@@ -243,7 +250,7 @@ for (const width of [320, 390]) for (const method of ['tap', 'swipe']) test(`${w
     else await swipe(page, context, direction);
     const frames = await pause(page);
     expect(frames).toHaveLength(2);
-    if (method === 'tap') expect(frames.map(frame => frame.duration)).toEqual([400, 400]);
+    if (method === 'tap') expect(frames.map(frame => frame.duration)).toEqual([300, 300]);
     else for (const frame of frames) {expect(frame.duration).toBeGreaterThan(0); expect(frame.duration).toBeLessThan(400);}
     expect(frames[0].x * direction).toBeLessThan(0);
     expect(frames[1].x * direction).toBeGreaterThan(0);
@@ -290,7 +297,7 @@ test('the shelf underline starts under the selected tab on its first painted fra
   await expect(page.getByRole('tab', {name: '浏览记录'})).toHaveAttribute('aria-selected', 'true');
 });
 
-test('a slow destination keeps the old screen, then receives the full animation', async ({page}) => {
+test('a tap slides immediately even while the destination is still loading', async ({page}) => {
   await setup(page);
   let release!: () => void;
   const gate = new Promise<void>(resolve => {release = resolve;});
@@ -298,14 +305,14 @@ test('a slow destination keeps the old screen, then receives the full animation'
   try {
     await hold(page);
     await page.locator('.mh-bottom:visible [data-section=forum]').click();
+    const frames = await pause(page, false);
+    expect(frames.map(frame => frame.duration)).toEqual([300, 300]);
+    expect(frames[0].x).toBeLessThan(0);
+    await page.locator('.mobile-section-snapshot').evaluateAll(elements => elements.forEach(element => element.getAnimations().forEach(animation => animation.finish())));
     await expect(page.locator('html')).toHaveAttribute('data-mobile-section-transition', 'loading');
-    await page.waitForTimeout(450);
-    await expect(page.locator('[data-section-pane=outgoing]')).toHaveCount(1);
-    await expect(page.locator('[data-section-pane=incoming]')).toHaveCount(0);
     release();
-    const frames = await pause(page);
-    expect(frames.map(frame => frame.duration)).toEqual([400, 400]);
-    await finish(page);
+    await expect(page.locator('.mobile-section-snapshot, .mobile-section-header')).toHaveCount(0);
+    await expect(page).toHaveURL(base + '/forum');
   } finally {release();}
 });
 
@@ -329,21 +336,28 @@ test('Back cancels a pending section without leaving an overlay or a late naviga
   } finally {release();}
 });
 
-test('reduced motion stays still for 400ms and resizing clears a running slide', async ({page}) => {
+test('reduced motion has no slide or minimum delay and resizing clears a running slide', async ({page}) => {
   await setup(page);
   await page.emulateMedia({reducedMotion: 'reduce'});
-  await hold(page);
+  await page.evaluate(() => {
+    const durations: number[] = [];
+    Object.assign(window, {sectionDurations: durations});
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function(frames, options) {
+      if (this.classList.contains('mobile-section-snapshot')) durations.push(Number(typeof options === 'number' ? options : options?.duration));
+      return animate.call(this, frames, options);
+    };
+  });
   await page.locator('.mh-bottom:visible [data-section=library]').click();
-  const frames = await pause(page);
-  expect(frames.map(frame => frame.x)).toEqual([0, 0]);
-  expect(frames.map(frame => frame.duration)).toEqual([400, 400]);
-  await finish(page);
+  await expect(page).toHaveURL(base + '/library');
+  await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as {sectionDurations: number[]}).sectionDurations)).toEqual([0, 0]);
   await page.emulateMedia({reducedMotion: 'no-preference'});
   await hold(page);
   await page.locator('.mh-bottom:visible [data-section=home]').click();
   await pause(page);
   await page.setViewportSize({width: 768, height: 844});
-  await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
+  await expect(page.locator('.mobile-section-snapshot, .mobile-section-header')).toHaveCount(0);
   await expect(page.locator('html')).not.toHaveAttribute('data-mobile-section-transition', /.+/);
 });
 

@@ -75,7 +75,6 @@ export default function ForumPage() {
   const feed = useRef<HTMLDivElement>(null);
   const horizontalSwipe = useRef(false);
   const sectionDrag = useRef<MobileSectionDrag | undefined>(undefined);
-  const swipeStartedAt = useRef(0);
   useEffect(() => () => sectionDrag.current?.cancel(), []);
   useEffect(() => {
     const host = feed.current;
@@ -104,9 +103,8 @@ export default function ForumPage() {
   const handleTouchStart = (e: React.TouchEvent) => {
     handleTouchCancel();
     suppressSwipeClick.current = false;
-    if (e.touches.length !== 1 || (e.target as Element).closest('button, input, select, textarea, [contenteditable], .mh-bottom, .forum-publish, dialog')) return;
+    if (e.touches.length !== 1 || (e.target as Element).closest('button, input, select, textarea, [contenteditable], .mh-bottom, .mh-topbar, .forum-publish, dialog')) return;
     setTouchStartPos({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
-    swipeStartedAt.current = performance.now();
     setIsDragging(true);
     setDragOffset(0);
     setSwipeDir(null);
@@ -135,7 +133,7 @@ export default function ForumPage() {
       let newOffset = diffX;
       // At the recommendation edge the entire section follows the finger.
       if (activeIndex === 0 && diffX > 0) {
-        sectionDrag.current ??= startMobileSectionDrag(e.currentTarget, 'home', swipeStartedAt.current);
+        sectionDrag.current ??= startMobileSectionDrag(e.currentTarget, 'home');
         sectionDrag.current?.update(diffX);
         newOffset = 0;
       }

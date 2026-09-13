@@ -8,16 +8,16 @@ export function useMobileHomeSwipe(enabled: boolean) {
   useEffect(() => {
     const host = root.current;
     if (!host || !enabled) return;
-    let gesture: {x: number; y: number; horizontal: boolean; dx: number; startedAt: number; direction?: number; drag?: MobileSectionDrag} | null = null;
+    let gesture: {x: number; y: number; horizontal: boolean; dx: number; direction?: number; drag?: MobileSectionDrag} | null = null;
     let suppressClick = false;
     const cancel = () => {gesture?.drag?.release(false); gesture = null;};
     const start = (event: TouchEvent) => {
       suppressClick = false;
       cancel();
       if (event.touches.length !== 1 || !matchMedia('(max-width: 767px)').matches ||
-        (event.target as Element).closest('button, input, select, textarea, [contenteditable], .mh-bottom, dialog')) return;
+        (event.target as Element).closest('button, input, select, textarea, [contenteditable], .mh-bottom, .mh-topbar, dialog')) return;
       const touch = event.touches[0];
-      gesture = {x: touch.clientX, y: touch.clientY, horizontal: false, dx: 0, startedAt: performance.now()};
+      gesture = {x: touch.clientX, y: touch.clientY, horizontal: false, dx: 0};
     };
     const move = (event: TouchEvent) => {
       if (!gesture) return;
@@ -33,7 +33,7 @@ export function useMobileHomeSwipe(enabled: boolean) {
       if (direction && direction !== gesture.direction) {
         gesture.drag?.cancel();
         gesture.direction = direction;
-        gesture.drag = startMobileSectionDrag(host, dx > 0 ? 'library' : 'forum', gesture.startedAt);
+        gesture.drag = startMobileSectionDrag(host, dx > 0 ? 'library' : 'forum');
       }
       gesture.drag?.update(dx);
       suppressClick = true;

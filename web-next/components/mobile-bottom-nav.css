@@ -1,5 +1,7 @@
 .mh-bottom { display:none; }
-.mobile-section-snapshot { position:fixed; top:0; left:0; width:100%; z-index:44; overflow:hidden; contain:paint; background:var(--home-background,#f4ece6); pointer-events:none; }
+.mobile-section-snapshot,.mobile-section-header { position:fixed; top:0; left:0; width:100%; z-index:44; overflow:hidden; contain:layout paint; background:var(--home-background,#f4ece6); pointer-events:none; }
+.mobile-section-snapshot { will-change:transform; }
+.mobile-section-header { z-index:46; }
 html[data-mobile-section-transition] { overflow-x:clip; }
 .mobile-section-backdrop { position:fixed; inset:0 0 auto; z-index:43; background:var(--home-background,#f4ece6); pointer-events:none; }
 .mobile-section-preview { color:var(--home-muted); font-size:14px; }
