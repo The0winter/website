@@ -57,7 +57,7 @@ for (const width of [320,390,768,1440]) test(`review footer, compact stars and p
     await expect(accountAvatar).toHaveText('山');
     expect(await first.locator('.book-review-avatar').evaluate(el=>getComputedStyle(el).backgroundColor)).toBe(await accountAvatar.evaluate(el=>getComputedStyle(el).backgroundColor));
   }
-  await page.locator('#reviews-section').screenshot({path:info.outputPath('comments.png')});
+  await page.locator('#reviews-section:visible').screenshot({path:info.outputPath('comments.png')});
   await like.click(); await expect(like).toHaveAttribute('aria-pressed','true'); await expect(like).toHaveAccessibleName('喜欢，19 人');
   await page.reload(); await expect(like).toHaveAttribute('aria-pressed','true');
   await dislike.click(); await expect(dislike).toHaveAttribute('aria-pressed','true'); await expect(like).toHaveAccessibleName('喜欢，18 人');

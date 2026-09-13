@@ -80,6 +80,8 @@
 .book-hero[data-cover-tone=mauve] { --cover-glow:#857084; --cover-mid:#634f67; --cover-base:#403345; --cover-wash:#efe6ee; }
 .book-hero[data-cover-tone=clay] { --cover-glow:#947965; --cover-mid:#6f5647; --cover-base:#4b392f; --cover-wash:#f0e6db; }
 .book-hero[data-cover-tone=olive] { --cover-glow:#838368; --cover-mid:#5e644b; --cover-base:#3d4432; --cover-wash:#ebedde; }
+.book-hero h1 { font-size:29px; }
+.book-meta a { font-size:15px; }
 .book-community { font-family:"PingFang SC","Microsoft YaHei","Noto Sans CJK SC","Noto Sans SC",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
 .book-community-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
 .community-tabs { display:flex; align-items:center; gap:14px; min-width:0; }
@@ -100,7 +102,7 @@
 .book-review-stars { gap:1px; }
 .book-review-stars svg { width:10px; height:10px; }
 .book-review-content { margin:0; padding:0; color:#262626; font-size:17px; line-height:28px; white-space:pre-wrap; overflow-wrap:anywhere; text-align:left; text-indent:0; }
-.book-review-footer { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:28px; margin-top:10px; color:#999ba1; }
+.book-review-footer { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:28px; margin-top:3px; color:#999ba1; }
 .book-review-footer time { flex-shrink:0; font-size:15px; line-height:23px; white-space:nowrap; }
 .book-review-reactions { display:flex; align-items:center; justify-content:flex-end; gap:20px; margin-left:auto; }
 .book-review-reactions button { display:flex; align-items:center; justify-content:center; gap:4px; min-width:28px; min-height:28px; padding:2px 0; border-radius:6px; font-size:15px; line-height:23px; white-space:nowrap; font-variant-numeric:tabular-nums; cursor:pointer; }
@@ -121,12 +123,12 @@
   .book-hero { padding:20px 20px 0; border-radius:0; box-shadow:none; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; background:radial-gradient(ellipse at -10% -15%,var(--cover-glow),transparent 62%),radial-gradient(ellipse at 110% 15%,var(--cover-mid),transparent 58%),linear-gradient(145deg,var(--cover-mid),var(--cover-base) 75%); }
   .book-hero>div:first-child { gap:20px; padding-bottom:20px; }
   .book-hero img,.book-hero>div:first-child>div:first-child>div { width:102px; height:140px; border-radius:5px; box-shadow:0 5px 18px #0004; }
-  .book-hero h1 { color:#fffaf0; font-size:20px; font-weight:500; line-height:1.4; padding-top:4px; }
+  .book-hero h1 { color:#fffaf0; font-size:19px; font-weight:500; line-height:1.4; padding-top:4px; }
   .book-hero>div:first-child>div:nth-child(2) { min-width:0; justify-content:flex-start; gap:9px; }
   .book-meta { gap:5px; margin:0; font-size:13px; }
   .book-meta>div>span:first-child { display:none; }
   .book-meta a,.book-meta span { color:#eeeae2; }
-  .book-meta a { font-size:16px; font-weight:400; }
+  .book-meta a { font-weight:400; }
   .book-meta a::after { content:' ›'; margin-left:6px; color:#d1cdc5; }
   .book-intro { margin:0 -20px; padding:18px 20px 16px; border:0; border-radius:24px 24px 0 0; background:#fffdf9; }
   .book-mobile-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); margin:0 0 16px; }
@@ -145,9 +147,9 @@
   .book-catalog { border-radius:0; box-shadow:none; background:#fffdf9; margin-bottom:10px; }
   .mobile-catalog { width:100%; display:flex; align-items:center; gap:8px; min-height:52px; padding:12px 20px; border-top:1px solid #f0ece5; text-align:left; }
   .mobile-catalog strong { flex-shrink:0; font-size:18px; font-weight:500; line-height:26px; }
-  .mobile-catalog>span { min-width:0; margin-left:auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right; font-size:12px; color:#8f8b83; line-height:20px; }
+  .mobile-catalog>span { min-width:0; margin-left:auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right; font-size:13px; color:#8f8b83; line-height:20px; }
   .mobile-catalog svg { flex-shrink:0; color:#b5aea3; }
-  .book-community { border-radius:0; box-shadow:none; padding:16px 16px 20px; background:#fff; }
+  .book-community { border-radius:0; box-shadow:none; padding:16px 16px 20px; background:#fffdf9; }
   .book-articles>div:first-child { margin-bottom:8px; font-size:13px; }
   .book-articles>p { padding-top:16px; padding-bottom:16px; }
   #reviews-panel nav[hidden] { display:none; }
