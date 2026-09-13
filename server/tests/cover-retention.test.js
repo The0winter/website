@@ -6,10 +6,10 @@ import Media from '../models/Media.js';
 import Book from '../models/Book.js';
 import User from '../models/User.js';
 import {claimMedia,claimImportedCover,retireUnreferencedCover} from '../services/media-reference.js';
-import {cleanUnusedCovers,coverRetentionMs} from '../services/cover-retention.js';
+import {cleanUnusedCovers,finishCoverRetirement} from '../services/cover-retention.js';
 import {createCoverStorage} from '../services/cover-storage.js';
 
-test('cover retention: real transactions, seven-day clock, reference races and physical deletion retries',async t=>{
+test('immediate cover deletion: real transactions, active uploads, reference races and retries',async t=>{
   const repl=await MongoMemoryReplSet.create({binary:{version:'7.0.40'},replSet:{count:1,storageEngine:'wiredTiger'}});
   await mongoose.connect(repl.getUri('cover_retention_test'),{autoIndex:false});
   const config={bucket:'test-covers',baseUrl:'https://img.example.test'};
@@ -39,24 +39,23 @@ test('cover retention: real transactions, seven-day clock, reference races and p
   });
   try {
     for(const model of [Media,Book,User])await model.createCollection();
-    await t.test('preview makes no changes and the exact seven-day boundary deletes both objects',async()=>{
+    await t.test('preview makes no changes and cleanup immediately deletes both objects',async()=>{
       const m=await make();
       const before=await Media.findById(m._id).lean(),count=calls.length;
-      const preview=await run(new Date(+start+coverRetentionMs),{apply:false});
+      const preview=await run(start,{apply:false});
       assert.equal(preview.results.find(r=>r.id===String(m._id)).status,'wouldDelete');
       assert.deepEqual(await Media.findById(m._id).lean(),before);assert.equal(calls.length,count);
-      await run(new Date(+start+coverRetentionMs-1));assert.equal(calls.length,count);
-      const result=await run(new Date(+start+coverRetentionMs));
+      const result=await run(start);
       assert.equal(result.results.find(r=>r.id===String(m._id)).status,'deleted');
       assert.ok((await Media.findById(m._id)).purgedAt);assert.ok(!objects.has(`covers/${m._id}/480.webp`));
     });
-    await t.test('legacy unused records start a full grace period; referenced books and avatars remain protected',async()=>{
+    await t.test('legacy unused records are deleted now; referenced books and avatars remain protected',async()=>{
       const m=await make({deleted:true}),active=await make(),removed=await make(),avatar=await make();
       await Media.updateOne({_id:m._id},{$unset:{unreferencedSince:1}});
       await Book.create([{title:'Active',cover_image:active.publicUrl},{title:'Recoverable',cover_image:removed.publicUrl,deletedAt:start}]);
       await User.create({username:'reference-owner',email:'reference@example.test',password:'synthetic',avatar:`/api/media/${avatar._id}`});
       const now=new Date(+start+20*86400000),result=await run(now);
-      assert.equal(result.results.find(r=>r.id===String(m._id)).status,'scheduled');
+      assert.equal(result.results.find(r=>r.id===String(m._id)).status,'deleted');
       assert.equal(+(await Media.findById(m._id)).unreferencedSince,+now);
       for(const item of [active,removed,avatar]){
         assert.equal((await Media.findById(item._id)).unreferencedSince,null);
@@ -64,15 +63,25 @@ test('cover retention: real transactions, seven-day clock, reference races and p
       }
       const next=await run(now);assert.ok(!next.results.some(r=>[m,active,removed,avatar].some(x=>String(x._id)===r.id)));
     });
-    await t.test('rebind cancels the old clock; a new unbind starts a fresh seven days; shared cover stays active',async()=>{
+    await t.test('shared and reclaimed covers stay active; the last unbind is deleted before returning',async()=>{
       const m=await make(),book=await Book.create({title:'Rebinding'}),other=await Book.create({title:'Shared'});
       await bind(m,book);assert.equal((await Media.findById(m._id)).unreferencedSince,null);
       await unbind(m,book,start);await bind(m,book);
-      await run(new Date(+start+coverRetentionMs));assert.ok(objects.has(`covers/${m._id}/240.webp`));
+      await run(start);assert.ok(objects.has(`covers/${m._id}/240.webp`));
       await bind(m,other);await unbind(m,book,start);assert.equal((await Media.findById(m._id)).unreferencedSince,null);
       const later=new Date(+start+3*86400000);await unbind(m,other,later);
-      await run(new Date(+later+coverRetentionMs-1));assert.ok(objects.has(`covers/${m._id}/480.webp`));
-      await run(new Date(+later+coverRetentionMs));assert.ok((await Media.findById(m._id)).purgedAt);
+      assert.equal((await finishCoverRetirement(m._id,{storage})).status,'deleted');
+      assert.ok((await Media.findById(m._id)).purgedAt);
+      assert.ok(!objects.has(`covers/${m._id}/480.webp`));
+      const count=calls.length;
+      assert.equal((await finishCoverRetirement(m._id,{storage})).status,'deleted');assert.equal(calls.length,count);
+    });
+    await t.test('a newly uploaded preview is protected until the user explicitly discards it',async()=>{
+      const m=await make({unreferencedSince:null});
+      await run(new Date(+start+86400000));assert.ok(objects.has(`covers/${m._id}/480.webp`));
+      assert.equal((await finishCoverRetirement(m._id,{storage})).status,'notRequired');
+      await Media.updateOne({_id:m._id},{$set:{deleted:true,unreferencedSince:start}});
+      assert.equal((await finishCoverRetirement(m._id,{storage})).status,'deleted');
     });
     await t.test('rolled-back book edits also roll back retirement',async()=>{
       const m=await make(),book=await Book.create({title:'Rollback'});await bind(m,book);
@@ -86,7 +95,7 @@ test('cover retention: real transactions, seven-day clock, reference races and p
     await t.test('committed deletion blocks simultaneous website and import claims',async()=>{
       const m=await make();let entered,release;
       const enteredPromise=new Promise(r=>entered=r),blocked=new Promise(r=>release=r);
-      const cleaning=run(new Date(+start+coverRetentionMs),{storage:{async remove(item){if(String(item._id)===String(m._id)){entered();await blocked;}return storage.remove(item);}}});
+      const cleaning=run(start,{storage:{async remove(item){if(String(item._id)===String(m._id)){entered();await blocked;}return storage.remove(item);}}});
       await enteredPromise;
       try {
         await mongoose.connection.transaction(async session=>assert.equal(await claimMedia(m.publicUrl,owner,session),null));
@@ -102,17 +111,17 @@ test('cover retention: real transactions, seven-day clock, reference races and p
         await Book.updateOne({_id:book._id},{$set:{cover_image:m.publicUrl}},{session});
       });
       await lockedPromise;
-      const cleaning=run(new Date(+start+coverRetentionMs));
+      const cleaning=run(start);
       release();await binding;await cleaning;
       assert.equal((await Book.findById(book._id)).cover_image,m.publicUrl);
       assert.ok(objects.has(`covers/${m._id}/480.webp`));assert.equal((await Media.findById(m._id)).purgedAt,undefined);
     });
     await t.test('partial R2 failures retain the tombstone and retry safely without touching unrelated keys',async()=>{
       const m=await make();failKey=`covers/${m._id}/480.webp`;
-      assert.equal((await run(new Date(+start+coverRetentionMs))).failed,1);
+      assert.equal((await finishCoverRetirement(m._id,{storage})).status,'retrying');
       assert.ok(!objects.has(`covers/${m._id}/240.webp`));assert.ok(objects.has(failKey));
       const failed=await Media.findById(m._id);assert.equal(failed.purgedAt,undefined);assert.ok(failed.purgeStartedAt);assert.equal(failed.deleted,true);
-      failKey=undefined;assert.equal((await run(new Date(+start+coverRetentionMs+1000))).failed,0);
+      failKey=undefined;assert.equal((await run(new Date(+start+1000))).failed,0);
       assert.ok((await Media.findById(m._id)).purgedAt);assert.ok(!objects.has(`covers/${m._id}/480.webp`));
       assert.ok(objects.size>0);
       for(const bad of [{...m.toObject(),bucket:'chapter-bodies'},{...m.toObject(),publicUrl:'https://wrong.test/cover.webp'}])await assert.rejects(storage.remove(bad),/Invalid cover deletion/);

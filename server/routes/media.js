@@ -8,6 +8,7 @@ import mongoose from 'mongoose';
 import { asyncRoute, publicUser } from '../security.js';
 import {getCoverStorage,prepareCover,coverUploadLimit} from '../services/cover-storage.js';
 import {mediaFilter,hasMediaReferences,claimMedia,retireUnreferencedCover} from '../services/media-reference.js';
+import {finishCoverRetirement} from '../services/cover-retention.js';
 
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:1572864,files:1,fields:0}});
 const coverUpload=multer({storage:multer.memoryStorage(),limits:{fileSize:coverUploadLimit,files:1,fields:0}});
@@ -55,6 +56,8 @@ export function mediaRoutes(app,auth) {
   app.delete('/api/upload/cover',auth.authenticate,asyncRoute(async(req,res)=>{
     const filter=mediaFilter(req.body.url,req.user.id);
     if (!filter) return res.status(403).json({error:'旧图片归属未确认，不能自动删除'});
+    delete filter.deleted; // Repeated deletes of the same owned asset are idempotent.
+    let retiredCover;
     await mongoose.connection.transaction(async session=>{
       const media=await Media.findOneAndUpdate(filter,{$inc:{referenceVersion:1}},{new:true,session});
       if (!media) throw Object.assign(new Error('无权删除'),{status:403});
@@ -62,7 +65,10 @@ export function mediaRoutes(app,auth) {
       media.deleted=true;
       if(media.storage==='r2')media.unreferencedSince ||= new Date();
       await media.save({session});
-    });res.json({success:true});
+      retiredCover=String(media._id);
+    });
+    const coverCleanup=await finishCoverRetirement(retiredCover,{storage:app.locals.coverStorage});
+    res.json({success:true,coverCleanup});
   }));
   app.patch('/api/users/:userId',auth.authenticate,asyncRoute(async(req,res)=>{
     if (req.params.userId!==req.user.id) return res.status(403).json({error:'只能修改本人资料'});
@@ -77,13 +83,15 @@ export function mediaRoutes(app,auth) {
       if (!['apricot','sage','mist','rose'].includes(req.body.profileTheme)) return res.status(400).json({error:'请选择有效的主页装扮'});
       updates.profileTheme = req.body.profileTheme;
     }
-    let user;
+    let user,retiredCover;
     await mongoose.connection.transaction(async session=>{
+      retiredCover=undefined;
       if(req.body.avatar){const asset=await claimMedia(req.body.avatar,req.user.id,session);if(!asset)throw Object.assign(new Error('头像必须来自本人上传'),{status:400});}
       const previous=await User.findById(req.user.id).select('avatar').session(session);
       user=await User.findByIdAndUpdate(req.user.id,{$set:updates},{new:true,runValidators:true,session});
-      if(previous?.avatar!==user.avatar)await retireUnreferencedCover(previous?.avatar,session);
+      if(previous?.avatar!==user.avatar)retiredCover=await retireUnreferencedCover(previous?.avatar,session);
     });
-    res.json({success:true,user:publicUser(user)});
+    const coverCleanup=await finishCoverRetirement(retiredCover,{storage:app.locals.coverStorage});
+    res.json({success:true,user:publicUser(user),coverCleanup});
   }));
 }

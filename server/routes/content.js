@@ -4,6 +4,7 @@ import Chapter from '../models/Chapter.js';
 import Bookmark from '../models/Bookmark.js';
 import Review from '../models/Review.js';
 import {claimMedia,retireUnreferencedCover} from '../services/media-reference.js';
+import {finishCoverRetirement} from '../services/cover-retention.js';
 import User from '../models/User.js';
 import Operation from '../models/Operation.js';
 import {pagination} from '../services/pagination.js';
@@ -44,8 +45,9 @@ export function contentRoutes(app,auth) {
   }));
   app.patch('/api/books/:id',auth.authenticate,asyncRoute(async(req,res)=>{
     bookFields(req.body);
-    let result;
+    let result,retiredCover;
     await mongoose.connection.transaction(async session=>{
+      retiredCover=undefined;
       const book=await lockBook(req.params.id,req.user,session);
       const previousCover=book.cover_image;
       if(req.body.cover_image && req.body.cover_image!==book.cover_image) {
@@ -53,8 +55,10 @@ export function contentRoutes(app,auth) {
         if(!asset)fail(400,'封面必须来自本人上传');
       }
       Object.assign(book,req.body);result=await book.save({session});
-      if(previousCover!==book.cover_image)await retireUnreferencedCover(previousCover,session);
-    });res.json(jsonDoc(result));
+      if(previousCover!==book.cover_image)retiredCover=await retireUnreferencedCover(previousCover,session);
+    });
+    const coverCleanup=await finishCoverRetirement(retiredCover,{storage:app.locals.coverStorage});
+    res.json({...jsonDoc(result),coverCleanup});
   }));
   app.delete('/api/books/:id',auth.authenticate,asyncRoute(async(req,res)=>{
     await mongoose.connection.transaction(async session=>{const book=await lockBook(req.params.id,req.user,session,{includeDeleted:true});book.deletedAt=book.deletedAt||new Date();await book.save({session});});

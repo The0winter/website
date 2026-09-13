@@ -10,8 +10,8 @@ const schema = new mongoose.Schema({
   mime: {type:String,required:true},
   sha256: {type:String,required:true},
   deleted: {type:Boolean,default:false},
-  // Cleared on every successful claim; legacy records start their grace period when observed.
-  unreferencedSince: {type:Date,default:function(){return this.storage==='r2'?new Date():undefined;}},
+  // New uploads are still being edited; only retirement queues them for deletion.
+  unreferencedSince: {type:Date,default:null},
   purgeStartedAt: Date,
   purgedAt: Date,
 }, {timestamps:true});

@@ -1,6 +1,7 @@
 import Author from '../models/Author.js';
 import {importMetadata} from '../services/import-metadata.js';
 import {claimImportedCover,retireUnreferencedCover} from '../services/media-reference.js';
+import {finishCoverRetirement} from '../services/cover-retention.js';
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import Book from '../models/Book.js';
@@ -34,8 +35,9 @@ export function importRoutes(app) {
       return result;
     });
     if(new Set(validated.map(c=>c.chapter_number)).size!==validated.length)fail(409,'批次内存在重复章号');
-    let result;
+    let result,retiredCover;
     await mongoose.connection.transaction(async session=>{
+      retiredCover=undefined;
       let book=await Book.findOne({sourceUrl:data.sourceUrl,importManaged:true}).session(session);
       if(book?.author_id)fail(409,'导入作品已绑定登录账号，需要人工核实归属');
       if(book?.author_profile_id){const previous=await Author.findById(book.author_profile_id).session(session);if(!previous||previous.sourceKey!==author.sourceKey)fail(409,'作者来源发生变化，需要明确核实');}
@@ -51,7 +53,7 @@ export function importRoutes(app) {
         const profile=await Author.findOneAndUpdate({sourceKey:author.sourceKey},{$setOnInsert:author},{upsert:true,new:true,session});
         Object.assign(book,metadata,{author:profile.name,author_profile_id:profile._id});
         await book.save({session});
-        if(previousCover!==book.cover_image)await retireUnreferencedCover(previousCover,session);
+        if(previousCover!==book.cover_image)retiredCover=await retireUnreferencedCover(previousCover,session);
       }
       let inserted=0,unchanged=0,enriched=0;
       for(const chapter of validated){
@@ -63,6 +65,8 @@ export function importRoutes(app) {
         else {inserted++;if(!data.dryRun)await Chapter.create([{...chapter,bookId:book._id}],{session});}
       }
       result={dryRun:!!data.dryRun,bookId:String(book._id),authorId:book.author_profile_id?String(book.author_profile_id):null,inserted,unchanged,enriched};
-    });res.json(result);
+    });
+    const coverCleanup=await finishCoverRetirement(retiredCover,{storage:app.locals.coverStorage});
+    res.json({...result,coverCleanup});
   }));
 }

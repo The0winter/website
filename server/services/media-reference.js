@@ -35,6 +35,7 @@ export async function retireUnreferencedCover(url,session,now=new Date()) {
   if(await hasMediaReferences(media,session))media.unreferencedSince=null;
   else media.unreferencedSince ||= now;
   await media.save({session});
+  return media.unreferencedSince?String(media._id):undefined;
 }
 
 // Imports can use external covers, but must also lock registered R2 covers before reuse.

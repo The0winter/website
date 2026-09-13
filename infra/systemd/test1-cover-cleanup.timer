@@ -1,11 +1,11 @@
 [Unit]
-Description=Hourly cleanup of unused R2 covers
+Description=Retry unused R2 cover cleanup every five minutes
 
 [Timer]
-OnBootSec=10min
-OnCalendar=hourly
+OnBootSec=2min
+OnCalendar=*:0/5
 Persistent=true
-RandomizedDelaySec=5min
+RandomizedDelaySec=15s
 Unit=test1-cover-cleanup.service
 
 [Install]

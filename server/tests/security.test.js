@@ -29,7 +29,9 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
   const config = readConfig({APP_ENV:'test',MONGO_URI:repl.getUri('test1_test'),JWT_SECRET:crypto.randomBytes(48).toString('hex')});
   await mongoose.connect(config.uri,{autoIndex:false,serverSelectionTimeoutMS:5000});
   for (const model of Object.values(mongoose.models)) await model.createIndexes();
-  const server=createApp(config).listen(0,'127.0.0.1');
+  const app=createApp(config),deletedR2=[];
+  app.locals.coverStorage={async remove(media){deletedR2.push(String(media._id));return {keys:[240,480].map(width=>`covers/${media._id}/${width}.webp`)};}};
+  const server=app.listen(0,'127.0.0.1');
   await new Promise(r=>server.once('listening',r));
   const base=`http://127.0.0.1:${server.address().port}`;
   function client() {
@@ -160,7 +162,9 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       assert.equal((await owner.write('/api/upload/cover','DELETE',{url})).status,409);
       const publicImage=await fetch(base+`/api/media/${id}`,{redirect:'manual'});
       assert.equal(publicImage.status,302);assert.equal(publicImage.headers.get('location'),url);
-      assert.equal((await owner.write(`/api/books/${book._id}`,'PATCH',{cover_image:''})).status,200);
+      const removed=await owner.write(`/api/books/${book._id}`,'PATCH',{cover_image:''});
+      assert.equal(removed.status,200);assert.equal(removed.data.coverCleanup.status,'deleted');
+      assert.ok(deletedR2.includes(String(id)));assert.ok((await Media.findById(id)).purgedAt);
       const retiredAt=(await Media.findById(id)).unreferencedSince;
       assert.ok(retiredAt instanceof Date);
       assert.equal((await other.write('/api/upload/cover','DELETE',{url})).status,403);
@@ -174,6 +178,24 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       const adminCsrf=(await administrator.request('/api/auth/csrf')).data.csrfToken;
       assert.equal((await administrator.request('/api/books','POST',{title:'New covered book',cover_image:adminUrl},{origin:'http://127.0.0.1:3000','x-csrf-token':adminCsrf,'idempotency-key':'new-cover-test-001'})).status,201);
       await administrator.write(`/api/books/${book._id}`,'PATCH',{cover_image:''});
+    });
+    await t.test('R2 outages report a queued retry after saving the book, and owned retries are idempotent',async()=>{
+      const id=new mongoose.Types.ObjectId(),url=`https://img.example.test/covers/${id}/480.webp`;
+      await Media.create({_id:id,owner:a._id,storage:'r2',publicUrl:url,bucket:'book-covers',mime:'image/webp',sha256:'retry-test'});
+      assert.equal((await owner.write(`/api/books/${book._id}`,'PATCH',{cover_image:url})).status,200);
+      const workingStorage=app.locals.coverStorage;
+      app.locals.coverStorage={async remove(){throw Error('Temporary R2 failure');}};
+      try {
+        const result=await owner.write(`/api/books/${book._id}`,'PATCH',{cover_image:''});
+        assert.equal(result.status,200);assert.equal(result.data.coverCleanup.status,'retrying');
+        assert.equal((await Book.findById(book._id)).cover_image,'');
+        const media=await Media.findById(id);assert.equal(media.deleted,true);assert.equal(media.purgedAt,undefined);
+      }finally{app.locals.coverStorage=workingStorage;}
+      const result=await owner.write('/api/upload/cover','DELETE',{url});
+      assert.equal(result.status,200);assert.equal(result.data.coverCleanup.status,'deleted');
+      const count=deletedR2.length;
+      assert.equal((await owner.write('/api/upload/cover','DELETE',{url})).data.coverCleanup.status,'deleted');
+      assert.equal(deletedR2.length,count);
     });
     await t.test('login failures accumulate and expired lock resets',async()=>{
       const bad=client();

@@ -28,7 +28,7 @@ export function parseArgs(args) {
 
 // This function is also sent over SSH; keep all server dependencies explicit.
 export async function uploadCover(job, services) {
-  const {mongoose,Book,Media,User,prepareCover,storage,config,lockBook,claimMedia,retireUnreferencedCover,checkWritable,verifyImage,writeAudit,hash,newId} = services;
+  const {mongoose,Book,Media,User,prepareCover,storage,config,lockBook,claimMedia,retireUnreferencedCover,finishCoverRetirement,checkWritable,verifyImage,writeAudit,hash,newId} = services;
   const fail = message => {throw Object.assign(new Error(message),{coverMessage:message});};
   if (!/^cover-[a-f0-9-]{36}$/.test(job.runId) || Boolean(job.book)===Boolean(job.bookId) || (job.bookId&&!/^[a-f0-9]{24}$/.test(job.bookId))) fail('上传参数无效');
   const bytes=Buffer.from(job.imageBase64,'base64');
@@ -58,18 +58,21 @@ export async function uploadCover(job, services) {
   await writeAudit(uploaded);
   for (const variant of variants) await verifyImage(stored.publicUrl.replace('/480.webp',`/${variant.width}.webp`),variant.sha256);
   await checkWritable();
+  let retiredCover;
   await mongoose.connection.transaction(async session=>{
+    retiredCover=undefined;
     if (!await User.exists({_id:actor.id,role:'admin',isBanned:{$ne:true}}).session(session)) fail('管理员状态已变化');
     const book=await lockBook(result.bookId,actor,session);
     if (book.title!==before.title || book.author!==before.author || (book.cover_image||'')!==previousCover) fail('书籍或封面已被其他任务修改，请重新检查后重试');
     await Media.create([{_id:mediaId,owner:actor.id,...stored}],{session});
     if (!await claimMedia(stored.publicUrl,actor.id,session)) fail('封面归属校验失败');
     book.cover_image=stored.publicUrl; await book.save({session});
-    await retireUnreferencedCover(previousCover,session);
+    retiredCover=await retireUnreferencedCover(previousCover,session);
   });
+  const coverCleanup=await finishCoverRetirement(retiredCover,{storage});
   if (!await Book.exists({_id:before._id,cover_image:stored.publicUrl})) fail('封面绑定回读失败');
-  await writeAudit({...uploaded,status:'bound',completedAt:new Date().toISOString()});
-  return {...result,status:'bound',cover:stored.publicUrl,mediaId};
+  await writeAudit({...uploaded,status:'bound',coverCleanup,completedAt:new Date().toISOString()});
+  return {...result,status:'bound',cover:stored.publicUrl,mediaId,coverCleanup};
 }
 
 // Runs against the active release. No persistent remote script or local R2 credentials.
@@ -84,6 +87,7 @@ async function remoteWorker(run,job) {
     const [Book,Media,User]=await Promise.all(['Book','Media','User'].map(async name=>(await load(`models/${name}.js`)).default));
     const {prepareCover,coverConfig,createCoverStorage}=await load('services/cover-storage.js');
     const {lockBook}=await load('services/content.js'),{claimMedia,retireUnreferencedCover}=await load('services/media-reference.js');
+    const {finishCoverRetirement}=await load('services/cover-retention.js');
     const {S3Client}=await load('node_modules/@aws-sdk/client-s3/dist-cjs/index.js');
     const config=coverConfig();
     if (!config) throw Error('Cover storage unavailable');
@@ -96,7 +100,7 @@ async function remoteWorker(run,job) {
     };
     await checkWritable();
     await mongoose.connect(process.env.MONGO_URI,{autoIndex:false,autoCreate:false,serverSelectionTimeoutMS:10000});
-    const result=await run(job,{mongoose,Book,Media,User,prepareCover,config,lockBook,claimMedia,retireUnreferencedCover,hash,checkWritable,
+    const result=await run(job,{mongoose,Book,Media,User,prepareCover,config,lockBook,claimMedia,retireUnreferencedCover,finishCoverRetirement,hash,checkWritable,
       storage:createCoverStorage(config,storageClient),newId:()=>String(new mongoose.Types.ObjectId()),
       verifyImage:async(url,expected)=>{
         const response=await fetch(url,{signal:AbortSignal.timeout(25000)});

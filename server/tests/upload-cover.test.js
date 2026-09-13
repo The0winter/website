@@ -9,6 +9,7 @@ import Media from '../models/Media.js';
 import User from '../models/User.js';
 import {lockBook} from '../services/content.js';
 import {claimMedia,retireUnreferencedCover} from '../services/media-reference.js';
+import {finishCoverRetirement} from '../services/cover-retention.js';
 import {prepareCover,createCoverStorage} from '../services/cover-storage.js';
 import {parseArgs,uploadCover} from '../../infra/upload-cover.mjs';
 
@@ -35,9 +36,13 @@ test('shared cover upload uses real MongoDB transactions and existing image stor
       const {Key,Body}=command.input;
       if(command.constructor.name==='PutObjectCommand'){puts++;objects.set(Key,Body);return {};}
       if(command.constructor.name==='DeleteObjectCommand'){objects.delete(Key);return {};}
+      if(command.constructor.name==='HeadObjectCommand'){
+        if(objects.has(Key))return {};
+        throw Object.assign(Error('Not found'),{name:'NotFound',$metadata:{httpStatusCode:404}});
+      }
       return {Body:{transformToByteArray:async()=>objects.get(Key)}};
     }});
-    const services={mongoose,Book,Media,User,prepareCover,storage,config,lockBook,claimMedia,retireUnreferencedCover,hash,newId:()=>String(new mongoose.Types.ObjectId()),checkWritable:async()=>{},writeAudit:async record=>{audits.push(structuredClone(record));},verifyImage:async(url,sha)=>assert.equal(hash(objects.get(new URL(url).pathname.slice(1))),sha)};
+    const services={mongoose,Book,Media,User,prepareCover,storage,config,lockBook,claimMedia,retireUnreferencedCover,finishCoverRetirement,hash,newId:()=>String(new mongoose.Types.ObjectId()),checkWritable:async()=>{},writeAudit:async record=>{audits.push(structuredClone(record));},verifyImage:async(url,sha)=>assert.equal(hash(objects.get(new URL(url).pathname.slice(1))),sha)};
     const job=overrides=>({runId:'cover-'+crypto.randomUUID(),book:'同名书',author:'甲',apply:true,imageBase64:bytes.toString('base64'),sourceSha256:hash(bytes),...overrides});
 
     await t.test('preview does not write objects, media, audits or book versions',async()=>{
@@ -93,12 +98,14 @@ test('shared cover upload uses real MongoDB transactions and existing image stor
       const current=await Book.findById(fresh._id);
       assert.equal(current.cover_image,anotherCover);assert.equal(current.writeVersion,0);assert.equal(await Media.countDocuments(),2);
     });
-    await t.test('a replacement keeps the previous media and unrelated book fields',async()=>{
+    await t.test('a replacement deletes old R2 bytes immediately and keeps unrelated book fields',async()=>{
       const before=await Book.findById(first._id).lean();
       const replacement=await sharp({create:{width:600,height:800,channels:3,background:'#536782'}}).png().toBuffer();
       const result=await uploadCover(job({imageBase64:replacement.toString('base64'),sourceSha256:hash(replacement)}),services);
       assert.equal(result.status,'bound');assert.notEqual(result.cover,before.cover_image);
-      assert.ok(await Media.exists({publicUrl:before.cover_image,deleted:false}));
+      assert.ok(await Media.exists({publicUrl:before.cover_image,deleted:true,purgedAt:{$ne:null}}));
+      assert.equal(result.coverCleanup.status,'deleted');
+      assert.ok(!objects.has(new URL(before.cover_image).pathname.slice(1)));
       assert.ok((await Media.findOne({publicUrl:before.cover_image})).unreferencedSince instanceof Date);
       assert.equal((await Media.findOne({publicUrl:result.cover})).unreferencedSince,null);
       const after=await Book.findById(first._id);

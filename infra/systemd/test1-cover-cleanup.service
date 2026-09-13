@@ -1,5 +1,5 @@
 [Unit]
-Description=Delete R2 covers after seven days without references
+Description=Retry deletion of retired and unused R2 covers
 After=network-online.target test1-api.service
 Wants=network-online.target
 ConditionPathExists=/srv/test1/current/infra/clean-unused-covers.mjs
