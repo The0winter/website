@@ -30,6 +30,7 @@ export function useShelfPageTurn(tab: LibraryTab, enabled: boolean) {
       viewport.current.style.minHeight = '';
     }
     tabs.current?.removeAttribute('data-dragging');
+    tabs.current?.removeAttribute('data-turning');
     align();
   }, [panels, tabs, align]);
 
@@ -60,6 +61,8 @@ export function useShelfPageTurn(tab: LibraryTab, enabled: boolean) {
     // Continue from the finger's position; a reversal retargets the current
     // frame immediately instead of waiting in a 400ms animation queue.
     const duration = Math.max(120, Math.min(300, 300 * remaining / motion.width));
+    tabs.current?.style.setProperty('--shelf-tab-duration', `${duration}ms`);
+    tabs.current?.setAttribute('data-turning', 'true');
     commit();
     align(nextTab === 'history' ? 1 : 0);
     motion.animations = panels().map(panel => {

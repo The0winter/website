@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, useSyncExternalStore, type ComponentProps } from 'react';
 import { canPrefetchHref, currentPrefetchPolicy, observeBookVisibility, serverPrefetchPolicy, shouldPrefetchBook, subscribePrefetchPolicy } from '@/lib/book-prefetch';
 import {navigateBookLink} from '@/lib/book-navigation';
+import {beginMobileSectionTransition} from '@/lib/mobile-section-navigation';
 
 type Props = Omit<ComponentProps<typeof Link>, 'prefetch' | 'ref'> & {
   prefetchMode?: 'visible' | 'intent';
@@ -41,7 +42,7 @@ export default function PrefetchLink({ children, href, prefetchMode = 'visible',
     onNavigate={event => {
       let cancelled = false;
       onNavigate?.({preventDefault() { cancelled = true; event.preventDefault(); }});
-      if (!cancelled && typeof href === 'string' && navigateBookLink(href)) {
+      if (!cancelled && typeof href === 'string' && !beginMobileSectionTransition(href) && navigateBookLink(href)) {
         event.preventDefault();
       }
     }}

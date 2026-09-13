@@ -18,6 +18,7 @@ async function setup(page: Page, signedIn = true) {
 }
 
 async function swipe(page: Page, context: BrowserContext, selector: string, dx: number, dy = 0, cancel = false, atY?: number) {
+  await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
   const box = (await page.locator(selector).first().boundingBox())!;
   const x = box.x + box.width * (dx < 0 ? .8 : .2), y = atY ?? Math.max(130, box.y + 65);
   const cdp = await context.newCDPSession(page);

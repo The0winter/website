@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import type { AuthUser } from '@/lib/api';
 import Link from './PrefetchLink';
+import {beginMobileSectionTransition} from '@/lib/mobile-section-navigation';
 
 type Props = Omit<ComponentProps<typeof Link>, 'href' | 'onNavigate'> & { href: '/library' | '/profile' };
 
@@ -42,7 +43,11 @@ export default function AccountLink({ href, children, ...props }: Props) {
       proceed.current = sessionUser => {
         cleanup.current?.();
         setWaiting(false);
-        if (location.href === source) router.push(sessionUser ? href : '/login');
+        if (location.href === source) {
+          const destination = sessionUser ? href : '/login';
+          beginMobileSectionTransition(destination);
+          router.push(destination);
+        }
       };
     }}>
     {children}
