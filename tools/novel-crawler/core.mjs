@@ -11,6 +11,7 @@ import {prepareImport} from '../../infra/import-plan.mjs';
 import {failureDetails} from './diagnostics.mjs';
 import {browserProfile} from './browser-session.mjs';
 import {loadReadingEdition, adoptReadingEdition, updateReadingEdition} from './reading-edition.mjs';
+import {continuationKey, continuationState, hasContinuation, acquireContinuation} from './continuation.mjs';
 
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const defaultStateDir = path.join(projectRoot, '.novel-crawler');
@@ -83,6 +84,10 @@ function exportPath(spec, id, outputDir) {
 
 export function localBookState(spec, {stateDir = defaultStateDir, outputDir} = {}) {
   spec = validateSpec(spec);
+  try {
+    const continuation = continuationState(spec, {stateDir: path.resolve(stateDir), outputDir: path.resolve(outputDir || path.join(projectRoot, 'downloads'))});
+    if (continuation) return continuation;
+  } catch (error) { return {state: 'blocked', blocked: true, saved: 0, total: 0, message: error.message}; }
   const id = jobId(spec), dir = path.join(stateDir, 'jobs', id);
   try {
     const reading = loadReadingEdition(dir, spec, extractionHash(spec), outputDir || path.join(projectRoot, 'downloads'));
@@ -176,6 +181,15 @@ async function recordSource(stateDir, spec, report, id) {
 }
 
 export async function acquire(input, options = {}) {
+  const spec = validateSpec(input), stateDir = path.resolve(options.stateDir || defaultStateDir), mode = options.mode || 'probe';
+  if (!['probe', 'download'].includes(mode)) throw Error('未知采集模式');
+  return withLock(path.join(stateDir, 'book-locks', continuationKey(spec) + '.lock'), async () => {
+    if (options.continuation || hasContinuation(spec, stateDir)) return acquireContinuation(spec, {...options, stateDir, mode, outputDir: path.resolve(options.outputDir || path.join(projectRoot, 'downloads')), extraction: extractionHash(spec), id: jobId(spec)});
+    return acquireRaw(spec, options);
+  });
+}
+
+async function acquireRaw(input, options = {}) {
   const spec = validateSpec(input), mode = options.mode || 'probe';
   if (!['probe', 'download'].includes(mode)) throw Error('未知采集模式');
   const stateDir = path.resolve(options.stateDir || defaultStateDir), id = jobId(spec);

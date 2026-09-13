@@ -18,7 +18,7 @@ process.on('message', async message => {
   if (message.type !== 'start' || started) return;
   started = true;
   try {
-    const options = {stateDir: message.stateDir, outputDir: message.outputDir, signal: controller.signal, shouldStop: () => paused, onProgress: progress => send({type: 'progress', ...progress}), onStatus: status => send({type: 'status', ...status})};
+    const options = {stateDir: message.stateDir, outputDir: message.outputDir, continuation: message.continuation, signal: controller.signal, shouldStop: () => paused, onProgress: progress => send({type: 'progress', ...progress}), onStatus: status => send({type: 'status', ...status})};
     const spec = validateSpec(message.spec);
     client = makeClient({cacheDir: path.join(message.stateDir, 'cache'), profileDir: browserProfile(message.stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, browser: spec.browser, onStatus: options.onStatus, shouldStop: options.shouldStop, signal: controller.signal});
     options.client = client;

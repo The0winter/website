@@ -155,7 +155,7 @@ function render() {
   $('pause').disabled = task.phase === 'pausing';
   $('pause').textContent = task.phase === 'pausing' ? '正在保存…' : '暂停采集';
   $('report-stats').hidden = !report;
-  if (report) $('report-stats').replaceChildren(...[[report.expected, report.readingEdition ? '阅读版条目' : '目录章节'], [report.errors, '错误'], [report.warnings, '待核对']].map(([number, label]) => { const div = document.createElement('div'), strong = document.createElement('strong'); strong.textContent = number; div.append(strong, label); return div; }));
+  if (report) $('report-stats').replaceChildren(...[[report.expected, report.continuation ? '本地书籍条目' : report.readingEdition ? '阅读版条目' : '目录章节'], [report.errors, '错误'], [report.warnings, '待核对']].map(([number, label]) => { const div = document.createElement('div'), strong = document.createElement('strong'); strong.textContent = number; div.append(strong, label); return div; }));
   renderDiagnostics(task);
   $('resume').hidden = !['paused', 'stopped', 'probed', 'error'].includes(task.phase) || !task.sourceUrl;
   $('results-panel').hidden = !data.candidates.length;
@@ -174,9 +174,9 @@ function render() {
     }));
   }
   for (const radio of document.querySelectorAll('input[name=book]')) radio.disabled = active;
-  $('start').disabled = active || !selectedUrl;
   const selected = data.candidates.find(book => book.url === selectedUrl);
-  $('start').textContent = $('probe-only').checked ? '开始试采 →' : selected?.local?.state === 'complete' ? '检查更新 ↓' : selected?.local?.saved ? '继续采集 ↓' : '试采并下载 ↓';
+  $('start').disabled = active || !selectedUrl || !!selected?.local?.blocked;
+  $('start').textContent = selected?.local?.blocked ? '需先核对本地版本' : $('probe-only').checked ? (selected?.local?.continuation ? '检查衔接 →' : '开始试采 →') : selected?.local?.state === 'switch' ? '换源续更 ↓' : selected?.local?.state === 'complete' ? '检查更新 ↓' : selected?.local?.saved ? '继续采集 ↓' : '试采并下载 ↓';
   if (data.adapterErrors.length) feedback(`有站点配置需要修复：${data.adapterErrors.join('；')}`);
 }
 async function poll() { if (pollRunning) return; pollRunning = true; try { data = await api('state'); render(); } catch (error) { feedback(error.message === 'Failed to fetch' ? '程序连接已断开，请关闭窗口后重新打开。' : error.message); } finally { pollRunning = false; } }

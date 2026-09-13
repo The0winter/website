@@ -4,6 +4,15 @@
   "name": "速读谷",
   "home": "https://www.shudugu.org/",
   "hosts": ["www.shudugu.org", "shudugu.org"],
+  "search": {
+    "url": "https://www.shudugu.org/i/sor.aspx?key=${query}",
+    "items": ".container > .item",
+    "title": ".itemtxt h3 a",
+    "author": {"selector": ".itemtxt a[href^='/zuozhe/']", "pattern": "^作者：[\\s]*(.+)$"},
+    "link": ".itemtxt h3 a",
+    "next": ".page a:contains('下一页')",
+    "maxPages": 8
+  },
   "book": {
     "urlPattern": "^/(?<bookId>[0-9]+)/$",
     "metadata": {
