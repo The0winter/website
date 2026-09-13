@@ -8,7 +8,7 @@ import Book from '../models/Book.js';
 import Media from '../models/Media.js';
 import User from '../models/User.js';
 import {lockBook} from '../services/content.js';
-import {claimMedia} from '../services/media-reference.js';
+import {claimMedia,retireUnreferencedCover} from '../services/media-reference.js';
 import {prepareCover,createCoverStorage} from '../services/cover-storage.js';
 import {parseArgs,uploadCover} from '../../infra/upload-cover.mjs';
 
@@ -37,7 +37,7 @@ test('shared cover upload uses real MongoDB transactions and existing image stor
       if(command.constructor.name==='DeleteObjectCommand'){objects.delete(Key);return {};}
       return {Body:{transformToByteArray:async()=>objects.get(Key)}};
     }});
-    const services={mongoose,Book,Media,User,prepareCover,storage,config,lockBook,claimMedia,hash,newId:()=>String(new mongoose.Types.ObjectId()),checkWritable:async()=>{},writeAudit:async record=>{audits.push(structuredClone(record));},verifyImage:async(url,sha)=>assert.equal(hash(objects.get(new URL(url).pathname.slice(1))),sha)};
+    const services={mongoose,Book,Media,User,prepareCover,storage,config,lockBook,claimMedia,retireUnreferencedCover,hash,newId:()=>String(new mongoose.Types.ObjectId()),checkWritable:async()=>{},writeAudit:async record=>{audits.push(structuredClone(record));},verifyImage:async(url,sha)=>assert.equal(hash(objects.get(new URL(url).pathname.slice(1))),sha)};
     const job=overrides=>({runId:'cover-'+crypto.randomUUID(),book:'同名书',author:'甲',apply:true,imageBase64:bytes.toString('base64'),sourceSha256:hash(bytes),...overrides});
 
     await t.test('preview does not write objects, media, audits or book versions',async()=>{
@@ -99,6 +99,8 @@ test('shared cover upload uses real MongoDB transactions and existing image stor
       const result=await uploadCover(job({imageBase64:replacement.toString('base64'),sourceSha256:hash(replacement)}),services);
       assert.equal(result.status,'bound');assert.notEqual(result.cover,before.cover_image);
       assert.ok(await Media.exists({publicUrl:before.cover_image,deleted:false}));
+      assert.ok((await Media.findOne({publicUrl:before.cover_image})).unreferencedSince instanceof Date);
+      assert.equal((await Media.findOne({publicUrl:result.cover})).unreferencedSince,null);
       const after=await Book.findById(first._id);
       assert.equal(after.writeVersion,before.writeVersion+1);assert.equal(after.description,before.description);assert.equal(after.author,before.author);
       assert.equal(audits.at(-1).previousCover,before.cover_image);

@@ -1,0 +1,12 @@
+[Unit]
+Description=Hourly cleanup of unused R2 covers
+
+[Timer]
+OnBootSec=10min
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=5min
+Unit=test1-cover-cleanup.service
+
+[Install]
+WantedBy=timers.target

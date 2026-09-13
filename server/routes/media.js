@@ -4,11 +4,10 @@ import sharp from 'sharp';
 import rateLimit from 'express-rate-limit';
 import Media from '../models/Media.js';
 import User from '../models/User.js';
-import Book from '../models/Book.js';
 import mongoose from 'mongoose';
 import { asyncRoute, publicUser } from '../security.js';
 import {getCoverStorage,prepareCover,coverUploadLimit} from '../services/cover-storage.js';
-import {mediaFilter} from '../services/media-reference.js';
+import {mediaFilter,hasMediaReferences,claimMedia,retireUnreferencedCover} from '../services/media-reference.js';
 
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:1572864,files:1,fields:0}});
 const coverUpload=multer({storage:multer.memoryStorage(),limits:{fileSize:coverUploadLimit,files:1,fields:0}});
@@ -59,9 +58,10 @@ export function mediaRoutes(app,auth) {
     await mongoose.connection.transaction(async session=>{
       const media=await Media.findOneAndUpdate(filter,{$inc:{referenceVersion:1}},{new:true,session});
       if (!media) throw Object.assign(new Error('无权删除'),{status:403});
-      const urls=[`/api/media/${media._id}`,...(media.publicUrl?[media.publicUrl]:[])];
-      if (await Book.exists({cover_image:{$in:urls}}).session(session) || await User.exists({avatar:{$in:urls}}).session(session)) throw Object.assign(new Error('图片仍在使用'),{status:409});
-      media.deleted=true;await media.save({session});
+      if (await hasMediaReferences(media,session)) throw Object.assign(new Error('图片仍在使用'),{status:409});
+      media.deleted=true;
+      if(media.storage==='r2')media.unreferencedSince ||= new Date();
+      await media.save({session});
     });res.json({success:true});
   }));
   app.patch('/api/users/:userId',auth.authenticate,asyncRoute(async(req,res)=>{
@@ -79,8 +79,10 @@ export function mediaRoutes(app,auth) {
     }
     let user;
     await mongoose.connection.transaction(async session=>{
-      if(req.body.avatar){const asset=await Media.findOneAndUpdate({_id:req.body.avatar.split('/').pop(),owner:req.user.id,deleted:false},{$inc:{referenceVersion:1}},{session});if(!asset)throw Object.assign(new Error('头像必须来自本人上传'),{status:400});}
+      if(req.body.avatar){const asset=await claimMedia(req.body.avatar,req.user.id,session);if(!asset)throw Object.assign(new Error('头像必须来自本人上传'),{status:400});}
+      const previous=await User.findById(req.user.id).select('avatar').session(session);
       user=await User.findByIdAndUpdate(req.user.id,{$set:updates},{new:true,runValidators:true,session});
+      if(previous?.avatar!==user.avatar)await retireUnreferencedCover(previous?.avatar,session);
     });
     res.json({success:true,user:publicUser(user)});
   }));

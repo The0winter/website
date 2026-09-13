@@ -155,13 +155,17 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       const otherCsrf=(await other.request('/api/auth/csrf')).data.csrfToken;
       assert.equal((await other.request('/api/books','POST',{title:'Stolen cover',cover_image:url},{origin:'http://127.0.0.1:3000','x-csrf-token':otherCsrf,'idempotency-key':'stolen-cover-test-001'})).status,400);
       assert.equal((await owner.write(`/api/books/${book._id}`,'PATCH',{cover_image:url})).status,200);
+      assert.equal((await Media.findById(id)).unreferencedSince,null);
       assert.equal((await owner.request(`/api/books/${book._id}`)).data.cover_image,url);
       assert.equal((await owner.write('/api/upload/cover','DELETE',{url})).status,409);
       const publicImage=await fetch(base+`/api/media/${id}`,{redirect:'manual'});
       assert.equal(publicImage.status,302);assert.equal(publicImage.headers.get('location'),url);
       assert.equal((await owner.write(`/api/books/${book._id}`,'PATCH',{cover_image:''})).status,200);
+      const retiredAt=(await Media.findById(id)).unreferencedSince;
+      assert.ok(retiredAt instanceof Date);
       assert.equal((await other.write('/api/upload/cover','DELETE',{url})).status,403);
       assert.equal((await owner.write('/api/upload/cover','DELETE',{url})).status,200);
+      assert.equal(+(await Media.findById(id)).unreferencedSince,+retiredAt);
       assert.equal((await owner.write(`/api/books/${book._id}`,'PATCH',{cover_image:url})).status,400);
       const adminId=new mongoose.Types.ObjectId();
       const adminUrl=`https://img.example.test/covers/${adminId}/480.webp`;

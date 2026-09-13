@@ -10,5 +10,9 @@ const schema = new mongoose.Schema({
   mime: {type:String,required:true},
   sha256: {type:String,required:true},
   deleted: {type:Boolean,default:false},
+  // Cleared on every successful claim; legacy records start their grace period when observed.
+  unreferencedSince: {type:Date,default:function(){return this.storage==='r2'?new Date():undefined;}},
+  purgeStartedAt: Date,
+  purgedAt: Date,
 }, {timestamps:true});
 export default mongoose.model('Media',schema);

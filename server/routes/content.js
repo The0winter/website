@@ -3,7 +3,7 @@ import Book from '../models/Book.js';
 import Chapter from '../models/Chapter.js';
 import Bookmark from '../models/Bookmark.js';
 import Review from '../models/Review.js';
-import {claimMedia} from '../services/media-reference.js';
+import {claimMedia,retireUnreferencedCover} from '../services/media-reference.js';
 import User from '../models/User.js';
 import Operation from '../models/Operation.js';
 import {pagination} from '../services/pagination.js';
@@ -47,11 +47,13 @@ export function contentRoutes(app,auth) {
     let result;
     await mongoose.connection.transaction(async session=>{
       const book=await lockBook(req.params.id,req.user,session);
+      const previousCover=book.cover_image;
       if(req.body.cover_image && req.body.cover_image!==book.cover_image) {
         const asset=await claimMedia(req.body.cover_image,req.user.id,session);
         if(!asset)fail(400,'封面必须来自本人上传');
       }
       Object.assign(book,req.body);result=await book.save({session});
+      if(previousCover!==book.cover_image)await retireUnreferencedCover(previousCover,session);
     });res.json(jsonDoc(result));
   }));
   app.delete('/api/books/:id',auth.authenticate,asyncRoute(async(req,res)=>{

@@ -1,5 +1,6 @@
 import Author from '../models/Author.js';
 import {importMetadata} from '../services/import-metadata.js';
+import {claimImportedCover,retireUnreferencedCover} from '../services/media-reference.js';
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import Book from '../models/Book.js';
@@ -45,9 +46,12 @@ export function importRoutes(app) {
         [book]=await Book.create([{title:data.title,author:typeof data.author==='string'?data.author:'未知',sourceUrl:data.sourceUrl,importManaged:true,category:data.category||'未分类'}],{session});
       } else if(!data.dryRun) await lockBook(book._id,{role:'import'},session);
       if(!data.dryRun){
+        const previousCover=book.cover_image;
+        if(metadata.cover_image && metadata.cover_image!==previousCover)await claimImportedCover(metadata.cover_image,session);
         const profile=await Author.findOneAndUpdate({sourceKey:author.sourceKey},{$setOnInsert:author},{upsert:true,new:true,session});
         Object.assign(book,metadata,{author:profile.name,author_profile_id:profile._id});
         await book.save({session});
+        if(previousCover!==book.cover_image)await retireUnreferencedCover(previousCover,session);
       }
       let inserted=0,unchanged=0,enriched=0;
       for(const chapter of validated){

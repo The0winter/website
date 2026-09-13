@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import sharp from 'sharp';
-import {S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand} from '@aws-sdk/client-s3';
+import {S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand} from '@aws-sdk/client-s3';
 
 export const coverCacheControl = 'public, max-age=31536000, immutable';
 export const coverUploadLimit = 8 * 1024 * 1024;
@@ -29,6 +29,19 @@ export async function prepareCover(bytes) {
 }
 export function createCoverStorage(config, client = new S3Client({region:'auto',endpoint:config.endpoint,credentials:config.credentials,maxAttempts:2})) {
   return {
+    async remove(media) {
+      const id=String(media._id);
+      if(!/^[a-f0-9]{24}$/.test(id) || media.storage!=='r2' || media.bucket!==config.bucket || media.publicUrl!==`${config.baseUrl}/covers/${id}/480.webp`)throw Error('Invalid cover deletion target');
+      // Never trust arbitrary stored variant keys or touch the chapter bucket.
+      const keys=[240,480].map(width=>`covers/${id}/${width}.webp`);
+      for(const Key of keys)await client.send(new DeleteObjectCommand({Bucket:config.bucket,Key}),{abortSignal:AbortSignal.timeout(12000)});
+      for(const Key of keys){
+        try {await client.send(new HeadObjectCommand({Bucket:config.bucket,Key}),{abortSignal:AbortSignal.timeout(12000)});}
+        catch(error){if(['NotFound','NoSuchKey'].includes(error.name) && error.$metadata?.httpStatusCode===404)continue;throw error;}
+        throw Error('Cover still exists after deletion');
+      }
+      return {keys};
+    },
     async write(id, variants) {
       if (!/^[a-f0-9]{24}$/.test(id) || variants.length !== 2 || variants[0].width !== 240 || variants[1].width !== 480) throw Error('Invalid cover variants');
       const uploaded = [];
