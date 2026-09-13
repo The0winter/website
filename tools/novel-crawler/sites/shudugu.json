@@ -25,7 +25,7 @@
   "spec": {
     "version": 1,
     "kind": "html",
-    "variant": "desktop-shudugu-v1",
+    "variant": "desktop-shudugu-v2",
     "title": "${title}",
     "author": "${author}",
     "sourceUrl": "${sourceUrl}",
@@ -44,6 +44,7 @@
       "title": {"selector": "h1", "pattern": ">\\s*(.+)$"},
       "content": ".con",
       "remove": ["script", "style"],
+      "removeText": ["(?:^|[\\r\\n])[^\\S\\r\\n]*[:：]+[^\\S\\r\\n]*(?=[\\r\\n]|$)"],
       "next": "a:contains('下一页')",
       "maxPages": 10
     }

@@ -15,7 +15,7 @@ const body = n => Array.from({length: 180}, (_, i) => String.fromCodePoint(0x4e0
 const title = n => `第${n}章 山间故事${n}`;
 async function fixture(t) {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'novel-continuation-')), outputDir = path.join(stateDir, 'out');
-  const state = {count: 6, requests: [], bodies: {}, titles: {}, order: null, notice: false, author: '甲作者'};
+  const state = {count: 6, requests: [], bodies: {}, titles: {}, headings: {}, order: null, notice: false, author: '甲作者'};
   const server = http.createServer((req, res) => {
     state.requests.push(req.url);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -25,7 +25,7 @@ async function fixture(t) {
     }
     if (req.url.endsWith('/notice')) return res.end('<h1>2026一月月票抽奖活动！</h1><article>感谢各位读者支持本书。月票抽奖活动开始了。</article>');
     const n = Number(req.url.split('/').at(-1));
-    res.end(`<h1>${state.titles[n] || title(n)}</h1><article>${state.bodies[n] || body(n)}</article>`);
+    res.end(`<h1>${state.headings[n] || state.titles[n] || title(n)}</h1><article>${state.bodies[n] || body(n)}</article>`);
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
@@ -80,6 +80,69 @@ test('old notices stay in place; equal new-source notices are not appended twice
   assert.equal(report.errors, 0, JSON.stringify(report.failures)); assert.equal(report.continuationAdded, 2); assert.equal(report.skipped.length, 1);
   assert.deepEqual(readJson(f.file).chapters.slice(0, 5), f.book.chapters);
   assert.equal(readJson(f.file).chapters.at(-1).chapter_number, 7);
+});
+
+test('exact repeated chapter blocks are skipped automatically, recorded, and continue updating after restart', async t => {
+  const f = await fixture(t), logical = [5, 6, 7, 5, 6, 7, 8];
+  f.state.count = 11;
+  for (const [index, n] of logical.entries()) { f.state.titles[index + 5] = title(n); f.state.bodies[index + 5] = body(n); }
+  const report = await f.run();
+  assert.equal(report.errors, 0, JSON.stringify(report.failures)); assert.equal(report.continuationAdded, 4);
+  assert.equal(report.automaticResolutions, 3); assert.ok(report.resolutions.every(item => item.kind === 'duplicate-chapter' && item.comparisonHash && item.retainedLink));
+  assert.deepEqual(readJson(f.file).chapters.map(c => c.title), Array.from({length: 8}, (_, i) => title(i + 1)));
+  const accepted = readJson(path.join(f.dir, 'binding.json')).value;
+  assert.equal(accepted.catalog.length, 11); assert.equal(accepted.resolutions.length, 3);
+  assert.ok(fs.existsSync(report.reportFile));
+  f.state.count = 12; f.state.titles[12] = title(9); f.state.bodies[12] = body(9); f.state.requests = [];
+  const update = await acquire(f.spec, {...f.options, mode: 'download'});
+  assert.equal(update.continuationAdded, 1); assert.equal(update.automaticResolutions, 0);
+  assert.deepEqual(f.state.requests, ['/new/book', '/new/c/12']);
+  assert.equal(readJson(path.join(f.dir, 'binding.json')).value.resolutions.length, 3);
+});
+
+test('a wrong catalog number uses a continuous page heading and preserves the conflicting source title', async t => {
+  const f = await fixture(t);
+  f.state.titles[5] = '第55章 山间故事5'; f.state.headings[5] = title(5);
+  const report = await f.run();
+  assert.equal(report.errors, 0, JSON.stringify(report.failures)); assert.equal(report.continuationAdded, 2);
+  assert.equal(report.resolutions[0].kind, 'catalog-number'); assert.equal(report.resolutions[0].catalogNumber, 55); assert.equal(report.resolutions[0].pageNumber, 5);
+  const chapter = readJson(f.file).chapters[4];
+  assert.equal(chapter.title, title(5)); assert.equal(chapter.catalogTitle, '第55章 山间故事5'); assert.equal(chapter.content, body(5));
+});
+
+test('new notices with identical complete prose are deduplicated within the same update', async t => {
+  const f = await fixture(t);
+  f.state.count = 7;
+  for (const n of [5, 6]) { f.state.titles[n] = '一月月票抽奖活动'; f.state.bodies[n] = '感谢大家对本书的支持，本月的抽奖活动正式开始。'; }
+  f.state.titles[7] = title(5); f.state.bodies[7] = body(5);
+  const report = await f.run();
+  assert.equal(report.errors, 0, JSON.stringify(report.failures)); assert.equal(report.continuationAdded, 2);
+  assert.equal(report.resolutions[0].kind, 'duplicate-notice'); assert.equal(readJson(f.file).chapters.at(-1).title, title(5));
+});
+
+test('repeated anchor numbers are matched by complete prose instead of blocking a valid handoff', async t => {
+  const f = await fixture(t);
+  f.state.order = [1, 2, 22, 3, 4, 5, 6]; f.state.titles[22] = title(2); f.state.bodies[22] = body(2);
+  f.state.bodies[2] = body(40);
+  const report = await f.run();
+  assert.equal(report.errors, 0, JSON.stringify(report.failures)); assert.equal(report.continuationAdded, 2);
+  assert.equal(report.anchors.length, 3); assert.deepEqual(readJson(f.file).chapters.slice(0, 4), f.book.chapters);
+  assert.equal(report.anchors[0].sourcePosition, 3);
+});
+
+test('similar versions, deleted paragraphs and reworded prose are not silently discarded', async t => {
+  for (const scenario of ['reworded', 'deleted-paragraph', 'different-notice']) await t.test(scenario, async t => {
+    const f = await fixture(t), original = fs.readFileSync(f.file);
+    f.state.titles[5] = title(4);
+    f.state.bodies[5] = scenario === 'reworded' ? body(4).slice(0, -1) + '改' : body(4).slice(60);
+    if (scenario === 'different-notice') {
+      for (const n of [5, 6]) f.state.titles[n] = '一月月票抽奖活动';
+      f.state.bodies[5] = '本月抽奖一份。'; f.state.bodies[6] = '本月抽奖两份。';
+    }
+    const report = await f.run(); assert.equal(report.exportFile, null); assert.equal(report.structuralPass, false);
+    assert.deepEqual(fs.readFileSync(f.file), original);
+    assert.equal(fs.existsSync(path.join(f.dir, 'binding.json')), false);
+  });
 });
 
 test('legacy ordinal gaps and truncated source headings retain old ordinals and append after their maximum', async t => {
@@ -204,6 +267,9 @@ test('interrupted commits recover after output rename and reject unrelated edits
 
 test('desktop offers switch updates, runs through worker, and retains remembered updates after reopening', async t => {
   const f = await fixture(t), sitesDirectory = path.join(f.options.stateDir, 'sites'); fs.mkdirSync(sitesDirectory);
+  f.state.count = 7;
+  f.state.titles[6] = title(5); f.state.bodies[6] = body(5);
+  f.state.titles[7] = title(6); f.state.bodies[7] = body(6);
   const site = {version: 1, id: 'fixture', name: '测试来源', home: 'https://books.example/', hosts: ['books.example'], book: {urlPattern: '^/new/book$', metadata: f.spec.metadata}, spec: f.spec};
   atomicWrite(path.join(sitesDirectory, 'fixture.json'), site);
   const settings = {...f.options, sitesDirectory, findBooks: async () => [{title: f.spec.title, author: f.spec.author, url: 'https://books.example/new/book', site: '测试来源'}], prepareBook: async () => f.spec};
@@ -224,9 +290,11 @@ test('desktop offers switch updates, runs through worker, and retains remembered
   await page.click('#start');
   await page.waitForFunction(() => document.getElementById('phase').textContent === '已完成', {timeout: 20000});
   assert.match(await page.$eval('#task-message', el => el.textContent), /本次追加 2 项/);
+  assert.match(await page.$eval('#task-message', el => el.textContent), /自动处理 1 项重复或编号差异/);
   assert.match(await page.$eval('#start', el => el.textContent), /检查更新/);
   assert.equal(app.state().report.continuation, true); assert.deepEqual(errors, []);
   await app.close(); app = await createDesktop(settings);
   assert.equal(app.state().report.continuationAdded, 2);
+  assert.equal(app.state().report.automaticResolutions, 1);
   assert.equal(localBookState(f.spec, f.options).state, 'complete');
 });

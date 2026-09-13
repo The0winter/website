@@ -148,6 +148,50 @@ function numbered(chapters) {
   return result;
 }
 
+// Resolve only decisions backed by complete content or the chapter page's own
+// heading. A repeated number with different prose is still an unresolved version.
+export function createContinuationReviewer(book) {
+  const accepted = [...book.chapters], skipped = [], resolutions = [];
+  let number = numbered(accepted).at(-1)?.number;
+  if (!number) throw Error('原书缺少可核对的正文章号');
+  return {
+    skipped, resolutions,
+    accept(entry, value) {
+      const listed = chapterIdentity(entry.title), actual = chapterIdentity(value.title);
+      if (!!listed !== !!actual || (listed && !compatibleNames(listed.name, actual.name))) throw Error(`目录与正文标题无法对应：「${entry.title}」 / 「${value.title}」`);
+      const peers = accepted.filter(previous => {
+        const identity = chapterIdentity(previous.title);
+        return actual ? identity?.number === actual.number && compatibleNames(identity.name, actual.name) : !identity && normalize(previous.title) === normalize(value.title);
+      });
+      const content = bodyKey(value.content, value.title);
+      const duplicate = (actual ? content.length >= 100 : !!content) && peers.find(previous => bodyKey(previous.content, previous.title) === content);
+      if (duplicate) {
+        const decision = {kind: actual ? 'duplicate-chapter' : 'duplicate-notice', title: entry.title, link: entry.link, sourcePosition: entry.chapter_number,
+          retainedTitle: duplicate.title, retainedLink: duplicate.link, retainedPosition: duplicate.chapter_number,
+          contentHash: hash(value.content), retainedContentHash: hash(duplicate.content), comparisonHash: hash(content),
+          reason: '书名作者已核对；同一章号及标题（或同名公告）的完整正文一致，保留已接受版本'};
+        skipped.push(decision); resolutions.push(decision);
+        return false;
+      }
+      if (actual) {
+        if (actual.number !== number + 1) {
+          const reason = peers.length ? '同章号正文不同，不能自动选择版本' : '缺章或章号顺序无法确定';
+          throw Error(`新来源衔接后章号冲突：应为第 ${number + 1} 章，实际为「${value.title}」；${reason}`);
+        }
+        if (listed.number !== actual.number) resolutions.push({kind: 'catalog-number', title: entry.title, link: entry.link, sourcePosition: entry.chapter_number,
+          acceptedTitle: value.title, catalogNumber: listed.number, pageNumber: actual.number, contentHash: hash(value.content),
+          reason: '目录与正文页标题名称一致，正文页章号接续原书；沿用正文页标题，保留原目录标题'});
+        number = actual.number;
+      } else {
+        if (!notice(value.title)) throw Error(`无法确定新增条目是否为公告或番外：「${value.title}」，需核对后接续`);
+        if (peers.length) throw Error(`同名公告或番外内容冲突：「${value.title}」，两个版本均已保留，原书未改写`);
+      }
+      accepted.push(value);
+      return true;
+    },
+  };
+}
+
 export async function acquireContinuation(spec, options) {
   const {stateDir, outputDir, mode, extraction, id} = options;
   if (spec.kind !== 'html' || spec.catalog?.walk) throw Error('换源续更目前需要可读取完整目录的 HTML 来源；此来源须先补齐目录适配');
@@ -162,13 +206,14 @@ export async function acquireContinuation(spec, options) {
   prepareImport(book);
   if (book.chapters.some((chapter, index) => index && chapter.chapter_number <= book.chapters[index - 1].chapter_number)) throw Error('原书顺序号未严格递增，请先核对');
   const lastOrdinal = book.chapters.at(-1).chapter_number;
+  const reviewer = createContinuationReviewer(book);
   const switching = !binding || binding.source.url !== spec.sourceUrl;
   if (!switching && binding.source.extraction !== extraction) throw Error('当前续更来源的提取规则已变化，请先核对适配，旧文件已保留');
   const sourceDir = path.join(dir, 'sources', hash([spec.sourceUrl, extraction]).slice(0, 24));
   const stopped = () => options.signal?.aborted || options.shouldStop?.();
   const client = options.client || makeClient({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, browser: spec.browser, signal: options.signal, shouldStop: stopped, onStatus: options.onStatus});
   const initialStats = {...client.stats}, started = Date.now();
-  const failures = [], anchors = [], tail = [], skipped = [];
+  const failures = [], anchors = [], tail = [], {skipped, resolutions} = reviewer;
   let catalog = [], evidence, added = 0, paused = false, exportFile = null, reusedExport = false, quality = {issues: []}, nextBook = book, fetched = 0;
   async function chapter(entry, links) {
     if (stopped()) throw Error('采集已暂停');
@@ -193,14 +238,15 @@ export async function acquireContinuation(spec, options) {
       const ending = oldNumbers.slice(-3);
       for (const [index, old] of ending.entries()) {
         if (index && old.number !== ending[index - 1].number + 1) throw Error('原书末尾正文章号不连续，需先核对缺章');
-        const matches = newNumbers.filter(item => item.number === old.number);
-        const name = matches[0]?.name || '';
-        const compatibleName = compatibleNames(name, old.name);
-        const match = matches.length === 1 && compatibleName ? matches[0] : null;
-        if (!match || (boundary !== undefined && match.index <= boundary)) throw Error(`新来源无法对齐「${book.chapters[old.index].title}」，可能缺章、改名或拆合章`);
-        const actual = await chapter(catalog[match.index], links), previous = book.chapters[old.index];
-        const oldBody = bodyKey(previous.content, previous.title), newBody = bodyKey(actual.content, actual.title);
-        if (oldBody.length < 100 || oldBody !== newBody) throw Error(`衔接正文不一致「${previous.title}」，旧书已保留，请核对是否删文或拆合章`);
+        const matches = newNumbers.filter(item => item.number === old.number && compatibleNames(item.name, old.name) && (boundary === undefined || item.index > boundary));
+        if (!matches.length || matches.length > 8) throw Error(`新来源无法对齐「${book.chapters[old.index].title}」，可能缺章、改名或拆合章`);
+        const previous = book.chapters[old.index], oldBody = bodyKey(previous.content, previous.title);
+        let actual, match;
+        for (const candidate of matches) {
+          const value = await chapter(catalog[candidate.index], links);
+          if (oldBody.length >= 100 && oldBody === bodyKey(value.content, value.title)) { actual = value; match = candidate; break; }
+        }
+        if (!actual) throw Error(`衔接正文不一致「${previous.title}」，旧书已保留，请核对是否删文或拆合章`);
         anchors.push({oldPosition: old.index + 1, sourcePosition: match.index + 1, oldLink: previous.link, newLink: actual.link, oldHash: hash(previous.content), newHash: hash(actual.content)});
         boundary = match.index;
       }
@@ -210,26 +256,11 @@ export async function acquireContinuation(spec, options) {
     }
     const pending = catalog.slice(boundary + 1);
     const targets = mode === 'probe' ? pending.slice(0, 3) : pending;
-    let number = last.number;
-    for (const entry of targets) {
-      const identity = chapterIdentity(entry.title);
-      if (identity) {
-        if (identity.number !== number + 1) throw Error(`新来源衔接后章号跳转：应为第 ${number + 1} 章，实际为「${entry.title}」`);
-        number = identity.number;
-      } else if (!notice(entry.title)) throw Error(`无法确定新增条目是否为公告或番外：「${entry.title}」，需核对后接续`);
-    }
     options.onProgress?.({jobId: id, mode, downloaded: 0, total: targets.length, failed: 0});
     for (const entry of targets) {
       const value = await chapter(entry, links);
-      if (!chapterIdentity(entry.title)) {
-        const same = book.chapters.filter(old => !chapterIdentity(old.title) && normalize(old.title) === normalize(entry.title));
-        if (same.length) {
-          if (same.length !== 1 || bodyKey(same[0].content, same[0].title) !== bodyKey(value.content, value.title)) throw Error(`同名公告或番外内容冲突：「${entry.title}」`);
-          skipped.push({title: entry.title, link: entry.link, reason: '原书已包含同名且正文一致的条目'});
-          continue;
-        }
-      }
-      tail.push({...formatChapterForExport(value), chapter_number: lastOrdinal + tail.length + 1, sourceChapterNumber: value.chapter_number, sourceChapterUrl: value.link, sourceBookUrl: spec.sourceUrl});
+      const next = {...formatChapterForExport(value), chapter_number: lastOrdinal + tail.length + 1, sourceChapterNumber: value.chapter_number, sourceChapterUrl: value.link, sourceBookUrl: spec.sourceUrl};
+      if (reviewer.accept(entry, next)) tail.push(next);
       options.onProgress?.({jobId: id, mode, downloaded: tail.length + skipped.length, total: targets.length, failed: 0});
     }
     nextBook = {...book, chapters: [...book.chapters, ...tail]};
@@ -246,7 +277,7 @@ export async function acquireContinuation(spec, options) {
       const nextHash = hash(bytes(nextBook));
       const next = {version: 1, revision: (binding?.revision || 0) + 1, title: book.title, author: book.author, file: selected.file, outputPath: file, originalSourceUrl: book.sourceUrl,
         source: {url: spec.sourceUrl, title: spec.title, author: spec.author, variant: spec.variant || '', extraction}, count: nextBook.chapters.length, exportHash: nextHash, catalog: catalog.map(({title, link}) => ({title, link})),
-        anchors: switching ? anchors : binding.anchors, skipped, previousSourceUrl: switching ? binding?.source.url || book.sourceUrl : binding.previousSourceUrl, updatedAt: new Date().toISOString()};
+        anchors: switching ? anchors : binding.anchors, skipped, resolutions: [...(binding?.resolutions || []), ...resolutions], previousSourceUrl: switching ? binding?.source.url || book.sourceUrl : binding.previousSourceUrl, updatedAt: new Date().toISOString()};
       reusedExport = originalHash === nextHash;
       if (switching || !reusedExport || hash(next.catalog) !== hash(binding.catalog)) {
         if (!fs.existsSync(path.join(dir, 'original.json'))) atomicWrite(path.join(dir, 'original.json'), original);
@@ -264,14 +295,14 @@ export async function acquireContinuation(spec, options) {
   const errors = failures.length + issues.filter(issue => issue.level === 'error').length;
   const result = {title: book.title, author: book.author, sourceUrl: spec.sourceUrl, originalSourceUrl: book.sourceUrl, mode, jobId: id, continuation: true, switching,
     expected: exportFile ? nextBook.chapters.length : book.chapters.length + tail.length, downloaded: exportFile ? nextBook.chapters.length : book.chapters.length,
-    originalCount: book.chapters.length, sourceExpected: catalog.length, continuationAdded: added, checkedNew: tail.length, anchors, skipped, evidence, issues, failures,
+    originalCount: book.chapters.length, sourceExpected: catalog.length, continuationAdded: added, checkedNew: tail.length, anchors, skipped, resolutions, automaticResolutions: resolutions.length, evidence, issues, failures,
     errors, warnings: issues.filter(issue => issue.level === 'warning').length, information: issues.filter(issue => issue.level === 'info').length,
     structuralPass: !errors && !paused, completeAgainstSource: !!exportFile, paused, exportFile, reusedExport, description: nextBook.description, status: nextBook.status,
     checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: Object.fromEntries(Object.entries(client.stats).map(([key, value]) => [key, value - initialStats[key]])),
-    limitation: '保留原书全部条目及稳定导入来源；换源核对末尾三个连续正文章节，只追加衔接点之后的内容。目录改名、拆合章、编号重置或正文不一致会停止。未重采或核对新站全部旧正文。'};
+    limitation: '保留原书全部条目及稳定导入来源。完整正文一致、同章号且标题对应的章节或同名公告可自动去重；目录编号有误而正文页编号连续时沿用正文页标题并记录证据。相似但不同的版本、拆合章、缺章及无可靠顺序证据的冲突仍停止。未重采或核对新站全部旧正文。'};
   result.reportFile = path.join(sourceDir, `${mode}-report.json`);
   result.summaryFile = path.join(sourceDir, `${mode}-report.md`);
   atomicWrite(result.reportFile, result);
-  atomicWrite(result.summaryFile, `# 换源续更报告\n\n原有 ${result.originalCount} 项；本次追加 ${added} 项；衔接核对 ${anchors.length} 章。\n\n${result.limitation}\n\n${failures.map(item => item.error).join('\n\n')}\n`);
+  atomicWrite(result.summaryFile, `# 换源续更报告\n\n原有 ${result.originalCount} 项；本次追加 ${added} 项；衔接核对 ${anchors.length} 章；本次自动核对处理 ${resolutions.length} 项。\n\n${result.limitation}\n\n${resolutions.map(item => `${item.title}：${item.reason}（${item.link}）`).join('\n\n')}\n\n${failures.map(item => item.error).join('\n\n')}\n`);
   return result;
 }
