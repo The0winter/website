@@ -13,12 +13,12 @@ import {openLocal} from './open-local.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const publicFiles = {'/': ['index.html', 'text/html'], '/app.css': ['app.css', 'text/css'], '/app.js': ['app.js', 'text/javascript'], '/icon.svg': ['icon.svg', 'image/svg+xml']};
-const busy = task => ['search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(task.phase);
+const busy = task => ['library', 'search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(task.phase);
 function visibleReport(report) {
   if (!report) return null;
   return {...Object.fromEntries(['title', 'author', 'description', 'descriptionStatus', 'status', 'statusDetection', 'jobId', 'mode', 'checkedAt', 'downloaded', 'expected', 'errors', 'warnings', 'structuralPass', 'completeAgainstSource', 'exportFile', 'summaryFile', 'reportFile', 'limitation', 'reusedExport', 'readingEdition', 'readingAdded', 'sourceExpected', 'sourceDownloaded', 'rawReportFile', 'continuation', 'switching', 'continuationAdded', 'originalCount', 'originalSourceUrl', 'automaticResolutions'].map(key => [key, report[key]])), failures: (report.failures || []).map(item => failureDetails(item, item))};
 }
-export async function createDesktop({stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads'), port = 0, sitesDirectory, open = openLocal, onFocus = () => {}, findBooks = searchBooks, prepareBook = resolveBook} = {}) {
+export async function createDesktop({stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads'), port = 0, sitesDirectory, loadSources = loadSites, open = openLocal, onFocus = () => {}, findBooks = searchBooks, prepareBook = resolveBook} = {}) {
   const token = randomBytes(32).toString('hex');
   let worker, operation, stopRequested = false, closing = false, selectedBook = null, candidates = [], lastProgress = 0;
   const resolvedSpecs = new Map();
@@ -36,10 +36,11 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
     if (readingReport?.checkedAt === task.report.checkedAt) task.report = visibleReport(readingReport);
   }
   // An interrupted process can be resumed from crawler checkpoints, never shown as running.
-  if (busy(task)) task = {...task, phase: 'paused', message: '上次任务已停止。重新查找这本书即可继续。'};
+  if (busy(task)) task = {...task, phase: 'paused', message: task.kind === 'library' ? '上次书库更新已停止。再次点击“更新书库”即可重新检查，已保存章节会复用。' : '上次任务已停止。重新查找这本书即可继续。',
+    ...(task.batch ? {batch: {...task.batch, stopped: true, items: task.batch.items.map(item => ['pending', 'running'].includes(item.state) ? {...item, state: 'stopped', message: '上次任务中断，等待重新检查'} : item)}} : {})};
   function save() { atomicWrite(path.join(stateDir, 'desktop-last-task.json'), task); }
   function update(values) { task = {...task, ...(Object.hasOwn(values, 'phase') ? {action: null, actionUrl: null, actionDeadline: null, failure: null} : {}), ...values}; save(); }
-  function sites() { return loadSites(sitesDirectory); }
+  function sites() { return loadSources(sitesDirectory); }
   function withLocalState(book) {
     try { return {...book, local: localBookState(resolvedSpecs.get(book.url) || specForBook(book, sites().sites), {stateDir, outputDir})}; }
     catch { return {...book, local: {state: 'unknown', saved: 0, total: 0, message: '开始采集时核对本地进度'}}; }
@@ -69,7 +70,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
       if (req.headers['x-desktop-token'] !== token || (req.headers.origin && req.headers.origin !== `http://${expectedHost}`)) return respond(403, {error: '窗口已过期，请重新打开程序'});
       if (pathname === '/api/state' && req.method === 'GET') {
         const loaded = sites();
-        return respond(200, {settings: readSettings(stateDir), sites: loaded.sites.map(({id, name, home, hosts, spec, search, book}) => ({id, name, home, hosts, remembersLogin: [spec.transport, search?.transport, book?.transport].includes('browser')})), adapterErrors: loaded.errors, task: {...task, canShowBrowser: !!worker?.connected && busy(task) && ['login', 'verification'].includes(task.action)}, candidates, outputDir});
+        return respond(200, {settings: readSettings(stateDir), sites: loaded.sites.map(({id, name, home, hosts, spec, search, book}) => ({id, name, home, hosts, remembersLogin: [spec.transport, search?.transport, book?.transport].includes('browser')})), adapterErrors: loaded.errors, task: {...task, busy: busy(task) || !!worker || !!operation, canShowBrowser: !!worker?.connected && busy(task) && ['login', 'verification'].includes(task.action)}, candidates, outputDir});
       }
       if (req.method !== 'POST') return respond(405, {error: '请求方式无效'});
       let raw = '';
@@ -85,6 +86,40 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         if (!site) throw Error('请先选择一个已适配的网站');
         clearBrowserSession(stateDir, site.home);
         return respond(200, {message: `已清除${site.name}在拾页中的登录状态，需要登录时会重新提示；已保存章节保留。`});
+      }
+      if (pathname === '/api/update-library') {
+        if (busy(task) || worker || operation) return respond(409, {error: '请先停止当前任务，等待采集窗口关闭后再更新书库'});
+        const librarySites = sites().sites;
+        stopRequested = false; candidates = []; selectedBook = null;
+        task = {kind: 'library', phase: 'library', message: '正在整理本地书库及每本书的来源…', batch: null}; save();
+        worker = fork(path.join(here, 'worker.mjs'), [], {windowsHide: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc']});
+        const current = worker;
+        let workerError = '', completed = false;
+        current.stderr.on('data', chunk => { workerError = (workerError + chunk.toString()).slice(-1500); });
+        current.on('message', message => {
+          if (message.type === 'library') update({batch: message.batch});
+          if (message.type === 'library-phase' && !['pausing', 'stopping'].includes(task.phase)) update({phase: message.phase, title: message.title, author: message.author, sourceUrl: message.sourceUrl,
+            message: message.phase === 'probe' ? '正在核对目录与已有章节…' : '正在补齐新章节并更新本地文件…', progress: null});
+          if (message.type === 'status' && !['pausing', 'stopping'].includes(task.phase)) update(statusValues(message));
+          if (message.type === 'progress') {
+            task.progress = message;
+            if (Date.now() - lastProgress > 1000) { save(); lastProgress = Date.now(); }
+          }
+          if (message.type === 'library-done') {
+            completed = true;
+            const batch = message.batch;
+            update({batch, phase: stopRequested || message.stopped ? 'stopped' : message.paused ? 'paused' : 'complete', progress: null,
+              message: batch.total === 0 ? '下载目录里还没有可更新的书籍。' : `${batch.stopped ? '书库更新已停止' : '书库检查完成'}：${batch.updated} 本已更新，${batch.unchanged} 本已是最新，新增 ${batch.added} 章。${batch.failed || batch.skipped ? ` ${batch.failed} 本失败，${batch.skipped} 本需核对，原因见下方列表。` : ''}`});
+          }
+          if (message.type === 'error') { if (stopRequested) stoppedTask(); else update({phase: 'error', message: message.error, failure: message.failure || failureDetails(message)}); }
+        });
+        current.on('error', error => update({phase: 'error', message: error.message, failure: failureDetails(error)}));
+        current.on('exit', () => {
+          if (worker === current) worker = null;
+          if (!completed && busy(task)) { if (stopRequested) stoppedTask(); else update({phase: 'error', message: `书库更新进程停止，已保存章节保留。${workerError.slice(-300)}`}); }
+        });
+        current.send({type: 'start', library: true, stateDir, outputDir, sites: librarySites});
+        return respond(202, {ok: true});
       }
       if (pathname === '/api/search') {
         if (busy(task) || worker) return respond(409, {error: '请先停止当前任务，等待进度保存完成'});
@@ -112,7 +147,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         const requestedContinuation = selectedBook.local?.continuation;
         stopRequested = false;
         const controller = new AbortController(); operation = controller;
-        update({phase: 'resolving', message: '正在读取书籍信息…', title: selectedBook.title, author: selectedBook.author, sourceUrl: selectedBook.url, description: null, status: null, statusDetection: null, report: null, progress: null, probeOnly: input.probeOnly === true});
+        update({kind: 'book', batch: null, phase: 'resolving', message: '正在读取书籍信息…', title: selectedBook.title, author: selectedBook.author, sourceUrl: selectedBook.url, description: null, status: null, statusDetection: null, report: null, progress: null, probeOnly: input.probeOnly === true});
         let spec;
         try { spec = await prepareBook({...selectedBook, stateDir, sites: sites().sites, ...controls(controller)}); }
         catch (error) {

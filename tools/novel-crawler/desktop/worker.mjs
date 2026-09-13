@@ -3,6 +3,7 @@ import path from 'node:path';
 import {makeClient} from '../http.mjs';
 import {failureDetails} from '../diagnostics.mjs';
 import {browserProfile} from '../browser-session.mjs';
+import {updateLibrary} from './library.mjs';
 
 let paused = false, started = false, stopped = false, client;
 const controller = new AbortController();
@@ -18,6 +19,17 @@ process.on('message', async message => {
   if (message.type !== 'start' || started) return;
   started = true;
   try {
+    if (message.library) {
+      const result = await updateLibrary({stateDir: message.stateDir, outputDir: message.outputDir, sites: message.sites,
+        signal: controller.signal, shouldStop: () => paused,
+        onClient: value => { client = value; },
+        onLibrary: batch => send({type: 'library', batch}),
+        onPhase: (phase, book) => send({type: 'library-phase', phase, title: book.title, author: book.author, sourceUrl: book.url}),
+        onProgress: progress => send({type: 'progress', ...progress}),
+        onStatus: status => send({type: 'status', ...status})});
+      send({type: 'library-done', batch: result, stopped, paused});
+      return;
+    }
     const options = {stateDir: message.stateDir, outputDir: message.outputDir, continuation: message.continuation, signal: controller.signal, shouldStop: () => paused, onProgress: progress => send({type: 'progress', ...progress}), onStatus: status => send({type: 'status', ...status})};
     const spec = validateSpec(message.spec);
     client = makeClient({cacheDir: path.join(message.stateDir, 'cache'), profileDir: browserProfile(message.stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, browser: spec.browser, onStatus: options.onStatus, shouldStop: options.shouldStop, signal: controller.signal});

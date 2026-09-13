@@ -53,6 +53,20 @@ h1, h2, h3, h4, p { margin: 0; }
 .local-dot { display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--accent); }
 main { width: calc(100% - 220px); max-width: 1200px; margin-left: 220px; padding: 30px 36px; }
 header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
+.library-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0; min-height: 42px; padding: 10px 16px; border: 1px solid #254b88; border-radius: 9px; background: linear-gradient(135deg, #193960, #2857a2); color: #fff; font-weight: 600; box-shadow: 0 3px 9px #1939601a; }
+.library-button:hover:not(:disabled) { background: #193960; border-color: #193960; }
+.library-button svg { width: 18px; height: 18px; }
+.library-button[data-running=true] svg { animation: library-spin 1.8s linear infinite; }
+@keyframes library-spin { to { transform: rotate(360deg); } }
+.library-summary { margin-bottom: 14px; color: #1d4ed8; font-size: 13px; font-variant-numeric: tabular-nums; line-height: 1.8; }
+.library-results { margin-top: 18px; max-height: 350px; overflow: auto; border-top: 1px solid var(--border); scrollbar-width: thin; }
+.library-row { padding: 12px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.library-row-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.library-row-heading strong { min-width: 0; font-size: 14px; font-weight: 600; }
+.library-row-heading span { flex-shrink: 0; font-size: 12px; color: var(--muted); }
+.library-row p { margin-top: 5px; font-size: 13px; color: var(--muted); line-height: 1.7; }
+.library-row[data-state=running] .library-row-heading span, .library-row[data-state=updated] .library-row-heading span { color: #1d4ed8; }
+.library-row[data-state=failed] .library-row-heading span, .library-row[data-state=skipped] .library-row-heading span { color: #a15c16; }
 h1 { font-size: 26px; font-weight: 700; letter-spacing: -.5px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px 24px; }
 .section-title { display: flex; align-items: center; gap: 10px; }
