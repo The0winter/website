@@ -47,6 +47,7 @@ export function beginMobileSectionTransition(href: string) {
     window.removeEventListener('popstate', cancel);
     window.removeEventListener('pagehide', cancel);
     window.removeEventListener('resize', cancel);
+    document.removeEventListener('pointerdown', cancel, true);
     document.removeEventListener('click', click, true);
     document.removeEventListener('touchmove', preventScroll, true);
     document.removeEventListener('wheel', preventScroll, true);
@@ -85,6 +86,9 @@ export function beginMobileSectionTransition(href: string) {
   window.addEventListener('popstate', cancel);
   window.addEventListener('pagehide', cancel);
   window.addEventListener('resize', cancel);
+  // Keep the original swipe's release click blocked, but let a fresh gesture
+  // take over immediately, before the destination's own handlers receive it.
+  document.addEventListener('pointerdown', cancel, true);
   document.addEventListener('click', click, true);
   document.addEventListener('touchmove', preventScroll, {capture: true, passive: false});
   document.addEventListener('wheel', preventScroll, {capture: true, passive: false});

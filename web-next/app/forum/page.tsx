@@ -129,8 +129,9 @@ export default function ForumPage() {
       horizontalSwipe.current = true;
       suppressSwipeClick.current = true;
       let newOffset = diffX;
-      // 边缘阻尼（首尾页拉拽时增加吃力感）
-      if ((activeIndex === 0 && diffX > 0) || (activeIndex === TABS.length - 1 && diffX < 0)) {
+      // 推荐右滑进入精选，不移动内部列表；关注左滑仍保留到头提示。
+      if (activeIndex === 0 && diffX > 0) newOffset = 0;
+      else if (activeIndex === TABS.length - 1 && diffX < 0) {
         newOffset = diffX * 0.3;
       }
       setDragOffset(newOffset);

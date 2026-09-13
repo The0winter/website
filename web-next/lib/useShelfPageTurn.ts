@@ -84,7 +84,8 @@ export function useShelfPageTurn(tab: LibraryTab, enabled: boolean) {
     const motion = active.current;
     if (!motion?.dragging) return;
     let x = motion.origin.shelf + distance;
-    if (x < 0) x *= .18;
+    // On mobile this edge leads to home; only the history end should resist.
+    if (x < 0) x = matchMedia('(max-width: 767px)').matches ? 0 : x * .18;
     if (x > motion.width) x = motion.width + (x - motion.width) * .18;
     for (const panel of panels()) panel.style.transform = `translateX(${x - (panel.dataset.shelfTab === 'history' ? motion.width : 0)}px)`;
     align(Math.max(0, Math.min(1, x / motion.width)));

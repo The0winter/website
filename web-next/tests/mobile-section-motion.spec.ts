@@ -24,12 +24,16 @@ async function setup(page: Page, path = '/') {
   await expect(page.locator('.mobile-account-initial:visible')).toHaveText('栏');
 }
 
-async function swipe(page: Page, context: BrowserContext, direction: number) {
-  await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
+async function swipe(page: Page, context: BrowserContext, direction: number, options: {duringMotion?: boolean; beforeEnd?: () => Promise<void>} = {}) {
+  if (!options.duringMotion) await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
   const cdp = await context.newCDPSession(page), width = page.viewportSize()!.width;
   const x = width * (direction > 0 ? .8 : .2), y = 320;
   await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y, id: 1}]});
-  for (let step = 1; step <= 6; step++) await cdp.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: x - direction * step * 23, y, id: 1}]});
+  for (let step = 1; step <= 6; step++) {
+    await cdp.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: x - direction * step * 23, y, id: 1}]});
+    await page.waitForTimeout(16);
+  }
+  await options.beforeEnd?.();
   await cdp.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
   await cdp.detach();
 }
@@ -54,6 +58,78 @@ async function finish(page: Page) {
   await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
   await expect(page.locator('html')).not.toHaveAttribute('data-mobile-section-transition', /.+/);
 }
+
+for (const width of [320, 390]) test(`${width}px a fresh swipe takes over a running section slide in either direction`, async ({page, context}) => {
+  await page.setViewportSize({width, height: 844});
+  await setup(page);
+  await hold(page);
+  await swipe(page, context, -1);
+  await pause(page);
+  // Continue into history before the incoming shelf has finished sliding.
+  await swipe(page, context, -1, {duringMotion: true});
+  await expect(page.getByRole('tab', {name: '浏览记录'})).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
+  await expect(page.locator('.shelf-viewport')).not.toHaveAttribute('data-switching', 'true');
+  await swipe(page, context, 1);
+  await expect(page.locator('.shelf-viewport')).not.toHaveAttribute('data-switching', 'true');
+  await swipe(page, context, 1);
+  await pause(page);
+  await expect(page).toHaveURL(base + '/');
+  // Continue through home and into the forum without waiting for either slide.
+  await swipe(page, context, 1, {duringMotion: true});
+  await pause(page);
+  await expect(page).toHaveURL(base + '/forum');
+  await swipe(page, context, 1, {duringMotion: true});
+  await expect(page.getByRole('button', {name: '热榜', exact: true})).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
+  await swipe(page, context, -1);
+  await expect(page.getByRole('button', {name: '推荐', exact: true})).toHaveAttribute('aria-current', 'page');
+  await swipe(page, context, -1);
+  await expect(page).toHaveURL(base + '/');
+  await pause(page);
+  await swipe(page, context, -1, {duringMotion: true});
+  await pause(page);
+  await expect(page).toHaveURL(base + '/library');
+  // Reverse direction while the shelf is still arriving.
+  await swipe(page, context, 1, {duringMotion: true});
+  await pause(page);
+  await expect(page).toHaveURL(base + '/');
+  await swipe(page, context, 1, {duringMotion: true});
+  await pause(page);
+  await swipe(page, context, -1, {duringMotion: true});
+  await pause(page);
+  await expect(page).toHaveURL(base + '/');
+  await finish(page);
+});
+
+for (const width of [320, 390]) test(`${width}px only the two terminal pages resist an outward drag`, async ({page, context}) => {
+  await page.setViewportSize({width, height: 844});
+  await setup(page, '/library');
+  const shelfX = () => page.locator('#shelf-content').evaluate(element => new DOMMatrix(getComputedStyle(element).transform).m41);
+  const forumX = () => page.locator('.forum-mobile-feed > div').evaluate(element => new DOMMatrix(getComputedStyle(element).transform).m41);
+  await swipe(page, context, 1, {beforeEnd: async () => {expect(await shelfX()).toBe(0);}});
+  await expect(page).toHaveURL(base + '/');
+  await swipe(page, context, 1);
+  await expect(page).toHaveURL(base + '/forum');
+  await swipe(page, context, -1, {beforeEnd: async () => {expect(await forumX()).toBe(0);}});
+  await expect(page).toHaveURL(base + '/');
+  await swipe(page, context, -1);
+  await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
+  await page.getByRole('tab', {name: '浏览记录'}).tap();
+  await expect(page.locator('.shelf-viewport')).not.toHaveAttribute('data-switching', 'true');
+  await swipe(page, context, -1, {beforeEnd: async () => {expect(await shelfX()).toBeGreaterThan(0);}});
+  await expect(page.getByRole('tab', {name: '浏览记录'})).toHaveAttribute('aria-selected', 'true');
+  await expect.poll(shelfX).toBe(0);
+  await page.locator('.mh-bottom:visible [data-section=forum]').tap();
+  await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
+  await page.getByRole('button', {name: '关注', exact: true}).tap();
+  const endX = -2 * await page.locator('.forum-mobile-feed').evaluate(element => element.clientWidth);
+  await expect.poll(forumX).toBe(endX);
+  await swipe(page, context, 1, {beforeEnd: async () => {expect(await forumX()).toBeLessThan(endX);}});
+  await expect(page.getByRole('button', {name: '关注', exact: true})).toHaveAttribute('aria-current', 'page');
+  await expect.poll(forumX).toBe(endX);
+  await expect(page).toHaveURL(base + '/forum');
+});
 
 for (const width of [320, 390]) for (const method of ['tap', 'swipe']) test(`${width}px ${method} slides both pages for 400ms and leaves navigation fixed`, async ({page, context}, info) => {
   await page.setViewportSize({width, height: 844});
