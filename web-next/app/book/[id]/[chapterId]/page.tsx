@@ -22,6 +22,7 @@ type ReaderData = {
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, '') || 'http://127.0.0.1:3000';
 
 const getReaderData = cache(async (bookId: string, chapterId: string): Promise<ReaderData> => {
+  if (![bookId, chapterId].every(id => /^[a-f0-9]{24}$/i.test(id))) return {book: null, chapter: null};
   const baseUrl = getApiBaseUrl(); // 动态获取：服务端走本地 5000 端口，客户端走公网
 
   try {
@@ -69,12 +70,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id: bookId, chapterId } = await params;
   const { book, chapter } = await getReaderData(bookId, chapterId);
 
-  if (!book || !chapter) {
-    return {
-      title: '章节未找到 - 九天小说站',
-      description: '你访问的章节不存在或已下线。',
-    };
-  }
+  if (!book || !chapter) notFound();
 
   const chapterTitle = getChapterTitle(chapter);
   const fullTitle = `${chapterTitle} - ${book.title} - 九天小说站`;

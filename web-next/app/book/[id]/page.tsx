@@ -29,6 +29,7 @@ function normalizeCoverImage(coverImage?: string): string {
 }
 
 const getBook = cache(async (id: string): Promise<Book | null> => {
+  if (!/^[a-f0-9]{24}$/i.test(id)) return null;
   try {
     const baseUrl = getApiBaseUrl(); // 动态获取：服务端走内网，客户端走公网
     const res = await fetch(`${baseUrl}/books/${id}`, { 
@@ -85,24 +86,20 @@ async function getTotalWords(id: string): Promise<number | null> {
 function buildDescription(book: Book): string {
   const raw = (book.description || '').replace(/[\r\n\t]+/g, ' ').trim();
   if (raw) return raw.length > 120 ? `${raw.slice(0, 120)}...` : raw;
-  return `${book.title} online reading`;
+  return `${book.title}，作者${book.author || '佚名'}。查看作品介绍、章节目录与最新更新，在线阅读尽在九天小说站。`;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const book = await getBook(id);
 
-  if (!book) {
-    return {
-      title: 'Book Not Found',
-    };
-  }
+  if (!book) notFound();
 
   const description = buildDescription(book);
   const canonicalUrl = `${SITE_URL}/book/${id}`;
   
   return {
-    title: `${book.title} - 九天小说站`,
+    title: `${book.title}${book.author ? `（${book.author}）` : ''} - 章节目录与在线阅读 - 九天小说站`,
     description,
     alternates: { canonical: canonicalUrl },
     openGraph: {
@@ -146,8 +143,8 @@ export default async function BookDetailPage({ params }: Props) {
     },
     description,
     image: book.cover_image, // 这里已经是我们转换过的绝对路径图片了，SEO 满分
-    url: `${SITE_URL}/book/${book.id}`,
-    numberOfPages: catalog?.total || undefined,
+    url: `${SITE_URL}/book/${id}`,
+    inLanguage: 'zh-CN',
   };
 
   return (
