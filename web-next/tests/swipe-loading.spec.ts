@@ -59,6 +59,8 @@ for(const width of [390,1440]) test(`${width}px book loading uses the site logo 
   await page.setViewportSize({width,height:844});
   await page.goto(base+'/');
   const link=page.locator(width<768?'.mobile-home .mh-book':'.desktop-home a[href^="/book/"]').first();
+  // Loading must reuse a small optimized logo, even when the full-size original is unavailable.
+  await page.route('**/icon.png',route=>route.abort());
   const href=await link.getAttribute('href');
   let release!:()=>void;
   const gate=new Promise<void>(resolve=>{release=resolve;});
@@ -68,8 +70,8 @@ for(const width of [390,1440]) test(`${width}px book loading uses the site logo 
     const loading=page.locator('.book-navigation-loading');
     await expect(loading).toBeVisible();
     await expect.poll(()=>loading.evaluate(element=>element.getBoundingClientRect().x)).toBeCloseTo(0,1);
-    await expect(loading.locator('img.loading-logo')).toHaveAttribute('src','/icon.png');
-    await expect.poll(()=>loading.locator('img').evaluate(image=>(image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+    await expect(loading.locator('img.loading-logo')).toHaveAttribute('src',/\/_next\/image\?/);
+    await expect.poll(()=>loading.locator('img').evaluate(image=>(image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth>0)).toBe(true);
     const dots=loading.locator('.loading-dots');
     await expect(dots).toHaveAttribute('aria-hidden','true');
     const stages=await dots.evaluate(async element=>{
