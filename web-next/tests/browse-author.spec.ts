@@ -26,7 +26,7 @@ for (const view of ['new', 'category']) {
     if (view === 'category') await page.getByRole('button', {name: '玄幻', exact: true}).click();
     await page.getByRole('button', {name: '下一页', exact: true}).click();
     await expect(page.locator('.mh-pagination')).toContainText('第 2 页');
-    await expect(page.locator('.mh-browse h3').first()).toHaveText('第2页作品0');
+    await expect(page.locator('.mh-browse .mh-book h3').first()).toHaveText('第2页作品0');
     const listUrl = page.url();
     await page.locator('.mh-browse .mh-book').first().click();
     await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);
@@ -35,7 +35,7 @@ for (const view of ['new', 'category']) {
     await page.goBack(); await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);
     await page.reload(); await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);
     await page.goBack(); await expect(page).toHaveURL(listUrl); await idle(page);
-    await expect(page.locator('.mh-browse h3').first()).toHaveText('第2页作品0');
+    await expect(page.locator('.mh-browse .mh-book h3').first()).toHaveText('第2页作品0');
     if (view === 'category') await expect(page.getByRole('button', {name: '玄幻', exact: true})).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('button', {name: '返回精选'}).click();
     await expect(page).toHaveURL(base + '/');
