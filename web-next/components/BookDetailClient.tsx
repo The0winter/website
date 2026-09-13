@@ -1,4 +1,5 @@
 'use client';
+import {LoadingLogo, LoadingText} from './BrandLoading';
 import BookCover from '@/components/BookCover';
 import { safeFetch as fetch, type CatalogPage } from '@/lib/request';
 
@@ -572,8 +573,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             {chapterError && <p role="alert" className="mb-3 text-sm text-red-600">{chapterError} <button onClick={catalog.retry} className="underline">重试</button></p>}
             {loadingChapters && chapters.length === 0 ? (
                <div className="py-6 md:py-10 text-center text-gray-500 flex flex-col items-center">
-                  <Loader2 className="w-6 h-6 md:w-8 md:h-8 animate-spin mb-2 text-blue-500" />
-                  <p className="text-xs md:text-sm">加载目录...</p>
+                  <LoadingLogo size={32} className="mb-2"/>
+                  <p className="text-xs md:text-sm"><LoadingText>加载目录</LoadingText></p>
                </div>
             ) : chapters.length === 0 ? (
               !chapterError && <p className="text-gray-600 text-sm">暂无章节</p>

@@ -58,7 +58,10 @@ function createTransition(href: string, dragging = false): MobileSectionDrag | u
     title.className = 'mobile-section-preview-title';
     title.textContent = ['浏览记录　　书架', '精选', '推荐　　热榜　　关注'][to];
     const loading = document.createElement('p');
-    loading.textContent = '加载中…';
+    loading.textContent = '加载中';
+    const dots = document.createElement('span');
+    dots.className = 'loading-dots'; dots.setAttribute('aria-hidden', 'true');
+    loading.append(dots);
     incoming.append(title, loading);
   }
   incoming.dataset.sectionPane = 'preview';

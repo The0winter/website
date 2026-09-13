@@ -1,5 +1,6 @@
 'use client';
 import BookCover from '@/components/BookCover';
+import {LoadingLogo, LoadingText} from './BrandLoading';
 import { safeFetch as fetch } from '@/lib/request';
 
 
@@ -520,7 +521,7 @@ const openBookManager = (book: Book) => {
     if (!authLoading && user && (standaloneCreate || !loading)) onReady?.();
   }, [authLoading, user, standaloneCreate, loading, onReady]);
 
-  if (authLoading || !user) return <div className="writer-page min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600"/></div>;
+  if (authLoading || !user) return <div className="writer-page min-h-screen flex flex-col gap-4 items-center justify-center" role="status"><LoadingLogo/><p><LoadingText>正在准备创作中心</LoadingText></p></div>;
 
   return (
     <div className={`writer-page min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans${embedded ? ' writer-embedded' : ''}${standaloneCreate ? ' writer-embedded-new' : ''}`}>

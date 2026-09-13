@@ -2,6 +2,7 @@
 
 import {useEffect, useRef} from 'react';
 import {navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from './mobile-section-navigation';
+import {sectionSwipeThreshold} from './section-swipe';
 
 export function useMobileHomeSwipe(enabled: boolean) {
   const root = useRef<HTMLDivElement>(null);
@@ -43,7 +44,7 @@ export function useMobileHomeSwipe(enabled: boolean) {
       const current = gesture;
       gesture = null;
       if (!current?.horizontal) return;
-      const commit = Math.abs(current.dx) >= Math.min(100, host.clientWidth * .25);
+      const commit = Math.abs(current.dx) >= sectionSwipeThreshold(host.clientWidth);
       if (current.drag) current.drag.release(commit);
       else if (commit) navigateMobileSection(host, current.dx > 0 ? 'library' : 'forum');
     };

@@ -22,6 +22,7 @@ import {formatRelativeUpdate} from '@/lib/relative-update';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {useShelfPageTurn} from '@/lib/useShelfPageTurn';
 import {navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from '@/lib/mobile-section-navigation';
+import {sectionSwipeThreshold} from '@/lib/section-swipe';
 import type {Book} from '@/lib/api';
 import './library.css';
 
@@ -296,7 +297,7 @@ function Library() {
     if (!gesture || gesture.id !== event.pointerId || !gesture.horizontal) return;
     const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
     const quick = event.timeStamp - gesture.lastAt < 100 && Math.abs(gesture.velocity) > .5 && Math.sign(gesture.velocity) === Math.sign(dx);
-    const distance = Math.min(100, (viewport.current?.clientWidth || 300) * .25);
+    const distance = sectionSwipeThreshold(viewport.current?.clientWidth || 300);
     const switchTab = Math.abs(dx) >= distance || Math.abs(dx) >= 40 && quick;
     if (gesture.section) {
       gesture.section.update(dx);

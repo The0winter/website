@@ -1,8 +1,9 @@
 'use client';
+import {LoadingLogo, LoadingText} from '@/components/BrandLoading';
 
 import { Suspense, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Hash, HelpCircle, Loader2, PenTool } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Hash, HelpCircle, PenTool } from 'lucide-react';
 import { forumApi } from '@/lib/api';
 
 const theme = {
@@ -212,8 +213,8 @@ function CreatePostContent() {
               </>
             ) : (
               <>
-                <Loader2 className="w-10 h-10 text-[#111827] animate-spin mb-4" />
-                <p className="text-[#646a73] font-medium text-sm">正在提交...</p>
+                <LoadingLogo size={40} className="mb-4"/>
+                <p className="text-[#646a73] font-medium text-sm"><LoadingText>正在提交</LoadingText></p>
               </>
             )}
           </div>

@@ -5,6 +5,7 @@ import {flushSync} from 'react-dom';
 import {beginChapterEntry, currentChapterEntry, failChapterEntry, finishChapterEntry, prepareChapterReveal, showChapterText, serverChapterEntry, subscribeChapterEntry} from '@/lib/chapter-entry';
 import './chapter-loading.css';
 import {prepareReaderPaper, readerPaperImage} from '@/lib/reader-paper';
+import {LoadingText} from './BrandLoading';
 
 export default function ChapterLoadingPage() {
   const entry = useSyncExternalStore(subscribeChapterEntry, currentChapterEntry, serverChapterEntry);
@@ -116,7 +117,7 @@ export default function ChapterLoadingPage() {
     {entry.textured && <link rel="preload" as="image" href={readerPaperImage} media="(max-width:1023px)" />}
     <div className="chapter-loading-sheet" data-paper={entry.textured}>
       <div role={entry.error ? 'alert' : 'status'} aria-live="polite" className="chapter-loading-message">
-        <h2>{entry.title}</h2><p>{entry.error || '正在加载'}</p>
+        <h2>{entry.title}</h2><p>{entry.error || <LoadingText>正在加载</LoadingText>}</p>
         {entry.error && <div className="chapter-loading-actions"><button onClick={() => {beginChapterEntry(entry.href, entry.title, entry.position); window.location.replace(entry.href);}}>重试</button><button onClick={() => window.history.back()}>返回</button></div>}
       </div>
     </div>

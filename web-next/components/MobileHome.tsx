@@ -1,5 +1,6 @@
 'use client';
 import BookCover from '@/components/BookCover';
+import {LoadingText} from './BrandLoading';
 
 import {useEffect,useLayoutEffect,useState} from 'react';
 import {useRouter,useSearchParams} from 'next/navigation';
@@ -100,7 +101,7 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
         </div>
         <div className="mh-browse-summary"><h3>{category==='全部'?'全部作品':`${category}作品`}</h3><span>{cached?`共 ${total.toLocaleString('zh-CN')} 本 · `:''}按热度排序</span></div>
       </>}
-      {loading?<p className="mh-empty" role="status">正在加载…</p>:error?<p role="alert" className="mh-empty">{error} <button onClick={()=>setRetry(n=>n+1)}>重试</button></p>:<BookRows books={rows}/>}
+      {loading?<p className="mh-empty" role="status"><LoadingText>正在加载</LoadingText></p>:error?<p role="alert" className="mh-empty">{error} <button onClick={()=>setRetry(n=>n+1)}>重试</button></p>:<BookRows books={rows}/>}
       <nav className="mh-pagination" aria-label="书籍分页"><button disabled={loading||page===1} onClick={()=>browse(mode,page-1,category,true)}>上一页</button><span>第 {page} 页</span><button disabled={loading||page*20>=total} onClick={()=>browse(mode,page+1,category,true)}>下一页</button></nav>
     </section>}
     {mode==='home'&&<MobileBottomNav/>}

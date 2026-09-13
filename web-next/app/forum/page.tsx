@@ -15,6 +15,7 @@ import {
 import { forumApi, ForumPost } from '@/lib/api';
 import HomeSearchHeader from '@/components/HomeSearchHeader';
 import {navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from '@/lib/mobile-section-navigation';
+import {sectionSwipeThreshold} from '@/lib/section-swipe';
 import './forum.css';
 
 type FeedTab = 'recommend' | 'hot' | 'follow';
@@ -163,7 +164,7 @@ export default function ForumPage() {
     }
 
     const distance = event.changedTouches[0]?.clientX - touchStartPos.x;
-    const threshold = Math.min(100, window.innerWidth * .25);
+    const threshold = sectionSwipeThreshold(window.innerWidth);
     if (sectionDrag.current) {
       sectionDrag.current.update(distance);
       sectionDrag.current.release(distance > threshold);

@@ -39,10 +39,15 @@ function bookLoadingPage(href: string, label = '书籍') {
   panel.tabIndex = -1;
   panel.setAttribute('aria-label', `正在打开${label}`);
   panel.setAttribute('aria-busy', 'true');
+  const logo = document.createElement('img');
+  logo.src = '/icon.png'; logo.alt = ''; logo.width = 48; logo.height = 48; logo.className = 'loading-logo';
   const message = document.createElement('p');
   message.setAttribute('role', 'status');
-  message.textContent = `正在打开${label}…`;
-  panel.append(message);
+  message.textContent = `正在打开${label}`;
+  const dots = document.createElement('span');
+  dots.className = 'loading-dots'; dots.setAttribute('aria-hidden', 'true');
+  message.append(dots);
+  panel.append(logo, message);
   panel.addEventListener('wheel', event => event.preventDefault(), {passive: false});
   panel.addEventListener('keydown', event => {
     if (event.key === 'Escape') {event.preventDefault(); window.history.back();}

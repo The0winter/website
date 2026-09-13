@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, BookOpen, Loader2, Sparkles, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, Sparkles, X } from 'lucide-react';
+import {LoadingLogo, LoadingText} from './BrandLoading';
 import type WriterDashboard from './WriterDashboard';
 import '@/app/writer/writer-mobile.css';
 import './mobile-writer-view.css';
@@ -57,7 +58,7 @@ export default function MobileWriterView({ view, covered, refreshVersion, onBack
       </header>
       <div className="mw-view-content">
         {!loaded && <div className="mw-view-loading" role={failed ? 'alert' : 'status'} aria-live="polite">
-          {failed ? <><p>页面暂时加载失败</p><button type="button" onClick={() => { setFailed(false); setAttempt(value => value + 1); }}>重新加载</button></> : <><Loader2 size={27} className="animate-spin"/><p>{create ? '正在准备新作品…' : '正在加载作品管理…'}</p><div className="mw-view-skeleton" aria-hidden="true"><i/><i/><i/></div></>}
+          {failed ? <><p>页面暂时加载失败</p><button type="button" onClick={() => { setFailed(false); setAttempt(value => value + 1); }}>重新加载</button></> : <><LoadingLogo/><p><LoadingText>{create ? '正在准备新作品' : '正在加载作品管理'}</LoadingText></p><div className="mw-view-skeleton" aria-hidden="true"><i/><i/><i/></div></>}
         </div>}
         <div className="mw-view-body" inert={!loaded} aria-hidden={!loaded || undefined}>
           {Dashboard && elapsed && <Dashboard entry={view.entry} embedded onExit={onBack} onOpenNew={onOpenNew} onReady={markReady} refreshVersion={refreshVersion} onWorksChanged={onChanged}/>}
