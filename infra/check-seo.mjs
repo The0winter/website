@@ -85,5 +85,17 @@ for (const url of process.argv.includes('--sitemaps') ? maps : maps.slice(0, 3))
   report.sitemaps.push({url, entries: entries.length});
 }
 report.urls = all.size;
+if (process.argv.includes('--baidu')) {
+  assert.ok(process.argv.includes('--sitemaps'), '--baidu requires a complete sitemap comparison');
+  const {body} = await read('/sitemap-baidu.xml');
+  assert.match(body, /<urlset\b/);
+  assert.doesNotMatch(body, /<sitemapindex\b/);
+  const urls = locs(body);
+  assert.equal(urls.length, all.size, 'Baidu feed contains all public sitemap URLs');
+  assert.equal(new Set(urls).size, urls.length, 'No duplicate Baidu URLs');
+  assert.ok(urls.every(url => all.has(url)), 'Baidu feed contains only canonical public URLs');
+  assert.ok(urls.length <= 50000 && Buffer.byteLength(body, 'utf8') < 10_000_000);
+  report.baidu = {urls: urls.length, bytes: Buffer.byteLength(body, 'utf8')};
+}
 report.sampleChapter = chapterPath;
 console.log(JSON.stringify(report, null, 2));

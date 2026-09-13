@@ -41,7 +41,7 @@ if exist baidu_push.cjs (
     node baidu_push.cjs
 ) else (
     echo 正在运行 .js 文件...
-    node baidu_push.js
+    node baidu_push.js --apply
 )
 
 if errorlevel 1 exit /b 1
