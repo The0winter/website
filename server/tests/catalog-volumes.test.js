@@ -29,3 +29,17 @@ test('ordinary chapter titles, notices and numbering resets never invent volume 
   assert.deepEqual(buildCatalogVolumes(chapters),[{id:'0',title:'正文',start:0,count:6}]);
   assert.deepEqual(buildCatalogVolumes([]),[]);
 });
+
+test('imported volume metadata groups unprefixed chapter titles, including repeated chapter numbers', () => {
+  const chapters = [
+    {title:'第一章 风起',volume_title:'第一卷 初遇',volume_number:1},
+    {title:'番外一 重逢',volume_title:'第一卷 初遇',volume_number:1},
+    {title:'第一章 启程',volume_title:'第二卷 远行',volume_number:2},
+    {title:'第二章 归来',volume_title:'第二卷 远行',volume_number:2},
+  ];
+  assert.deepEqual(buildCatalogVolumes(chapters),[
+    {id:'0',title:'第一卷 初遇',start:0,count:2},
+    {id:'2',title:'第二卷 远行',start:2,count:2},
+  ]);
+  assert.deepEqual(buildCatalogVolumes([{title:'第一章',volume_title:'第一卷',volume_number:1}]),[{id:'0',title:'第一卷',start:0,count:1}]);
+});

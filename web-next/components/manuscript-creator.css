@@ -60,10 +60,10 @@
   padding: 22px 30px 15px;
   border-bottom: 1px solid #ecdfd5;
 }
-.manuscript-header span {
-  font-size: 10px;
-  letter-spacing: 2px;
-  color: #987e6e;
+.manuscript-header > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .manuscript-header h2 {
   font-size: 23px;
@@ -226,8 +226,8 @@
   padding-top: 20px;
 }
 .manuscript-import-heading {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -235,22 +235,25 @@
 .manuscript-import-heading h4 {
   font-weight: 650;
 }
-.manuscript-import-heading details {
-  display: contents;
-}
-.manuscript-import-heading summary {
+.manuscript-example-toggle {
   color: #b8424c;
   font-size: 12px;
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  min-height: 32px;
+  min-height: 36px;
   display: flex;
   align-items: center;
+  gap: 6px;
+  justify-self: end;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f3e8de;
+}
+.manuscript-example-toggle[aria-expanded="true"] svg:last-child {
+  transform: rotate(180deg);
 }
 .manuscript-guide {
   width: 100%;
-  order: 2;
+  grid-column: 1 / -1;
   font-size: 12px;
   border-radius: 12px;
   border: 1px solid #ead8c7;
@@ -268,13 +271,6 @@
   color: #584637;
   line-height: 1.9;
 }
-.manuscript-guide ul {
-  list-style: disc;
-  padding-left: 18px;
-}
-.manuscript-guide li {
-  margin-bottom: 6px;
-}
 .manuscript-guide a {
   display: inline-block;
   margin-top: 10px;
@@ -282,13 +278,16 @@
   color: #a83c48;
 }
 .manuscript-modes {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
   margin: 14px 0 12px;
 }
 .manuscript-modes button {
   display: flex;
   align-items: center;
+  justify-content: center;
+  width: 100%;
   gap: 7px;
   padding: 6px 13px;
   border-radius: 8px;
@@ -346,10 +345,6 @@
 }
 .manuscript-encoding span {
   margin-left: auto;
-}
-.manuscript-paste {
-  font-size: 13px;
-  line-height: 1.9;
 }
 .manuscript-book-summary {
   display: flex;

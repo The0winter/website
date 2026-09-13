@@ -22,7 +22,43 @@ for (const width of [320, 390, 1440])
       .getByLabel("简介", { exact: true })
       .fill("一封信，让两个陌生人相遇。");
     await expect(page.getByText("非必须", { exact: true })).toBeVisible();
-    await page.getByText("格式示例与说明", { exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "直接粘贴", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByText("把写好的故事，带到这里", { exact: true }),
+    ).toHaveCount(0);
+    await expect(page.locator(".manuscript-header img")).toHaveAttribute(
+      "src",
+      /icon\.png/,
+    );
+    const widths = await page
+      .locator(".manuscript-modes button")
+      .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().width));
+    expect(widths.length).toBe(2);
+    expect(Math.abs(widths[0] - widths[1])).toBeLessThan(1);
+    const alignment = await page
+      .locator(".manuscript-import-heading")
+      .evaluate((el) => ({
+        right: el.getBoundingClientRect().right,
+        summary: el.querySelector("button")!.getBoundingClientRect().right,
+      }));
+    expect(Math.abs(alignment.right - alignment.summary)).toBeLessThan(1);
+    await page.getByText("格式示例", { exact: true }).click();
+    await expect(page.locator(".manuscript-guide p")).toHaveText(
+      "卷名或章名请单独成行，便于系统识别整理，中文或数字均可",
+    );
+    await expect(page.locator(".manuscript-guide li")).toHaveCount(0);
+    expect(
+      await page.locator(".manuscript-guide pre").textContent(),
+    ).not.toContain("\n\n");
+    const guideWidth = await page
+      .locator(".manuscript-guide")
+      .evaluate((el) => ({
+        guide: el.getBoundingClientRect().width,
+        parent: el.parentElement!.getBoundingClientRect().width,
+      }));
+    expect(Math.abs(guideWidth.guide - guideWidth.parent)).toBeLessThan(1);
     await expect(
       page.getByRole("link", { name: "下载 TXT 示例" }),
     ).toBeVisible();
@@ -30,11 +66,14 @@ for (const width of [320, 390, 1440])
       path: info.outputPath("form.png"),
       fullPage: true,
     });
-    await page.getByText("格式示例与说明", { exact: true }).click();
+    await page.getByText("格式示例", { exact: true }).click();
     await page
       .getByLabel("上传文稿", { exact: true })
       .setInputFiles(
-        path.resolve(__dirname, "../../server/tests/fixtures/manuscripts/chapters.docx"),
+        path.resolve(
+          __dirname,
+          "../../server/tests/fixtures/manuscripts/chapters.docx",
+        ),
       );
     await page.getByRole("button", { name: "识别并预览", exact: true }).click();
     await expect(page.locator(".manuscript-book-summary")).toContainText(
@@ -96,7 +135,7 @@ for (const width of [320, 390, 1440])
     ).json();
     expect(chapter.content).toBe("修正后保留下来的第二章正文。");
   });
-test("paste warnings, invalid metadata, online writing and recovery after failed save", async ({
+test("unified writing and paste warnings, invalid metadata and recovery after failed save", async ({
   page,
 }) => {
   await page.goto(base + "/writer?action=new");
@@ -106,11 +145,11 @@ test("paste warnings, invalid metadata, online writing and recovery after failed
   ).toBeDisabled();
   await page.getByLabel("书名", { exact: true }).fill("在线创作验收");
   await page.getByLabel("简介", { exact: true }).fill("简介");
-  await page.getByRole("button", { name: "直接粘贴", exact: true }).click();
+  await page.getByRole("button", { name: "直接码字", exact: true }).click();
   await page
-    .getByLabel("粘贴文稿")
+    .getByLabel("在线章节正文")
     .fill("前言。\n第一章 风起\n第二章 来信\n正文。\n第二章 重复\n末尾。");
-  await page.getByRole("button", { name: "识别并预览", exact: true }).click();
+  await page.getByRole("button", { name: "预览章节", exact: true }).click();
   await expect(page.locator(".manuscript-warnings")).toContainText("章号重复");
   await expect(page.locator(".manuscript-error")).toContainText("为空或超长");
   await page.getByRole("button", { name: "返回调整文稿" }).click();
@@ -132,10 +171,97 @@ test("paste warnings, invalid metadata, online writing and recovery after failed
     } else await route.continue();
   });
   await page.getByRole("button", { name: "保存草稿", exact: true }).click();
-  await expect(page.locator(".manuscript-form").getByRole("alert")).toContainText("模拟网络失败");
+  await expect(
+    page.locator(".manuscript-form").getByRole("alert"),
+  ).toContainText("模拟网络失败");
   await expect(page.getByLabel("章节正文", { exact: true })).toHaveValue(
     "这是第二章。",
   );
   await page.getByRole("button", { name: "保存草稿", exact: true }).click();
   await expect(page.locator(".manuscript-form")).toHaveCount(0);
+});
+
+test("whole text in the writing tab preserves volumes through editing, resume and publication", async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  const title = "分卷" + Date.now().toString().slice(-8);
+  await page.goto(base + "/writer?action=new");
+  await page.getByLabel("书名", { exact: true }).fill(title);
+  await page.getByLabel("简介", { exact: true }).fill("分卷整理验收。");
+  await page.getByRole("button", { name: "直接码字", exact: true }).click();
+  await page
+    .getByLabel("在线章节正文")
+    .fill(
+      "第二卷 远行\n第二章 归来\n归来正文。\n第一章 启程\n启程正文。\n第一卷 风起\n第二章 来信\n来信正文。\n第一章 初遇\n初遇正文。",
+    );
+  await page.getByRole("button", { name: "预览章节", exact: true }).click();
+  await expect(page.locator(".manuscript-book-summary")).toContainText(
+    "2 卷 · 4 章",
+  );
+  await expect(page.locator(".manuscript-preview article")).toContainText(
+    "初遇正文。",
+  );
+  await expect(page.locator("optgroup")).toHaveCount(2);
+  expect(
+    await page
+      .locator("optgroup")
+      .evaluateAll((els) => els.map((el) => el.getAttribute('label'))),
+  ).toEqual(["第一卷 风起", "第二卷 远行"]);
+  await page
+    .getByRole("button", { name: "添加章节，继续码字", exact: false })
+    .click();
+  await page.getByLabel("章节正文", { exact: true }).fill("新增第三章。");
+  await page.getByRole("button", { name: "查看阅读效果" }).click();
+  await page.getByRole("button", { name: "下一章", exact: true }).click();
+  await expect(page.locator(".manuscript-preview-tools")).toContainText(
+    "第二卷 远行",
+  );
+  await expect(page.locator(".manuscript-preview article")).toContainText(
+    "启程正文。",
+  );
+  await page.screenshot({
+    path: info.outputPath("volumes.png"),
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect(page.locator(".manuscript-form")).toHaveCount(0);
+  await expect(page).toHaveURL(base + "/writer");
+  await page.reload();
+  await page
+    .locator(".manuscript-drafts>div")
+    .filter({ hasText: title })
+    .getByRole("button", { name: "继续整理" })
+    .click();
+  await expect(page.locator("optgroup")).toHaveCount(2);
+  await page.getByRole("checkbox").check();
+  const resultPromise = page.waitForResponse(
+    (r) =>
+      r.request().method() === "PUT" && r.url().includes("/api/manuscripts/"),
+  );
+  await page.getByRole("button", { name: "提交作品", exact: true }).click();
+  const result = await (await resultPromise).json();
+  expect(result.status).toBe("published");
+  await expect(page.locator(".manuscript-form")).toHaveCount(0);
+  await expect(page).toHaveURL(base + "/writer");
+  const catalog = await (
+    await page.request.get(base + "/api/books/" + result.bookId + "/catalog")
+  ).json();
+  expect(
+    catalog.volumes.map((v: { title: string; count: number }) => [
+      v.title,
+      v.count,
+    ]),
+  ).toEqual([
+    ["第一卷 风起", 3],
+    ["第二卷 远行", 2],
+  ]);
+  await page.goto(base + "/book/" + result.bookId);
+  await page.getByRole('button',{name:/目录 连载至/}).click();
+  await expect(
+    page.getByText("第一卷 风起", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByText("第二卷 远行", { exact: true }).first(),
+  ).toBeVisible();
 });

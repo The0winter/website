@@ -7,6 +7,7 @@
 .mw-view-header>div { flex:1; }
 .mw-view-header span { font-size:10px; color:#a18a76; letter-spacing:1px; }
 .mw-view-header h2 { margin-top:3px; font-size:20px; font-weight:700; }
+.mw-view[data-kind=new] .mw-view-header h2 { margin-top:0; }
 .mw-view-header>svg { color:#b3484f; }
 .mw-view-header button { display:grid; place-items:center; flex:0 0 44px; height:44px; border:1px solid #e3d5c8; border-radius:50%; }
 .mw-view-content { position:relative; flex:1; min-height:0; display:flex; }

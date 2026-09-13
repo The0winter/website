@@ -21,19 +21,23 @@ export function splitCatalogTitle(title = '') {
   return {volume: '', chapterTitle: text};
 }
 
-/** @param {{id?: string, _id?: unknown, title: string}[]} chapters */
+/** @param {{id?: string, _id?: unknown, title: string, volume_title?: string, volume_number?: number}[]} chapters */
 export function buildCatalogVolumes(chapters) {
   /** @type {CatalogVolume[]} */
   const volumes = [];
   let title = '正文';
+  let number;
   chapters.forEach((chapter, index) => {
-    title = splitCatalogTitle(chapter.title).volume || title;
+    const explicit = typeof chapter.volume_title === 'string' && chapter.volume_title.trim();
+    const newNumber = explicit ? chapter.volume_number : number;
+    title = explicit || splitCatalogTitle(chapter.title).volume || title;
     let volume = volumes[volumes.length - 1];
-    if (!volume || volume.title !== title) {
+    if (!volume || volume.title !== title || newNumber !== number) {
       volume = {id: String(chapter.id ?? chapter._id ?? index), title, start: index, count: 0};
       volumes.push(volume);
     }
     volume.count++;
+    number = newNumber;
   });
   return volumes;
 }

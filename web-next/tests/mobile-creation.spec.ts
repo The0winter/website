@@ -82,6 +82,13 @@ for (const width of [320, 390]) test(`creator actions open the matching creation
   await expect(page.getByLabel('书名', {exact:true})).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath(`create-${width}.png`) });
+  await expect(page.locator('.mw-view-header img')).toHaveAttribute('src',/icon\.png/);
+  await expect(page.locator('.mw-view-header')).not.toContainText('九天 · 创作者空间');
+  await expect(page.locator('.manuscript-modes button')).toHaveCount(2);
+  await page.getByRole('button',{name:'格式示例',exact:true}).click();
+  await expect(page.locator('.manuscript-guide p')).toHaveText('卷名或章名请单独成行，便于系统识别整理，中文或数字均可');
+  await page.locator('.manuscript-guide').scrollIntoViewIfNeeded();
+  await page.screenshot({path:info.outputPath(`guide-${width}.png`)});
   await page.getByRole('button', { name: '关闭新建作品', exact: true }).click();
   await expect(page.locator('.mw-view')).toHaveCount(0);
   await expect(modal(page)).toBeVisible();
@@ -306,6 +313,7 @@ test('creating a work closes the sheet directly and refreshes the retained cente
   let created = false;
   const newBook = { ...book, id: '000000000000000000000200', title: '新故事' };
   await page.route('**/api/manuscripts/*', async route => {
+    if (route.request().url().endsWith('/parse')) return route.fulfill({json:{chapters:[{title:'第一章',content:'新的第一章正文。',sourceNumber:null,volumeTitle:'第一卷',volumeNumber:1}],warnings:[]}});
     if (route.request().method() !== 'PUT') return route.continue();
     created = true; await route.fulfill({ json: {status:'published',bookId:newBook.id,revision:1} });
   });

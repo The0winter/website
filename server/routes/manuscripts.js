@@ -195,6 +195,8 @@ export function manuscriptRoutes(app, auth) {
               title: c.title,
               content: c.content,
               chapter_number: i + 1,
+              volume_title: c.volumeTitle,
+              volume_number: c.volumeNumber,
               word_count: c.content.length,
             })),
             { session },

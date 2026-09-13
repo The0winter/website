@@ -1,7 +1,7 @@
 import {safeFetch} from './request';
 import {buildCatalogVolumes} from '../../shared/catalog-volumes.mjs';
 
-export type CatalogChapter = {id: string; title: string; chapter_number: number};
+export type CatalogChapter = {id: string; title: string; chapter_number: number; volume_title?: string; volume_number?: number};
 export type CatalogSeed = {rows: CatalogChapter[]; total: number | null};
 export type CatalogVolume = {id: string; title: string; start: number; count: number};
 export type CatalogSnapshot = {

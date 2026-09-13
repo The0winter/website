@@ -14,7 +14,13 @@ const schema = new mongoose.Schema(
     filename: String,
     chapters: [
       new mongoose.Schema(
-        { title: String, content: String, sourceNumber: Number },
+        {
+          title: String,
+          content: String,
+          sourceNumber: Number,
+          volumeTitle: String,
+          volumeNumber: Number,
+        },
         { _id: false },
       ),
     ],

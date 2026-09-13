@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   BookOpen,
   Check,
+  ChevronDown,
   FileText,
   ImagePlus,
   Loader2,
@@ -14,9 +15,16 @@ import {
 } from "lucide-react";
 import { safeFetch } from "@/lib/request";
 import BookCover from "./BookCover";
+import { LoadingLogo } from "./BrandLoading";
 import "./manuscript-creator.css";
 
-type Chapter = { title: string; content: string; sourceNumber: number | null };
+type Chapter = {
+  title: string;
+  content: string;
+  sourceNumber: number | null;
+  volumeTitle: string;
+  volumeNumber: number;
+};
 type Draft = {
   title: string;
   description: string;
@@ -43,16 +51,14 @@ const empty: Draft = {
 };
 const length = (value: string) => Array.from(value).length;
 const example =
-  "第一章 初遇\n\n清晨，街角的书店刚刚开门。\n她推开门，看见桌上那封没有署名的信。\n\n第2章 来信\n\n信里只写着一句话。\n故事，从这里继续。";
+  "第一卷 风起\n第一章 初遇\n清晨，街角的书店刚刚开门。\n她推开门，看见桌上那封信。\n第2章 来信\n信里只写着一句话。\n第二卷 远行\n第一章 启程\n天亮时，她踏上了旅途。";
 async function responseJson(response: Response) {
-  const result = await response
-    .json()
-    .catch(() => ({
-      error:
-        response.status === 413
-          ? "文件过大，请使用 10 MB 以内的文稿"
-          : "请求暂时失败，请重试",
-    }));
+  const result = await response.json().catch(() => ({
+    error:
+      response.status === 413
+        ? "文件过大，请使用 10 MB 以内的文稿"
+        : "请求暂时失败，请重试",
+  }));
   if (!response.ok) throw Error(result.error || "请求暂时失败，请重试");
   return result;
 }
@@ -157,10 +163,9 @@ export default function ManuscriptCreator({
   const [error, setError] = useState("");
   const [loadFailed, setLoadFailed] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
-  const [mode, setMode] = useState<"file" | "paste" | "write">("file");
-  const [writeTitle, setWriteTitle] = useState("第一章");
+  const [mode, setMode] = useState<"file" | "write">("file");
   const [writeContent, setWriteContent] = useState("");
-  const [source, setSource] = useState("");
+  const [showExample, setShowExample] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [encoding, setEncoding] = useState("");
   const [coverFile, setCoverFile] = useState<File | null>(null);
@@ -178,6 +183,26 @@ export default function ManuscriptCreator({
   }, [dirty, busy, onClose]);
   const form = useRef<HTMLFormElement>(null);
   const chapter = draft.chapters[selected];
+  const volumes = useMemo(() => {
+    const groups = new Map<
+      number,
+      {
+        number: number;
+        title: string;
+        chapters: (Chapter & { index: number })[];
+      }
+    >();
+    draft.chapters.forEach((c, index) => {
+      if (!groups.has(c.volumeNumber))
+        groups.set(c.volumeNumber, {
+          number: c.volumeNumber,
+          title: c.volumeTitle,
+          chapters: [],
+        });
+      groups.get(c.volumeNumber)!.chapters.push({ ...c, index });
+    });
+    return [...groups.values()];
+  }, [draft.chapters]);
   const total = draft.chapters.reduce((n, c) => n + c.content.length, 0);
   const invalidChapters = draft.chapters
     .map((c, i) =>
@@ -220,7 +245,14 @@ export default function ManuscriptCreator({
         .then(responseJson)
         .then((data) => {
           if (active) {
-            setDraft(data);
+            setDraft({
+              ...data,
+              chapters: data.chapters.map((c: Chapter) => ({
+                ...c,
+                volumeTitle: c.volumeTitle || "第一卷",
+                volumeNumber: c.volumeNumber || 1,
+              })),
+            });
             setStep(data.chapters.length ? 2 : 1);
           }
         })
@@ -302,34 +334,16 @@ export default function ManuscriptCreator({
   }, [embedded]);
   useEffect(() => {
     form.current
-      ?.querySelector<HTMLElement>("[data-step-heading]")
+      ?.querySelector<HTMLElement>("[data-step-heading], #manuscript-title")
       ?.focus({ preventScroll: true });
     form.current?.scrollTo({ top: 0 });
   }, [step]);
 
   async function parse() {
     if (lock.current) return;
-    if (mode === "write") {
-      if (!writeTitle.trim() || !writeContent.trim()) {
-        setError("请填写章节标题和正文");
-        return;
-      }
-      patch({
-        chapters: [
-          { title: writeTitle, content: writeContent, sourceNumber: null },
-        ],
-        filename: "在线创作",
-      });
-      setWarnings([]);
-      setSourceChanged(false);
-      setSelected(0);
-      setEditing(false);
-      setStep(2);
-      return;
-    }
     const input =
-      mode === "paste"
-        ? new File([source], "粘贴文稿.txt", { type: "text/plain" })
+      mode === "write"
+        ? new File([writeContent], "在线创作.txt", { type: "text/plain" })
         : file;
     if (!input) {
       setError("请先选择文稿文件");
@@ -349,7 +363,7 @@ export default function ManuscriptCreator({
     try {
       const body = new FormData();
       body.append("file", input);
-      body.append("encoding", mode === "paste" ? "utf-8" : encoding);
+      body.append("encoding", mode === "write" ? "utf-8" : encoding);
       const result = await responseJson(
         await safeFetch("/api/manuscripts/parse", {
           method: "POST",
@@ -462,7 +476,7 @@ export default function ManuscriptCreator({
         {!embedded && (
           <header className="manuscript-header">
             <div>
-              <span>九天 · 创作者空间</span>
+              <LoadingLogo size={32} />
               <h2>创建新作品</h2>
             </div>
             <button
@@ -491,16 +505,16 @@ export default function ManuscriptCreator({
             <p>请关闭此窗口，重新打开草稿后继续。</p>
           ) : (
             <>
-              <h3 data-step-heading tabIndex={-1}>
-                {step === 1
-                  ? "把写好的故事，带到这里"
-                  : "这就是读者将看到的章节"}
-              </h3>
-              <p className="manuscript-intro">
-                {step === 1
-                  ? "上传文稿或直接粘贴，整理好章节后再发布。"
-                  : "按原文顺序保留内容。点选章节检查正文，也可以直接修正。"}
-              </p>
+              {step === 2 && (
+                <>
+                  <h3 data-step-heading tabIndex={-1}>
+                    这就是读者将看到的章节
+                  </h3>
+                  <p className="manuscript-intro">
+                    已按卷、章顺序整理，可点选章节检查和修正。
+                  </p>
+                </>
+              )}
               {step === 1 ? (
                 <>
                   <div className="manuscript-field">
@@ -634,31 +648,26 @@ export default function ManuscriptCreator({
                   <section className="manuscript-import">
                     <div className="manuscript-import-heading">
                       <h4>导入正文</h4>
-                      <details>
-                        <summary>格式示例与说明</summary>
-                        <div className="manuscript-guide">
+                      <button
+                        type="button"
+                        className="manuscript-example-toggle"
+                        aria-expanded={showExample}
+                        aria-controls="manuscript-example"
+                        onClick={() => setShowExample((v) => !v)}
+                      >
+                        <BookOpen size={14} />
+                        格式示例
+                        <ChevronDown size={14} />
+                      </button>
+                      {showExample && (
+                        <div
+                          className="manuscript-guide"
+                          id="manuscript-example"
+                        >
                           <p>
-                            每个章标题单独成行，例如「第一章 初遇」或「第2章
-                            来信」，下一行开始写正文。中文数字和阿拉伯数字都可以。
+                            卷名或章名请单独成行，便于系统识别整理，中文或数字均可
                           </p>
                           <pre>{example}</pre>
-                          <ul>
-                            <li>章节按文稿中的先后顺序排列，请先排好顺序。</li>
-                            <li>
-                              不要附带目录；分卷标题请放在下一章正文中，避免误分章。
-                            </li>
-                            <li>
-                              首章前的文字会保留为前言；未识别到章标题时，会整篇保留为一章。
-                            </li>
-                            <li>
-                              Word
-                              请使用普通正文段落，章号写成实际文字；不使用自动编号、文本框或图片承载正文。图片、字体、页眉页脚不导入。
-                            </li>
-                            <li>
-                              TXT 推荐 UTF-8，也支持 GBK 和 UTF-16。单次最多 200
-                              万字符、2000 章，每章最多 6 万字符。
-                            </li>
-                          </ul>
                           <a
                             download="文稿格式示例.txt"
                             href={
@@ -669,7 +678,7 @@ export default function ManuscriptCreator({
                             下载 TXT 示例
                           </a>
                         </div>
-                      </details>
+                      )}
                     </div>
                     <div className="manuscript-modes">
                       <button
@@ -683,18 +692,6 @@ export default function ManuscriptCreator({
                       >
                         <Upload size={16} />
                         上传文件
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={mode === "paste"}
-                        disabled={Boolean(busy)}
-                        onClick={() => {
-                          setMode("paste");
-                          if (source) setSourceChanged(true);
-                        }}
-                      >
-                        <FileText size={16} />
-                        直接粘贴
                       </button>
                       <button
                         type="button"
@@ -759,23 +756,10 @@ export default function ManuscriptCreator({
                           <span>预览乱码时可切换</span>
                         </label>
                       </>
-                    ) : mode === "write" ? (
+                    ) : (
                       <div className="manuscript-chapter-editor">
                         <label>
-                          章节标题
-                          <input
-                            aria-label="在线章节标题"
-                            value={writeTitle}
-                            disabled={Boolean(busy)}
-                            onChange={(e) => {
-                              setWriteTitle(e.target.value);
-                              setSourceChanged(true);
-                              setDirty(true);
-                            }}
-                          />
-                        </label>
-                        <label>
-                          章节正文
+                          文稿正文
                           <textarea
                             aria-label="在线章节正文"
                             rows={10}
@@ -786,24 +770,10 @@ export default function ManuscriptCreator({
                               setSourceChanged(true);
                               setDirty(true);
                             }}
-                            placeholder="从这里开始写，预览后可以继续添加章节…"
+                            placeholder={"在这里写作或粘贴文稿…\n\n" + example}
                           />
                         </label>
                       </div>
-                    ) : (
-                      <textarea
-                        aria-label="粘贴文稿"
-                        className="manuscript-paste"
-                        rows={8}
-                        value={source}
-                        disabled={Boolean(busy)}
-                        onChange={(e) => {
-                          setSource(e.target.value);
-                          setSourceChanged(true);
-                          setDirty(true);
-                        }}
-                        placeholder={example}
-                      />
                     )}
                     {sourceChanged && draft.chapters.length > 0 && (
                       <button
@@ -828,8 +798,8 @@ export default function ManuscriptCreator({
                     <div>
                       <strong>{draft.title || "未命名作品"}</strong>
                       <span>
-                        {draft.chapters.length} 章 · {total.toLocaleString()} 字
-                        · {draft.filename}
+                        {volumes.length} 卷 · {draft.chapters.length} 章 ·{" "}
+                        {total.toLocaleString()} 字 · {draft.filename}
                       </span>
                     </div>
                     <button
@@ -870,11 +840,17 @@ export default function ManuscriptCreator({
                         setEditing(false);
                       }}
                     >
-                      {draft.chapters.map((c, i) => (
-                        <option key={i} value={i}>
-                          {i + 1}. {c.title || "未命名章节"}
-                          {invalidChapters.includes(i) ? "（待修正）" : ""}
-                        </option>
+                      {volumes.map((v) => (
+                        <optgroup key={v.number} label={v.title}>
+                          {v.chapters.map((c) => (
+                            <option key={c.index} value={c.index}>
+                              {c.title || "未命名章节"}
+                              {invalidChapters.includes(c.index)
+                                ? "（待修正）"
+                                : ""}
+                            </option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                   </label>
@@ -882,7 +858,8 @@ export default function ManuscriptCreator({
                     <section className="manuscript-preview">
                       <div className="manuscript-preview-tools">
                         <span>
-                          第 {selected + 1} / {draft.chapters.length} 项 ·{" "}
+                          {chapter.volumeTitle} · 第 {selected + 1} /{" "}
+                          {draft.chapters.length} 项 ·{" "}
                           {chapter.content.length.toLocaleString()} 字
                         </span>
                         <button
@@ -976,17 +953,32 @@ export default function ManuscriptCreator({
                     className="manuscript-add"
                     disabled={Boolean(busy) || draft.chapters.length >= 2000}
                     onClick={() => {
-                      patch({
-                        chapters: [
-                          ...draft.chapters,
-                          {
-                            title: `第${draft.chapters.length + 1}章`,
-                            content: "",
-                            sourceNumber: null,
-                          },
-                        ],
+                      const volumeNumber = chapter?.volumeNumber || 1;
+                      const volumeTitle = chapter?.volumeTitle || "第一卷";
+                      const siblings = draft.chapters.filter(
+                        (c) => c.volumeNumber === volumeNumber,
+                      );
+                      const nextNumber =
+                        Math.max(
+                          siblings.length,
+                          ...siblings.map((c) => c.sourceNumber || 0),
+                        ) + 1;
+                      const insertAt =
+                        draft.chapters.findLastIndex(
+                          (c) => c.volumeNumber === volumeNumber,
+                        ) + 1;
+                      const chapters = [...draft.chapters];
+                      chapters.splice(insertAt, 0, {
+                        title: `第${nextNumber}章`,
+                        content: "",
+                        sourceNumber: nextNumber,
+                        volumeNumber,
+                        volumeTitle,
                       });
-                      setSelected(draft.chapters.length);
+                      patch({
+                        chapters,
+                      });
+                      setSelected(insertAt);
                       setEditing(true);
                     }}
                   >
@@ -1051,9 +1043,7 @@ export default function ManuscriptCreator({
                   !fieldsValid ||
                   (mode === "file"
                     ? !file && !draft.chapters.length
-                    : mode === "paste"
-                      ? !source.trim() && !draft.chapters.length
-                      : !writeContent.trim() && !draft.chapters.length)
+                    : !writeContent.trim() && !draft.chapters.length)
                 }
                 onClick={() => {
                   if (!sourceChanged && draft.chapters.length) {

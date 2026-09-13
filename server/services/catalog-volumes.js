@@ -8,7 +8,7 @@ export function catalogVolumes(bookId, version, total) {
   const key = `${bookId}:${version}:${total}`;
   const found = cache.get(key);
   if (found && found.expires > Date.now()) return found.promise;
-  const promise = Chapter.find({bookId, deletedAt: null}).select('_id title')
+  const promise = Chapter.find({bookId, deletedAt: null}).select('_id title volume_title volume_number')
     .sort({chapter_number: 1}).maxTimeMS(3000).lean().then(buildCatalogVolumes);
   const entry = {promise, expires: Date.now() + 60000};
   cache.delete(key); cache.set(key, entry);

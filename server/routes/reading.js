@@ -74,7 +74,7 @@ export function readingRoutes(app,auth) {
     // (bookId, chapter_number) is unique, so no extra in-memory _id sort is needed.
     const [book,chapters,total]=await Promise.all([
       Book.exists({_id:req.params.bookId,deletedAt:null}).maxTimeMS(3000),
-      Chapter.find(filter).select('title chapter_number published_at bookId word_count').sort({chapter_number:req.query.order==='desc'?-1:1}).skip((page-1)*limit).limit(limit).setOptions({batchSize:limit,singleBatch:true}).maxTimeMS(3000).lean(),
+      Chapter.find(filter).select('title chapter_number volume_title volume_number published_at bookId word_count').sort({chapter_number:req.query.order==='desc'?-1:1}).skip((page-1)*limit).limit(limit).setOptions({batchSize:limit,singleBatch:true}).maxTimeMS(3000).lean(),
       Chapter.countDocuments(filter).maxTimeMS(3000),
     ]);
     if(!book)fail(404,'作品不可用');

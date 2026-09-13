@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, BookOpen, Sparkles, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, X } from 'lucide-react';
 import {LoadingLogo, LoadingText} from './BrandLoading';
 import type WriterDashboard from './WriterDashboard';
 import '@/app/writer/writer-mobile.css';
@@ -59,8 +59,8 @@ export default function MobileWriterView({ view, covered, refreshVersion, onBack
     <div className="mw-view-scrim" aria-hidden="true"/>
     <div ref={panel} className="mw-view-panel" role="dialog" aria-modal="true" aria-label={create ? '新建作品' : '作品管理'} tabIndex={-1} data-ready={loaded}>
       <header className="mw-view-header">
-        {create ? <Sparkles size={23}/> : <button type="button" aria-label="返回创作中心" onClick={onBack}><ArrowLeft size={20}/></button>}
-        <div><span>九天 · 创作者空间</span><h2>{create ? '创建新作品' : '作品管理'}</h2></div>
+        {create ? <LoadingLogo size={32}/> : <button type="button" aria-label="返回创作中心" onClick={onBack}><ArrowLeft size={20}/></button>}
+        <div>{!create && <span>九天 · 创作者空间</span>}<h2>{create ? '创建新作品' : '作品管理'}</h2></div>
         {create ? <button type="button" aria-label="关闭新建作品" onClick={closeNew}><X size={22}/></button> : <BookOpen size={23}/>}
       </header>
       <div className="mw-view-content">

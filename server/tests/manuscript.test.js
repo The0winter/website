@@ -8,16 +8,21 @@ import {
 } from "../services/manuscript.js";
 import { readManuscriptFile } from "../services/manuscript-file.js";
 
-test("Chinese/Arabic chapter headings preserve source order, prelude and paragraphs", () => {
+test("Chinese/Arabic headings sort numerically and preserve prelude, duplicate chapters and paragraphs", () => {
   const result = parseManuscript(
     "\uFEFF书前寄语\r\n\r\n第十二章 归来\r\n第一段。\r\n\r\n第二段。\r\n第１０章 风起\r\n正文。\r\n第十章 重复\r\n末尾。",
   );
   assert.deepEqual(
     result.chapters.map((c) => c.sourceNumber),
-    [null, 12, 10, 10],
+    [null, 10, 10, 12],
   );
   assert.equal(result.chapters[0].content, "书前寄语");
-  assert.equal(result.chapters[1].content, "第一段。\n\n第二段。");
+  assert.equal(result.chapters[3].content, "第一段。\n\n第二段。");
+  assert.ok(
+    result.chapters.every(
+      (c) => c.volumeTitle === "第一卷" && c.volumeNumber === 1,
+    ),
+  );
   assert.equal(result.warnings.length, 3);
   for (const [text, n] of [
     ["一百零二", 102],
@@ -27,6 +32,48 @@ test("Chinese/Arabic chapter headings preserve source order, prelude and paragra
     ["二〇二", 202],
   ])
     assert.equal(chapterNumber(text), n);
+});
+
+test("volumes and chapters sort independently with number resets, adjacent prose and special headings retained", () => {
+  const result = parseManuscript(
+    "第２卷 远行\n第10章 归来\n十。\n第一章 启程\n启程正文。\n第二章 路途\n路途正文。\n尾声\n结尾。\n第一卷 风起\n序章\n序。\n第二章 来信\n信。\n第一章 初遇\n初遇第一段。\n初遇第二段。",
+  );
+  assert.deepEqual(
+    result.chapters.map((c) => [c.volumeTitle, c.volumeNumber, c.title]),
+    [
+      ["第一卷 风起", 1, "序章"],
+      ["第一卷 风起", 1, "第一章 初遇"],
+      ["第一卷 风起", 1, "第二章 来信"],
+      ["第２卷 远行", 2, "第一章 启程"],
+      ["第２卷 远行", 2, "第二章 路途"],
+      ["第２卷 远行", 2, "第10章 归来"],
+      ["第２卷 远行", 2, "尾声"],
+    ],
+  );
+  assert.deepEqual(
+    result.chapters.map((c) => c.content),
+    [
+      "序。",
+      "初遇第一段。\n初遇第二段。",
+      "信。",
+      "启程正文。",
+      "路途正文。",
+      "十。",
+      "结尾。",
+    ],
+  );
+  assert.ok(result.warnings.some((w) => w.includes("按卷号")));
+  assert.ok(!result.warnings.some((w) => w.includes("重复")));
+  assert.equal(parseManuscript("前言\n开场白").chapters[0].title, "前言");
+  const prelude = parseManuscript("书前寄语\n卷一 风起\n章一 初遇\n正文");
+  assert.equal(new Set(prelude.chapters.map((c) => c.volumeNumber)).size, 1);
+  assert.equal(prelude.chapters[0].content, "书前寄语");
+  assert.equal(prelude.chapters[1].sourceNumber, 1);
+  const empty = parseManuscript("第一卷\n第二卷\n正文");
+  assert.deepEqual(
+    empty.chapters.map((c) => c.content),
+    ["", "正文"],
+  );
 });
 test("no heading and empty chapters retain all content for review", () => {
   assert.equal(

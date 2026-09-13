@@ -257,6 +257,69 @@ test("whole manuscript drafts are private, transactional, revision protected and
         );
       },
     );
+    await t.test(
+      "volume parsing survives draft resume, publication and both reader catalog endpoints",
+      async () => {
+        const body = new FormData();
+        body.append(
+          "file",
+          new Blob([
+            "第二卷 远行\n第二章 归来\n归来正文。\n第一章 启程\n启程正文。\n第一卷 风起\n第二章 来信\n来信正文。\n第一章 初遇\n初遇正文。",
+          ]),
+          "volumes.txt",
+        );
+        const parsed = await owner.request(
+          "/api/manuscripts/parse",
+          "POST",
+          body,
+        );
+        assert.equal(parsed.status, 200);
+        const key = crypto.randomUUID();
+        const draft = {
+          ...data,
+          title: "分卷测试",
+          chapters: parsed.data.chapters,
+          revision: 0,
+        };
+        assert.equal((await owner.save(key, draft)).status, 200);
+        const resumed = (await owner.request("/api/manuscripts/" + key)).data;
+        assert.deepEqual(resumed.chapters, parsed.data.chapters);
+        const published = await owner.save(key, {
+          ...resumed,
+          action: "publish",
+        });
+        assert.equal(published.status, 200);
+        const list = await guest.request(
+          "/api/books/" + published.data.bookId + "/chapters?order=asc",
+        );
+        assert.deepEqual(
+          list.data.map((c) => [c.title, c.volume_title, c.chapter_number]),
+          [
+            ["第一章 初遇", "第一卷 风起", 1],
+            ["第二章 来信", "第一卷 风起", 2],
+            ["第一章 启程", "第二卷 远行", 3],
+            ["第二章 归来", "第二卷 远行", 4],
+          ],
+        );
+        const catalog = await guest.request(
+          "/api/books/" + published.data.bookId + "/catalog",
+        );
+        assert.equal(catalog.status, 200);
+        assert.deepEqual(
+          catalog.data.volumes.map(({ title, start, count }) => ({
+            title,
+            start,
+            count,
+          })),
+          [
+            { title: "第一卷 风起", start: 0, count: 2 },
+            { title: "第二卷 远行", start: 2, count: 2 },
+          ],
+        );
+        const content = await guest.request("/api/chapters/" + list.data[2].id);
+        assert.equal(content.data.content, "启程正文。");
+      },
+    );
   } finally {
     await new Promise((r) => server.close(r));
     await mongoose.disconnect();
