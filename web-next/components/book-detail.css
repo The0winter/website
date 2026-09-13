@@ -70,7 +70,7 @@
   .book-catalog-header p,.book-catalog-volume-count,.book-catalog-loading { color:#887451; }
   .book-catalog-volume-toggle { background:#f2e3c7; }
   .book-catalog-volume-toggle:hover,.book-catalog-back:hover,.book-catalog-chapter:hover { background:#f5e9d3; }
-  .book-catalog-scrollbar::before { background:var(--catalog-border); }
+  .book-catalog-scrollbar::before { display:none; }
   .book-catalog-thumb { background:#b49b73; box-shadow:0 0 0 2px var(--catalog-paper); }
   .book-catalog-scrollbar:hover .book-catalog-thumb,.book-catalog-scrollbar[data-dragging=true] .book-catalog-thumb { background:#8b725c; }
   .book-catalog-placeholder::before { background:linear-gradient(transparent 30%,var(--catalog-border) 30%,var(--catalog-border) 70%,transparent 70%); }
