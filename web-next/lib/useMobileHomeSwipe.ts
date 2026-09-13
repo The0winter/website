@@ -1,23 +1,23 @@
 'use client';
 
 import {useEffect, useRef} from 'react';
-import {navigateMobileSection} from './mobile-section-navigation';
+import {navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from './mobile-section-navigation';
 
 export function useMobileHomeSwipe(enabled: boolean) {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const host = root.current;
     if (!host || !enabled) return;
-    let gesture: {x: number; y: number; horizontal: boolean; dx: number} | null = null;
+    let gesture: {x: number; y: number; horizontal: boolean; dx: number; startedAt: number; direction?: number; drag?: MobileSectionDrag} | null = null;
     let suppressClick = false;
-    const cancel = () => {gesture = null;};
+    const cancel = () => {gesture?.drag?.release(false); gesture = null;};
     const start = (event: TouchEvent) => {
       suppressClick = false;
       cancel();
       if (event.touches.length !== 1 || !matchMedia('(max-width: 767px)').matches ||
         (event.target as Element).closest('button, input, select, textarea, [contenteditable], .mh-bottom, dialog')) return;
       const touch = event.touches[0];
-      gesture = {x: touch.clientX, y: touch.clientY, horizontal: false, dx: 0};
+      gesture = {x: touch.clientX, y: touch.clientY, horizontal: false, dx: 0, startedAt: performance.now()};
     };
     const move = (event: TouchEvent) => {
       if (!gesture) return;
@@ -29,15 +29,23 @@ export function useMobileHomeSwipe(enabled: boolean) {
         gesture.horizontal = true;
       }
       gesture.dx = dx;
+      const direction = Math.sign(dx);
+      if (direction && direction !== gesture.direction) {
+        gesture.drag?.cancel();
+        gesture.direction = direction;
+        gesture.drag = startMobileSectionDrag(host, dx > 0 ? 'library' : 'forum', gesture.startedAt);
+      }
+      gesture.drag?.update(dx);
       suppressClick = true;
       if (event.cancelable) event.preventDefault();
     };
     const end = () => {
       const current = gesture;
-      cancel();
-      if (current?.horizontal && Math.abs(current.dx) >= Math.min(100, host.clientWidth * .25)) {
-        navigateMobileSection(host, current.dx > 0 ? 'library' : 'forum');
-      }
+      gesture = null;
+      if (!current?.horizontal) return;
+      const commit = Math.abs(current.dx) >= Math.min(100, host.clientWidth * .25);
+      if (current.drag) current.drag.release(commit);
+      else if (commit) navigateMobileSection(host, current.dx > 0 ? 'library' : 'forum');
     };
     const click = (event: MouseEvent) => {
       // Programmatic bottom-nav activation is intentional; suppress only the
@@ -51,6 +59,7 @@ export function useMobileHomeSwipe(enabled: boolean) {
     host.addEventListener('click', click, true);
     window.addEventListener('resize', cancel);
     return () => {
+      gesture?.drag?.cancel();
       host.removeEventListener('touchstart', start);
       host.removeEventListener('touchmove', move);
       host.removeEventListener('touchend', end);

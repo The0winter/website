@@ -21,7 +21,7 @@ import {beginLibraryVisit} from '@/lib/book-visit';
 import {formatRelativeUpdate} from '@/lib/relative-update';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {useShelfPageTurn} from '@/lib/useShelfPageTurn';
-import {navigateMobileSection} from '@/lib/mobile-section-navigation';
+import {navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from '@/lib/mobile-section-navigation';
 import type {Book} from '@/lib/api';
 import './library.css';
 
@@ -155,7 +155,8 @@ function Library() {
   const [removeError, setRemoveError] = useState('');
   const management = useRef<{token: string; afterClose?: () => void} | null>(null);
   const removalVersion = useRef({value: 0});
-  const swipe = useRef<{id: number; x: number; y: number; horizontal: boolean; lastX: number; lastAt: number; velocity: number} | null>(null);
+  const swipe = useRef<{id: number; x: number; y: number; horizontal: boolean; lastX: number; lastAt: number; velocity: number; startedAt: number; section?: MobileSectionDrag} | null>(null);
+  useEffect(() => () => swipe.current?.section?.cancel(), []);
   const suppressSwipeClick = useRef(false);
   const pageTurn = useShelfPageTurn(tab, pathname === '/library' && Boolean(user) && !authLoading);
   const {viewport, tabs} = pageTurn;
@@ -252,10 +253,11 @@ function Library() {
 
   function startSwipe(event: PointerEvent<HTMLElement>) {
     suppressSwipeClick.current = false;
+    swipe.current?.section?.cancel();
     swipe.current = null;
     if (!event.isPrimary || event.button !== 0 || targets || removing || (event.target as HTMLElement).closest('button, select, input, [role="menu"], .mh-bottom, dialog')) return;
     setPages(current => current[otherTab] === 1 ? current : {...current, [otherTab]: 1});
-    swipe.current = {id: event.pointerId, x: event.clientX, y: event.clientY, horizontal: false, lastX: event.clientX, lastAt: event.timeStamp, velocity: 0};
+    swipe.current = {id: event.pointerId, x: event.clientX, y: event.clientY, horizontal: false, lastX: event.clientX, lastAt: event.timeStamp, velocity: 0, startedAt: performance.now()};
   }
 
   function moveSwipe(event: PointerEvent<HTMLElement>) {
@@ -274,6 +276,17 @@ function Library() {
     const elapsed = event.timeStamp - gesture.lastAt;
     if (elapsed > 0) gesture.velocity = (event.clientX - gesture.lastX) / elapsed;
     gesture.lastX = event.clientX; gesture.lastAt = event.timeStamp;
+    if (dx < 0 && tab === 'shelf' && !managing && !menu && matchMedia('(max-width: 767px)').matches) {
+      if (!gesture.section) {
+        pageTurn.cancel();
+        gesture.section = startMobileSectionDrag(event.currentTarget, 'home', gesture.startedAt);
+      }
+      gesture.section?.update(dx);
+      if (gesture.section) return;
+    } else if (gesture.section) {
+      gesture.section.cancel(); gesture.section = undefined;
+      pageTurn.startDrag();
+    }
     pageTurn.drag(dx);
   }
 
@@ -285,6 +298,11 @@ function Library() {
     const quick = event.timeStamp - gesture.lastAt < 100 && Math.abs(gesture.velocity) > .5 && Math.sign(gesture.velocity) === Math.sign(dx);
     const distance = Math.min(100, (viewport.current?.clientWidth || 300) * .25);
     const switchTab = Math.abs(dx) >= distance || Math.abs(dx) >= 40 && quick;
+    if (gesture.section) {
+      gesture.section.update(dx);
+      gesture.section.release(switchTab && dx < 0 && Math.abs(dx) >= Math.abs(dy) * 1.25);
+      return;
+    }
     if (switchTab && Math.abs(dx) >= Math.abs(dy) * 1.25) {
       if (dx > 0 && tab === 'shelf' || dx < 0 && tab === 'history') {changeView(otherTab, 1); return;}
       if (dx < 0 && tab === 'shelf' && !managing && !menu) {
@@ -296,6 +314,7 @@ function Library() {
   }
 
   function cancelSwipe() {
+    swipe.current?.section?.release(false);
     if (swipe.current?.horizontal) pageTurn.change(tab, () => {});
     swipe.current = null;
   }

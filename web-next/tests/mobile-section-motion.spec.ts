@@ -1,5 +1,107 @@
 import {test, expect, type Page, type BrowserContext} from '@playwright/test';
 
+for (const width of [320, 390]) test(`${width}px every section follows each touch move and a slow release only settles the remaining distance`, async ({page, context}, info) => {
+  await page.setViewportSize({width, height: 844});
+  await setup(page);
+  for (const [path, direction] of [['/library', -1], ['/', 1], ['/forum', 1], ['/', -1]] as const) {
+    await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
+    const originalUrl = page.url();
+    const nav = await page.locator('.mh-bottom:visible').boundingBox();
+    const cdp = await context.newCDPSession(page), x = width * (direction > 0 ? .8 : .2), y = 320;
+    await hold(page);
+    await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y, id: 1}]});
+    for (const distance of [30, 75, 120, 95, 140]) {
+      await cdp.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: x - direction * distance, y, id: 1}]});
+      await expect(page.locator('html')).toHaveAttribute('data-mobile-section-transition', 'dragging');
+      await expect.poll(() => page.locator('[data-section-pane=outgoing]').evaluate(element => element.getBoundingClientRect().x), {timeout: 300}).toBeCloseTo(-direction * distance, 0);
+      const positions = await page.locator('.mobile-section-snapshot').evaluateAll(elements => elements.map(element => ({pane: (element as HTMLElement).dataset.sectionPane, x: element.getBoundingClientRect().x, animations: element.getAnimations().length})));
+      expect(positions.find(p => p.pane === 'outgoing')!.x).toBeCloseTo(-direction * distance, 0);
+      expect(positions.find(p => p.pane === 'preview')!.x).toBeCloseTo(direction * (width - distance), 0);
+      expect(positions.every(p => p.animations === 0)).toBe(true);
+      expect(page.url()).toBe(originalUrl);
+      expect(await page.locator('.mh-bottom:visible').boundingBox()).toEqual(nav);
+      await page.waitForTimeout(100);
+    }
+    await page.screenshot({path: info.outputPath('drag-' + path.replaceAll('/', '_') + '.png')});
+    await cdp.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+    await cdp.detach();
+    const frames = await pause(page);
+    for (const frame of frames) expect(frame.duration).toBeCloseTo(240 * (1 - 140 / width), 0);
+    const initial = await page.locator('[data-section-pane=outgoing]').evaluate(element => (element.getAnimations()[0].effect as KeyframeEffect).getKeyframes()[0].transform);
+    expect(initial).toBe(`translateX(${-direction * 140}px)`);
+    await expect(page).toHaveURL(base + path);
+    await finish(page);
+  }
+});
+
+test('reversing through the start and cancelling returns home without navigating or opening a book', async ({page, context}) => {
+  await setup(page);
+  const cdp = await context.newCDPSession(page), x = 195, y = 320;
+  await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y, id: 1}]});
+  for (const dx of [70, 110, 45, -35, -100, -40]) {
+    await cdp.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: x + dx, y, id: 1}]});
+    await expect(page.locator('html')).toHaveAttribute('data-mobile-section-transition', 'dragging');
+    expect(await page.locator('[data-section-pane=outgoing]').evaluate(element => element.getBoundingClientRect().x)).toBeCloseTo(dx, 0);
+  }
+  await cdp.send('Input.dispatchTouchEvent', {type: 'touchCancel', touchPoints: []});
+  await cdp.detach();
+  await expect(page.locator('.mobile-section-snapshot, .mobile-section-backdrop')).toHaveCount(0);
+  await expect(page).toHaveURL(base + '/');
+});
+
+test('a quick flick counts finger travel towards the 400ms minimum', async ({page, context}) => {
+  await setup(page);
+  // Warm the static forum route so this measures motion, not home SSR latency.
+  await page.locator('.mh-bottom:visible [data-section=forum]').click();
+  await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
+  await page.locator('.mh-bottom:visible [data-section=home]').click();
+  await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
+  await page.evaluate(() => {
+    document.addEventListener('touchstart', () => Object.assign(window, {flickStarted: performance.now()}), {once: true});
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function(frames, options) {
+      if (this.classList.contains('mobile-section-snapshot')) Object.assign(window, {flickAnimationAt: performance.now()});
+      return animate.call(this, frames, options);
+    };
+  });
+  await hold(page);
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x: 340, y: 320, id: 1}]});
+  await cdp.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: 80, y: 320, id: 1}]});
+  await cdp.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+  await cdp.detach();
+  const frames = await pause(page);
+  const elapsed = await page.evaluate(() => {
+    const state = window as unknown as {flickStarted: number; flickAnimationAt: number};
+    return state.flickAnimationAt - state.flickStarted;
+  });
+  expect(elapsed).toBeLessThan(300);
+  expect(Number(frames[0].duration) + elapsed).toBeGreaterThanOrEqual(395);
+  expect(Number(frames[0].duration) + elapsed).toBeLessThan(425);
+  expect(frames[0].duration).toBeLessThan(400);
+  await finish(page);
+});
+
+test('a slow route retains the released drag position without jumping back to the start', async ({page, context}) => {
+  await setup(page);
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => {release = resolve;});
+  await page.route('**/forum?_rsc=*', async route => {await gate; await route.continue();});
+  try {
+    await hold(page);
+    await swipe(page, context, 1);
+    await expect(page.locator('html')).toHaveAttribute('data-mobile-section-transition', 'loading');
+    await page.waitForTimeout(450);
+    expect(await page.locator('[data-section-pane=outgoing]').evaluate(element => element.getBoundingClientRect().x)).toBe(-138);
+    expect(await page.locator('[data-section-pane=preview]').evaluate(element => element.getBoundingClientRect().x)).toBe(252);
+    release();
+    const frames = await pause(page);
+    expect(frames[0].duration).toBeLessThan(240);
+    expect(await page.locator('[data-section-pane=outgoing]').evaluate(element => (element.getAnimations()[0].effect as KeyframeEffect).getKeyframes()[0].transform)).toBe('translateX(-138px)');
+    await finish(page);
+  } finally {release();}
+});
+
 const base = process.env.MOBILE_SECTIONS_BASE || 'http://127.0.0.1:3000';
 const user = {id: '000000000000000000000001', username: '栏目动画验证', role: 'reader'};
 test.use({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true});
@@ -12,7 +114,7 @@ async function setup(page: Page, path = '/') {
     Element.prototype.animate = function(frames, options) {
       const animation = animate.call(this, frames, options);
       if (this.classList.contains('mobile-section-snapshot') && (window as unknown as {holdSectionMotion?: boolean}).holdSectionMotion) {
-        animation.pause(); animation.currentTime = 200;
+        animation.pause(); animation.currentTime = Number(animation.effect!.getTiming().duration) / 2;
       }
       return animation;
     };
@@ -42,7 +144,7 @@ async function pause(page: Page) {
   await expect(page.locator('html')).toHaveAttribute('data-mobile-section-transition', 'animating');
   return page.locator('.mobile-section-snapshot').evaluateAll(elements => elements.map(element => {
     const animation = element.getAnimations()[0];
-    animation.pause(); animation.currentTime = 200;
+    animation.pause(); animation.currentTime = Number(animation.effect!.getTiming().duration) / 2;
     return {pane: (element as HTMLElement).dataset.sectionPane, x: element.getBoundingClientRect().x,
       width: element.getBoundingClientRect().width, duration: animation.effect!.getTiming().duration};
   }));
@@ -131,7 +233,7 @@ for (const width of [320, 390]) test(`${width}px only the two terminal pages res
   await expect(page).toHaveURL(base + '/forum');
 });
 
-for (const width of [320, 390]) for (const method of ['tap', 'swipe']) test(`${width}px ${method} slides both pages for 400ms and leaves navigation fixed`, async ({page, context}, info) => {
+for (const width of [320, 390]) for (const method of ['tap', 'swipe']) test(`${width}px ${method} slides both pages from their current position and leaves navigation fixed`, async ({page, context}, info) => {
   await page.setViewportSize({width, height: 844});
   await setup(page);
   const navBounds = await page.locator('.mh-bottom:visible').boundingBox();
@@ -141,7 +243,8 @@ for (const width of [320, 390]) for (const method of ['tap', 'swipe']) test(`${w
     else await swipe(page, context, direction);
     const frames = await pause(page);
     expect(frames).toHaveLength(2);
-    expect(frames.map(frame => frame.duration)).toEqual([400, 400]);
+    if (method === 'tap') expect(frames.map(frame => frame.duration)).toEqual([400, 400]);
+    else for (const frame of frames) {expect(frame.duration).toBeGreaterThan(0); expect(frame.duration).toBeLessThan(400);}
     expect(frames[0].x * direction).toBeLessThan(0);
     expect(frames[1].x * direction).toBeGreaterThan(0);
     expect(Math.abs((frames[1].x - frames[0].x) * direction - width)).toBeLessThan(1);

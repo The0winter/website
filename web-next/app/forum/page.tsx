@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { forumApi, ForumPost } from '@/lib/api';
 import HomeSearchHeader from '@/components/HomeSearchHeader';
-import {navigateMobileSection} from '@/lib/mobile-section-navigation';
+import {navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from '@/lib/mobile-section-navigation';
 import './forum.css';
 
 type FeedTab = 'recommend' | 'hot' | 'follow';
@@ -74,6 +74,9 @@ export default function ForumPage() {
   const suppressSwipeClick = useRef(false);
   const feed = useRef<HTMLDivElement>(null);
   const horizontalSwipe = useRef(false);
+  const sectionDrag = useRef<MobileSectionDrag | undefined>(undefined);
+  const swipeStartedAt = useRef(0);
+  useEffect(() => () => sectionDrag.current?.cancel(), []);
   useEffect(() => {
     const host = feed.current;
     const move = (event: TouchEvent) => {if (horizontalSwipe.current && event.touches.length === 1 && event.cancelable) event.preventDefault();};
@@ -103,6 +106,7 @@ export default function ForumPage() {
     suppressSwipeClick.current = false;
     if (e.touches.length !== 1 || (e.target as Element).closest('button, input, select, textarea, [contenteditable], .mh-bottom, .forum-publish, dialog')) return;
     setTouchStartPos({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
+    swipeStartedAt.current = performance.now();
     setIsDragging(true);
     setDragOffset(0);
     setSwipeDir(null);
@@ -129,16 +133,22 @@ export default function ForumPage() {
       horizontalSwipe.current = true;
       suppressSwipeClick.current = true;
       let newOffset = diffX;
-      // 推荐右滑进入精选，不移动内部列表；关注左滑仍保留到头提示。
-      if (activeIndex === 0 && diffX > 0) newOffset = 0;
+      // At the recommendation edge the entire section follows the finger.
+      if (activeIndex === 0 && diffX > 0) {
+        sectionDrag.current ??= startMobileSectionDrag(e.currentTarget, 'home', swipeStartedAt.current);
+        sectionDrag.current?.update(diffX);
+        newOffset = 0;
+      }
       else if (activeIndex === TABS.length - 1 && diffX < 0) {
         newOffset = diffX * 0.3;
       }
+      if (diffX <= 0 && sectionDrag.current) {sectionDrag.current.cancel(); sectionDrag.current = undefined;}
       setDragOffset(newOffset);
     }
   };
 
   const handleTouchCancel = () => {
+    sectionDrag.current?.release(false); sectionDrag.current = undefined;
     horizontalSwipe.current = false;
     setIsDragging(false);
     setDragOffset(0);
@@ -156,7 +166,11 @@ export default function ForumPage() {
 
     const distance = event.changedTouches[0]?.clientX - touchStartPos.x;
     const threshold = Math.min(100, window.innerWidth * .25);
-    if (distance > threshold && activeIndex === 0) {
+    if (sectionDrag.current) {
+      sectionDrag.current.update(distance);
+      sectionDrag.current.release(distance > threshold);
+      sectionDrag.current = undefined;
+    } else if (distance > threshold && activeIndex === 0) {
       navigateMobileSection(event.currentTarget, 'home');
     } else if (distance > threshold && activeIndex > 0) {
       setActiveTab(TABS[activeIndex - 1].id);

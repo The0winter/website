@@ -1,6 +1,10 @@
 .mh-bottom { display:none; }
 .mobile-section-snapshot { position:fixed; top:0; left:0; width:100%; z-index:44; overflow:hidden; contain:paint; background:var(--home-background,#f4ece6); pointer-events:none; }
 html[data-mobile-section-transition] { overflow-x:clip; }
+.mobile-section-backdrop { position:fixed; inset:0 0 auto; z-index:43; background:var(--home-background,#f4ece6); pointer-events:none; }
+.mobile-section-preview { color:var(--home-muted); font-size:14px; }
+.mobile-section-preview-title { padding:30px 20px 18px; border-bottom:1px solid var(--home-border); color:var(--home-text); font-size:17px; font-weight:600; background:var(--home-surface); }
+.mobile-section-preview p { padding:40px 20px; text-align:center; }
 @media (max-width:767px) {
   .mh-bottom { position:fixed; bottom:0; left:0; right:0; z-index:45; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); padding:6px 76px calc(5px + env(safe-area-inset-bottom)) 0; background:#fffaf7f5; backdrop-filter:blur(14px); border-top:1px solid #eee4dc; }
   .mh-bottom a { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:44px; gap:3px; color:#554d45; font-size:11px; }
