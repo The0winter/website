@@ -8,6 +8,7 @@ import type {Book, Profile} from '@/lib/api';
 import {safeFetch} from '@/lib/request';
 import {syncBookRoute} from '@/lib/book-navigation';
 import BookLink from '@/components/BookLink';
+import AuthorLoading from './loading';
 import './author.css';
 
 export const dynamic = 'force-dynamic';
@@ -63,19 +64,20 @@ export default function AuthorProfile() {
     window.scrollTo({top: 0, behavior: 'instant'});
   }
 
-  return <div className="author-page">
+  if (loading) return <AuthorLoading/>;
+
+  return <div className="author-page" data-author-href={'/author/' + id + (query ? '?' + query : '')} aria-busy="false">
     <div className="author-shell">
       <header className="author-topbar"><button type="button" onClick={() => history.length > 1 ? router.back() : router.replace('/')}><ArrowLeft size={20}/>返回</button><span>作者主页</span></header>
       <section className="author-profile" aria-label="作者信息">
         <div className="author-avatar">{profile?.avatar && avatarFailed !== profile.avatar
           ? <img src={profile.avatar} alt="作者头像" onError={() => setAvatarFailed(profile.avatar!)}/>
           : <UserRound size={32} aria-hidden="true"/>}</div>
-        <div className="author-identity"><p>作者</p><h1>{profile?.username || (loading ? '正在加载作者…' : '作者信息')}</h1></div>
+        <div className="author-identity"><p>作者</p><h1>{profile?.username || '作者信息'}</h1></div>
       </section>
       <section className="author-works" aria-label="作者作品" aria-busy={loading}>
         <header className="author-works-heading"><h2><BookOpen size={20}/>全部作品{profile && <span>（{total}）</span>}</h2><span>最近更新</span></header>
         {error ? <div className="author-empty" role="alert"><BookOpen size={32}/><p>{error}</p><button onClick={() => {setFailure(null); setRetry(value => value + 1);}}><RotateCcw size={16}/>重新加载</button></div>
-          : loading ? <div className="author-empty" role="status"><BookOpen size={32}/><p>正在加载作品…</p></div>
           : books.length ? <div className="author-book-list">{books.map(book => <BookLink key={book.id} href={'/book/' + book.id} className="author-book">
             <Cover book={book}/>
             <div className="author-book-info"><h3>{book.title}</h3><p>{book.description && book.description !== '暂无简介' ? book.description : '暂无简介，打开作品开始阅读。'}</p><div className="author-book-meta"><span>{book.category?.split('>').pop()?.trim() || '综合'}</span><span>{['completed', '完结'].includes(book.status || '') ? '完结' : '连载'}</span></div></div>

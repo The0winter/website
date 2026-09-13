@@ -90,7 +90,7 @@ for (const width of [320, 390, 768, 1440]) {
       const box = form.getBoundingClientRect(), input = form.querySelector('input')!.getBoundingClientRect(), icon = form.querySelector('svg')!.getBoundingClientRect();
       return {inline: icon.right < input.left, contained: input.right <= box.right, height: box.height, overflow: document.documentElement.scrollWidth > innerWidth};
     });
-    expect(layout).toEqual({inline: true, contained: true, height: 44, overflow: false});
+    expect(layout).toEqual({inline: true, contained: true, height: width < 768 ? 38 : 44, overflow: false});
     await input.fill('不存在的帖子检索词');
     await expect(input).toHaveValue('不存在的帖子检索词');
     await page.screenshot({path: testInfo.outputPath('forum.png'), fullPage: true});

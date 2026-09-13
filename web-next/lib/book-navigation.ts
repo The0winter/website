@@ -4,7 +4,7 @@ import {installRankingCache, trackRankingReading} from './ranking-cache';
 
 type Route = {kind: 'home' | 'author' | 'library' | 'ranking' | 'detail' | 'reader'; href: string; bookId?: string};
 type RankingView = {activeRank: string; category: string};
-type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; restoreSession?: string; homeBrowse?: boolean; homeShortcutVisit?: boolean; libraryReturn?: string; rankingView?: RankingView};
+type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; restoreSession?: string; homeBrowse?: boolean; homeShortcutVisit?: boolean; libraryReturn?: string; rankingView?: RankingView; authorSource?: {href: string; flow: string}};
 type Router = {push: (href: string) => void; replace: (href: string) => void};
 const listeners = new Set<() => void>();
 let router: Router | undefined;
@@ -74,6 +74,10 @@ export function syncBookRoute(path: string) {
   const saved = stored();
   if (saved?.href === path) { mark(saved); return; }
   if (isList(route)) {
+    // Pagination stays in the same author visit, including its return target.
+    if (route.kind === 'author' && previous?.kind === 'author' && route.href.split('?')[0] === previous.href.split('?')[0]) {
+      mark({...previous, ...route}); return;
+    }
     mark({...entryFor(route), homeBrowse: route.kind === 'home' && Boolean(window.history.state?.homeBrowse)}); return;
   }
   // Browse views, authors, the library and rankings keep their list as the predecessor.
@@ -142,22 +146,33 @@ function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, t
       window.history.pushState({...window.history.state, bookNavigation: entry}, '', entry.href);
       current = entry;
       router!.replace(entry.href);
-    } else if (!replace && entry.kind === 'detail') {
-      // Reserve the detail visit before requesting it so Back from its loader
-      // lands on the source, even when home was the first page in this tab.
+    } else if (!replace && (entry.kind === 'detail' || entry.kind === 'author')) {
+      // Reserve the visit before requesting it so Back from its loader
+      // lands on the source, even before the destination route is available.
       // This slot has no restoreSession: Forward must load the real details,
       // rather than restoring the source's temporary Next route tree.
       window.history.pushState({...window.history.state, bookNavigation: entry}, '', entry.href);
+      if (entry.kind === 'author') current = entry;
       router!.replace(entry.href);
     } else if (replace) router!.replace(entry.href);
     else router!.push(entry.href);
-  }, mobile() ? homeShortcut(entry) : undefined);
+  }, entry.kind === 'author' ? '作者主页' : mobile() ? homeShortcut(entry) : undefined);
 }
 
 function onPopState(event: PopStateEvent) {
   const from = current;
   const target = stored(event.state);
   if (!from || !router) { cancelBookTransition(); return; }
+  // Author pages start their own list flow, but retain the actual source visit
+  // for animated Back/Forward, including cancellation during route loading.
+  const authorBack = from.kind === 'author' && from.authorSource?.flow === target?.flow && from.authorSource?.href === target?.href;
+  const authorForward = target?.kind === 'author' && target.authorSource?.flow === from.flow && target.authorSource?.href === from.href;
+  if (target && (authorBack || authorForward)) {
+    const restore = target.restoreSession === session() && Boolean(event.state?.__NA);
+    if (!restore) event.stopImmediatePropagation();
+    navigate(target, authorForward ? 'enter' : 'exit', true, true, restore);
+    return;
+  }
   if (mobile() && target && (featuredHome(from) && homeShortcut(target) || homeShortcut(from) && featuredHome(target))) {
     const restore = target.restoreSession === session() && Boolean(event.state?.__NA);
     if (!restore) event.stopImmediatePropagation();
@@ -220,6 +235,10 @@ export function navigateBookLink(href: string) {
   const target = routeFor(href);
   if (!target || !router) return false;
   if (document.documentElement.dataset.bookTransition) return true;
+  if (target.kind === 'author' && target.href !== current?.href) {
+    navigate({...entryFor(target), authorSource: current ? {href: current.href, flow: current.flow} : undefined}, 'enter', false);
+    return true;
+  }
   if (mobile() && featuredHome(current) && homeShortcut(target)) {
     navigate({...entryFor(target), homeBrowse: target.kind === 'home', homeShortcutVisit: true}, 'enter', false);
     return true;

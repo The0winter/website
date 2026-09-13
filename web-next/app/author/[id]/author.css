@@ -1,4 +1,6 @@
 .author-page { min-height:100svh; background:var(--home-background); color:var(--home-text); padding:0 20px 48px; }
+.author-page.author-loading { position:fixed; inset:0; z-index:1000; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; padding:24px; font:16px/1.8 Arial,"Microsoft YaHei",sans-serif; text-align:center; }
+body:has(.book-navigation-loading) .author-loading { visibility:hidden; }
 .author-shell { max-width:1008px; margin:0 auto; }
 .author-topbar { display:flex; align-items:center; gap:18px; min-height:72px; font-size:14px; color:var(--home-muted); }
 .author-topbar button { display:flex; align-items:center; gap:6px; min-height:44px; color:var(--home-text); }

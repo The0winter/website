@@ -46,7 +46,7 @@ for (const width of [390, 1440]) {
     await expect.poll(() => requested).toBe(true);
     await expect(page.locator('html')).toHaveAttribute('data-book-transition-phase', 'loading');
     await expect(page.locator('.book-transition-snapshot')).toHaveCount(2);
-    await expect(page.locator('.book-navigation-loading')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expect(page.locator('.book-navigation-loading')).toHaveCSS('background-color', width < 768 ? 'rgb(244, 236, 230)' : 'rgb(248, 249, 250)');
     await details(page);
     expect(await page.evaluate(() => history.length)).toBe(length + 1);
     expect(await page.evaluate(() => (window as Window & {bookAnimations?: unknown[]}).bookAnimations)).toEqual([{
@@ -66,7 +66,7 @@ for (const width of [390, 1440]) {
 
 for (const origin of ['/ranking', '/search?q=山海', '/author/000000000000000000000001']) {
   for (const width of [320, 1440]) {
-    test(`${origin} slides the white loader over the source and reveals details without another motion at ${width}px`, async ({page}, info) => {
+    test(`${origin} slides the themed loader over the source and reveals details without another motion at ${width}px`, async ({page}, info) => {
       await page.setViewportSize({width, height: 844});
       await page.addInitScript(() => {
         Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}});
@@ -93,7 +93,7 @@ for (const origin of ['/ranking', '/search?q=山海', '/author/00000000000000000
         await link.click();
         const loader = page.locator('.book-navigation-loading');
         await expect(loader).toBeVisible();
-        await expect(loader).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+        await expect(loader).toHaveCSS('background-color', width < 768 ? 'rgb(244, 236, 230)' : 'rgb(248, 249, 250)');
         const x = await loader.evaluate(element => element.getBoundingClientRect().left);
         expect(x).toBeGreaterThan(0); expect(x).toBeLessThan(width);
         await expect(page.locator('.book-transition-snapshot')).toHaveCount(2);

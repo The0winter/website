@@ -15,7 +15,7 @@ function waitForPage(href: string, signal: AbortSignal, onSlow?: () => void) {
     const ready = () => location.pathname === path && (parts[1] === 'library'
       ? visible('.library-page, .account-loading')
       : parts[1] === 'author'
-      ? visible('.author-page')
+      ? visible(`.author-page[data-author-href="${CSS.escape(path + url.search)}"][aria-busy="false"]`)
       : parts[1] === 'ranking'
       ? visible('.ranking-page')
       : parts[3]
