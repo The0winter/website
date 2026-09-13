@@ -6,6 +6,8 @@ const reviewSchema = new mongoose.Schema({
   
   // 评论内容
   content: { type: String, required: true },
+  likedBy: { type: [mongoose.Schema.Types.ObjectId], default: [], select: false },
+  dislikedBy: { type: [mongoose.Schema.Types.ObjectId], default: [], select: false },
   
   // 关联的书籍
   book: { 

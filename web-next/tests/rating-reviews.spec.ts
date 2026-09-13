@@ -15,6 +15,7 @@ for (const width of [320, 390, 1440]) test(`ten-point ratings preserve saved sta
     const request = route.request(), url = new URL(request.url());
     if (url.pathname === '/api/auth/session') return route.fulfill({json:{user:reader, profile:reader}});
     if (url.pathname === '/api/auth/csrf') return route.fulfill({json:{csrfToken:'browser-fixture'}});
+    if (url.pathname.endsWith('/review-reactions')) return route.fulfill({json:reviews.map(review => ({id:review._id, likes:0, dislikes:0, reaction:null}))});
     if (url.pathname.endsWith('/check')) return route.fulfill({json:{isBookmarked:false}});
     if (url.pathname === `/api/books/${book}/reviews/mine`) return route.fulfill({json:reviews.find(review=>review.user._id===reader.id) || null});
     if (url.pathname === `/api/books/${book}/reviews`) {

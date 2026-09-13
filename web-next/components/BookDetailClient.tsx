@@ -12,11 +12,12 @@ import BookCatalogSheet from './BookCatalogSheet';
 import {useBookCatalog} from '@/lib/useBookCatalog';
 import {formatChapterTitle} from '@/lib/catalog-title';
 import {formatRating, ratingLabel} from '@/lib/rating';
+import {useReviewReactions} from '@/lib/useReviewReactions';
 import {beginChapterEntry} from '@/lib/chapter-entry';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, User as UserIcon, Pencil, X, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, Heart, HeartCrack, User as UserIcon, Pencil, X, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import BookArticles from './BookArticles';
 import './book-detail.css';
 import { useAuth } from '@/contexts/AuthContext';
@@ -26,7 +27,7 @@ const StarRating = ({ rating, size = 5, interactive = false, onRate }: { rating:
   const [hoverRating, setHoverRating] = useState(0);
 
   return (
-    <div className="flex shrink-0 space-x-1" role={interactive ? 'group' : 'img'} aria-label={interactive ? '选择评分，最低 2 分，最高 10 分' : ratingLabel(rating)} onMouseLeave={() => interactive && setHoverRating(0)}>
+    <div className={`flex shrink-0 ${size === 4 ? 'book-review-stars' : 'space-x-1'}`} role={interactive ? 'group' : 'img'} aria-label={interactive ? '选择评分，最低 2 分，最高 10 分' : ratingLabel(rating)} onMouseLeave={() => interactive && setHoverRating(0)}>
       {[1, 2, 3, 4, 5].map((star) => (
         <Star
           key={star}
@@ -229,6 +230,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
     const others = reviews.filter(r => r._id !== myReview._id);
     return [myReview, ...others];
   }, [reviews, myReview]);
+  const feedback = useReviewReactions(book.id, sortedReviews.map(review => review._id).join(','), user?.id || user?._id || '');
 
   // --- 操作：收藏 ---
   const handleToggleBookmark = async () => {
@@ -518,6 +520,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             )}
 
             {reviewError&&<p role="alert">{reviewError}<button onClick={()=>setReviewRefresh(value=>value+1)}>重试</button></p>}
+            {feedback.error && <p className="book-review-error" role="alert">{feedback.error} <button onClick={feedback.retry}>重试</button></p>}
             <nav hidden={reviewTotal <= 20} aria-label="评价分页" className="flex gap-4 justify-center my-4"><button disabled={reviewPage===1} onClick={()=>setReviewPage(reviewPage-1)}>上一页</button><span>第 {reviewPage} 页</span><button disabled={reviewPage*20>=reviewTotal} onClick={()=>setReviewPage(reviewPage+1)}>下一页</button></nav>
             {/* 评论列表 */}
             <div className="space-y-6 md:space-y-8">
@@ -530,7 +533,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                         if (isMyReview && showReviewForm) return null;
 
                         return (
-                            <div key={review._id} className={`book-review border-t border-gray-100 pt-4 ${isMyReview ? 'bg-blue-50/30 -mx-4 px-4 pb-4 rounded' : ''}`}>
+                            <article key={review._id} className="book-review">
                                 <div className="flex items-start space-x-3">
                                     <div className="flex-shrink-0 pt-1">
                                         {review.user?.avatar ? (
@@ -557,12 +560,29 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                                         </div>
                                         <div className="book-review-meta">
                                             <StarRating rating={review.rating} size={4} />
-                                            <time dateTime={review.createdAt}>{review.createdAt.slice(0, 10)}</time>
                                         </div>
                                         <p className="book-review-content">{review.content}</p>
+                                        <footer className="book-review-footer">
+                                            <time dateTime={review.createdAt}>{review.createdAt.slice(0, 10)}</time>
+                                            <div className="book-review-reactions" role="group" aria-label="评论反馈">
+                                                {(['like', 'dislike'] as const).map(choice => {
+                                                    const label = choice === 'like' ? '喜欢' : '不喜欢';
+                                                    const row = feedback.rows[review._id];
+                                                    const count = (choice === 'like' ? row?.likes : row?.dislikes) || 0;
+                                                    const active = row?.reaction === choice;
+                                                    const Icon = choice === 'like' ? Heart : HeartCrack;
+                                                    return <button key={choice} type="button" aria-label={`${label}，${count} 人`} title={active ? `取消${label}` : label}
+                                                        aria-pressed={active} disabled={feedback.busy(review._id) || (!!user && !row)}
+                                                        onClick={() => {if (!user) router.push('/login'); else void feedback.react(review._id, active ? null : choice);}}>
+                                                        <Icon size={18} aria-hidden="true"/>
+                                                        {count > 0 && <span aria-hidden="true">{new Intl.NumberFormat('zh-CN', {notation:'compact', maximumFractionDigits:1}).format(count)}</span>}
+                                                    </button>;
+                                                })}
+                                            </div>
+                                        </footer>
                                     </div>
                                 </div>
-                            </div>
+                            </article>
                         );
                     })
                 )}
