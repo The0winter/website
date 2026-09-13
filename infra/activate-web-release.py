@@ -48,19 +48,41 @@ def ready(port):
             time.sleep(1)
 
 def route(config, port):
+    # nginx reload returns before its old workers finish using the old upstream.
+    workers = {}
+    for process in pathlib.Path('/proc').glob('[0-9]*'):
+        try:
+            if process.joinpath('cmdline').read_bytes().startswith(b'nginx: worker process'):
+                workers[process] = process.joinpath('stat').read_text().rsplit(')', 1)[1].split()[19]
+        except (FileNotFoundError, ProcessLookupError):
+            pass
     text, count = re.subn(r'(upstream test1_web \{ server 127\.0\.0\.1:)\d+(;)', lambda m: m[1] + str(port) + m[2], config)
     assert count == 1, 'Expected exactly one frontend upstream'
     write(NGINX, text)
     run('nginx', '-t')
     run('systemctl', 'reload', 'nginx')
+    deadline = time.monotonic() + 120
+    while workers:
+        for process, started in list(workers.items()):
+            try:
+                if process.joinpath('stat').read_text().rsplit(')', 1)[1].split()[19] != started:
+                    del workers[process]
+            except (FileNotFoundError, ProcessLookupError):
+                del workers[process]
+        if not workers:
+            break
+        if time.monotonic() >= deadline:
+            raise RuntimeError('Old nginx workers are still draining; keep the old frontend running')
+        time.sleep(0.25)
 
 def rollback(manifest):
     backup = pathlib.Path(manifest['configurationBackup'])
     old = pathlib.Path(manifest['previousRelease'])
     assert old.is_dir()
     write(ENV, (backup / 'web.env').read_bytes(), 0o600)
-    switch(old)
-    run('systemctl', 'restart', 'test1-web')
+    if (ROOT / 'current').resolve() != old:
+        switch(old)
+        run('systemctl', 'restart', 'test1-web')
     ready(3000)
     write(NGINX, (backup / 'nginx.conf').read_bytes())
     run('nginx', '-t')
