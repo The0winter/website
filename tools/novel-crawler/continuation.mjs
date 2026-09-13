@@ -13,6 +13,7 @@ const normalize = value => normalizedIdentity(value, 'chinese-simplified');
 const sameBook = (a, b) => ['title', 'author'].every(key => a[key] && b[key] && normalize(a[key]) === normalize(b[key]));
 export const continuationKey = spec => hash([normalize(spec.title), normalize(spec.author)]).slice(0, 24);
 const directory = (stateDir, spec) => path.join(stateDir, 'continuations', continuationKey(spec));
+const sourceDirectory = (stateDir, spec, extraction) => path.join(directory(stateDir, spec), 'sources', hash([spec.sourceUrl, extraction]).slice(0, 24));
 const bytes = value => JSON.stringify(value, null, 2) + '\n';
 const sealed = value => ({hash: hash(value), value});
 function checked(file) {
@@ -148,10 +149,39 @@ function numbered(chapters) {
   return result;
 }
 
+const reviewFingerprint = chapter => ({link: chapter.link, title: normalize(chapter.title), contentHash: hash(chapter.content)});
+const reviewPairKey = pair => hash(pair.map(reviewFingerprint).sort((a, b) => a.link.localeCompare(b.link)));
+function loadReviews(spec, {stateDir, extraction}) {
+  const file = path.join(sourceDirectory(stateDir, spec, extraction), 'reviews.json');
+  if (!fs.existsSync(file)) return {version: 1, title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, extraction, decisions: []};
+  const value = checked(file);
+  if (value.version !== 1 || !sameBook(value, spec) || value.sourceUrl !== spec.sourceUrl || value.extraction !== extraction || !Array.isArray(value.decisions)) throw Error('版本核对记录与书籍或来源规则不匹配');
+  return value;
+}
+
+// Called under the same book lock as acquisition. A review is specific to both
+// complete, checksummed source bodies; similarity alone never selects a version.
+export function recordContinuationReview(spec, options, {firstLink, secondLink, keepLink, reason}) {
+  if (firstLink === secondLink || ![firstLink, secondLink].includes(keepLink) || typeof reason !== 'string' || !reason.trim()) throw Error('需要两个不同的来源链接、保留版本及核对理由');
+  const sourceDir = sourceDirectory(options.stateDir, spec, options.extraction);
+  const pair = [firstLink, secondLink].map(link => {
+    const saved = readJson(path.join(sourceDir, 'chapters', hash(link) + '.json'));
+    if (!saved?.chapter || saved.hash !== hash(saved.chapter) || saved.chapter.link !== link) throw Error('待核对版本的完整检查点缺失或损坏');
+    return saved.chapter;
+  });
+  const [a, b] = pair.map(chapter => chapterIdentity(chapter.title));
+  if (a ? !b || a.number !== b.number || !compatibleNames(a.name, b.name) : b || !notice(pair[0].title) || normalize(pair[0].title) !== normalize(pair[1].title)) throw Error('只能核对同章号同标题的版本或同名公告，不能跨章删改');
+  const state = loadReviews(spec, options), key = reviewPairKey(pair);
+  const decision = {key, versions: pair.map(reviewFingerprint), keepLink, reason: reason.trim(), reviewedAt: new Date().toISOString()};
+  state.decisions = [...state.decisions.filter(item => item.key !== key), decision];
+  atomicWrite(path.join(sourceDir, 'reviews.json'), sealed(state));
+  return decision;
+}
+
 // Resolve only decisions backed by complete content or the chapter page's own
 // heading. A repeated number with different prose is still an unresolved version.
-export function createContinuationReviewer(book) {
-  const accepted = [...book.chapters], skipped = [], resolutions = [];
+export function createContinuationReviewer(book, reviews = []) {
+  const accepted = [...book.chapters], originals = new Set(book.chapters), skipped = [], resolutions = [];
   let number = numbered(accepted).at(-1)?.number;
   if (!number) throw Error('原书缺少可核对的正文章号');
   return {
@@ -170,6 +200,24 @@ export function createContinuationReviewer(book) {
           retainedTitle: duplicate.title, retainedLink: duplicate.link, retainedPosition: duplicate.chapter_number,
           contentHash: hash(value.content), retainedContentHash: hash(duplicate.content), comparisonHash: hash(content),
           reason: '书名作者已核对；同一章号及标题（或同名公告）的完整正文一致，保留已接受版本'};
+        skipped.push(decision); resolutions.push(decision);
+        return false;
+      }
+      for (const peer of peers) {
+        const review = reviews.find(item => item.key === reviewPairKey([peer, value]));
+        if (!review) continue;
+        const incoming = review.keepLink === value.link;
+        if (!incoming && review.keepLink !== peer.link) throw Error('版本核对记录的保留链接无效');
+        if (incoming && originals.has(peer)) throw Error('版本核对不能替换原书章节，原书已保留');
+        const kept = incoming ? value : peer, discarded = incoming ? peer : value;
+        const decision = {kind: 'reviewed-variant', title: entry.title, link: discarded.link, sourcePosition: discarded.sourceChapterNumber || discarded.chapter_number,
+          retainedTitle: kept.title, retainedLink: kept.link, retainedPosition: peer.chapter_number,
+          contentHash: hash(discarded.content), retainedContentHash: hash(kept.content), reviewKey: review.key, reason: review.reason, reviewedAt: review.reviewedAt};
+        if (incoming) {
+          const ordinal = peer.chapter_number;
+          for (const key of Object.keys(peer)) delete peer[key];
+          Object.assign(peer, value, {chapter_number: ordinal});
+        }
         skipped.push(decision); resolutions.push(decision);
         return false;
       }
@@ -206,10 +254,10 @@ export async function acquireContinuation(spec, options) {
   prepareImport(book);
   if (book.chapters.some((chapter, index) => index && chapter.chapter_number <= book.chapters[index - 1].chapter_number)) throw Error('原书顺序号未严格递增，请先核对');
   const lastOrdinal = book.chapters.at(-1).chapter_number;
-  const reviewer = createContinuationReviewer(book);
+  const reviewer = createContinuationReviewer(book, loadReviews(spec, options).decisions);
   const switching = !binding || binding.source.url !== spec.sourceUrl;
   if (!switching && binding.source.extraction !== extraction) throw Error('当前续更来源的提取规则已变化，请先核对适配，旧文件已保留');
-  const sourceDir = path.join(dir, 'sources', hash([spec.sourceUrl, extraction]).slice(0, 24));
+  const sourceDir = sourceDirectory(stateDir, spec, extraction);
   const stopped = () => options.signal?.aborted || options.shouldStop?.();
   const client = options.client || makeClient({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, browser: spec.browser, signal: options.signal, shouldStop: stopped, onStatus: options.onStatus});
   const initialStats = {...client.stats}, started = Date.now();
@@ -221,9 +269,9 @@ export async function acquireContinuation(spec, options) {
     if (saved && (saved.hash !== hash(saved.chapter) || saved.chapter.link !== entry.link || saved.chapter.chapter_number !== entry.chapter_number || saved.catalogTitle !== entry.title)) throw Error(`新来源检查点与目录不匹配：${entry.title}`);
     if (!saved && options.maxNew !== undefined && fetched >= options.maxNew) { paused = true; throw Error('本次采集数量已达上限'); }
     const value = saved?.chapter || await getChapter(spec, entry, links, client);
-    const report = qualityReport([entry], [value], [], 'probe');
-    if (report.issues.some(issue => issue.level !== 'info' && issue.code !== 'short-outlier')) throw Error(`新来源章节需核对「${entry.title}」：${report.issues.map(issue => issue.code).join('、')}`);
     if (!saved) { fetched++; atomicWrite(checkpoint, {hash: hash(value), chapter: value, catalogTitle: entry.title}); }
+    const report = qualityReport([entry], [value], [], 'probe');
+    if (report.issues.some(issue => issue.level !== 'info' && issue.code !== 'short-outlier')) throw Object.assign(Error(`新来源章节需核对「${entry.title}」：${report.issues.map(issue => issue.code).join('、')}`), {continuationConflict: true});
     return value;
   }
   try {
@@ -256,12 +304,22 @@ export async function acquireContinuation(spec, options) {
     }
     const pending = catalog.slice(boundary + 1);
     const targets = mode === 'probe' ? pending.slice(0, 3) : pending;
+    atomicWrite(path.join(sourceDir, 'catalog.json'), catalog);
     options.onProgress?.({jobId: id, mode, downloaded: 0, total: targets.length, failed: 0});
     for (const entry of targets) {
-      const value = await chapter(entry, links);
-      const next = {...formatChapterForExport(value), chapter_number: lastOrdinal + tail.length + 1, sourceChapterNumber: value.chapter_number, sourceChapterUrl: value.link, sourceBookUrl: spec.sourceUrl};
-      if (reviewer.accept(entry, next)) tail.push(next);
-      options.onProgress?.({jobId: id, mode, downloaded: tail.length + skipped.length, total: targets.length, failed: 0});
+      let loaded = false;
+      try {
+        const value = await chapter(entry, links);
+        loaded = true;
+        const next = {...formatChapterForExport(value), chapter_number: lastOrdinal + tail.length + 1, sourceChapterNumber: value.chapter_number, sourceChapterUrl: value.link, sourceBookUrl: spec.sourceUrl};
+        if (reviewer.accept(entry, next)) tail.push(next);
+      } catch (error) {
+        // Transport/access and checkpoint failures must stop the batch. Only
+        // complete source bodies with reviewable content conflicts may continue.
+        if (paused || stopped() || (!loaded && !error.continuationConflict)) throw error;
+        failures.push({chapter: entry.chapter_number, title: entry.title, link: entry.link, error: error.message, nextStep: '已保存完整正文可供核对，其他章节继续采集；全部冲突解决后才更新原书。'});
+      }
+      options.onProgress?.({jobId: id, mode, downloaded: tail.length + skipped.length, total: targets.length, failed: failures.length});
     }
     nextBook = {...book, chapters: [...book.chapters, ...tail]};
     // Preserve stable import identity, author mapping, cover and all old chapters.
@@ -272,7 +330,7 @@ export async function acquireContinuation(spec, options) {
     if (newIssues.some(issue => issue.level !== 'info' && issue.code !== 'short-outlier')) throw Error(`新增内容检查未通过：${newIssues.map(issue => `第 ${issue.chapter} 项 ${issue.code}`).join('；')}`);
     prepareImport(nextBook);
     if (stopped()) { paused = true; throw Error('采集已暂停'); }
-    if (mode === 'download') {
+    if (mode === 'download' && !failures.length) {
       if (hash(fs.readFileSync(file)) !== originalHash) throw Error('采集期间原书被其他程序修改，拒绝覆盖');
       const nextHash = hash(bytes(nextBook));
       const next = {version: 1, revision: (binding?.revision || 0) + 1, title: book.title, author: book.author, file: selected.file, outputPath: file, originalSourceUrl: book.sourceUrl,
@@ -299,7 +357,7 @@ export async function acquireContinuation(spec, options) {
     errors, warnings: issues.filter(issue => issue.level === 'warning').length, information: issues.filter(issue => issue.level === 'info').length,
     structuralPass: !errors && !paused, completeAgainstSource: !!exportFile, paused, exportFile, reusedExport, description: nextBook.description, status: nextBook.status,
     checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: Object.fromEntries(Object.entries(client.stats).map(([key, value]) => [key, value - initialStats[key]])),
-    limitation: '保留原书全部条目及稳定导入来源。完整正文一致、同章号且标题对应的章节或同名公告可自动去重；目录编号有误而正文页编号连续时沿用正文页标题并记录证据。相似但不同的版本、拆合章、缺章及无可靠顺序证据的冲突仍停止。未重采或核对新站全部旧正文。'};
+    limitation: '保留原书全部条目及稳定导入来源。完整正文一致、同章号且标题对应的章节或同名公告可自动去重；目录编号有误而正文页编号连续时沿用正文页标题并记录证据。不同正文只沿用已核对且两边哈希完全匹配的版本选择，不按相似度自动择优。未解决的冲突保留全部已取得正文并阻止更新原书，其他章节继续采集。未重采或核对新站全部旧正文。'};
   result.reportFile = path.join(sourceDir, `${mode}-report.json`);
   result.summaryFile = path.join(sourceDir, `${mode}-report.md`);
   atomicWrite(result.reportFile, result);

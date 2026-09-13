@@ -131,8 +131,8 @@ test('shudugu details adapter handles variable book IDs and chapter pages withou
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     const id = req.url.split('/')[1];
     if (req.url === `/${id}/`) res.end(`<div class="itemtxt"><h1><i>字数</i><a>测试${id}</a></h1><p><a href="/zuozhe/?tag=test">作者：测试作者</a></p></div><div id="list"><ul><li><a href="/${id}/100.html">第1章 开始</a></li></ul></div>`);
-    else if (req.url === `/${id}/100.html`) res.end(`<h1><a href="/${id}/">测试${id}</a> &gt; 第1章 开始</h1><div class="con"><p>第一页的合成正文。</p><p>：</p><p>……</p><p>他说：“时间是12:30。”</p><p>  :  </p></div><a href="/${id}/100-2.html">下一页</a>`);
-    else if (req.url === `/${id}/100-2.html`) res.end(`<h1><a href="/${id}/">测试${id}</a> &gt; 第1章 开始</h1><div class="con"><p>第二页的合成正文。</p><p>&nbsp;：&nbsp;</p><p>......</p><p>「：」</p></div><a href="/${id}/200.html">下一章</a>`);
+    else if (req.url === `/${id}/100.html`) res.end(`<h1><a href="/${id}/">测试${id}</a> &gt; 第1章 开始</h1><div class="con"><p>第一页的合成正文。</p><p>：</p><p>……</p><p>他说：“时间是12:30。”</p><p>  :  </p><p>本章节来源于??9</p></div><a href="/${id}/100-2.html">下一页</a>`);
+    else if (req.url === `/${id}/100-2.html`) res.end(`<h1><a href="/${id}/">测试${id}</a> &gt; 第1章 开始</h1><div class="con"><p>第二页的合成正文。</p><p>&nbsp;：&nbsp;</p><p>......</p><p>「：」</p><p>本章节来源于???9</p><p>本章节来源于.?</p><p>本章节来源于.???m</p><p>本章节来源于这段对话。</p><p>本章节来源于1984</p></div><a href="/${id}/200.html">下一章</a>`);
     else { res.statusCode = 404; res.end('unexpected chapter'); }
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -146,7 +146,7 @@ test('shudugu details adapter handles variable book IDs and chapter pages withou
     const book = JSON.parse(fs.readFileSync(report.exportFile));
     assert.equal(book.chapters[0].title, '第1章 开始');
     assert.match(book.chapters[0].content, /第一页[\s\S]*第二页/);
-    assert.equal(book.chapters[0].content, '第一页的合成正文。\n……\n他说：“时间是12:30。”\n第二页的合成正文。\n......\n「：」');
+    assert.equal(book.chapters[0].content, '第一页的合成正文。\n……\n他说：“时间是12:30。”\n第二页的合成正文。\n......\n「：」\n本章节来源于这段对话。\n本章节来源于1984');
     assert.equal(book.chapters[0].provenance.length, 2);
   }
 });

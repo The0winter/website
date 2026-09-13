@@ -42,14 +42,14 @@ try {
       const result = await acquire(JSON.parse(fs.readFileSync(values.spec, 'utf8')), {mode: command, stateDir, outputDir: values['output-dir'], samples: integer('samples', 4, 30), maxNew: integer('max-new', 1, 20000), refresh: values.refresh, onProgress: data => {
         if (data.downloaded <= 1 || data.downloaded % 20 === 0 || data.downloaded === data.total) console.error(JSON.stringify(data));
       }});
-      const {issues, missing, ...summary} = result;
+      const {issues, missing = [], ...summary} = result;
       console.log(JSON.stringify({...summary, issueCounts: Object.fromEntries([...new Set(issues.map(i => i.code))].map(code => [code, issues.filter(i => i.code === code).length])), missingCount: missing.length}, null, 2));
       if (!result.structuralPass || (command === 'download' && !result.completeAgainstSource)) process.exitCode = 2;
     } else if (command === 'report') {
       if (!/^[a-f0-9]{20}$/.test(values.job || '') || !['probe', 'download'].includes(values.mode || 'download')) throw Error('需要有效 --job 和 --mode');
       const report = readJson(path.join(stateDir, 'jobs', values.job, `${values.mode || 'download'}-report.json`));
       if (!report) throw Error('报告不存在');
-      const {missing, issues, ...summary} = report;
+      const {missing = [], issues, ...summary} = report;
       console.log(JSON.stringify({...summary, missingCount: missing.length, issues: issues.slice(0, 30)}, null, 2));
     } else if (command === 'validate') {
       if (!values.file) throw Error('需要 --file');

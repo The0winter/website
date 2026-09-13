@@ -25,7 +25,7 @@
   "spec": {
     "version": 1,
     "kind": "html",
-    "variant": "desktop-shudugu-v2",
+    "variant": "desktop-shudugu-v5",
     "title": "${title}",
     "author": "${author}",
     "sourceUrl": "${sourceUrl}",
@@ -44,7 +44,7 @@
       "title": {"selector": "h1", "pattern": ">\\s*(.+)$"},
       "content": ".con",
       "remove": ["script", "style"],
-      "removeText": ["(?:^|[\\r\\n])[^\\S\\r\\n]*[:：]+[^\\S\\r\\n]*(?=[\\r\\n]|$)"],
+      "removeText": ["(?:^|[\\r\\n])[^\\S\\r\\n]*[:：]+[^\\S\\r\\n]*(?=[\\r\\n]|$)", "(?:^|[\\r\\n])[^\\S\\r\\n]*本章节来源于(?=[?？.。…·°A-Za-z0-9]*[?？])[?？.。…·°A-Za-z0-9]{1,40}[^\\S\\r\\n]*(?=[\\r\\n]|$)"],
       "next": "a:contains('下一页')",
       "maxPages": 10
     }

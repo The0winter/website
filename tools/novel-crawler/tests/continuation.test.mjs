@@ -5,8 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import puppeteer from 'puppeteer';
-import {acquire, localBookState, validateSpec} from '../core.mjs';
-import {continuationKey, continuationState, recoverContinuation} from '../continuation.mjs';
+import {acquire, localBookState, validateSpec, extractionHash} from '../core.mjs';
+import {continuationKey, continuationState, recoverContinuation, recordContinuationReview} from '../continuation.mjs';
 import {atomicWrite, readJson, hash, acquireLock} from '../storage.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 import {loadSites, parseSearch} from '../desktop/sources.mjs';
@@ -25,6 +25,7 @@ async function fixture(t) {
     }
     if (req.url.endsWith('/notice')) return res.end('<h1>2026一月月票抽奖活动！</h1><article>感谢各位读者支持本书。月票抽奖活动开始了。</article>');
     const n = Number(req.url.split('/').at(-1));
+    if (n === state.unavailable) { res.statusCode = 503; return res.end('temporarily unavailable'); }
     res.end(`<h1>${state.headings[n] || state.titles[n] || title(n)}</h1><article>${state.bodies[n] || body(n)}</article>`);
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -143,6 +144,69 @@ test('similar versions, deleted paragraphs and reworded prose are not silently d
     assert.deepEqual(fs.readFileSync(f.file), original);
     assert.equal(fs.existsSync(path.join(f.dir, 'binding.json')), false);
   });
+});
+
+test('conflicts retain later chapters, and a reviewed incoming version resumes without downloading bodies again', async t => {
+  const f = await fixture(t), original = fs.readFileSync(f.file);
+  f.state.count = 7;
+  f.state.titles[6] = title(5); f.state.bodies[6] = body(5) + '经过核对的正确版本。';
+  f.state.titles[7] = title(6); f.state.bodies[7] = body(6);
+  const failed = await f.run();
+  assert.equal(failed.completeAgainstSource, false); assert.deepEqual(fs.readFileSync(f.file), original);
+  assert.equal(failed.failures.length, 1); assert.equal(failed.failures[0].link, f.base + '/new/c/6');
+  assert.ok(f.state.requests.includes('/new/c/7'), 'collect the remaining source even when an earlier version is unresolved');
+  const decision = recordContinuationReview(f.spec, {...f.options, extraction: extractionHash(f.spec)}, {
+    firstLink: f.base + '/new/c/5', secondLink: f.base + '/new/c/6', keepLink: f.base + '/new/c/6', reason: '逐项核对两个完整版本，保留第二个版本。',
+  });
+  f.state.requests = [];
+  const result = await f.run();
+  assert.equal(result.errors, 0, JSON.stringify(result.failures)); assert.equal(result.continuationAdded, 2);
+  assert.deepEqual(f.state.requests, ['/new/book']);
+  const book = readJson(f.file);
+  assert.deepEqual(book.chapters.slice(0, 4), f.book.chapters);
+  assert.equal(book.chapters[4].link, f.base + '/new/c/6'); assert.equal(book.chapters[4].chapter_number, 5);
+  assert.equal(book.chapters[4].sourceChapterNumber, 6); assert.equal(book.chapters[4].content, f.state.bodies[6]);
+  assert.equal(book.chapters[5].title, title(6)); assert.equal(result.resolutions[0].reviewKey, decision.key);
+  assert.equal(readJson(path.join(f.dir, 'binding.json')).value.resolutions[0].kind, 'reviewed-variant');
+  f.state.count = 8; f.state.titles[8] = title(7); f.state.bodies[8] = body(7); f.state.requests = [];
+  assert.equal((await f.run()).continuationAdded, 1); assert.deepEqual(f.state.requests, ['/new/book', '/new/c/8']);
+});
+
+test('a reviewed notice retains the selected complete text; unrelated or changed bodies cannot reuse that decision', async t => {
+  const f = await fixture(t), original = fs.readFileSync(f.file);
+  f.state.count = 7;
+  for (const n of [5, 6]) f.state.titles[n] = '一月月票抽奖活动';
+  f.state.bodies[5] = '本月抽奖一份。'; f.state.bodies[6] = '本月抽奖两份。';
+  f.state.titles[7] = title(5); f.state.bodies[7] = body(5);
+  const failed = await f.run(), options = {...f.options, extraction: extractionHash(f.spec)};
+  const review = {firstLink: f.base + '/new/c/5', secondLink: f.base + '/new/c/6', keepLink: f.base + '/new/c/5', reason: '本次核对保留第一份公告。'};
+  assert.equal(failed.failures.length, 1);
+  assert.throws(() => recordContinuationReview(f.spec, options, {...review, secondLink: f.base + '/new/c/7'}), /不能跨章/);
+  recordContinuationReview(f.spec, options, review);
+  const sourceDir = path.dirname(failed.reportFile), checkpoint = path.join(sourceDir, 'chapters', hash(review.secondLink) + '.json');
+  const saved = readJson(checkpoint), changed = {...saved.chapter, content: '该页后来改成了三份奖品。'};
+  atomicWrite(checkpoint, {...saved, chapter: changed, hash: hash(changed)});
+  const stale = await f.run(); assert.equal(stale.completeAgainstSource, false); assert.deepEqual(fs.readFileSync(f.file), original);
+  atomicWrite(checkpoint, saved);
+  const result = await f.run(); assert.equal(result.errors, 0); assert.equal(result.continuationAdded, 2);
+  assert.equal(readJson(f.file).chapters[4].content, f.state.bodies[5]);
+  assert.equal(result.resolutions[0].retainedLink, review.keepLink);
+  const reviewsFile = path.join(sourceDir, 'reviews.json'), reviews = readJson(reviewsFile);
+  reviews.value.decisions[0].keepLink = review.secondLink; atomicWrite(reviewsFile, reviews);
+  await assert.rejects(f.run(), /损坏/);
+});
+
+test('transport failures stop further requests and preserve completed checkpoints for a later retry', async t => {
+  const f = await fixture(t), original = fs.readFileSync(f.file);
+  f.state.unavailable = 5;
+  const failed = await f.run();
+  assert.equal(failed.completeAgainstSource, false); assert.ok(failed.failures.length);
+  assert.equal(f.state.requests.includes('/new/c/6'), false);
+  assert.deepEqual(fs.readFileSync(f.file), original);
+  f.state.unavailable = null; f.state.requests = [];
+  const result = await f.run();
+  assert.equal(result.continuationAdded, 2);
+  assert.deepEqual(f.state.requests, ['/new/book', '/new/c/5', '/new/c/6']);
 });
 
 test('legacy ordinal gaps and truncated source headings retain old ordinals and append after their maximum', async t => {
