@@ -146,8 +146,8 @@
   .book-intro button { background:none; color:#978369; justify-content:flex-end; width:auto; margin-left:auto; padding:4px 0; font-size:13px; }
   .book-catalog { border-radius:0; box-shadow:none; background:#fffdf9; margin-bottom:10px; }
   .mobile-catalog { width:100%; display:flex; align-items:center; gap:8px; min-height:52px; padding:12px 20px; border-top:1px solid #f0ece5; text-align:left; }
-  .mobile-catalog strong { flex-shrink:0; font-size:18px; font-weight:500; line-height:26px; }
-  .mobile-catalog>span { min-width:0; margin-left:auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right; font-size:13px; color:#8f8b83; line-height:20px; }
+  .mobile-catalog strong { flex-shrink:0; font-size:19px; font-weight:500; line-height:26px; }
+  .mobile-catalog>span { min-width:0; margin-left:auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right; font-size:14px; color:#8f8b83; line-height:20px; }
   .mobile-catalog svg { flex-shrink:0; color:#b5aea3; }
   .book-community { border-radius:0; box-shadow:none; padding:16px 16px 20px; background:#fffdf9; }
   .book-articles>div:first-child { margin-bottom:8px; font-size:13px; }
