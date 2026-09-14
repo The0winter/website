@@ -178,6 +178,33 @@ test('qiufengshuwu canonicalizes details and catalog inputs, follows the real ca
   }
 });
 
+test('youyouxs follows separate catalog and chapter pagination and retains source labels', async () => {
+  const site = loadSites().sites.find(s => s.id === 'youyouxs');
+  assert.equal(site.name, '友友小说'); assert.equal(site.search, undefined);
+  for (const id of ['128', '9401']) {
+    const url = `${site.home}xs_${id}`, spec = specForBook({url, title: `测试${id}`, author: '测试作者'}), requests = [];
+    const catalogUrl = n => `${url}/zjml_${n}`, link = n => `${url}/zj_${n}`;
+    const pages = new Map([
+      [url, `<h1>测试${id}</h1><meta property="og:novel:author" content="测试作者">`],
+      [catalogUrl(1), `<dl><dt><a href="${catalogUrl(2)}">下一页</a></dt><div id="content_1"><a rel="chapter" href="/xs_${id}/zj_11">第706章 第703章 归来</a><a rel="chapter" href="/xs_99999/zj_12">他书</a></div><dt><a href="${catalogUrl(2)}">下一页</a></dt></dl>`],
+      [catalogUrl(2), `<dl><dt><a href="${catalogUrl(1)}">上一页</a></dt><div id="content_1"><a rel="chapter" href="/xs_${id}/zj_12">第707章 请假说明</a></div></dl>`],
+      [link(11), `<h1 class="bookname">第706章 第703章 归来 （1/2）</h1><div id="booktxt"><p>上半页正文。</p></div><div class="bottem1"><a href="${link(11)}?page=2">下一页</a></div><div class="bottem2"><a href="${link(11)}?page=2">下一页</a></div>`],
+      [link(11) + '?page=2', `<h1 class="bookname">第706章 第703章 归来 （2/2）</h1><div id="booktxt"><p>下半页正文。</p><p>友友小说为广大书友们提供好看的网络小说全文免费在线阅读，如果您喜欢本站，请分享给更多的书友们！</p><p>如果您觉得《测试${id}》小说很精彩的话，请粘贴以下网址分享给您的好友，谢谢支持！</p><p>（ 本书网址：https://youyouxs.com/xs_${id} ）</p></div><div class="bottem1"><a href="${link(12)}">下一章</a></div>`],
+      [link(12), '<h1 class="bookname">第707章 请假说明 </h1><div id="booktxt"><p>今天请假，明天恢复更新。</p></div>']
+    ]);
+    const client = {assertUrl(value) { assert.equal(new URL(value).hostname, 'youyouxs.com'); return value; }, async get(value) { requests.push(value); assert.ok(pages.has(value), value); return {url: value, body: Buffer.from(pages.get(value)), contentType: 'text/html; charset=utf-8'}; }};
+    const {catalog} = await getCatalog(spec, client);
+    assert.deepEqual(catalog.map(c => [c.title, c.sourceCatalogTitle]), [['第703章 归来', '第706章 第703章 归来'], ['请假说明', '第707章 请假说明']]);
+    const chapter = await getChapter(spec, catalog[0], new Set(catalog.map(c => c.link)), client);
+    assert.equal(chapter.title, '第703章 归来'); assert.equal(chapter.content, '上半页正文。\n下半页正文。');
+    assert.equal(chapter.sourceCatalogTitle, '第706章 第703章 归来');
+    assert.deepEqual(requests, [url, catalogUrl(1), catalogUrl(2), link(11), link(11) + '?page=2']);
+    const notice = await getChapter(spec, catalog[1], new Set(catalog.map(c => c.link)), client);
+    assert.equal(notice.title, '请假说明'); assert.equal(notice.content, '今天请假，明天恢复更新。');
+    assert.throws(() => specForBook({url: link(11), title: '测试', author: '作者'}), /不是章节/);
+  }
+});
+
 test('69shuba uses book-specific full catalogs, source order and clean single-chapter text', async t => {
   const site = loadSites().sites.find(s => s.id === '69shuba');
   const stateDir = temp(t);

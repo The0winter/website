@@ -142,12 +142,14 @@ export async function getCatalog(spec, client) {
       const link = client.assertUrl(httpUrl(href, page.url));
       if (seenLinks.has(link)) throw Error(`目录链接重复：${link}`);
       seenLinks.add(link);
-      const title = (config.titleAttribute ? a.attr(config.titleAttribute) : a.text())?.trim();
-      if (!title || title.length > 200) throw Error('目录标题缺失或异常');
+      const sourceTitle = (config.titleAttribute ? a.attr(config.titleAttribute) : a.text())?.trim();
+      if (!sourceTitle || sourceTitle.length > 200) throw Error('目录标题缺失或异常');
+      const title = config.titlePattern ? new RegExp(config.titlePattern, 'u').exec(sourceTitle)?.[1]?.trim() : sourceTitle;
+      if (!title) throw Error(`目录标题提取规则不匹配：${sourceTitle}`);
       const orderNode = config.orderAncestor ? a.closest(config.orderAncestor) : a;
       const sourceOrder = config.orderAttribute ? Number(orderNode.attr(config.orderAttribute)) : catalog.length + 1;
       if (!Number.isSafeInteger(sourceOrder) || sourceOrder < 1) throw Error('来源目录序号缺失或无效');
-      catalog.push({title, link, sourceOrder});
+      catalog.push({title, link, sourceOrder, ...(title !== sourceTitle ? {sourceCatalogTitle: sourceTitle} : {})});
       if (catalog.length > 20000) throw Error('目录超过20000项上限');
     }
     url = nextPage(doc, config.next, page.url, client);

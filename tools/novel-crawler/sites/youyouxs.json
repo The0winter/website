@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "id": "youyouxs",
+  "name": "友友小说",
+  "home": "https://youyouxs.com/",
+  "hosts": ["youyouxs.com"],
+  "book": {
+    "urlPattern": "^/xs_(?<bookId>[0-9]+)$",
+    "metadata": {
+      "title": "h1",
+      "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"},
+      "status": {"selector": "meta[property='og:novel:status']", "attribute": "content"}
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-youyouxs-v3",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "https://youyouxs.com/xs_${bookId}",
+    "allowedHosts": ["youyouxs.com"],
+    "browser": {"headless": true},
+    "delayMs": 1500,
+    "retries": 1,
+    "timeoutMs": 20000,
+    "metadata": {
+      "title": "h1",
+      "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"},
+      "status": {"selector": "meta[property='og:novel:status']", "attribute": "content"}
+    },
+    "catalog": {
+      "url": "https://youyouxs.com/xs_${bookId}/zjml_1",
+      "links": "#content_1 a[rel='chapter'][href^='/xs_${bookId}/zj_']",
+      "titlePattern": "^第[0-9]+章\\s+(.+)$",
+      "next": "dt:first a:contains('下一页')"
+    },
+    "chapter": {
+      "title": {"selector": "h1.bookname", "pattern": "^第[0-9]+章\\s+([\\s\\S]+?)(?:\\s*（[0-9]+/[0-9]+）)?$"},
+      "content": "#booktxt",
+      "next": ".bottem1 a:contains('下一页')",
+      "removeText": [
+        "(?:^|\\n)[\\t \\u3000]*友友小说为广大书友们提供好看的网络小说全文免费在线阅读，如果您喜欢本站，请分享给更多的书友们！[\\t \\u3000]*(?=\\n|$)",
+        "(?:^|\\n)[\\t \\u3000]*如果您觉得《[^\\n]{1,200}》小说很精彩的话，请粘贴以下网址分享给您的好友，谢谢支持！[\\t \\u3000]*(?=\\n|$)",
+        "(?:^|\\n)[\\t \\u3000]*（[\\t ]*本书网址：https://youyouxs\\.com/xs_[0-9]+[\\t ]*）[\\t \\u3000]*(?=\\n|$)"
+      ]
+    }
+  }
+}

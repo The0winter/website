@@ -49,6 +49,22 @@ function specFor(base) {
 }
 const prose = label => `${label}。山间的路从村庄一直通往远方，读者可以从这里出发。`;
 
+test('catalog title extraction preserves source labels, notices and order; unmatched rules block export', async t => {
+  const f = await fixture(t, (req, res) => res.end(req.url === '/book' ? heading + '<div id="catalog"><a href="/a">第901章 第703章 归来</a><a href="/b">第902章 请假说明</a></div>' : req.url === '/a' ? `<h1>第703章 归来</h1><div id="content">${prose('归来')}</div>` : '<h1>请假说明</h1><div id="content">今天出门办事，更新暂缓。</div>'));
+  const spec = {...specFor(f.base), catalog: {links: '#catalog a', titlePattern: '^第[0-9]+章\\s+(.+)$'}};
+  const result = await acquire(spec, f.options);
+  assert.equal(result.completeAgainstSource, true);
+  const book = readJson(result.exportFile);
+  assert.deepEqual(book.chapters.map(c => [c.title, c.sourceCatalogTitle, c.chapter_number]), [['第703章 归来', '第901章 第703章 归来', 1], ['请假说明', '第902章 请假说明', 2]]);
+  for (const titlePattern of ['^missing (.+)$', '^第[0-9]+章']) {
+    const failed = await acquire({...spec, variant: titlePattern, catalog: {...spec.catalog, titlePattern}}, f.options);
+    assert.equal(failed.completeAgainstSource, false);
+    assert.equal(failed.exportFile, null);
+    assert.match(failed.failures[0].error, /目录标题提取规则不匹配/);
+  }
+  for (const titlePattern of ['', '(', '(.*)', 123]) assert.throws(() => validateSpec({...spec, catalog: {...spec.catalog, titlePattern}}));
+});
+
 test('catalog entry links must be unique, remain allowed and cannot hide behind incompatible modes', async t => {
   let catalogLinks = '<a class="full" href="/catalog">完整目录</a>';
   const f = await fixture(t, (req, res) => res.end(req.url === '/book' ? heading + catalogLinks : req.url === '/catalog' ? '<div id="catalog"><a href="/a">第一章</a></div>' : '<h1>第一章</h1><div id="content">完整的合成正文。</div>'));
