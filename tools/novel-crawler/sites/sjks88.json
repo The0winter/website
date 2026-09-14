@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "sjks88",
+  "name": "手机看书网",
+  "home": "https://www.sjks88.com/",
+  "hosts": ["www.sjks88.com"],
+  "book": {
+    "urlPattern": "^/(?<category>[a-z]+)/(?<bookId>[0-9]+)\\.html$",
+    "metadata": {
+      "title": {"selector": ".box-artic > h1", "pattern": "^(.+?)(?:\\([0-9]+-[0-9]+\\))?$"},
+      "author": {"selector": ".box-artic > .autor2:contains('作者：')", "pattern": "^作者[：:]\\s*(.+)$"},
+      "description": {"selector": "meta[name='description']", "attribute": "content"}
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-sjks88-v1",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": ["www.sjks88.com"],
+    "delayMs": 1200,
+    "timeoutMs": 25000,
+    "retries": 1,
+    "browser": {"headless": true},
+    "metadata": {
+      "title": {"selector": ".box-artic > h1", "pattern": "^(.+?)(?:\\([0-9]+-[0-9]+\\))?$"},
+      "author": {"selector": ".box-artic > .autor2:contains('作者：')", "pattern": "^作者[：:]\\s*(.+)$"},
+      "description": {"selector": "meta[name='description']", "attribute": "content"}
+    },
+    "catalog": {"links": ".list > li > a[href^='/${category}/${bookId}/']"},
+    "chapter": {
+      "title": {"selector": ".box-artic > h1", "pattern": "(第[0-9]+节)$"},
+      "content": ".box-artic > .content"
+    }
+  }
+}
