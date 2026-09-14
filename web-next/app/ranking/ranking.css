@@ -9,7 +9,7 @@
 .ranking-title>span { color:var(--rank-muted); font-size:12px; letter-spacing:1px; font-weight:400; }
 .ranking-categories { display:flex; align-items:center; gap:8px; overflow-x:auto; padding:3px 0; scrollbar-width:none; }
 .ranking-categories::-webkit-scrollbar { display:none; }
-.ranking-categories button { position:relative; flex-shrink:0; min-width:66px; min-height:42px; padding:0 14px; border-radius:9px; color:#807367; font-size:14px; text-align:left; transition:color .15s,background .15s; }
+.ranking-categories button { position:relative; flex-shrink:0; min-width:66px; min-height:42px; padding:0 14px; border-radius:9px; color:#807367; font-size:14px; text-align:center; transition:color .15s,background .15s; }
 .ranking-categories button:not([aria-pressed=true]):hover { background:var(--rank-soft); }
 .ranking-categories [aria-pressed=true] { background:#3c3530; color:#fff8ee; font-weight:600; }
 .ranking-layout { display:grid; grid-template-columns:132px minmax(0,1fr); align-items:stretch; gap:22px; }
@@ -71,7 +71,7 @@
   .ranking-categories button { min-width:54px; min-height:40px; padding:0 4px; border-radius:8px; font-size:13px; }
   .ranking-layout { grid-template-columns:54px minmax(0,1fr); gap:6px; }
   .ranking-nav { gap:8px; }
-  .ranking-nav button { position:relative; min-height:46px; justify-content:flex-start; padding:0 4px; border-radius:7px; }
+  .ranking-nav button { position:relative; min-height:46px; justify-content:center; padding:0 4px; border-radius:7px; }
   .ranking-nav button>span { font-size:15px; letter-spacing:0; }
   .ranking-nav button svg { display:none; }
   .ranking-content { padding:0 10px 5px; border-radius:13px; }
