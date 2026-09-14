@@ -22,7 +22,7 @@ for (const width of [320, 390, 768, 1440]) test(`ranking navigation and readable
   await expect(page.locator('.ranking-row')).toHaveCount(8);
   await expect(page.getByRole('navigation', {name: '榜单切换'}).getByRole('button')).toHaveText(['日榜', '周榜', '月榜', '总榜', '浏览榜']);
   await expect(page.locator('.ranking-book-info h2').first()).toHaveText('夜无疆');
-  await expect(page.locator('.ranking-rating').first()).toHaveText('9.6 分');
+  await expect(page.locator('.ranking-rating').first()).toHaveText('9.6');
   for (const [name, sort] of [['周榜', 'rank_week'], ['月榜', 'rank_month'], ['总榜', 'rank_total'], ['浏览榜', 'views'], ['日榜', 'rank_day']]) {
     await page.getByRole('button', {name, exact: true}).click();
     await expect(page.getByRole('region', {name: `全部${name}`, exact: true})).toBeVisible();

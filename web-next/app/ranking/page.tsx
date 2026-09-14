@@ -6,7 +6,7 @@ import Link from '@/components/PrefetchLink';
 import {ArrowLeft, BookOpen, ChevronRight, Star} from 'lucide-react';
 import BookCover from '@/components/BookCover';
 import BookLink from '@/components/BookLink';
-import {ratingLabel} from '@/lib/rating';
+import {formatRating, ratingLabel} from '@/lib/rating';
 import {currentRankingVisit, selectRankingView, subscribeBookNavigation} from '@/lib/book-navigation';
 import {getRankingSnapshot, loadRanking, rankingScroll, rememberRankingScroll, serverRankingSnapshot, subscribeRanking} from '@/lib/ranking-cache';
 import './ranking.css';
@@ -115,7 +115,7 @@ export default function RankingPage() {
                     <div className="ranking-book-heading">
                       <h2>{book.title}</h2>
                       <span className="ranking-rating" data-unrated={!book.rating} aria-label={`评分：${ratingLabel(book.rating)}`}>
-                        {book.rating ? <><Star size={13} aria-hidden="true"/><strong>{ratingLabel(book.rating)}</strong></> : '暂无评分'}
+                        {book.rating ? <><Star size={13} aria-hidden="true"/><strong>{formatRating(book.rating)}</strong></> : '暂无评分'}
                       </span>
                     </div>
                     <p className="ranking-book-meta"><span>{book.author || book.profiles?.username || '佚名'}</span></p>
