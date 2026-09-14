@@ -17,7 +17,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "csrf-csrf": "^4.0.3",
-    "diff": "8.0.2",
+    "diff": "8.0.4",
     "dotenv": "^16.4.1",
     "express": "^4.22.2",
     "express-mongo-sanitize": "^2.2.0",
