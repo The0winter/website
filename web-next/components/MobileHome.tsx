@@ -82,27 +82,29 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
   }
   function back(){if(navigateBookLink('/'))return;if(history.state?.homeBrowse)router.back();else router.replace('/');}
   return <div ref={swipeRoot} className={`mobile-home md:hidden${mode==='home'?'':' mobile-home-browse'}`} data-home-href={'/'+(query?`?${query}`:'')} aria-busy={loading}>
-    <HomeSearchHeader/>
     {mode==='home'?<>
+      <HomeSearchHeader/>
       {hero&&<BookLink href={`/book/${hero.id}`} className="mh-banner"><div><span className="mh-kicker">九天精选 · 好书推荐</span><h2>{hero.title}</h2><span className="mh-banner-sub">{hero.author||'九天小说'} <ChevronRight size={13}/></span></div><Cover book={hero} priority/><div className="mh-banner-seal" aria-hidden="true">阅</div></BookLink>}
       <MobileHomeShortcuts onCategory={()=>browse('category')} onNew={()=>browse('new')}/>
       <MobileHomeSection title="热门精选"><BookRows books={featured.slice(0,3)}/></MobileHomeSection>
       <MobileHomeSection title="精选推荐"><BookRows books={recommended.slice(0,3)}/></MobileHomeSection>
       <MobileHomeSection title="新书上架" onMore={()=>browse('new')}><BookRows books={newBooks.slice(0,3)}/></MobileHomeSection>
-    </>:<section className="mh-section mh-browse">
-      <header className="mh-browse-header"><button type="button" className="mh-back" onClick={back} aria-label="返回精选"><ArrowLeft size={20} aria-hidden="true"/></button><h2>{mode==='new'?'新书上架':'分类找书'}</h2></header>
+    </>:<>
+      <header className="mh-browse-header"><div className="mh-browse-titlebar"><button type="button" className="mh-back" onClick={back} aria-label="返回精选"><ArrowLeft size={21} aria-hidden="true"/></button><h2>{mode==='new'?'新书上架':'分类找书'}</h2></div></header>
+      <section className="mh-section mh-browse">
       {mode==='category'&&<>
         <div className="mh-categories" role="group" aria-label="小说分类">
           {categories.map(({name,icon:Icon})=><button type="button" key={name} aria-pressed={category===name} onClick={()=>browse('category',1,name,true)}>
-            <Icon className="mh-category-icon" size={22} aria-hidden="true"/><span>{name}</span>
-            {category===name&&<Check className="mh-category-check" size={12} aria-hidden="true"/>}
+            <Icon className="mh-category-icon" size={18} aria-hidden="true"/><span>{name}</span>
+            {category===name&&<Check className="mh-category-check" size={10} aria-hidden="true"/>}
           </button>)}
         </div>
         <div className="mh-browse-summary"><h3>{category==='全部'?'全部作品':`${category}作品`}</h3><span>{cached?`共 ${total.toLocaleString('zh-CN')} 本 · `:''}按热度排序</span></div>
       </>}
       {loading?<p className="mh-empty" role="status"><LoadingText>正在加载</LoadingText></p>:error?<p role="alert" className="mh-empty">{error} <button onClick={()=>setRetry(n=>n+1)}>重试</button></p>:<BookRows books={rows}/>}
       <nav className="mh-pagination" aria-label="书籍分页"><button disabled={loading||page===1} onClick={()=>browse(mode,page-1,category,true)}>上一页</button><span>第 {page} 页</span><button disabled={loading||page*20>=total} onClick={()=>browse(mode,page+1,category,true)}>下一页</button></nav>
-    </section>}
+      </section>
+    </>}
     {mode==='home'&&<MobileBottomNav/>}
   </div>;
 }
