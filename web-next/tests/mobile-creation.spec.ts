@@ -85,22 +85,19 @@ for (const width of [320, 390]) test(`creator actions open the matching creation
   await page.screenshot({ path: info.outputPath(`create-${width}.png`) });
   await expect(page.locator('.mw-view-header img')).toHaveAttribute('src',/icon\.png/);
   await expect(page.locator('.mw-view-header')).not.toContainText('九天 · 创作者空间');
-  await expect(page.locator('.manuscript-modes button')).toHaveCount(2);
-  await page.getByRole('button',{name:'格式示例',exact:true}).click();
-  await expect(page.locator('.manuscript-guide p')).toHaveText('卷名或章名请单独成行，便于系统识别整理，中文或数字均可');
-  await page.locator('.manuscript-guide').scrollIntoViewIfNeeded();
-  await page.screenshot({path:info.outputPath(`guide-${width}.png`)});
+  await expect(page.locator('.manuscript-import')).toHaveCount(0);
+  await expect(page.locator('.work-create-footer button')).toHaveText('创建');
   await page.getByRole('button', { name: '关闭新建作品', exact: true }).click();
   await expect(page.locator('.mw-view')).toHaveCount(0);
   await expect(modal(page)).toBeVisible();
-  await modal(page).getByRole('link', { name: '继续创作', exact: true }).click();
+  await modal(page).getByRole('link', { name: '创作', exact: true }).click();
   await page.getByRole('button',{name:'新建章节',exact:true}).click();
   await expect(page.getByPlaceholder('请输入章节标题')).toBeVisible();
   await expect(page.getByRole('button', { name: '存草稿', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath(`editor-${width}.png`) });
   await page.goBack(); await expect(page.locator('.mw-view')).toHaveCount(0); await expect(modal(page)).toBeVisible();
-  await modal(page).getByRole('link', { name: '继续创作', exact: true }).click();
+  await modal(page).getByRole('link', { name: '创作', exact: true }).click();
   await expect(page.getByText('目录与设置', { exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath(`manager-${width}.png`) });
   await page.getByRole('button', { name: '继续草稿', exact: true }).click();
@@ -296,7 +293,7 @@ test('slow management data keeps its loading panel visible and Back cancels an u
 
 test('new work opened from management returns to the same management layer before the center', async ({ page }) => {
   await page.goto(base); await launch(page).click();
-  await modal(page).getByRole('link', { name: '继续创作', exact:true }).click();
+  await modal(page).getByRole('link', { name: '创作', exact:true }).click();
   await expect(page.locator('.mw-view-panel')).toHaveAttribute('data-ready', 'true');
   await page.getByRole('button',{name:'关闭作品管理',exact:true}).click();
   const id = await page.evaluate(() => history.state.mobileWriterViews[0].id);
@@ -317,18 +314,14 @@ test('creating a work closes the sheet directly and refreshes the retained cente
   await page.route('**/api/manuscripts/*', async route => {
     if (route.request().url().endsWith('/parse')) return route.fulfill({json:{chapters:[{title:'第一章',content:'新的第一章正文。',sourceNumber:null,volumeTitle:'第一卷',volumeNumber:1}],warnings:[]}});
     if (route.request().method() !== 'PUT') return route.continue();
-    created = true; await route.fulfill({ json: {status:'published',bookId:newBook.id,revision:1} });
+    created = true; await route.fulfill({ json: {status:'draft',bookId:newBook.id,revision:1} });
   });
   await page.route('**/api/writer/works?**', route => route.fulfill({ json: created ? [newBook, book] : [book] }));
   await page.goto(base); await launch(page).click();
   await modal(page).getByRole('link', { name: /新建作品/ }).click();
   await page.getByLabel('书名', {exact:true}).fill(newBook.title);
   await page.getByLabel('简介',{exact:true}).fill('新的故事简介');
-  await page.getByRole('button', {name:'直接码字',exact:true}).click();
-  await page.getByLabel('在线章节正文').fill('新的第一章正文。');
-  await page.getByRole('button',{name:'预览章节',exact:true}).click();
-  await page.getByRole('checkbox').check();
-  await page.getByRole('button',{name:'提交作品',exact:true}).click();
+  await page.getByRole('button',{name:'创建',exact:true}).click();
   await expect(page.locator('.mw-view')).toHaveCount(0);
   await expect(modal(page).getByRole('heading', { name: newBook.title })).toBeVisible();
 });
@@ -356,3 +349,15 @@ test('unsaved manuscript survives cancelled native Back and closes after one con
   await expect(page.locator('.mw-view')).toHaveCount(0);
   expect(questions).toBe(2);
 });
+
+for (const width of [320,390]) test(`saved manuscript still offers import guidance at ${width}px`, async ({page},info) => {
+  await page.setViewportSize({width,height:844});
+  const key='saved-manuscript-key';
+  await page.route('**/api/manuscripts/'+key,route=>route.fulfill({json:{title:'已有作品',description:'已创建的故事',cover_image:'',category:'未分类',filename:'',chapters:[],revision:1}}));
+  await page.goto(base+'/writer?action=new&draft='+key);
+  await expect(page.locator('.manuscript-modes button')).toHaveCount(2);
+  await page.getByRole('button',{name:'格式示例',exact:true}).click();
+  await expect(page.locator('.manuscript-guide p')).toHaveText('卷名或章名请单独成行，便于系统识别整理，中文或数字均可');
+  await page.locator('.manuscript-guide').scrollIntoViewIfNeeded();
+  await page.screenshot({path:info.outputPath(`guide-${width}.png`)});
+ });

@@ -1,6 +1,7 @@
 .writer-work-actions { display:flex; align-items:start; gap:12px; margin-top:18px; }
-.writer-continue { display:inline-flex; align-items:center; justify-content:center; padding:10px 20px; min-height:44px; background:#b8424c; color:#fffaf6; border-radius:9px; font-size:15px; cursor:pointer; }
-.writer-work-actions .work-management { min-width:110px; }
+.writer-continue { display:inline-flex; align-items:center; justify-content:center; padding:10px 30px; min-width:136px; min-height:50px; background:#b8424c; color:#fffaf6; border-radius:12px; font-size:20px; font-weight:700; cursor:pointer; }
+.writer-work-actions .work-management summary { width:50px; height:50px; padding:0; border-radius:12px; }
+.writer-work-actions .work-management-menu { left:0; right:auto; }
 .writer-works-shell { overflow:visible; }
 .writer-works-heading { border-radius:16px 16px 0 0; }
 @media(min-width:768px) {
@@ -11,10 +12,11 @@
   .writer-page .text-lg { font-size:21px; }
   .writer-page .text-xl { font-size:24px; }
   .writer-page .writer-main { padding:40px; }
-  .writer-page .writer-work { padding:28px; }
+  .writer-page .writer-work { padding:32px; align-items:center; }
+  .writer-page .writer-work-cover { width:120px; height:160px; box-shadow:0 10px 22px #49302020; }
   .writer-page .writer-works-heading { padding:24px 28px; }
   .writer-page :is(input,textarea,select) { font-size:17px; }
   .writer-page .writer-editor textarea { font-size:19px; line-height:2; }
   .writer-work-actions { margin-top:22px; }
-  .writer-continue { min-height:46px; font-size:16px; }
+  .writer-continue { min-height:50px; font-size:20px; }
 }

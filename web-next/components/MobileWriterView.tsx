@@ -54,7 +54,8 @@ export default function MobileWriterView({ view, covered, refreshVersion, onBack
   const closeNew = () => {
     const form = panel.current?.querySelector<HTMLElement>('.manuscript-form');
     if (form?.dataset.busy === 'true') return;
-    if (form?.dataset.dirty === 'true' && !confirm('还有未保存的内容，确定关闭？可以先保存草稿，之后继续整理。')) return;
+    const warning = form?.classList.contains('work-create-form') ? '作品还未创建，确定关闭？已填写的内容不会保存。' : '还有未保存的内容，确定关闭？可以先保存草稿，之后继续整理。';
+    if (form?.dataset.dirty === 'true' && !confirm(warning)) return;
     if (form) form.dataset.dirty = 'false';
     onBack();
   };

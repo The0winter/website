@@ -1,6 +1,7 @@
 'use client';
 import BookCover from '@/components/BookCover';
 import ManuscriptCreator from './ManuscriptCreator';
+import WorkCreator from './WorkCreator';
 import WorkActions from './WorkActions';
 import WriterStatistics from './WriterStatistics';
 import './writer-desktop.css';
@@ -496,12 +497,19 @@ const openBookManager = (book: Book) => {
     if (!authLoading && user && (standaloneCreate || !loading)) onReady?.();
   }, [authLoading, user, standaloneCreate, loading, onReady]);
 
-  const creator = <ManuscriptCreator key={bookCreationKey} draftKey={bookCreationKey} resume={resumingManuscript} embedded={embedded && standaloneCreate} fullPage={!embedded} onClose={closeCreate} onComplete={published => {
+  const creator = resumingManuscript ? <ManuscriptCreator key={bookCreationKey} draftKey={bookCreationKey} resume embedded={embedded && standaloneCreate} fullPage={!embedded} onClose={closeCreate} onComplete={published => {
           onWorksChanged?.();
           if(standaloneCreate){onExit?.();return;}
           closeCreate();setResumingManuscript(false);
           setToast({msg:published?'作品与章节已提交':'作品已保存为私密，可在我的作品继续创作',type:'success'});
           void fetchMyData();
+        }}/> : <WorkCreator key={bookCreationKey} draftKey={bookCreationKey} embedded={embedded && standaloneCreate} onClose={closeCreate} onComplete={() => {
+          onWorksChanged?.();
+          if (standaloneCreate) {onExit?.(); return;}
+          closeCreate();
+          setToast({msg:'作品已创建', type:'success'});
+          if (worksPage !== 1) setWorksPage(1);
+          else void fetchMyData();
         }}/>;
   if (user && !embedded && showCreateBookModal) return creator;
 
@@ -592,7 +600,7 @@ const openBookManager = (book: Book) => {
                     ) : (
                         myBooks.map((book) => (
                             <div key={book.id} className="writer-work p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
-                                <div className="w-20 aspect-[3/4] h-auto md:w-24 md:aspect-[3/4] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
+                                <div className="writer-work-cover w-20 aspect-[3/4] h-auto md:w-24 md:aspect-[3/4] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
                                     {book.cover_image ? <BookCover src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
                                 </div>
                                 <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
@@ -604,8 +612,8 @@ const openBookManager = (book: Book) => {
                                         <p className="text-xs md:text-sm text-gray-500 mt-1 line-clamp-2">{book.description || '暂无简介'}</p>
                                     </div>
                                     <div className="writer-work-actions">
-                                        <button onClick={() => { if (book.manuscriptKey) {setBookCreationKey(book.manuscriptKey); setResumingManuscript(true); setShowCreateBookModal(true);} else openBookManager(book); }} className="writer-continue">继续创作</button>
                                         <WorkActions book={book} onChanged={() => {onWorksChanged?.(); if(myBooks.length === 1 && worksPage > 1) setWorksPage(worksPage - 1); else void fetchMyData();}}/>
+                                        <button onClick={() => { if (book.manuscriptKey) {setBookCreationKey(book.manuscriptKey); setResumingManuscript(true); setShowCreateBookModal(true);} else openBookManager(book); }} className="writer-continue">创作</button>
                                     </div>
                                 </div>
                             </div>

@@ -66,7 +66,8 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
       const viewId = form?.closest<HTMLElement>('.mw-view')?.dataset.viewId;
       const removing = history.state?.mobileWriter !== marker || !historyWriterViews().some(view => view.id === viewId);
       if (form && removing) {
-        if (form.dataset.busy === 'true' || (form.dataset.dirty === 'true' && !confirm('还有未保存的内容，确定关闭？可以先保存草稿，之后继续整理。'))) {
+        const warning = form.classList.contains('work-create-form') ? '作品还未创建，确定关闭？已填写的内容不会保存。' : '还有未保存的内容，确定关闭？可以先保存草稿，之后继续整理。';
+        if (form.dataset.busy === 'true' || (form.dataset.dirty === 'true' && !confirm(warning))) {
           history.forward(); return;
         }
         form.dataset.dirty = 'false';
@@ -151,6 +152,11 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
     });
   };
   const worksChanged = useCallback(() => setRefreshVersion(value => value + 1), []);
+  const viewWorksChanged = useCallback(() => {
+    setPage(1);
+    dialog.current?.querySelector('.mw-scroll')?.scrollTo({top:0});
+    worksChanged();
+  }, [worksChanged]);
 
   const writerHref = (book: Book) => book.manuscriptKey ? `/writer?action=new&draft=${encodeURIComponent(book.manuscriptKey)}&from=creation` : `/writer?book=${encodeURIComponent(book.id)}&action=manage&page=${page}&from=creation`;
 
@@ -162,12 +168,19 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
       {authLoading ? <p className="mw-status" role="status"><LoadingLogo size={28}/><LoadingText>正在确认登录状态</LoadingText></p> : !user ? <section className="mw-guest"><FilePenLine size={32}/><h3>你的故事，值得被读到</h3><p>登录后创建作品、保存草稿，<br/>也可以接着写上次未完成的章节。</p><Link prefetchMode="intent" href="/login" className="mw-primary" onNavigate={() => navigate.current()}>登录并开始创作<ArrowRight size={17}/></Link></section> : <>
         <div className="mw-actions"><Link prefetchMode="intent" href="/writer?action=new&from=creation" className="mw-action mw-action-primary" onNavigate={event => { event.preventDefault(); openView("/writer?action=new&from=creation"); }}><Plus size={23}/><strong>新建作品</strong><span>开启一个新故事</span></Link><Link prefetchMode="intent" href="/writer?action=statistics&from=creation" className="mw-action" onNavigate={event => { event.preventDefault(); openView("/writer?action=statistics&from=creation"); }}><BarChart3 size={23}/><strong>作品数据</strong><span>浏览趋势 · 阅读统计</span></Link></div>
         <section className="mw-works" aria-label="我的作品"><div className="mw-section-heading"><h3>我的作品</h3></div>
-          {loading ? <p className="mw-status" role="status"><LoadingLogo size={28}/><LoadingText>正在翻开你的作品</LoadingText></p> : error ? <div className="mw-status" role="alert"><p>{error}</p><button type="button" onClick={() => setRetry(value => value + 1)}>重新加载</button></div> : books.length ? <div className="mw-book-list">{books.map(book => <article className="mw-book" key={book.id}><div className="mw-cover">{book.cover_image ? <BookCover src={book.cover_image} alt={`${book.title}封面`} sizes="64px"/> : <BookOpen size={26}/>}</div><div className="mw-book-info"><h4>{book.title}</h4><p>{book.category || '未分类'}</p>{book.visibility === 'private' ? <span className="work-private"><LockKeyhole size={12}/>私密</span> : <p>{['completed', '完结'].includes(book.status || '') ? '已完结' : '连载中'}</p>}</div><div className="mw-book-actions"><Link prefetchMode="intent" href={writerHref(book)} onNavigate={event => { event.preventDefault(); openView(writerHref(book)); }}>继续创作</Link><WorkActions book={book} onChanged={() => {if (books.length === 1 && page > 1) setPage(page - 1); worksChanged();}}/></div></article>)}</div> : <div className="mw-empty"><FilePenLine size={34}/><h4>{page === 1 ? '第一部作品，从这里开始' : '这一页还没有作品'}</h4><p>{page === 1 ? '先给故事起个名字，再慢慢写下它的世界。' : '返回上一页，继续你的故事。'}</p></div>}
+          {loading ? <p className="mw-status" role="status"><LoadingLogo size={28}/><LoadingText>正在翻开你的作品</LoadingText></p> : error ? <div className="mw-status" role="alert"><p>{error}</p><button type="button" onClick={() => setRetry(value => value + 1)}>重新加载</button></div> : books.length ? <div className="mw-book-list">{books.map(book => <article className="mw-book" key={book.id}>
+            <div className="mw-cover">{book.cover_image ? <BookCover src={book.cover_image} alt={`${book.title}封面`} sizes="120px"/> : <BookOpen size={40}/>}</div>
+            <div className="mw-book-info"><h4>{book.title}</h4>{book.visibility === 'private' ? <span className="work-private"><LockKeyhole size={12}/>私密</span> : <p>{['completed', '完结'].includes(book.status || '') ? '已完结' : '连载中'}</p>}</div>
+            <div className="mw-book-actions">
+              <WorkActions book={book} onChanged={() => {if (books.length === 1 && page > 1) setPage(page - 1); worksChanged();}}/>
+              <Link prefetchMode="intent" href={writerHref(book)} onNavigate={event => { event.preventDefault(); openView(writerHref(book)); }}>创作</Link>
+            </div>
+          </article>)}</div> : <div className="mw-empty"><FilePenLine size={34}/><h4>{page === 1 ? '第一部作品，从这里开始' : '这一页还没有作品'}</h4><p>{page === 1 ? '先给故事起个名字，再慢慢写下它的世界。' : '返回上一页，继续你的故事。'}</p></div>}
           {(page > 1 || books.length === 20) && <nav className="mw-pagination" aria-label="作品分页"><button type="button" disabled={loading || page === 1} onClick={() => setPage(value => value - 1)}><ChevronLeft size={17}/>上一页</button><span>{page}</span><button type="button" disabled={loading || Boolean(error) || books.length < 20} onClick={() => setPage(value => value + 1)}>下一页<ChevronRight size={17}/></button></nav>}
         </section>
         <p className="mw-note">草稿仅自己可见，准备好后再发布。</p>
       </>}
     </div>
-    {views.map((view, index) => <MobileWriterView key={view.id} view={view} covered={index < views.length - 1} refreshVersion={refreshVersion} onBack={() => dismiss.current()} onExited={exitView} onOpenNew={() => openView('/writer?action=new&from=creation')} onChanged={worksChanged}/>)}
+    {views.map((view, index) => <MobileWriterView key={view.id} view={view} covered={index < views.length - 1} refreshVersion={refreshVersion} onBack={() => dismiss.current()} onExited={exitView} onOpenNew={() => openView('/writer?action=new&from=creation')} onChanged={viewWorksChanged}/>)}
   </dialog>, document.body);
 }

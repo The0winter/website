@@ -619,7 +619,7 @@
   max-height: none;
   overflow: visible;
 }
-.mw-view[data-kind="new"]:has(.manuscript-form) .mw-view-panel {
+.mw-view[data-kind="new"]:has(.manuscript-form:not(.work-create-form)) .mw-view-panel {
   height: min(880px, calc(100dvh - env(safe-area-inset-top) - 12px));
   max-width: 760px;
 }

@@ -1,7 +1,13 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import path from "node:path";
 
 const base = process.env.MANUSCRIPT_BASE_URL || "http://127.0.0.1:3107";
+async function createAndOpen(page: Page) {
+  const title = await page.getByLabel("书名", {exact:true}).inputValue();
+  await page.getByRole("button", {name:"创建",exact:true}).click();
+  await page.locator('.writer-work').filter({hasText:title}).getByRole('button',{name:'创作',exact:true}).click();
+  await expect(page.getByLabel("书名", {exact:true})).toHaveValue(title);
+}
 test.beforeEach(async ({ page }) => {
   const csrf = await (await page.request.get(base + "/api/auth/csrf")).json();
   const login = await page.request.post(base + "/api/auth/signin", {
@@ -21,6 +27,7 @@ for (const width of [320, 390, 1440])
     await page
       .getByLabel("简介", { exact: true })
       .fill("一封信，让两个陌生人相遇。");
+    await createAndOpen(page);
     await expect(page.getByText("非必须", { exact: true })).toBeVisible();
     await expect(
       page.getByRole("button", { name: "直接粘贴", exact: true }),
@@ -110,7 +117,7 @@ for (const width of [320, 390, 1440])
     const row = page
       .locator(".writer-work")
       .filter({ hasText: title });
-    await row.getByRole("button", { name: "继续创作" }).click();
+    await row.getByRole("button", { name: "创作" }).click();
     await page.getByRole("combobox", { name: "选择章节" }).selectOption("1");
     await expect(page.locator(".manuscript-preview article")).toContainText(
       "修正后保留下来的第二章正文。",
@@ -141,10 +148,11 @@ test("unified writing and paste warnings, invalid metadata and recovery after fa
   await page.goto(base + "/writer?action=new");
   await page.getByLabel("书名", { exact: true }).fill("😀".repeat(16));
   await expect(
-    page.getByRole("button", { name: "保存草稿", exact: true }),
+    page.getByRole("button", { name: "创建", exact: true }),
   ).toBeDisabled();
   await page.getByLabel("书名", { exact: true }).fill("在线创作验收");
   await page.getByLabel("简介", { exact: true }).fill("简介");
+  await createAndOpen(page);
   await page.getByRole("button", { name: "直接码字", exact: true }).click();
   await page
     .getByLabel("在线章节正文")
@@ -189,6 +197,7 @@ test("whole text in the writing tab preserves volumes through editing, resume an
   await page.goto(base + "/writer?action=new");
   await page.getByLabel("书名", { exact: true }).fill(title);
   await page.getByLabel("简介", { exact: true }).fill("分卷整理验收。");
+  await createAndOpen(page);
   await page.getByRole("button", { name: "直接码字", exact: true }).click();
   await page
     .getByLabel("在线章节正文")
@@ -231,7 +240,7 @@ test("whole text in the writing tab preserves volumes through editing, resume an
   await page
     .locator(".writer-work")
     .filter({ hasText: title })
-    .getByRole("button", { name: "继续创作" })
+    .getByRole("button", { name: "创作" })
     .click();
   await expect(page.locator("optgroup")).toHaveCount(2);
   await page.getByRole("checkbox").check();

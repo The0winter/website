@@ -1,6 +1,6 @@
 'use client';
 import {useRef, useState} from 'react';
-import {LockKeyhole, Trash2, ChevronDown} from 'lucide-react';
+import {LockKeyhole, Trash2, Settings} from 'lucide-react';
 import {type Book} from '@/lib/api';
 import {safeFetch} from '@/lib/request';
 import './work-actions.css';
@@ -25,7 +25,7 @@ export default function WorkActions({book, onChanged}: {book: Book; onChanged: (
   };
   return <div className="work-management">
     <details ref={menu} onKeyDown={event => {if (event.key === 'Escape' && menu.current) {menu.current.open = false; menu.current.querySelector('summary')?.focus();}}}>
-      <summary aria-label={`管理《${book.title}》`}>管理<ChevronDown size={14}/></summary>
+      <summary aria-label={`管理《${book.title}》`} title="管理作品"><Settings size={22} aria-hidden="true"/></summary>
       <div className="work-management-menu">
         <button type="button" disabled={busy || book.visibility === 'private'} onClick={() => void change('private')}><LockKeyhole size={16}/>{book.visibility === 'private' ? '已为私密' : '转为私密'}</button>
         <button type="button" className="work-delete" disabled={busy} onClick={() => void change('delete')}><Trash2 size={16}/>删除作品</button>

@@ -3,7 +3,7 @@
 html.dark :is(.writer-page,.mw-dialog,.mw-view-panel,.writer-statistics,.manuscript-overlay) { color:var(--home-text); }
 html.dark :is(.writer-page,.mw-reveal,.mw-view-panel,.manuscript-page) { background:var(--home-background); }
 html.dark .mw-view[data-kind=new] .mw-view-panel { background:var(--home-surface); }
-html.dark :is(.mw-action:not(.mw-action-primary),.mw-book-list,.mw-empty,.mw-guest,.mw-view-loading) { background:var(--home-surface); color:var(--home-text); border-color:var(--home-border); }
+html.dark :is(.mw-action:not(.mw-action-primary),.mw-book,.mw-empty,.mw-guest,.mw-view-loading) { background:var(--home-surface); color:var(--home-text); border-color:var(--home-border); }
 html.dark :is(.mw-book+.mw-book,.mw-view-header,.mw-view-header button,.mw-view-loading button,.writer-mobile-header>button) { border-color:var(--home-border); }
 html.dark :is(.mw-book-info>p,.mw-book-info a:last-child,.mw-empty p,.mw-guest p,.mw-note,.mw-status,.mw-view-header span,.writer-mobile-header span) { color:var(--home-muted); }
 html.dark :is(.mw-empty h4,.mw-guest h3) { color:var(--home-text); }
