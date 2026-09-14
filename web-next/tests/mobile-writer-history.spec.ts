@@ -9,6 +9,7 @@ test.beforeEach(async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
   await page.route('**/api/auth/session', route => route.fulfill({json: {user: account, profile: account}}));
   await page.route('**/api/writer/works?**', route => route.fulfill({json: [book]}));
+  await page.route('**/api/books/' + book.id, route => route.fulfill({json: {...book, description: '用于返回检查的作品简介。'}}));
   await page.route('**/api/writer/statistics?**', route => route.fulfill({json: {points: [], totalViews: 0, historyStart: '2026-09-14', hasPrevious: false, hasNext: false}}));
   await page.route('**/api/writer/workspace/**', route => route.fulfill({json: {
     work: {reference: 'b_' + book.id, title: book.title, bookId: book.id, visibility: 'public'},
@@ -72,6 +73,7 @@ test('native Back out of metadata editing releases its lock only after the cente
   await page.getByLabel(`管理《${book.title}》`).click();
   await page.getByRole('button', {name: '编辑作品', exact: true}).click();
   await expect(page.getByRole('dialog', {name: '编辑作品', exact: true})).toBeVisible();
+  await expect(page.locator('.work-edit-dialog form')).toHaveAttribute('data-busy', 'false');
   await page.goBack();
   await expect(page.locator('.work-edit-dialog')).toHaveCount(0);
   await expect(center(page)).toBeVisible();
