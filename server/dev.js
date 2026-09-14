@@ -1,3 +1,4 @@
+import '../tools/test-env.cjs';
 // This entry deliberately never loads existing .env files or old data.
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import crypto from 'node:crypto';

@@ -11,6 +11,8 @@
     "lint": "npm --prefix web-next run lint",
     "typecheck": "npm --prefix web-next run typecheck",
     "test": "npm --prefix server test",
+    "test:crawler": "node --require ./tools/test-env.cjs --test tools/novel-crawler/tests/*.test.mjs",
+    "test:browser": "node --require ./tools/test-env.cjs web-next/node_modules/@playwright/test/cli.js test --config web-next/playwright.config.ts",
     "dev:isolated": "node server/dev.js"
   },
   "dependencies": {

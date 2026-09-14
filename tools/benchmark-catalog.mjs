@@ -1,3 +1,4 @@
+import './test-env.cjs';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import mongoose from '../server/node_modules/mongoose/index.js';

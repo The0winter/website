@@ -1,3 +1,4 @@
+import '../../tools/test-env.cjs';
 // Explicit integration check: a loopback disposable database and uniquely named R2 objects.
 // Run from the repository root. No production database is opened or modified.
 import fs from 'node:fs';

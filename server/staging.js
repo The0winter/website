@@ -1,3 +1,4 @@
+import '../tools/test-env.cjs';
 // Equivalent local staging: real replica set + production Next build + nginx.
 import {MongoMemoryReplSet} from 'mongodb-memory-server';
 import mongoose from 'mongoose';

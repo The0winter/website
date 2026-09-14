@@ -1,3 +1,4 @@
+import '../../tools/test-env.cjs';
 import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
 import {spawn} from 'node:child_process';

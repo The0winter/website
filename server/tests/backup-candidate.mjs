@@ -1,3 +1,4 @@
+import '../../tools/test-env.cjs';
 // Actual tools, fresh synthetic replicas, no old URI and no production writes.
 import fs from 'node:fs/promises';
 import path from 'node:path';
