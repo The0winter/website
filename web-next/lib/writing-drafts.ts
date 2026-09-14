@@ -1,7 +1,7 @@
 export type WritingDraft = {
   id: string; title: string; content: string; number: number; revision: number; updatedAt: string;
   targetChapterId?: string; baseUpdatedAt?: string; legacyBaseHash?: string;
-  deleted?: boolean; published?: boolean;
+  deleted?: boolean; published?: boolean; deletedAt?: string; trashUntil?: string;
   cloudRevision?: number; syncedFingerprint?: string; contentLoaded?: boolean; words?: number;
 };
 export const draftFingerprint = (draft: WritingDraft) => JSON.stringify([draft.title, draft.content, draft.number, Boolean(draft.deleted), Boolean(draft.published)]);
@@ -11,7 +11,9 @@ export type WorkspaceSnapshot = {
   cloudDrafts: WritingDraft[];
   published: {id: string; title: string; number: number; words: number; updatedAt: string}[];
   total: number; maxNumber: number; publishedDraftIds: string[];
+  trash?: WritingTrashItem[]; removedDraftIds?: string[];
 };
+export type WritingTrashItem = {id: string; sourceId: string; kind: 'draft' | 'chapter'; title: string; number: number; words: number; updatedAt: string; deletedAt: string; trashUntil: string; cloudRevision?: number};
 type Row = WritingDraft & {key: string; scope: string};
 const database = 'jiutian-writing';
 let connection: Promise<IDBDatabase> | undefined;
@@ -62,7 +64,9 @@ export async function loadDrafts(scope: string, snapshot?: WorkspaceSnapshot): P
       try {
       for (const draft of snapshot.cloudDrafts) {
         const previous = rows.find(row => row.id === draft.id);
-        if (previous && (needsCloudSave(previous) || (previous.cloudRevision || 0) >= (draft.cloudRevision || 0))) continue;
+        // Deletion/restoration is authoritative even when an old device has unsynced text.
+        const trashChanged = previous && Boolean(previous.deleted) !== Boolean(draft.deleted) && (draft.cloudRevision || 0) > (previous.cloudRevision || 0);
+        if (previous && !trashChanged && (needsCloudSave(previous) || (previous.cloudRevision || 0) >= (draft.cloudRevision || 0))) continue;
         const row = {...draft, revision: (previous?.revision || 0) + 1, scope, key: `${scope}:${draft.id}`};
         if (draft.cloudRevision && draft.contentLoaded !== false) row.syncedFingerprint = draftFingerprint(draft);
         store.put(row);
@@ -72,6 +76,9 @@ export async function loadDrafts(scope: string, snapshot?: WorkspaceSnapshot): P
       for (const row of rows) if (published.has(row.id) && !row.published) {
         row.published = true; row.revision++; store.put(row);
       }
+      const removed = new Set(snapshot.removedDraftIds || []);
+      for (const row of rows) if (removed.has(row.id)) store.delete(row.key);
+      rows = rows.filter(row => !removed.has(row.id));
       } catch {tx.abort();}
     };
     tx.oncomplete = () => resolve(rows.filter(row => !row.deleted && !row.published).sort((a, b) => b.number - a.number));

@@ -4,6 +4,8 @@ import WriterDraft from '../models/WriterDraft.js';
 import WriterBlob from '../models/WriterBlob.js';
 import User from '../models/User.js';
 import Chapter from '../models/Chapter.js';
+import WriterDiscard from '../models/WriterDiscard.js';
+import {moveDraftToTrash} from './writing-trash.js';
 import {bodyHash} from './r2.js';
 import {contentHash, dayKey, fail} from './content.js';
 
@@ -31,7 +33,8 @@ export function draftJson(row, content) {
   return {id: row.draftId, title: row.title, number: row.number, words: row.words, cloudRevision: row.revision,
     content: content ?? '', contentLoaded: content !== undefined, updatedAt: row.updatedAt,
     targetChapterId: row.targetChapterId ? String(row.targetChapterId) : undefined,
-    baseUpdatedAt: row.baseUpdatedAt, legacyBaseHash: row.legacyBaseHash, deleted: row.deleted, published: row.published};
+    baseUpdatedAt: row.baseUpdatedAt, legacyBaseHash: row.legacyBaseHash, deleted: row.deleted, published: row.published,
+    deletedAt: row.deletedAt, trashUntil: row.trashUntil};
 }
 export async function chargeDraftQuota(actor, words, session) {
   if (!words) return;
@@ -51,10 +54,16 @@ export async function saveCloudDraft({actor, reference, body, resolve, storage})
     await User.updateOne({_id: actor.id}, {$inc: {contentVersion: 1}}, {session});
     const {work, book} = await resolve(reference, actor, session);
     const key = draftKey(actor, work, data.id);
+    if (await WriterDiscard.exists({_id: key}).session(session)) fail(410, '此草稿已过期清除，不能从旧设备重新同步');
     let draft = await WriterDraft.findById(key).session(session);
     if (draft?.published) fail(409, '此草稿已经发布，请重新打开已发布章节后修改');
+    if (draft?.deleted && data.deleted) {result = draft; return;}
     if (draft?.savedHash === hash) {result = draft; return;}
     if ((draft?.revision || 0) !== body.revision) fail(409, '此草稿已在另一页面更新或删除。你的文字仍保留，请下载备份后重新打开核对。');
+    if (data.deleted) {
+      if (!draft) fail(409, '请先保存草稿再删除，以便在回收站保留正文');
+      result = await moveDraftToTrash(draft, session); return;
+    }
     if (draft?.deleted && !data.deleted) fail(409, '此草稿已经删除，请新建草稿后恢复文字');
     let baseline = '';
     if (draft) {
@@ -87,7 +96,7 @@ export async function saveCloudDraft({actor, reference, body, resolve, storage})
       words: Array.from(data.content).length, revision: draft.revision + 1, savedHash: hash});
     result = await draft.save({session});
   });
-  return draftJson(result, data.content);
+  return draftJson(result, data.deleted ? undefined : data.content);
 }
 
 export async function retireWorkspaceDrafts(owner, work, session) {

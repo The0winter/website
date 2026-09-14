@@ -132,8 +132,7 @@ test('administrator searches, edits and withdraws chapters through the shared ed
   await page.getByRole('button',{name:'发布',exact:true}).click();
   await expect(page.locator('.writing-editor')).toHaveCount(0);
   expect((await(await page.request.get(base+'/api/chapters/'+chapterId)).json()).content).toBe('校对后的正文');
-  await page.getByRole('button',{name:'批量管理',exact:true}).click();
-  await page.getByRole('button',{name:'全选',exact:true}).click();
+  await page.locator('.writing-chapter').focus(); await page.keyboard.press('Shift+F10');
   await page.getByRole('region',{name:'章节批量管理'}).getByRole('button',{name:'删除',exact:true}).click();
   await page.getByRole('button',{name:'确认删除',exact:true}).click();
   await expect(page.locator('.writing-chapter')).toHaveCount(0);

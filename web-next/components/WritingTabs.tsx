@@ -3,14 +3,15 @@
 import {useEffect, useRef, useState, type PointerEvent, type ReactNode} from 'react';
 import {sectionSwipeThreshold} from '@/lib/section-swipe';
 
-type Tab = 'drafts' | 'published';
+export type WritingTab = 'drafts' | 'published' | 'trash';
+type Tab = WritingTab;
 type Props = {
-  value: Tab; onChange: (tab: Tab) => void; draftCount: number; publishedCount: number;
-  disabled?: boolean; swipeDisabled?: boolean; notice?: ReactNode; children: [ReactNode, ReactNode];
+  value: Tab; onChange: (tab: Tab) => void; draftCount: number; publishedCount: number; trashCount: number;
+  disabled?: boolean; swipeDisabled?: boolean; notice?: ReactNode; children: [ReactNode, ReactNode, ReactNode];
 };
-const tabs = ['drafts', 'published'] as const;
+const tabs = ['drafts', 'published', 'trash'] as const;
 
-export default function WritingTabs({value, onChange, draftCount, publishedCount, disabled, swipeDisabled, notice, children}: Props) {
+export default function WritingTabs({value, onChange, draftCount, publishedCount, trashCount, disabled, swipeDisabled, notice, children}: Props) {
   const viewport = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const gesture = useRef<{id: number; x: number; y: number; horizontal: boolean; origin: number} | null>(null);
@@ -18,6 +19,7 @@ export default function WritingTabs({value, onChange, draftCount, publishedCount
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
   const index = tabs.indexOf(value);
+  const counts = [draftCount, publishedCount, trashCount];
   const cancel = () => {gesture.current = null; setDragging(false); setOffset(0);};
 
   useEffect(() => {
@@ -53,7 +55,8 @@ export default function WritingTabs({value, onChange, draftCount, publishedCount
     suppressClick.current = true; event.preventDefault();
     const width = viewport.current?.clientWidth || 1;
     const position = -index * width + current.origin + dx;
-    const bounded = position > 0 ? position * .18 : position < -width ? -width + (position + width) * .18 : position;
+    const end = -(tabs.length - 1) * width;
+    const bounded = position > 0 ? position * .18 : position < end ? end + (position - end) * .18 : position;
     setOffset(bounded + index * width);
   }
   function end(event: PointerEvent<HTMLDivElement>) {
@@ -62,7 +65,7 @@ export default function WritingTabs({value, onChange, draftCount, publishedCount
     if (!current || current.id !== event.pointerId) return;
     const dx = event.clientX - current.x, dy = event.clientY - current.y;
     if (current.horizontal && Math.abs(dx) >= sectionSwipeThreshold(viewport.current?.clientWidth || 300) && Math.abs(dx) >= Math.abs(dy) * 1.25) {
-      onChange(tabs[Math.max(0, Math.min(1, index + (dx < 0 ? 1 : -1)))]);
+      onChange(tabs[Math.max(0, Math.min(tabs.length - 1, index + (dx < 0 ? 1 : -1)))]);
     }
     cancel();
   }
@@ -76,11 +79,11 @@ export default function WritingTabs({value, onChange, draftCount, publishedCount
     <div className="writing-tabs" role="tablist" aria-label="章节分类" onKeyDown={event => {
       if (disabled || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : (index + 1) % 2;
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowLeft' ? -1 : 1) + tabs.length) % tabs.length;
       select(tabs[next]); root.current?.querySelector<HTMLButtonElement>(`#writing-${tabs[next]}-tab`)?.focus();
     }}>
       {tabs.map((tab, i) => <button key={tab} type="button" role="tab" disabled={disabled} id={`writing-${tab}-tab`} aria-controls={`writing-${tab}`} aria-selected={value === tab} tabIndex={value === tab ? 0 : -1} onClick={() => select(tab)}>
-        {i === 0 ? '草稿箱' : '已发布'}{(i === 0 ? draftCount : publishedCount) > 0 && <span>{i === 0 ? draftCount : publishedCount}</span>}
+        {['草稿箱', '已发布', '回收站'][i]}{counts[i] > 0 && <span>{counts[i]}</span>}
       </button>)}
     </div>
     {notice}

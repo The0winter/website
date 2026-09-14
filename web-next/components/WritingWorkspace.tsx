@@ -1,13 +1,13 @@
 'use client';
 
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {ArrowLeft, Plus, FileText, Download, Trash2, Check, Loader2, Upload} from 'lucide-react';
+import {ArrowLeft, Plus, FileText, Download, Trash2, Check, Loader2, Upload, RotateCcw} from 'lucide-react';
 import {useAuth} from '@/contexts/AuthContext';
 import {safeFetch} from '@/lib/request';
 import {lockBodyScroll} from '@/lib/body-scroll-lock';
-import WritingTabs from './WritingTabs';
+import WritingTabs, {type WritingTab} from './WritingTabs';
 import WritingChapterRow, {WritingBatchDialog, chapterLabel} from './WritingChapterRow';
-import {cachedWorkspace, cacheWorkspace, draftScope, loadDrafts, writeDraft, pendingDrafts, needsCloudSave, draftFingerprint as fingerprint, type WritingDraft, type WorkspaceSnapshot} from '@/lib/writing-drafts';
+import {cachedWorkspace, cacheWorkspace, draftScope, loadDrafts, writeDraft, pendingDrafts, needsCloudSave, draftFingerprint as fingerprint, type WritingDraft, type WorkspaceSnapshot, type WritingTrashItem} from '@/lib/writing-drafts';
 import './writing-workspace.css';
 
 const chapterTitle = (draft: {title: string; number: number}) => draft.title.trim() || `第${draft.number}章`;
@@ -29,7 +29,7 @@ export default function WritingWorkspace(props: WorkspaceProps) {
 function WorkspaceContent({reference, embedded = false, moderation = false, compactHeader = false, onExit, onReady, onChanged, accountId}: WorkspaceProps & {accountId: string}) {
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot>();
   const [drafts, setDrafts] = useState<WritingDraft[]>([]);
-  const [tab, setTab] = useState<'drafts' | 'published'>(moderation ? 'published' : 'drafts');
+  const [tab, setTab] = useState<WritingTab>(moderation ? 'published' : 'drafts');
   const [search, setSearch] = useState('');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const filter = useRef({search: '', order: 'desc'});
@@ -40,7 +40,8 @@ function WorkspaceContent({reference, embedded = false, moderation = false, comp
   const [working, setWorking] = useState(false);
   const [managing, setManaging] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
-  const [batchAction, setBatchAction] = useState<'delete' | 'publish' | null>(null);
+  const [batchAction, setBatchAction] = useState<'delete' | 'publish' | 'restore' | null>(null);
+  const [actionTargets, setActionTargets] = useState<string[]>([]);
   const [batchProgress, setBatchProgress] = useState('');
   const management = useRef<{token: string; afterClose?: () => void} | null>(null);
   const backgroundSync = useRef<Promise<void> | null>(null);
@@ -324,24 +325,35 @@ function WorkspaceContent({reference, embedded = false, moderation = false, comp
       setDrafts(await loadDrafts(scope)); openEditor(draft);
     } catch (reason) {setError((reason as Error).message);} finally {setWorking(false);}
   };
-  const runBatch = async (action: 'delete' | 'publish') => {
-    if (publishBusy.current || !selected.length || (action === 'publish' && tab !== 'drafts')) return;
+  function confirmBatch(action: 'delete' | 'publish' | 'restore', ids = selected) {setActionTargets(ids); setBatchAction(action);}
+  const runBatch = async (action: 'delete' | 'publish' | 'restore') => {
+    const targetsIds = actionTargets;
+    const verb = action === 'publish' ? '发布' : action === 'restore' ? '复原' : '删除';
+    if (publishBusy.current || !targetsIds.length || (action === 'publish' && tab !== 'drafts')) return;
     publishBusy.current = true; setWorking(true); setBatchAction(null); setError('');
     const completed = new Set<string>();
     let failure = '';
     try {
       // Finish an in-flight minute sync before reading the latest local revisions.
       await backgroundSync.current;
-      const rows = tab === 'drafts' ? await loadDrafts(scope) : snapshot?.published || [];
-      const targets = rows.filter(row => selected.includes(row.id)).sort((a, b) => a.number - b.number);
-      if (targets.length !== selected.length) throw Error('选中的章节已发生变化，请刷新后重新选择。');
+      const rows = tab === 'drafts' ? await loadDrafts(scope) : tab === 'trash' ? snapshot?.trash || [] : snapshot?.published || [];
+      const targets = rows.filter(row => targetsIds.includes(row.id)).sort((a, b) => a.number - b.number);
+      if (targets.length !== targetsIds.length) throw Error('选中的章节已发生变化，请刷新后重新选择。');
       for (const row of targets) {
-        setBatchProgress(`正在${action === 'publish' ? '发布' : '删除'} ${completed.size + 1} / ${targets.length}`);
+        setBatchProgress(`正在${verb} ${completed.size + 1} / ${targets.length}`);
         try {
-          if (tab === 'published') await request(`/api/chapters/${row.id}`, {method: 'DELETE'});
+          if (tab === 'trash') {
+            const item = row as WritingTrashItem;
+            if (item.kind === 'chapter') await request(`/api/chapters/${item.sourceId}/restore`, {method: 'POST'});
+            else await request(`/api/writer/workspace/${reference}/trash/drafts/${item.sourceId}/restore`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({revision: item.cloudRevision})});
+          } else if (tab === 'published') await request(`/api/chapters/${row.id}`, {method: 'DELETE'});
           else if (action === 'delete') {
-            // Keep a failed deletion visible; only persist its tombstone after cloud acknowledgement.
-            await upload({...(row as WritingDraft), content: '', contentLoaded: true, deleted: true});
+            let draft = row as WritingDraft;
+            // Cloud drafts can be recycled without fetching their bodies; unsaved local text is saved first.
+            if (needsCloudSave(draft) || !draft.cloudRevision) draft = await upload(await hydrate(draft));
+            const result = await request<WritingDraft>(`/api/writer/workspace/${reference}/trash/drafts/${draft.id}/delete`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({revision: draft.cloudRevision})});
+            const deleted = {...draft, deleted: true, cloudRevision: result.cloudRevision, deletedAt: result.deletedAt, trashUntil: result.trashUntil};
+            await writeDraft(scope, {...deleted, syncedFingerprint: fingerprint(deleted)});
           } else {
             let draft = await hydrate(row as WritingDraft);
             if (!draft.content.trim()) throw Error('正文为空，请补充正文后发布。');
@@ -360,8 +372,8 @@ function WorkspaceContent({reference, embedded = false, moderation = false, comp
       // A lost response can still be reconciled by the server's publication receipt/tombstone.
       if (tab === 'drafts') {
         const resolved = action === 'publish' ? new Set(refreshed.publishedDraftIds) : new Set(refreshed.cloudDrafts.filter(row => row.deleted).map(row => row.id));
-        for (const id of selected) if (resolved.has(id)) completed.add(id);
-        if (completed.size === selected.length) failure = '';
+        for (const id of targetsIds) if (resolved.has(id)) completed.add(id);
+        if (completed.size === targetsIds.length) failure = '';
       }
       if (tab === 'published' && snapshot && snapshot.published.length === completed.size && page > 1) await refresh(page - 1);
     } catch (reason) {
@@ -371,8 +383,9 @@ function WorkspaceContent({reference, embedded = false, moderation = false, comp
     }
     publishBusy.current = false; setWorking(false); setBatchProgress('');
     if (completed.size) callbacks.current.onChanged?.();
-    if (failure) {setSelected(previous => previous.filter(id => !completed.has(id))); setError(`已${action === 'publish' ? '发布' : '删除'} ${completed.size} 章。${failure} 未完成的章节仍保留，可重试。`);}
-    else finishManaging(action === 'publish' ? () => setTab('published') : undefined);
+    if (failure) {setSelected(previous => previous.filter(id => !completed.has(id))); setError(`已${verb} ${completed.size} 章。${failure}${action === 'restore' ? '' : ' 未完成的章节仍保留，可重试。'}`);}
+    else if (managing) finishManaging(action === 'publish' ? () => setTab('published') : undefined);
+    else if (action === 'publish') setTab('published');
   };
   const publish = async () => {
     if (publishBusy.current || !current.current?.content.trim()) return;
@@ -410,18 +423,17 @@ function WorkspaceContent({reference, embedded = false, moderation = false, comp
     } catch (reason) {setEditorError((reason as Error).message);}
   };
 
-  const visibleIds = (tab === 'drafts' ? drafts : snapshot?.published || []).map(row => row.id);
+  const visibleIds = (tab === 'drafts' ? drafts : tab === 'trash' ? snapshot?.trash || [] : snapshot?.published || []).map(row => row.id);
   const allSelected = visibleIds.length > 0 && visibleIds.every(id => selected.includes(id));
   const exitLibrary = () => managing ? finishManaging() : onExit();
   return <section data-managing={managing} onKeyDown={event => {if (event.key === 'Escape' && managing && !batchAction) {event.preventDefault(); event.stopPropagation(); finishManaging();}}} className={`writing-workspace${embedded ? ' writing-embedded' : ''}${compactHeader ? ' writing-compact-header' : ''}`} aria-label="章节创作">
     <div className="writing-library" inert={Boolean(editor)} aria-hidden={Boolean(editor) || undefined}>
       {!embedded && <header className="writing-header"><button type="button" aria-label={managing ? "退出批量管理" : "返回创作中心"} disabled={working} onClick={exitLibrary}><ArrowLeft size={20}/></button><h1>创作</h1></header>}
       <div className="writing-heading">{compactHeader ? <button type="button" aria-label={managing ? "退出批量管理" : "返回创作中心"} disabled={working} onClick={exitLibrary}><ArrowLeft size={21}/></button> : <p>我的作品</p>}<h2>{snapshot?.work.title || '创作'}</h2></div>
-      <WritingTabs value={tab} onChange={next => {if (next !== tab) {if (managing) finishManaging(() => setTab(next)); else setTab(next);}}} draftCount={drafts.length} publishedCount={snapshot?.total || 0} disabled={loading || editing || working} swipeDisabled={managing} notice={<>
-      {!loading && <div className="writing-draft-tools">
+      <WritingTabs value={tab} onChange={next => {if (next !== tab) {if (managing) finishManaging(() => setTab(next)); else setTab(next);}}} draftCount={drafts.length} publishedCount={snapshot?.total || 0} trashCount={snapshot?.trash?.length || 0} disabled={loading || editing || working} swipeDisabled={managing} notice={<>
+      {!loading && <div className="writing-draft-tools" data-managing={managing}>
         {managing ? <div className="writing-selection-tools"><button type="button" disabled={working} onClick={() => setSelected(allSelected ? [] : visibleIds)}>{allSelected ? '取消全选' : tab === 'published' && (snapshot?.total || 0) > 50 ? '全选本页' : '全选'}</button><span role="status">已选 {selected.length} 章</span><button type="button" disabled={working} onClick={() => finishManaging()}>完成</button></div> : <>
           {tab === 'drafts' && <button className="writing-add" type="button" aria-label="新建章节" disabled={working || !snapshot} onClick={() => void create()}><Plus size={21}/><span>新建章节</span></button>}
-          <button className="writing-manage" type="button" disabled={working || !visibleIds.length} onClick={() => startManaging()}>批量管理</button>
         </>}
       </div>}
 
@@ -431,20 +443,24 @@ function WorkspaceContent({reference, embedded = false, moderation = false, comp
       {loading && <p className="writing-empty" role="status"><Loader2 className="writing-spinner" size={24}/>正在打开章节…</p>}
       </>}>
       <div hidden={loading}>
-        {drafts.length ? <ol className="writing-chapters">{drafts.map(draft => <WritingChapterRow key={draft.id} chapter={draft} words={draft.contentLoaded === false ? draft.words || 0 : Array.from(draft.content).length} status={draft.targetChapterId ? '修改稿' : undefined} managing={managing && tab === 'drafts'} selected={selected.includes(draft.id)} disabled={working || tab !== 'drafts'} onManage={() => startManaging(draft.id)} onSelect={() => selectChapter(draft.id)} onOpen={() => void openEditor(draft)}/>)}</ol> : <div className="writing-empty"><FileText size={34}/><h3>下一章，从这里开始</h3><p>点“新建章节”，写下故事的第一句。</p></div>}
+        {drafts.length ? <ol className="writing-chapters">{drafts.map(draft => <WritingChapterRow key={draft.id} chapter={draft} words={draft.contentLoaded === false ? draft.words || 0 : Array.from(draft.content).length} status={draft.targetChapterId ? '修改稿' : undefined} managing={managing && tab === 'drafts'} selected={selected.includes(draft.id)} disabled={working || tab !== 'drafts'} onManage={() => startManaging(draft.id)} onSelect={() => selectChapter(draft.id)} onOpen={() => void openEditor(draft)} onPublish={() => confirmBatch('publish', [draft.id])} onDelete={() => confirmBatch('delete', [draft.id])}/>)}</ol> : <div className="writing-empty"><FileText size={34}/><h3>下一章，从这里开始</h3><p>点“新建章节”，写下故事的第一句。</p></div>}
         {drafts.some(needsCloudSave) && <p className="writing-storage-note">有草稿等待同步，保持页面打开即可；进入章节后也可点“保存”。</p>}
       </div>
       <div hidden={loading}>
         {moderation && <form className="writing-filters" onSubmit={event => {event.preventDefault(); filter.current={search,order}; void refresh().catch(reason => setError(reason.message));}}><input disabled={managing || working} aria-label="搜索章节" value={search} maxLength={100} onChange={event => setSearch(event.target.value)} placeholder="搜索章节名"/><select disabled={managing || working} aria-label="章节排序" value={order} onChange={event => {const value=event.target.value as 'asc'|'desc'; setOrder(value); filter.current={search,order:value}; void refresh().catch(reason => setError(reason.message));}}><option value="desc">倒序</option><option value="asc">正序</option></select><button type="submit" disabled={managing || working}>搜索</button></form>}
-        {snapshot?.published.length ? <><ol className="writing-chapters">{snapshot.published.map(chapter => <WritingChapterRow key={chapter.id} chapter={chapter} words={chapter.words} status="已发布" managing={managing && tab === 'published'} selected={selected.includes(chapter.id)} disabled={working || tab !== 'published'} onManage={() => startManaging(chapter.id)} onSelect={() => selectChapter(chapter.id)} onOpen={() => void editPublished(chapter)}/>)}</ol>{snapshot.total > 50 && <nav className="writing-pagination" aria-label="已发布章节分页"><button disabled={page === 1 || working || managing} onClick={() => void refresh(page - 1).catch(reason => setError(reason.message))}>上一页</button><span>{page} / {Math.ceil(snapshot.total / 50)}</span><button disabled={page * 50 >= snapshot.total || working || managing} onClick={() => void refresh(page + 1).catch(reason => setError(reason.message))}>下一页</button></nav>}</> : <div className="writing-empty"><FileText size={34}/><h3>还没有已发布章节</h3><p>草稿准备好后，就可以发布了。</p></div>}
+        {snapshot?.published.length ? <><ol className="writing-chapters">{snapshot.published.map(chapter => <WritingChapterRow key={chapter.id} chapter={chapter} words={chapter.words} status="已发布" managing={managing && tab === 'published'} selected={selected.includes(chapter.id)} disabled={working || tab !== 'published'} onManage={() => startManaging(chapter.id)} onSelect={() => selectChapter(chapter.id)} onOpen={() => void editPublished(chapter)} published onDelete={() => confirmBatch('delete', [chapter.id])}/>)}</ol>{snapshot.total > 50 && <nav className="writing-pagination" aria-label="已发布章节分页"><button disabled={page === 1 || working || managing} onClick={() => void refresh(page - 1).catch(reason => setError(reason.message))}>上一页</button><span>{page} / {Math.ceil(snapshot.total / 50)}</span><button disabled={page * 50 >= snapshot.total || working || managing} onClick={() => void refresh(page + 1).catch(reason => setError(reason.message))}>下一页</button></nav>}</> : <div className="writing-empty"><FileText size={34}/><h3>还没有已发布章节</h3><p>草稿准备好后，就可以发布了。</p></div>}
+      </div>
+      <div hidden={loading}>
+        {snapshot?.trash?.length ? <><p className="writing-trash-note">删除的章节保留七天，逾期自动清除。</p><ol className="writing-chapters">{snapshot.trash.map(item => <WritingChapterRow key={item.id} chapter={item} words={item.words} status={item.kind === 'draft' ? '草稿' : '已发布章节'} expiresAt={item.trashUntil} managing={managing && tab === 'trash'} selected={selected.includes(item.id)} disabled={working || tab !== 'trash'} onManage={() => startManaging(item.id)} onSelect={() => selectChapter(item.id)} onOpen={() => confirmBatch('restore', [item.id])} onRestore={() => confirmBatch('restore', [item.id])}/>)}</ol></> : <div className="writing-empty"><Trash2 size={34}/><h3>回收站是空的</h3><p>删除的章节会在这里保留七天，期间可以复原。</p></div>}
       </div>
       </WritingTabs>
       <div className="writing-batch-bar" role="region" aria-label="章节批量管理" aria-hidden={!managing} inert={!managing}>
-        <button type="button" className="writing-batch-delete" disabled={!selected.length || working} onClick={() => setBatchAction('delete')}><Trash2 size={18}/>删除</button>
-        <button type="button" className="writing-batch-publish" disabled={!selected.length || working || tab !== 'drafts'} onClick={() => setBatchAction('publish')}><Upload size={18}/>{tab === 'published' ? '已发布' : '发布'}</button>
+        {tab === 'trash' ? <button type="button" className="writing-batch-publish" disabled={!selected.length || working} onClick={() => confirmBatch('restore')}><RotateCcw size={18}/>复原</button> : <>
+        <button type="button" className="writing-batch-delete" disabled={!selected.length || working} onClick={() => confirmBatch('delete')}><Trash2 size={18}/>删除</button>
+        <button type="button" className="writing-batch-publish" disabled={!selected.length || working || tab !== 'drafts'} onClick={() => confirmBatch('publish')}><Upload size={18}/>{tab === 'published' ? '已发布' : '发布'}</button></>}
       </div>
     </div>
-    {batchAction && <WritingBatchDialog action={batchAction} count={selected.length} published={tab === 'published'} publicWork={Boolean(snapshot?.work.bookId)} onClose={() => setBatchAction(null)} onConfirm={() => void runBatch(batchAction)}/> }
+    {batchAction && <WritingBatchDialog action={batchAction} count={actionTargets.length} published={tab === 'published'} publicWork={Boolean(snapshot?.work.bookId)} onClose={() => setBatchAction(null)} onConfirm={() => void runBatch(batchAction)}/> }
     {editor && <div className="writing-editor" ref={editorPanel} role="dialog" aria-modal="true" aria-label={editor.targetChapterId ? '修改章节' : '创建新章节'} tabIndex={-1} data-closing={closing || undefined}>
       <header className="writing-header"><button type="button" aria-label="返回草稿箱" disabled={publishing} onClick={() => void closeEditor()}><ArrowLeft size={20}/></button><div><p>{snapshot?.work.title}</p><h2>第 {editor.number} 章</h2></div><button type="button" className="writing-save" disabled={publishing} onClick={() => void save()}>保存</button></header>
       <form ref={form} className="writing-form writer-dirty-form" data-dirty={needsCloudSave(editor)} data-busy={publishing} onSubmit={event => {event.preventDefault(); void save();}}>

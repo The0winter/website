@@ -36,6 +36,7 @@ import { getReviews } from './controllers/reviewController.js';
 
 export function createApp(config = readConfig()) {
 const app = express();
+app.locals.writingCleanupEnabled = config.writeMode === 'readwrite';
 const metrics = createRequestMetrics();
 app.use((req,res,next)=>{ res.once('finish',()=>{if(!req.path.startsWith('/health/'))metrics.record(res.statusCode);});next(); });
 app.param(['id','bookId','userId'],(req,res,next,value)=>/^[a-fA-F0-9]{24}$/.test(value)?next():res.status(400).json({error:'资源ID无效'}));

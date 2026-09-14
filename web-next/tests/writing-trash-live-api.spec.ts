@@ -1,0 +1,43 @@
+import {test, expect} from '@playwright/test';
+
+// This test mutates only the explicitly configured, disposable local fixture.
+const base = process.env.WRITING_TRASH_FIXTURE_URL || '';
+test('real API: menu deletion, recovery, publication and chapter recovery preserve the text', async ({page}) => {
+  test.skip(!/^http:\/\/127\.0\.0\.1:\d+$/.test(base), 'Requires the isolated local recycle-bin fixture');
+  const csrf = await (await page.request.get(base + '/api/auth/csrf')).json();
+  const login = await page.request.post(base + '/api/auth/signin', {headers: {origin: base, 'x-csrf-token': csrf.csrfToken}, data: {email: 'trash@example.test', password: 'Trash-test-123'}});
+  expect(login.ok()).toBe(true);
+  await page.setViewportSize({width: 390, height: 844});
+  await page.goto(base + '/writer?action=chapters&work=m_recycle-fixture-0001');
+  const first = page.locator('#writing-drafts li').filter({hasText: '第24章 来信24'});
+  await expect(first).toBeVisible();
+  await first.getByRole('button', {name: /更多/}).click();
+  await page.getByRole('menuitem', {name: '删除', exact: true}).click();
+  await expect(page.getByRole('dialog')).toContainText('七天内可复原');
+  await page.getByRole('button', {name: '取消', exact: true}).click(); await expect(first).toBeVisible();
+  await first.getByRole('button', {name: /更多/}).click(); await page.getByRole('menuitem', {name: '删除', exact: true}).click();
+  await page.getByRole('button', {name: '确认删除'}).click(); await expect(first).toHaveCount(0);
+  await page.getByRole('tab', {name: /回收站/}).click();
+  const recycled = page.locator('#writing-trash li').filter({hasText: '第24章 来信24'});
+  await expect(recycled).toContainText('后自动清除');
+  await recycled.getByRole('button', {name: /更多/}).click(); await page.getByRole('menuitem', {name: '复原'}).click();
+  await page.getByRole('button', {name: '确认复原'}).click(); await expect(recycled).toHaveCount(0);
+  await page.getByRole('tab', {name: /草稿箱/}).click(); await first.locator('.writing-chapter').click();
+  await expect(page.getByLabel('正文', {exact: true})).toHaveValue('第24章的完整故事正文。');
+  await page.getByRole('button', {name: '返回草稿箱'}).click(); await expect(page.locator('.writing-editor')).toHaveCount(0);
+  await first.getByRole('button', {name: /更多/}).click(); await page.getByRole('menuitem', {name: '发布', exact: true}).click();
+  await page.getByRole('button', {name: '确认发布'}).click();
+  await expect(page.getByRole('tab', {name: /已发布/})).toHaveAttribute('aria-selected', 'true');
+  const snapshot = await (await page.request.get(base + '/api/writer/workspace/m_recycle-fixture-0001')).json();
+  const chapterId = snapshot.published[0].id;
+  await page.locator('#writing-published li').getByRole('button', {name: /更多/}).click();
+  await expect(page.getByRole('menuitem', {name: '发布', exact: true})).toBeDisabled();
+  await page.getByRole('menuitem', {name: '删除', exact: true}).click(); await page.getByRole('button', {name: '确认删除'}).click();
+  await expect(page.locator('#writing-published li')).toHaveCount(0);
+  expect((await page.request.get(base + '/api/chapters/' + chapterId)).status()).toBe(404);
+  await page.getByRole('tab', {name: /回收站/}).click();
+  await recycled.getByRole('button', {name: /更多/}).click(); await page.getByRole('menuitem', {name: '复原'}).click(); await page.getByRole('button', {name: '确认复原'}).click();
+  await expect(recycled).toHaveCount(0);
+  const recovered = await (await page.request.get(base + '/api/chapters/' + chapterId)).json();
+  expect(recovered.id).toBe(chapterId); expect(recovered.content).toBe('第24章的完整故事正文。');
+});

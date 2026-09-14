@@ -45,14 +45,15 @@ for (const width of [320, 390, 430, 1440]) test(`writing header and equal tabs w
   }
   const list = (await page.getByRole('tablist').boundingBox())!;
   const draft = page.getByRole('tab', {name: /草稿箱/}), published = page.getByRole('tab', {name: /已发布/});
-  for (const tab of [draft, published]) expect((await tab.boundingBox())!.width).toBeCloseTo(list.width / 2, 0);
+  for (const tab of [draft, published]) expect((await tab.boundingBox())!.width).toBeCloseTo(list.width / 3, 0);
   await drag(page, -22); await expect(draft).toHaveAttribute('aria-selected', 'true');
   await drag(page, 5, 75); await expect(draft).toHaveAttribute('aria-selected', 'true');
   await drag(page, -90); await expect(published).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tabpanel')).toHaveCount(1);
   await expect(page.getByRole('tabpanel')).toContainText('风起');
   await expect(page.locator('.writing-editor')).toHaveCount(0);
-  await drag(page, -90); await expect(published).toHaveAttribute('aria-selected', 'true');
+  await drag(page, -90); await expect(page.getByRole('tab', {name: /回收站/})).toHaveAttribute('aria-selected', 'true');
+  await drag(page, 90); await expect(published).toHaveAttribute('aria-selected', 'true');
   await drag(page, 90); await expect(draft).toHaveAttribute('aria-selected', 'true');
   await published.click(); await expect(published).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('ArrowLeft'); await expect(draft).toHaveAttribute('aria-selected', 'true');

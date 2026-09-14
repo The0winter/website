@@ -7,6 +7,8 @@ import User from '../models/User.js';
 import WriterPublication from '../models/WriterPublication.js';
 import WriterDraft from '../models/WriterDraft.js';
 import WriterBlob from '../models/WriterBlob.js';
+import WriterDiscard from '../models/WriterDiscard.js';
+import {moveDraftToTrash, purgeExpiredWritingTrash} from '../services/writing-trash.js';
 import {createWritingStorage} from '../services/writing-storage.js';
 import {cleanupDraftObjects, draftKey, draftJson, saveCloudDraft} from '../services/writing-drafts.js';
 import {asyncRoute} from '../security.js';
@@ -33,14 +35,38 @@ export function writingWorkspaceRoutes(app, auth) {
   let storage, cleaning = false;
   const getStorage = () => app.locals.writingStorage || (storage ||= createWritingStorage());
   const cleanup = setInterval(async () => {
-    if (cleaning || mongoose.connection.readyState !== 1 || (!storage && !app.locals.writingStorage && process.env.CHAPTER_STORAGE !== 'r2')) return;
+    if (cleaning || !app.locals.writingCleanupEnabled || mongoose.connection.readyState !== 1) return;
     cleaning = true;
-    try {await cleanupDraftObjects(getStorage());}
+    try {
+      await purgeExpiredWritingTrash();
+      if (storage || app.locals.writingStorage || process.env.CHAPTER_STORAGE === 'r2') await cleanupDraftObjects(getStorage());
+    }
     catch {console.warn('Draft object cleanup deferred');}
     finally {cleaning = false;}
   }, 60000);
   cleanup.unref();
   app.locals.stopWritingCleanup = () => clearInterval(cleanup);
+
+  for (const action of ['delete', 'restore']) app.post(`/api/writer/workspace/:reference/trash/drafts/:draftId/${action}`, auth.authenticate, asyncRoute(async (req, res) => {
+    if (!Number.isSafeInteger(req.body?.revision) || req.body.revision < 1) fail(400, '草稿版本无效，请刷新后重试');
+    let result;
+    await mongoose.connection.transaction(async session => {
+      await User.updateOne({_id: req.user.id}, {$inc: {contentVersion: 1}}, {session});
+      const {work} = await resolve(req.params.reference, req.user, session);
+      const draft = await WriterDraft.findById(draftKey(req.user, work, req.params.draftId)).session(session);
+      if (!draft || draft.published) fail(404, '草稿不存在或已过期清除');
+      if (action === 'delete' && draft.deleted) {result = draft; return;}
+      if (action === 'restore' && !draft.deleted && draft.revision === req.body.revision + 1) {result = draft; return;}
+      if (draft.revision !== req.body.revision) fail(409, '草稿已在另一页面更新，请刷新后重试');
+      if (action === 'delete') result = await moveDraftToTrash(draft, session);
+      else {
+        if (!draft.deleted || !draft.trashUntil || draft.trashUntil <= new Date()) fail(410, '已超过七天恢复期限');
+        draft.deleted = false; draft.deletedAt = undefined; draft.trashUntil = undefined; draft.revision++; draft.savedHash = undefined;
+        result = await draft.save({session});
+      }
+    });
+    res.set('Cache-Control', 'private, no-store').json(draftJson(result));
+  }));
 
   app.put('/api/writer/workspace/:reference/drafts/:draftId', auth.authenticate, asyncRoute(async (req, res) => {
     if (req.body?.id !== req.params.draftId) fail(400, '草稿编号不一致');
@@ -60,13 +86,15 @@ export function writingWorkspaceRoutes(app, auth) {
     const search = req.query.search || '', order = req.query.order || 'desc';
     if (typeof search !== 'string' || search.length > 100 || !['asc', 'desc'].includes(order)) fail(400, '筛选参数无效');
     const receipts = await WriterPublication.find({owner: req.user.id, work}).select('draftId').lean();
+    const removed = await WriterDiscard.find({owner: req.user.id, work}).select('draftId').lean();
+    const removedIds = new Set(removed.map(row => row.draftId));
     const publishedIds = new Set(receipts.map(receipt => receipt.draftId));
     const cloudDrafts = (manuscript?.chapters || []).flatMap((chapter, index) => {
       const id = `manuscript-${index}`;
-      return publishedIds.has(id) ? [] : [{id, title: chapter.title, content: chapter.content, number: index + 1,
+      return publishedIds.has(id) || removedIds.has(id) || !chapter.title && !chapter.content ? [] : [{id, title: chapter.title, content: chapter.content, number: index + 1,
         volumeTitle: chapter.volumeTitle, volumeNumber: chapter.volumeNumber, updatedAt: manuscript.updatedAt}];
     });
-    let published = [], total = 0, maxNumber = manuscript?.chapters.length || 0;
+    let published = [], total = 0, maxNumber = manuscript?.chapters.length || 0, recycledChapters = [];
     if (book) {
       const filter = {bookId: book._id, deletedAt: null, ...(search ? {title: {$regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i'}} : {})};
       const [rows, count, last, legacy] = await Promise.all([
@@ -77,8 +105,9 @@ export function writingWorkspaceRoutes(app, auth) {
         ChapterDraft.findOne({bookId: book._id, owner: req.user.id, publishedChapterId: null}).lean(),
       ]);
       published = rows.map(row => ({id: String(row._id), title: row.title, number: row.chapter_number, words: row.word_count, updatedAt: row.updatedAt}));
+      recycledChapters = await Chapter.find({bookId: book._id, deletedAt: {$ne: null}, trashUntil: {$gt: new Date()}}).select('_id title chapter_number word_count updatedAt deletedAt trashUntil').sort({deletedAt: -1}).lean();
       total = count; maxNumber = Math.max(maxNumber, last?.chapter_number || 0);
-      if (legacy && !publishedIds.has(`legacy-${legacy._id}`)) {
+      if (legacy && !publishedIds.has(`legacy-${legacy._id}`) && !removedIds.has(`legacy-${legacy._id}`)) {
         const target = legacy.targetChapterId && await Chapter.findById(legacy.targetChapterId).select('updatedAt').lean();
         cloudDrafts.push({id: `legacy-${legacy._id}`, title: legacy.title, content: legacy.content, number: legacy.chapter_number,
           targetChapterId: legacy.targetChapterId ? String(legacy.targetChapterId) : undefined,
@@ -88,11 +117,15 @@ export function writingWorkspaceRoutes(app, auth) {
     }
     const saved = await WriterDraft.find({owner: req.user.id, work}).sort({number: -1}).lean();
     const savedIds = new Set(saved.map(row => row.draftId));
-    for (const row of saved) if (!row.deleted) maxNumber = Math.max(maxNumber, row.number);
+    for (const row of saved) maxNumber = Math.max(maxNumber, row.number);
+    const trash = [
+      ...saved.filter(row => row.deleted && row.trashUntil > new Date()).map(row => ({...draftJson(row), id: `draft:${row.draftId}`, sourceId: row.draftId, kind: 'draft'})),
+      ...recycledChapters.map(row => ({id: `chapter:${row._id}`, sourceId: String(row._id), kind: 'chapter', title: row.title, number: row.chapter_number, words: row.word_count, updatedAt: row.updatedAt, deletedAt: row.deletedAt, trashUntil: row.trashUntil})),
+    ].sort((a, b) => new Date(b.deletedAt) - new Date(a.deletedAt));
     res.set('Cache-Control', 'private, no-store').json({work: {reference: work, title: (book || manuscript).title,
       bookId: book ? String(book._id) : null, visibility: book?.visibility || 'private'},
       cloudDrafts: [...cloudDrafts.filter(row => !savedIds.has(row.id)), ...saved.filter(row => !row.published).map(row => draftJson(row))],
-      published, total, maxNumber, publishedDraftIds: [...publishedIds]});
+      published, total, maxNumber, publishedDraftIds: [...publishedIds], removedDraftIds: [...removedIds], trash});
   }));
 
   app.post('/api/writer/workspace/:reference/publish', auth.authenticate, asyncRoute(async (req, res) => {

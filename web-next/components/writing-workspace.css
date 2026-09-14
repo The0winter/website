@@ -8,7 +8,7 @@
 .writing-compact-header .writing-heading>button { display:grid; place-items:center; width:32px; height:44px; border:0; border-radius:50%; color:inherit; }
 .writing-compact-header .writing-heading>button:hover { background:var(--writing-line); }
 .writing-compact-header .writing-heading h2 { min-width:0; font-size:20px; }
-.writing-tabs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border-bottom:1px solid var(--writing-line); }
+.writing-tabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border-bottom:1px solid var(--writing-line); }
 .writing-tabs button { position:relative; display:flex; justify-content:center; align-items:center; gap:7px; min-width:0; min-height:48px; color:var(--writing-muted); font-size:16px; font-weight:600; }
 .writing-tabs button[aria-selected=true] { color:var(--writing-ink); }
 .writing-tabs button[aria-selected=true]:after { content:''; position:absolute; bottom:-1px; height:3px; border-radius:3px; left:0; right:0; background:var(--writing-accent); }
@@ -19,7 +19,7 @@
 .writing-tab-panel[aria-hidden=true] { position:absolute; top:0; left:0; }
 .writing-tab-view[data-dragging=true] .writing-tab-panel { transition:none; user-select:none; }
 .writing-draft-tools { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:60px; padding:10px 0 6px; }
-.writing-manage { margin-left:auto; min-height:44px; color:var(--writing-muted); font-size:12px; }
+.writing-draft-tools:empty { display:none; }
 .writing-selection-tools { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; font-size:12px; }
 .writing-selection-tools button { min-height:44px; min-width:44px; color:var(--writing-accent); }
 .writing-selection-tools span { color:var(--writing-muted); }
@@ -31,13 +31,21 @@
 .writing-filters input { flex:1; min-width:0; }
 .writing-filters :is(input,select,button) { min-height:44px; padding:8px 10px; border:1px solid var(--writing-line); border-radius:8px; color:var(--writing-ink); background:var(--writing-paper); font-size:14px; }
 .writing-filters button { color:var(--writing-accent); }
-.writing-chapters li { display:flex; align-items:center; border-bottom:1px solid var(--writing-line); }
-.writing-chapter { flex:1; min-width:0; display:flex; text-align:left; align-items:center; min-height:62px; padding:9px 0; user-select:none; -webkit-touch-callout:none; transition:background-color 200ms ease; }
+.writing-chapters li { position:relative; display:flex; align-items:center; border-bottom:1px solid var(--writing-line); }
+.writing-chapter { flex:1; min-width:0; display:flex; text-align:left; align-items:center; min-height:74px; padding:12px 0; user-select:none; -webkit-touch-callout:none; transition:background-color 200ms ease; }
 .writing-chapter-details { min-width:0; flex:1; }
-.writing-chapter strong { display:block; font-size:15px; line-height:1.5; font-weight:600; overflow-wrap:anywhere; }
-.writing-chapter-meta { display:flex; flex-wrap:wrap; justify-content:space-between; gap:2px 8px; margin-top:3px; color:var(--writing-muted); font-size:10px; line-height:1.5; }
-.writing-chapter small { font-size:11px; }
+.writing-chapter strong { display:block; padding-right:34px; font-size:17px; line-height:1.5; font-weight:600; overflow-wrap:anywhere; }
+.writing-chapter-meta { display:flex; flex-wrap:wrap; justify-content:space-between; gap:2px 8px; margin-top:5px; color:var(--writing-muted); font-size:12px; line-height:1.5; }
+.writing-chapter small { font-size:13px; }
 .writing-chapter time { margin-left:auto; text-align:right; white-space:nowrap; }
+.writing-chapter-more { position:absolute; top:3px; right:0; width:40px; height:40px; display:grid; place-items:center; color:var(--writing-muted); }
+.writing-chapter-menu { position:fixed; inset:auto; width:140px; margin:0; padding:5px; border:1px solid var(--writing-line); border-radius:12px; background:var(--writing-paper); color:var(--writing-ink); box-shadow:0 8px 28px #21160d25; }
+.writing-chapter-menu:popover-open { display:grid; }
+.writing-chapter-menu::backdrop { background:transparent; }
+.writing-chapter-menu button { min-height:44px; padding:0 14px; text-align:left; border-radius:7px; font-size:14px; }
+.writing-chapter-menu button:hover { background:var(--writing-bg); }
+.writing-trash-note { margin:10px 0 3px; color:var(--writing-muted); font-size:12px; line-height:1.6; }
+.writing-trash-expiry { flex-basis:100%; text-align:right; font-size:12px; }
 .writing-selection { display:grid; flex:0 0 0px; width:0; opacity:0; overflow:hidden; transition:flex-basis 260ms cubic-bezier(.2,.75,.25,1),opacity 180ms ease; }
 .writing-selection>span { display:grid; place-items:center; width:21px; height:21px; border:1px solid var(--writing-line); border-radius:50%; color:#fffaf6; transition:background-color 180ms ease,border-color 180ms ease; }
 .writing-workspace[data-managing=true] .writing-selection { flex-basis:32px; opacity:1; }
@@ -101,8 +109,8 @@ html .writing-workspace .writing-form :is(input,textarea):focus-visible { outlin
   .writing-heading { padding:12px 0 4px; }
   .writing-compact-header .writing-heading { padding:calc(4px + env(safe-area-inset-top)) 0 0; }
   .writing-tabs button { min-height:44px; }
-  .writing-draft-tools { min-height:42px; padding:0; }
-  .writing-manage,.writing-selection-tools button { min-height:42px; }
+  .writing-draft-tools { min-height:0; padding:0; }
+  .writing-draft-tools[data-managing=true],.writing-selection-tools button { min-height:42px; }
   .writing-add { position:fixed; z-index:20; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%); min-height:48px; padding:0 23px; border:0; border-radius:999px; color:#fffaf6; background:var(--writing-accent); box-shadow:0 6px 24px #70353a30; white-space:nowrap; }
 }
 @media(max-height:600px) { .writing-editor { overflow-y:auto; } .writing-form.writer-dirty-form { min-height:330px; } }

@@ -6,6 +6,7 @@ import Bookmark from '../models/Bookmark.js';
 import Review from '../models/Review.js';
 import {claimMedia,retireUnreferencedCover} from '../services/media-reference.js';
 import {finishCoverRetirement} from '../services/cover-retention.js';
+import {trashChapter} from '../services/writing-trash.js';
 import User from '../models/User.js';
 import Operation from '../models/Operation.js';
 import {workAccess} from '../services/work-access.js';
@@ -94,20 +95,12 @@ export function contentRoutes(app,auth) {
     });res.json(await chapterResponse(result));
   }));
   app.delete('/api/chapters/:id',auth.authenticate,asyncRoute(async(req,res)=>{
-    await mongoose.connection.transaction(async session=>{
-      const chapter=await Chapter.findById(req.params.id).session(session);if(!chapter)fail(404,'章节不存在');
-      await lockBook(chapter.bookId,req.user,session);
-      // Retain the original bytes and ID for a later explicit recovery operation.
-      chapter.deletedAt=new Date();await chapter.save({session});
-    });res.json({success:true});
+    const chapter=await trashChapter(req.user,req.params.id);
+    res.json({success:true,trashUntil:chapter.trashUntil});
   }));
   app.post('/api/chapters/:id/restore',auth.authenticate,asyncRoute(async(req,res)=>{
-    let chapter;
-    await mongoose.connection.transaction(async session=>{
-      chapter=await Chapter.findById(req.params.id).session(session);if(!chapter)fail(404,'章节不存在');
-      await lockBook(chapter.bookId,req.user,session);
-      chapter.deletedAt=null;await chapter.save({session});
-    });res.json(await chapterResponse(chapter));
+    const chapter=await trashChapter(req.user,req.params.id,{restore:true});
+    res.json(await chapterResponse(chapter));
   }));
   const own=(req,res,next)=>req.params.userId===req.user.id?next():res.status(403).json({error:'只能访问本人书架'});
   app.get('/api/users/:userId/bookmarks',auth.authenticate,own,asyncRoute(async(req,res)=>{

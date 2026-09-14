@@ -189,7 +189,7 @@ test('chapter workspace preserves cloud drafts, ownership, quota and publication
       assert.equal((await owner(url + '/drafts/new-day', 'PUT', {id: 'new-day', title: '次日', content: '新😀', number: 4, revision: 0})).status, 200);
       assert.equal((await User.findById(user.id)).daily_upload_words, 2);
       await cleanupDraftObjects(storage, new Date(Date.now() + 7200000));
-      assert.equal(storage.objects.has(keyBefore), false);
+      assert.equal(storage.objects.has(keyBefore), true); // Recycled drafts retain their bodies for seven days.
       assert.equal(await storage.readChapter(chapter), second.content);
       assert.equal((await owner(url + '/drafts/new-day')).data.content, '新😀');
       assert.equal(await WriterBlob.countDocuments({retireAt: {$ne: null, $lte: new Date()}}), 0);

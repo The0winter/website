@@ -1,10 +1,11 @@
 import {test, expect, type Page} from '@playwright/test';
+import type {WritingDraft} from '../lib/writing-drafts';
 
 // Safe for candidate/public UI verification: every account API is synthetic.
 const base = process.env.CREATION_BASE_URL || 'http://127.0.0.1:3107';
 const reference = 'm_writing-workspace-test';
 function stateFactory() {
-  return {account: '000000000000000000000099', mutations: 0, saves: 0, fail: false, published: [] as string[], cloud: new Map<string, Record<string, any>>()};
+  return {account: '000000000000000000000099', mutations: 0, saves: 0, fail: false, published: [] as string[], cloud: new Map<string, WritingDraft & {hash: string}>()};
 }
 async function setup(page: Page, shared?: ReturnType<typeof stateFactory>) {
   const state = shared || stateFactory();
@@ -102,7 +103,7 @@ for (const width of [320, 390, 1440]) test(`draft library and local editor at ${
   await expect(page.getByLabel('正文', {exact: true})).toHaveValue(first.content + '\n返回前最后输入的一句。');
   await page.goBack();
   await expect(editor).toHaveCount(0);
-  await page.getByRole('button', {name: /第9章.*潮声/}).click();
+  await page.getByRole('button', {name: /^第9章.*潮声/}).click();
   await expect(page.getByLabel('正文', {exact: true})).toHaveValue(first.content + '\n返回前最后输入的一句。');
   await page.getByRole('button', {name: '返回草稿箱'}).click();
   await expect(editor).toHaveCount(0);
