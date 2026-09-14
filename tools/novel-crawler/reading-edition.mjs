@@ -89,14 +89,15 @@ export function verifyReadingSources(dir, state, catalog) {
   }
 }
 
-function orderedChapters(chapters) {
+function orderedChapters(chapters, reviewedPrefix = 0) {
   let number = 0;
   for (const [index, chapter] of chapters.entries()) {
     if (chapter.chapter_number !== index + 1) throw Error('阅读版顺序号不连续');
     const title = chapter.title.normalize('NFKC').trim();
-    const match = /^第([0-9]+)章/u.exec(title);
+    const match = /^(?:第([0-9]+)章|([0-9]+)[、.])/u.exec(title);
+    if (index < reviewedPrefix) { if (match) number = Number(match[1] || match[2]); continue; }
     if (match) {
-      const current = Number(match[1]);
+      const current = Number(match[1] || match[2]);
       if (!Number.isSafeInteger(current) || current !== number + 1) throw Error(`阅读版章号不连续：应为第 ${number + 1} 章，实际为“${chapter.title}”`);
       number = current;
     } else if (!/^(?:番外|IF番外|(?:[一二三四五六七八九十0-9]+月)?总结|请假|公告|通知|活动|感言|后记|月票)/iu.test(title)) {
@@ -112,7 +113,27 @@ function checkNewIssues(report, after = 0) {
   if (blocking.length) throw Error(`阅读版需要核对：${blocking.slice(0, 5).map(i => `第 ${i.chapter} 项 ${i.code}`).join('；')}`);
 }
 
-export function adoptReadingEdition(dir, spec, extraction, file, outputDir) {
+function verifySourceOrderReview(review, catalog, raw, book, seen) {
+  if (!review || review.catalogHash !== hash(catalog) || !Array.isArray(review.pairs) || !review.pairs.length || typeof review.reason !== 'string' || !review.reason.trim()) throw Error('来源顺序验收需要目录哈希、逐项重复核对和具体理由');
+  let previous = 0;
+  for (const [index, chapter] of book.chapters.entries()) {
+    if (chapter.chapter_number !== index + 1) throw Error('阅读版顺序号不连续');
+    if (chapter.sourceChapterNumber <= previous) throw Error('来源顺序验收不能重排章节');
+    previous = chapter.sourceChapterNumber;
+  }
+  const issues = qualityReport(catalog, raw, [], 'download').issues;
+  const omissions = new Set();
+  for (const pair of review.pairs) {
+    const omit = raw[pair.omit - 1], keep = raw[pair.keep - 1];
+    if (!Number.isInteger(pair.omit) || !Number.isInteger(pair.keep) || !omit || !keep || seen.has(omit.link) || !seen.has(keep.link) || omissions.has(omit.link) || pair.omitHash !== hash(omit.content) || pair.keepHash !== hash(keep.content) || typeof pair.reason !== 'string' || !pair.reason.trim()) throw Error('重复项核对与保留章节、正文哈希不匹配');
+    if (!issues.some(i => ['duplicate-body', 'duplicate-title-body'].includes(i.code) && ((i.chapter === pair.omit && i.otherChapter === pair.keep) || (i.chapter === pair.keep && i.otherChapter === pair.omit)))) throw Error('不能将未检测为重复的正文从阅读版排除');
+    omissions.add(omit.link);
+  }
+  if (raw.some(c => !seen.has(c.link) && !omissions.has(c.link))) throw Error('来源顺序验收不得遗漏未核对的目录项');
+  return {...review, reviewedAt: new Date().toISOString()};
+}
+
+export function adoptReadingEdition(dir, spec, extraction, file, outputDir, sourceOrderReview) {
   if (hasReadingEdition(dir)) throw Error('这本书已绑定阅读版，不能重新覆盖来源映射');
   const report = readJson(path.join(dir, 'download-report.json'));
   const catalog = readJson(path.join(dir, 'catalog.json'));
@@ -132,13 +153,16 @@ export function adoptReadingEdition(dir, spec, extraction, file, outputDir) {
     if (!source || seen.has(chapter.link) || hash(chapter) !== hash(expected)) throw Error(`阅读版第 ${chapter.chapter_number} 项与来源检查点不匹配`);
     seen.add(chapter.link);
   }
-  orderedChapters(book.chapters);
+  let acceptedSourceOrder;
+  if (sourceOrderReview) acceptedSourceOrder = verifySourceOrderReview(sourceOrderReview, catalog, raw, book, seen);
+  else orderedChapters(book.chapters);
   checkNewIssues(editionQuality(book));
   prepareImport(book);
   const state = {
     version: 1, revision: 1, identity: {title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, variant: spec.variant || ''},
     extractionHash: extraction, file: path.basename(file), outputPath: path.resolve(file),
     sources: catalog.map((entry, i) => fingerprint(entry, raw[i])), book,
+    ...(acceptedSourceOrder ? {sourceOrderReview: acceptedSourceOrder} : {}),
     exportHash: hash(bytes(book)), updatedAt: new Date().toISOString(),
   };
   checkState(state, spec, extraction, outputDir);
@@ -163,7 +187,7 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
     if (!rawReport.paused && rawReport.mode === 'download' && rawReport.completeAgainstSource) {
       const tail = catalog.slice(state.sources.length).map(entry => rawChapter(dir, entry));
       const chapters = [...book.chapters, ...tail.map((chapter, index) => ({...formatChapterForExport(chapter), chapter_number: originalCount + index + 1, sourceChapterNumber: chapter.chapter_number, sourceChapterUrl: chapter.link}))];
-      orderedChapters(chapters);
+      orderedChapters(chapters, state.sourceOrderReview ? originalCount : 0);
       const nextBook = {...book, ...Object.fromEntries(['description', 'status', 'category', 'cover_image', 'authorSourceUrl'].filter(key => spec[key] !== undefined).map(key => [key, spec[key]])), chapters};
       checkNewIssues(editionQuality(nextBook), originalCount);
       prepareImport(nextBook);
@@ -180,6 +204,7 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
   const quality = editionQuality(book, rawReport.mode);
   if (failure) { quality.failures.push(failure); quality.errors++; quality.structuralPass = false; }
   return {...rawReport, ...quality, readingEdition: true, sourceExpected: rawReport.expected, sourceDownloaded: rawReport.downloaded, sourceErrors: rawReport.errors, sourceWarnings: rawReport.warnings,
+    ...(state.sourceOrderReview ? {acceptedSourceOrder: state.sourceOrderReview} : {}),
     completeAgainstSource: !!exportFile, exportFile, reusedExport, readingAdded: added,
     mappingFile: stateFile(dir), mapping: book.chapters.map(c => ({chapter_number: c.chapter_number, title: c.title, sourcePosition: c.sourceChapterNumber, sourceUrl: c.link, sourceHash: hash(c.content)})),
     limitation: '沿用这本书已核对的来源映射，阅读版章序保持稳定。新发现的重复、乱码、章号跳转会暂停更新，旧阅读版和原始采集记录保留。只检查可检测异常，不能保证源站无删文或错配。',

@@ -213,6 +213,58 @@ test('TXT segmentation preserves volume resets and preamble; GB18030 decoding is
   assert.throws(() => checkIdentity({title: '小说', author: '甲'}, {title: '小说', author: '乙'}), /不匹配/);
 });
 
+test('TXT title entity decoding is explicit, single-layer and preserves raw titles and body', () => {
+  const text = '第1章 A&amp;amp;B &lt;甲&gt; <乙>\n正文 &amp; 保留原样。';
+  assert.equal(splitText(text, {})[0].title, '第1章 A&amp;amp;B &lt;甲&gt; <乙>');
+  const chapter = splitText(text, {resource: {decodeTitleEntities: true}})[0];
+  assert.equal(chapter.title, '第1章 A&amp;B <甲> <乙>');
+  assert.equal(chapter.sourceTitle, '第1章 A&amp;amp;B &lt;甲&gt; <乙>');
+  assert.equal(chapter.sourceCatalogTitle, chapter.sourceTitle);
+  assert.equal(chapter.content, '正文 &amp; 保留原样。');
+});
+
+test('multipart TXT validates every part and catalog position, preserves notices and per-file evidence', async t => {
+  let second = '请假条\n今天暂时请假。\n第一章 新卷\n新卷开始了，完整正文保留。';
+  const f = await fixture(t, (req, res) => res.end(req.url === '/book' ? heading + '<div id="catalog"><a href="/a">第一章 开始</a><a href="/b">请假条</a><a href="/c">第一章 新卷</a></div>' : req.url === '/one.txt' ? '第一章 开始\n这是开头，合成测试的完整正文。' : second));
+  const spec = {...specFor(f.base), kind: 'txt', resource: {parts: [{url: f.base + '/one.txt', expectedCount: 1}, {url: f.base + '/two.txt', expectedCount: 2}], headingPattern: '^(第一章[^\\n]*|请假条)$'}};
+  const report = await acquire(spec, f.options);
+  assert.equal(report.completeAgainstSource, true);
+  const book = readJson(report.exportFile);
+  assert.deepEqual(book.chapters.map(c => c.title), ['第一章 开始', '请假条', '第一章 新卷']);
+  assert.deepEqual(book.chapters.map(c => c.provenance[0].url), [f.base + '/one.txt', f.base + '/two.txt', f.base + '/two.txt']);
+  assert.deepEqual(book.chapters.map(c => c.link), [f.base + '/a', f.base + '/b', f.base + '/c']);
+  assert.equal(prepareImport(book).length, 1);
+  const metadata = readJson(path.join(f.options.stateDir, 'jobs', report.jobId, 'resource-metadata.json'));
+  assert.equal(metadata.hash, hash(metadata.parts));
+  assert.deepEqual(metadata.parts.map(p => p.chapters), [1, 2]);
+  assert.equal((await acquire(spec, f.options)).reusedExport, true);
+  const reverse = await acquire({...spec, variant: 'reversed', resource: {...spec.resource, parts: [...spec.resource.parts].reverse()}}, f.options);
+  assert.equal(reverse.exportFile, null);
+  assert.match(reverse.failures[0].error, /在线目录第1项标题不同/);
+  const wrongCount = await acquire({...spec, variant: 'wrong-count', resource: {...spec.resource, parts: [{url: f.base + '/one.txt', expectedCount: 2}]}}, f.options);
+  assert.match(wrongCount.failures[0].error, /分段 1 分章数量/);
+  second += '追加的内容使第二段哈希变化。';
+  const changed = await acquire(spec, {...f.options, refresh: true});
+  assert.equal(changed.exportFile, null);
+  assert.match(changed.failures[0].error, /资源文件发生变化/);
+  assert.deepEqual(readJson(report.exportFile), book);
+});
+
+test('multipart TXT rejects webpage downloads, foreign hosts and incompatible configurations', async t => {
+  const f = await fixture(t, (req, res) => res.end(req.url === '/book' ? heading : '<html><body>请验证后下载</body></html>'));
+  const spec = {...specFor(f.base), kind: 'txt', resource: {parts: [{url: f.base + '/one.txt', expectedCount: 1}]}};
+  assert.match((await acquire(spec, f.options)).failures[0].error, /TXT 下载返回了网页/);
+  const foreign = {...spec, variant: 'foreign', resource: {parts: [{url: 'https://outside.example/one.txt', expectedCount: 1}]}};
+  assert.match((await acquire(foreign, f.options)).failures[0].error, /域名范围/);
+  for (const invalid of [
+    {...spec, kind: 'epub'}, {...spec, catalog: undefined},
+    {...spec, resource: {...spec.resource, url: f.base + '/one.txt'}},
+    {...spec, resource: {...spec.resource, compression: 'zip'}},
+    {...spec, resource: {parts: []}}, {...spec, resource: {parts: [...spec.resource.parts, ...spec.resource.parts]}},
+    {...spec, resource: {parts: [{url: f.base + '/one.txt', expectedCount: 0}]}},
+  ]) assert.throws(() => validateSpec(invalid));
+});
+
 test('TXT resources pass the real import contract and keep original resource hashes', async t => {
   const f = await fixture(t, (req, res) => res.end(req.url === '/book' ? heading : '第一章 开始\n合成正文第一段。\n第二章 终点\n合成正文第二段。'));
   const spec = {...specFor(f.base), catalog: undefined, kind: 'txt', resource: {url: f.base + '/book.txt', expectedCount: 2}};

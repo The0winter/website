@@ -3,7 +3,7 @@ import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {load} from 'cheerio';
 import {decode, httpUrl} from './http.mjs';
-import {atomicWrite} from './storage.mjs';
+import {atomicWrite, hash} from './storage.mjs';
 import {checkIdentity, normalizedTitle} from './quality.mjs';
 import {rejectedPage} from './diagnostics.mjs';
 
@@ -259,15 +259,18 @@ export function splitText(text, spec) {
   for (let i = 0; i < matches.length; i++) {
     const match = matches[i];
     if (!match[0].length) throw Error('分章规则不能匹配空字符串');
-    const catalogTitle = (match[1] || match[0]).trim();
+    const sourceCatalogTitle = (match[1] || match[0]).trim();
+    // Escape literal tags before parsing, so only one entity layer is decoded.
+    const titleText = value => config.decodeTitleEntities ? load(value.replaceAll('<', '&lt;').replaceAll('>', '&gt;'), {}, false).text() : value;
+    const catalogTitle = titleText(sourceCatalogTitle);
     let content = text.slice(match.index + match[0].length, matches[i + 1]?.index ?? text.length).trim();
-    let title = catalogTitle;
+    let title = catalogTitle, sourceTitle = sourceCatalogTitle;
     if (config.innerHeadingPattern) {
       const lines = content.split(/\r?\n/);
       const inner = new RegExp(config.innerHeadingPattern, 'u').exec(lines[0]);
-      if (inner) { title = (inner[1] || inner[0]).trim(); lines.shift(); content = lines.join('\n').trim(); }
+      if (inner) { sourceTitle = (inner[1] || inner[0]).trim(); title = titleText(sourceTitle); lines.shift(); content = lines.join('\n').trim(); }
     }
-    chapters.push({title, catalogTitle, content});
+    chapters.push({title, catalogTitle, content, ...(title !== sourceTitle ? {sourceTitle} : {}), ...(catalogTitle !== sourceCatalogTitle ? {sourceCatalogTitle} : {})});
   }
   chapters.preamble = preamble;
   return chapters;
@@ -281,11 +284,30 @@ export async function getResource(spec, client, jobDir) {
   Object.assign(actual, extractDescription($, spec.metadata.description));
   Object.assign(actual, extractBookStatus($, spec.metadata.status, evidence));
   const config = spec.resource;
-  if (!config.url && ($(config.link).length !== 1 || !$(config.link).attr('href'))) throw Error('文件下载链接必须唯一且含 href');
-  const resourceUrl = config.url || httpUrl($(config.link).attr('href'), evidence.url);
-  const response = await client.get(resourceUrl);
-  let chapters;
-  if (spec.kind === 'txt') {
+  let chapters, response, resourceMetadata;
+  if (config.parts) {
+    chapters = [];
+    const parts = [];
+    let bytes = 0;
+    for (const [index, part] of config.parts.entries()) {
+      const item = await client.get(part.url);
+      bytes += item.body.length;
+      if (bytes > 64 * 1024 * 1024) throw Error('分段 TXT 总文件大小超过 64 MiB');
+      const text = decode(item.body, item.contentType, config.encoding);
+      if (/^\s*(?:<!doctype html|<html)/i.test(text)) throw Error('TXT 下载返回了网页');
+      const parsed = splitText(text, spec);
+      if (parsed.length !== part.expectedCount) throw Error(`TXT 分段 ${index + 1} 分章数量 ${parsed.length} 与已核实的 ${part.expectedCount} 不同`);
+      if (parsed.preamble) atomicWrite(path.join(jobDir, `source-preamble-${index + 1}.txt`), parsed.preamble);
+      chapters.push(...parsed.map((c, i) => ({...c, link: `${item.url}#chapter-${i + 1}`, contentFetchedAt: item.fetchedAt, provenance: [{url: item.url, hash: item.hash, fetchedAt: item.fetchedAt}]})));
+      parts.push({url: item.url, hash: item.hash, bytes: item.body.length, chapters: parsed.length});
+    }
+    resourceMetadata = {parts, bytes, hash: hash(parts)};
+  } else {
+    if (!config.url && ($(config.link).length !== 1 || !$(config.link).attr('href'))) throw Error('文件下载链接必须唯一且含 href');
+    const resourceUrl = config.url || httpUrl($(config.link).attr('href'), evidence.url);
+    response = await client.get(resourceUrl);
+  }
+  if (!config.parts && spec.kind === 'txt') {
     let bytes = response.body;
     if (config.compression === 'zip') {
       const file = path.join(jobDir, 'source.zip');
@@ -298,7 +320,7 @@ export async function getResource(spec, client, jobDir) {
     const text = decode(bytes, config.compression ? '' : response.contentType, config.encoding);
     if (/^\s*(?:<!doctype html|<html)/i.test(text)) throw Error('TXT 下载返回了网页');
     chapters = splitText(text, spec);
-  } else {
+  } else if (!config.parts) {
     const file = path.join(jobDir, 'source.epub');
     atomicWrite(file, response.body);
     const result = spawnSync(process.env.NOVEL_CRAWLER_PYTHON || 'python', [fileURLToPath(new URL('./epub.py', import.meta.url)), file], {encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 60000, windowsHide: true});
@@ -310,7 +332,7 @@ export async function getResource(spec, client, jobDir) {
   if (config.expectedCount !== undefined && chapters.length !== config.expectedCount) throw Error(`分章数量 ${chapters.length} 与已核实的 ${config.expectedCount} 不同`);
   if (!chapters.length || chapters.length > 20000) throw Error('资源章节数量无效');
   if (chapters.preamble) atomicWrite(path.join(jobDir, 'source-preamble.txt'), chapters.preamble);
-  let complete = chapters.map((c, i) => ({...c, catalogTitle: c.catalogTitle || c.title, chapter_number: i + 1, sourceOrder: i + 1, link: `${response.url}#chapter-${i + 1}`, contentFetchedAt: response.fetchedAt, provenance: [{url: response.url, hash: response.hash, fetchedAt: response.fetchedAt}]}));
+  let complete = chapters.map((c, i) => ({...c, catalogTitle: c.catalogTitle || c.title, chapter_number: i + 1, sourceOrder: i + 1, ...(!config.parts ? {link: `${response.url}#chapter-${i + 1}`, contentFetchedAt: response.fetchedAt, provenance: [{url: response.url, hash: response.hash, fetchedAt: response.fetchedAt}]} : {})}));
   let catalog = complete.map(({content, ...c}) => c);
   if (spec.catalog) {
     const reference = await getCatalog(spec, client);
@@ -322,6 +344,6 @@ export async function getResource(spec, client, jobDir) {
     }
     atomicWrite(path.join(jobDir, 'resource-catalog-check.json'), {resourceChapters: complete.length, onlineChapters: catalog.length, matchedPrefix: complete.length, missing: catalog.slice(complete.length), evidence: reference.evidence});
   }
-  atomicWrite(path.join(jobDir, 'resource-metadata.json'), {url: response.url, hash: response.hash, bytes: response.bytes});
+  atomicWrite(path.join(jobDir, 'resource-metadata.json'), resourceMetadata || {url: response.url, hash: response.hash, bytes: response.bytes});
   return {actual, catalog, chapters: complete, evidence: {url: evidence.url, hash: evidence.hash, fetchedAt: evidence.fetchedAt}};
 }

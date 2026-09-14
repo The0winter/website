@@ -10,9 +10,9 @@ import {formatChapterForExport} from '../titles.mjs';
 import {loadReadingEdition} from '../reading-edition.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 
-async function fixture(t) {
+async function fixture(t, {sourceOrder = false} = {}) {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'novel-edition-'));
-  const state = {count: 5, titles: {}, bodies: {}, requests: []};
+  const state = {count: 5, titles: {}, bodies: sourceOrder ? {4: '核实过的独立完整正文。'.repeat(90)} : {}, requests: []};
   const ids = [90, 12, 70, 21, 60, 31, 50, 41];
   const title = n => state.titles[n] || `第${[1,3,1,2,2][n - 1] || n - 2}章 场景${n === 3 ? 1 : n}`;
   const body = n => state.bodies[n] || (n === 4 ? '銆锛鈥鐨勬姹熸'.repeat(100) : Array.from({length: 100}, (_, i) => String.fromCodePoint(0x4e00 + (n === 3 ? 1 : n) * 200 + i)).join('').repeat(8));
@@ -33,7 +33,7 @@ async function fixture(t) {
   const options = {stateDir, outputDir: path.join(stateDir, 'exports')};
   const initial = await acquire(spec, {...options, mode: 'download'});
   assert.equal(initial.completeAgainstSource, true);
-  assert.ok(initial.errors >= 2);
+  assert.ok(initial.errors >= (sourceOrder ? 1 : 2));
   assert.equal(initial.exportFile, null);
   const dir = path.join(stateDir, 'jobs', jobId(spec)), file = path.join(options.outputDir, '测试书--网站阅读版.json');
   const raw = n => readJson(path.join(dir, 'chapters', hash(base + chapterPath(n)) + '.json')).chapter;
@@ -43,6 +43,28 @@ async function fixture(t) {
   const bind = () => bindReadingEdition(spec, file, options);
   return {spec, options, dir, file, binding, state, raw, bind, base, chapterPath, book};
 }
+
+test('source-order review pins duplicate omissions while preserving historical numbering and all other entries', async t => {
+  const f = await fixture(t, {sourceOrder: true});
+  const select = positions => ({...f.book, chapters: positions.map((n, i) => ({...formatChapterForExport(f.raw(n)), chapter_number: i + 1, sourceChapterNumber: n, sourceChapterUrl: f.raw(n).link}))});
+  const book = select([1,2,4,5]);
+  const review = {catalogHash: hash(readJson(path.join(f.dir, 'catalog.json'))), reason: '已核对当前来源重号，保留原始顺序；只移出已确认的重复项。', pairs: [{omit: 3, keep: 1, omitHash: hash(f.raw(3).content), keepHash: hash(f.raw(1).content), reason: '两个来源条目全文相同。'}]};
+  const bind = r => bindReadingEdition(f.spec, f.file, {...f.options, sourceOrderReview: r});
+  atomicWrite(f.file, book);
+  for (const r of [{...review, catalogHash: 'stale'}, {...review, pairs: []}, {...review, pairs: [{...review.pairs[0], omitHash: 'stale'}]}, {...review, pairs: [{...review.pairs[0], keep: 2, keepHash: hash(f.raw(2).content)}]}]) await assert.rejects(bind(r));
+  atomicWrite(f.file, select([2,1,4,5])); await assert.rejects(bind(review), /不能重排/);
+  atomicWrite(f.file, select([1,2,5])); await assert.rejects(bind(review), /不得遗漏/);
+  atomicWrite(f.file, {...book, chapters: book.chapters.map((c, i) => ({...c, chapter_number: i + 2}))}); await assert.rejects(bind(review), /顺序号/);
+  atomicWrite(f.file, book);
+  assert.equal((await bind(review)).readingEntries, 4);
+  assert.deepEqual(readJson(f.file), book);
+  const unchanged = await acquire(f.spec, {...f.options, mode: 'download'});
+  assert.equal(unchanged.reusedExport, true);
+  assert.equal(unchanged.acceptedSourceOrder.pairs.length, 1);
+  f.state.count = 6; f.state.titles[6] = '第99章 未核对跳号';
+  const blocked = await acquire(f.spec, {...f.options, mode: 'download'});
+  assert.equal(blocked.exportFile, null); assert.deepEqual(readJson(f.file), book);
+});
 
 test('bound updates preserve reviewed order, bypass only pinned source errors, and append after restart', async t => {
   const f = await fixture(t);

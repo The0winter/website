@@ -59,7 +59,21 @@ export function validateSpec(input) {
     if (spec.kind !== 'html' || !spec.catalog.count || spec.catalog.next || spec.catalog.selectPages || spec.catalog.json || !walk.next || !walk.bookLink || !walk.recentLinks || typeof walk.chapterPattern !== 'string' || !walk.chapterPattern.includes('(?<chapterId>')) throw Error('顺序采集需要目录总数、下一章、书籍链接、最新列表和本书章节路径规则，不能混用目录翻页');
     new RegExp(walk.chapterPattern, 'u');
   }
-  if (spec.kind !== 'html' && !(spec.resource?.url || spec.resource?.link)) throw Error('文件来源需配置下载地址或链接选择器');
+  if (spec.kind !== 'html' && !(spec.resource?.url || spec.resource?.link || spec.resource?.parts)) throw Error('文件来源需配置下载地址或链接选择器');
+  if (spec.resource?.decodeTitleEntities !== undefined && (spec.kind !== 'txt' || typeof spec.resource.decodeTitleEntities !== 'boolean')) throw Error('decodeTitleEntities 只支持 TXT 布尔值');
+  if (spec.resource?.parts !== undefined) {
+    const {parts, url, link, compression} = spec.resource;
+    if (spec.kind !== 'txt' || url || link || compression || !spec.catalog || !Array.isArray(parts) || !parts.length || parts.length > 40) throw Error('分段 TXT 需要在线目录和 1–40 个文件，不能混用单文件或压缩格式');
+    const urls = new Set();
+    let count = 0;
+    for (const part of parts) {
+      if (!part || typeof part.url !== 'string' || !Number.isInteger(part.expectedCount) || part.expectedCount < 1 || part.expectedCount > 20000) throw Error('每个 TXT 分段需要地址和已核实的章节数');
+      part.url = httpUrl(part.url);
+      if (urls.has(part.url)) throw Error('TXT 分段下载地址重复');
+      urls.add(part.url); count += part.expectedCount;
+    }
+    if (count > 20000) throw Error('TXT 分段总章节数超限');
+  }
   spec.allowedHosts = [...new Set([new URL(spec.sourceUrl).hostname, ...(spec.allowedHosts || [])])];
   for (const host of spec.allowedHosts) if (typeof host !== 'string' || !host || /[\s/@?#]/.test(host)) throw Error('allowedHosts 只能包含域名');
   for (const [field, lower, upper] of [['delayMs', 200, 60000], ['retries', 0, 5], ['timeoutMs', 1000, 60000]]) if (spec[field] !== undefined && (!Number.isInteger(spec[field]) || spec[field] < lower || spec[field] > upper)) throw Error(`${field} 超出范围`);
@@ -118,12 +132,12 @@ export function localBookState(spec, {stateDir = defaultStateDir, outputDir} = {
   } catch (error) { return {state: 'unknown', saved: 0, total: 0, message: `本地记录需要核对；旧文件会保留。${error.message}`}; }
 }
 
-export async function bindReadingEdition(input, file, {stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads')} = {}) {
+export async function bindReadingEdition(input, file, {stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads'), sourceOrderReview} = {}) {
   const spec = validateSpec(input), dir = path.join(path.resolve(stateDir), 'jobs', jobId(spec));
   return withLock(path.join(dir, 'job.lock'), async () => {
     const previous = readJson(path.join(dir, 'spec.json'));
     if (!previous || extractionHash(previous) !== extractionHash(spec)) throw Error('没有与当前规则匹配的原始采集记录');
-    return adoptReadingEdition(dir, spec, extractionHash(spec), path.resolve(file), path.resolve(outputDir));
+    return adoptReadingEdition(dir, spec, extractionHash(spec), path.resolve(file), path.resolve(outputDir), sourceOrderReview);
   });
 }
 
