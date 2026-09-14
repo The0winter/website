@@ -6,6 +6,10 @@
 .writer-works-shell { overflow:visible; }
 .writer-works-heading { border-radius:16px 16px 0 0; }
 .writer-toast { width:max-content; max-width:calc(100vw - 32px); }
+.writer-admin-work { min-height:100dvh; background:var(--home-background,#f7efe9); color:var(--home-text,#42362f); }
+.writer-admin-work-header { display:flex; align-items:center; gap:16px; max-width:840px; padding:20px 22px; margin:auto; }
+.writer-admin-work-header>button { display:flex; align-items:center; gap:6px; min-height:44px; font-size:14px; }
+.writer-admin-work-header h1 { flex:1; min-width:0; overflow-wrap:anywhere; font-size:18px; font-weight:600; }
 @media(min-width:768px) {
   .writer-page { font-size:17px; background:#f7f0e9; }
   .writer-page .text-xs { font-size:14px; line-height:1.6; }
@@ -18,7 +22,6 @@
   .writer-page .writer-work-cover { width:88px; height:118px; box-shadow:0 4px 10px #49302014; }
   .writer-page .writer-works-heading { padding:24px 28px; }
   .writer-page :is(input,textarea,select) { font-size:17px; }
-  .writer-page .writer-editor textarea { font-size:19px; line-height:2; }
   .writer-work-actions { margin-top:22px; }
   .writer-continue { min-height:40px; font-size:15px; }
 }

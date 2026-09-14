@@ -14,6 +14,10 @@
 .writing-draft-tools>span,.writing-storage-note,.writing-note { color:var(--writing-muted); font-size:11px; line-height:1.7; }
 .writing-storage-note { margin-top:22px; }
 .writing-chapters { margin:0; padding:0; list-style:none; }
+.writing-filters { display:flex; gap:8px; padding:18px 0 4px; }
+.writing-filters input { flex:1; min-width:0; }
+.writing-filters :is(input,select,button) { min-height:44px; padding:8px 10px; border:1px solid var(--writing-line); border-radius:8px; color:var(--writing-ink); background:var(--writing-paper); font-size:14px; }
+.writing-filters button { color:var(--writing-accent); }
 .writing-chapters li { display:flex; align-items:center; border-bottom:1px solid var(--writing-line); }
 .writing-chapter { flex:1; min-width:0; display:flex; text-align:left; align-items:center; gap:13px; min-height:86px; padding:14px 0; }
 .writing-chapter-number { flex:0 0 31px; color:var(--writing-muted); font-size:16px; font-variant-numeric:tabular-nums; }
@@ -34,7 +38,7 @@
 .writing-editor[data-closing=true] { animation:writing-exit-right 280ms ease both; pointer-events:none; }
 .writing-editor .writing-header { padding:calc(10px + env(safe-area-inset-top)) 16px 10px; flex:none; }
 .writing-save { min-width:64px; min-height:40px; padding:0 14px; border-radius:9px; background:var(--writing-accent); color:#fffaf6; font-size:14px; font-weight:600; }
-.writing-form.manuscript-form { display:flex; flex:1; flex-direction:column; min-height:0; width:100%; max-width:840px; margin:0 auto; padding:0 22px; border:0; border-radius:0; box-shadow:none; color:var(--writing-ink); background:transparent; }
+.writing-form.writer-dirty-form { display:flex; flex:1; flex-direction:column; min-height:0; width:100%; max-width:840px; margin:0 auto; padding:0 22px; border:0; border-radius:0; box-shadow:none; color:var(--writing-ink); background:transparent; }
 .writing-save-state { display:flex; align-items:center; gap:4px; min-height:42px; flex:none; font-size:10px; color:var(--writing-muted); }
 .writing-save-state>span:last-child { margin-left:auto; }
 .writing-title,.writing-body { display:flex; flex-direction:column; gap:9px; font-size:12px; color:var(--writing-muted); }
@@ -61,6 +65,6 @@ html .writing-workspace .writing-form :is(input,textarea):focus-visible { outlin
 @keyframes writing-enter-right { from { transform:translateX(100%); } to { transform:translateX(0); } }
 @keyframes writing-exit-right { to { transform:translateX(100%); } }
 @media(min-width:768px) { .writing-workspace { padding-bottom:40px; } .writing-heading { padding-top:34px; } .writing-editor .writing-header { padding-inline:max(24px,calc((100vw - 840px)/2)); } .writing-editor-footer { min-height:80px; } }
-@media(max-height:600px) { .writing-editor { overflow-y:auto; } .writing-form.manuscript-form { min-height:330px; } }
+@media(max-height:600px) { .writing-editor { overflow-y:auto; } .writing-form.writer-dirty-form { min-height:330px; } }
 html.dark .writing-workspace { --writing-paper:#24211e; --writing-bg:#1b1917; --writing-ink:#eaded2; --writing-muted:#a99887; --writing-line:#433a32; --writing-accent:#bd6b6d; }
 @media(prefers-reduced-motion:reduce) { .writing-workspace,.writing-editor { animation-duration:.01ms; } }

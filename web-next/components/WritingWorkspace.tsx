@@ -18,15 +18,19 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
 type WorkspaceProps = {
   reference: string; embedded?: boolean; onExit: () => void; onReady?: () => void; onChanged?: () => void;
+  moderation?: boolean;
 };
 export default function WritingWorkspace(props: WorkspaceProps) {
   const {user} = useAuth();
   return user ? <WorkspaceContent {...props} key={user.id + props.reference} accountId={user.id}/> : <p className="writing-note">请登录后继续创作。</p>;
 }
-function WorkspaceContent({reference, embedded = false, onExit, onReady, onChanged, accountId}: WorkspaceProps & {accountId: string}) {
+function WorkspaceContent({reference, embedded = false, moderation = false, onExit, onReady, onChanged, accountId}: WorkspaceProps & {accountId: string}) {
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot>();
   const [drafts, setDrafts] = useState<WritingDraft[]>([]);
-  const [tab, setTab] = useState<'drafts' | 'published'>('drafts');
+  const [tab, setTab] = useState<'drafts' | 'published'>(moderation ? 'published' : 'drafts');
+  const [search, setSearch] = useState('');
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const filter = useRef({search: '', order: 'desc'});
   const [page, setPage] = useState(1);
   const [error, setError] = useState('');
   const [offline, setOffline] = useState(false);
@@ -59,11 +63,11 @@ function WorkspaceContent({reference, embedded = false, onExit, onReady, onChang
   const refresh = useCallback(async (number = 1) => {
     let next: WorkspaceSnapshot;
     try {
-      next = await request<WorkspaceSnapshot>(`/api/writer/workspace/${reference}?page=${number}`);
+      next = await request<WorkspaceSnapshot>(`/api/writer/workspace/${reference}?page=${number}&search=${encodeURIComponent(filter.current.search)}&order=${filter.current.order}`);
       setOffline(false);
     } catch (reason) {
       if ((reason as {status?: number}).status && (reason as {status: number}).status < 500) throw reason;
-      const cached = number === 1 ? await cachedWorkspace(accountId, reference) : undefined;
+      const cached = number === 1 && !filter.current.search && filter.current.order === 'desc' ? await cachedWorkspace(accountId, reference) : undefined;
       if (!cached) throw reason;
       next = cached; setOffline(true);
     }
@@ -71,7 +75,7 @@ function WorkspaceContent({reference, embedded = false, onExit, onReady, onChang
     // A storage failure must never be mistaken for a successful local save.
     const local = await loadDrafts(nextScope, next);
     setSnapshot(next); setDrafts(local); setPage(number);
-    if (number === 1) await cacheWorkspace(accountId, reference, next);
+    if (number === 1 && !filter.current.search && filter.current.order === 'desc') await cacheWorkspace(accountId, reference, next);
     return next;
   }, [reference, accountId]);
 
@@ -218,6 +222,14 @@ function WorkspaceContent({reference, embedded = false, onExit, onReady, onChang
       setDrafts(await loadDrafts(scope)); openEditor(draft);
     } catch (reason) {setError((reason as Error).message);} finally {setWorking(false);}
   };
+  const deletePublished = async (chapter: WorkspaceSnapshot['published'][number]) => {
+    if (working || !confirm(`下架「${chapterTitle(chapter)}」？下架后读者将无法查看此章节。`)) return;
+    setWorking(true); setError('');
+    try {
+      await request(`/api/chapters/${chapter.id}`, {method: 'DELETE'});
+      await refresh(); callbacks.current.onChanged?.();
+    } catch (reason) {setError((reason as Error).message);} finally {setWorking(false);}
+  };
   const publish = async () => {
     if (publishBusy.current || !current.current?.content.trim()) return;
     if (!confirm(current.current.targetChapterId ? '发布修改并更新原章节？' : `发布「${chapterTitle(current.current)}」？${snapshot?.work.bookId ? '' : '作品将同时公开。'}`)) return;
@@ -268,12 +280,13 @@ function WorkspaceContent({reference, embedded = false, onExit, onReady, onChang
         {drafts.length ? <ol className="writing-chapters">{drafts.map(draft => <li key={draft.id}><button type="button" className="writing-chapter" onClick={() => openEditor(draft)}><span className="writing-chapter-number">{String(draft.number).padStart(2, '0')}</span><span><strong>{chapterTitle(draft)}</strong><small>{draft.targetChapterId ? '修改稿 · ' : ''}{Array.from(draft.content).length.toLocaleString()} 字</small></span><ChevronRight size={17}/></button><button type="button" className="writing-delete" aria-label={`删除草稿「${chapterTitle(draft)}」`} onClick={() => void remove(draft)}><Trash2 size={16}/></button></li>)}</ol> : <div className="writing-empty"><FileText size={34}/><h3>下一章，从这里开始</h3><p>点上方加号，写下故事的第一句。</p></div>}
         <p className="writing-storage-note">草稿按账号保存在当前浏览器，清除网站数据会删除本地草稿。</p>
       </div> : <div role="tabpanel" id="writing-published" aria-labelledby="writing-published-tab">
-        {snapshot?.published.length ? <><ol className="writing-chapters">{snapshot.published.map(chapter => <li key={chapter.id}><button className="writing-chapter" type="button" disabled={working} onClick={() => void editPublished(chapter)}><span className="writing-chapter-number">{String(chapter.number).padStart(2, '0')}</span><span><strong>{chapterTitle(chapter)}</strong><small>{chapter.words.toLocaleString()} 字 · 已发布</small></span><ChevronRight size={17}/></button></li>)}</ol>{snapshot.total > 50 && <nav className="writing-pagination" aria-label="已发布章节分页"><button disabled={page === 1 || working} onClick={() => void refresh(page - 1).catch(reason => setError(reason.message))}>上一页</button><span>{page} / {Math.ceil(snapshot.total / 50)}</span><button disabled={page * 50 >= snapshot.total || working} onClick={() => void refresh(page + 1).catch(reason => setError(reason.message))}>下一页</button></nav>}</> : <div className="writing-empty"><FileText size={34}/><h3>还没有已发布章节</h3><p>草稿准备好后，就可以发布了。</p></div>}
+        {moderation && <form className="writing-filters" onSubmit={event => {event.preventDefault(); filter.current={search,order}; void refresh().catch(reason => setError(reason.message));}}><input aria-label="搜索章节" value={search} maxLength={100} onChange={event => setSearch(event.target.value)} placeholder="搜索章节名"/><select aria-label="章节排序" value={order} onChange={event => {const value=event.target.value as 'asc'|'desc'; setOrder(value); filter.current={search,order:value}; void refresh().catch(reason => setError(reason.message));}}><option value="desc">倒序</option><option value="asc">正序</option></select><button type="submit">搜索</button></form>}
+        {snapshot?.published.length ? <><ol className="writing-chapters">{snapshot.published.map(chapter => <li key={chapter.id}><button className="writing-chapter" type="button" disabled={working} onClick={() => void editPublished(chapter)}><span className="writing-chapter-number">{String(chapter.number).padStart(2, '0')}</span><span><strong>{chapterTitle(chapter)}</strong><small>{chapter.words.toLocaleString()} 字 · 已发布</small></span><ChevronRight size={17}/></button><button type="button" className="writing-delete" disabled={working} aria-label={`下架章节「${chapterTitle(chapter)}」`} onClick={() => void deletePublished(chapter)}><Trash2 size={16}/></button></li>)}</ol>{snapshot.total > 50 && <nav className="writing-pagination" aria-label="已发布章节分页"><button disabled={page === 1 || working} onClick={() => void refresh(page - 1).catch(reason => setError(reason.message))}>上一页</button><span>{page} / {Math.ceil(snapshot.total / 50)}</span><button disabled={page * 50 >= snapshot.total || working} onClick={() => void refresh(page + 1).catch(reason => setError(reason.message))}>下一页</button></nav>}</> : <div className="writing-empty"><FileText size={34}/><h3>还没有已发布章节</h3><p>草稿准备好后，就可以发布了。</p></div>}
       </div>}
     </div>
     {editor && <div className="writing-editor" ref={editorPanel} role="dialog" aria-modal="true" aria-label={editor.targetChapterId ? '修改章节' : '创建新章节'} tabIndex={-1} data-closing={closing || undefined}>
       <header className="writing-header"><button type="button" aria-label="返回草稿箱" disabled={publishing} onClick={() => void closeEditor()}><ArrowLeft size={20}/></button><div><p>{snapshot?.work.title}</p><h2>第 {editor.number} 章</h2></div><button type="button" className="writing-save" disabled={publishing} onClick={() => void save()}>保存</button></header>
-      <form ref={form} className="writing-form manuscript-form" data-dirty={fingerprint(editor) !== savedText.current} data-busy={publishing} onSubmit={event => {event.preventDefault(); void save();}}>
+      <form ref={form} className="writing-form writer-dirty-form" data-dirty={fingerprint(editor) !== savedText.current} data-busy={publishing} onSubmit={event => {event.preventDefault(); void save();}}>
         <div className="writing-save-state" role="status" aria-live="polite">{saveStatus === '已保存到本机' && <Check size={14}/>}<span>{saveStatus}</span><span>有改动时每 2 秒自动保存</span></div>
         {editorError && <div className="writing-error" role="alert">{editorError}{editorError.includes('序号已被使用') && <button type="button" onClick={() => void renumber()}>重新编号</button>}</div>}
         <label className="writing-title">章节名<input aria-label="章节名" value={editor.title} disabled={publishing} onChange={event => update('title', event.target.value)} maxLength={100} placeholder={`第${editor.number}章  章节名`}/></label>

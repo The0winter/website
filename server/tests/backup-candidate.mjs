@@ -57,7 +57,7 @@ try{
     const login=await fetch(base+'/api/auth/signin',{method:'POST',headers:{'content-type':'application/json',origin:'http://127.0.0.1:3000','x-csrf-token':csrf.csrfToken,cookie:csrfResponse.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ')},body:JSON.stringify({email:user.email,password:'Restore-test-12345'})});
     assert.equal(login.status,200);
     const cookie=login.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');
-    assert.equal((await fetch(`${base}/api/books/${book._id}/draft`,{headers:{cookie}})).status,200);
+    assert.equal((await fetch(`${base}/api/writer/workspace/b_${book._id}`,{headers:{cookie}})).status,200);
     assert.equal((await fetch(`${base}/api/users/${user._id}/bookmarks`,{headers:{cookie}})).status,200);
   }finally{await new Promise(resolve=>server.close(resolve));}
   const report={result:'passed',elapsedMs:Date.now()-started,mongodb:'7.0.40',tools:'100.17.0',backup:manifest,checked:['chapter ID and exact content','book-user-shelf-review relations','password login','private draft retention','unique chapter index','readiness and restored HTTP reading'],limitations:['synthetic data only','same Windows machine','no offsite copy','no browser or Linux boot verification']};

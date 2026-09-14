@@ -22,13 +22,6 @@
 .mw-view-panel[data-closing=true] { animation:mw-view-slide-out 400ms cubic-bezier(.4,0,.6,1) both; }
 .mw-view[data-kind=new] .mw-view-panel[data-closing=true] { animation-name:mw-view-sheet-out; }
 .mw-view[data-closing=true] .mw-view-scrim { animation:mw-view-dim-out 400ms ease both; }
-.writer-embedded { min-height:0; }
-.writer-embedded>.writer-mobile-header,.writer-embedded>aside { display:none; }
-.writer-embedded-new { background:transparent; }
-.writer-embedded-new>.writer-main { display:none; }
-.writer-embedded-new .writer-create-modal { position:static; background:transparent; backdrop-filter:none; animation:none; }
-.writer-embedded-new .writer-create-modal>div { padding-top:16px; max-height:none; border-radius:0; background:transparent; box-shadow:none; animation:none; }
-.writer-embedded-new .writer-create-title { display:none; }
 @keyframes mw-view-slide-in { from { transform:translate3d(100%,0,0); } to { transform:translate3d(0,0,0); } }
 .mw-view[data-direction=left] .mw-view-panel { animation-name:mw-writing-slide-in; }
 .mw-view[data-direction=left] .mw-view-panel[data-closing=true] { animation-name:mw-writing-slide-out; }

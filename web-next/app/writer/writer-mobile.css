@@ -21,13 +21,4 @@
   .writer-page .text-blue-600 { color:#b8424c; }
   .writer-page .border-blue-100 { border-color:#ecd1cb; }
   .writer-page .shadow-blue-500\/20,.writer-page .shadow-blue-500\/30 { --tw-shadow-color:#b8424c20; }
-  .writer-create-modal>div { max-height:calc(100dvh - env(safe-area-inset-top) - 12px); overflow-y:auto; padding:22px 20px calc(20px + env(safe-area-inset-bottom)); }
-  .writer-create-modal input,.writer-create-modal textarea { font-size:16px; }
-  .writer-editor { height:100dvh; }
-  .writer-editor>div>div:first-child { padding:calc(10px + env(safe-area-inset-top)) 12px 10px; }
-  .writer-editor>div>div:first-child button { min-height:40px; }
-  .writer-editor>div>div:first-child h3 { font-size:15px; }
-  .writer-editor [aria-label="存草稿"] { padding-left:10px; padding-right:10px; }
-  .writer-editor [aria-label="存草稿"] span { display:inline; font-size:12px; }
-  .writer-manager>div { height:calc(100dvh - env(safe-area-inset-top) - 20px); }
 }

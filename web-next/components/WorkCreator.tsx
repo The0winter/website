@@ -7,7 +7,7 @@ import type {Book} from '@/lib/api';
 import BookCover from './BookCover';
 import './work-creator.css';
 
-type Manuscript = {title:string; description:string; cover_image:string; category:string; filename:string; chapters:unknown[]; revision:number};
+type WorkMetadata = {revision:number};
 async function readResult(response:Response) {
   const result=await response.json().catch(()=>({}));
   if(!response.ok) throw Error(result.error || '操作失败，请重试');
@@ -28,7 +28,7 @@ export default function WorkCreator({draftKey, work, embedded, onClose, onComple
   const [error,setError]=useState('');
   const form=useRef<HTMLFormElement>(null);
   const lock=useRef(false);
-  const manuscript=useRef<Manuscript|null>(null);
+  const manuscript=useRef<WorkMetadata|null>(null);
   const uploaded=useRef<{file:File;url:string}|null>(null);
   const titleLength=Array.from(title).length, descriptionLength=Array.from(description).length;
   const limits=work && !work.manuscriptKey ? {title:100,description:500} : {title:15,description:300};
@@ -78,10 +78,10 @@ export default function WorkCreator({draftKey, work, embedded, onClose, onComple
       if(work && !work.manuscriptKey) {
         await readResult(await safeFetch('/api/books/'+work.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,description,cover_image:image})}));
       } else {
-        const original=manuscript.current || {category:'未分类',filename:'',chapters:[],revision:0};
+        const revision=manuscript.current?.revision || 0;
         const body=new FormData();
-        // Keep the loaded revision and every chapter; concurrent edits must conflict, never overwrite.
-        body.append('manuscript',JSON.stringify({...original,title,description,cover_image:image,action:'draft'}));
+        // Chapter content stays on the server; metadata edits cannot replace it.
+        body.append('manuscript',JSON.stringify({revision,title,description,cover_image:image,action:'draft'}));
         await readResult(await safeFetch('/api/manuscripts/'+(work?.manuscriptKey || draftKey),{method:'PUT',body,signal:AbortSignal.timeout(90000)}));
       }
       if(form.current){form.current.dataset.dirty='false';form.current.dataset.busy='false';}
@@ -92,7 +92,7 @@ export default function WorkCreator({draftKey, work, embedded, onClose, onComple
   };
 
   return <div className={`work-create${embedded ? ' work-create-embedded' : ''}`}>
-    <form ref={form} className="manuscript-form work-create-form" aria-label={work ? '编辑作品' : '创建新作品'} data-dirty={dirty} data-busy={busy} onSubmit={event=>{event.preventDefault();void save();}}>
+    <form ref={form} className="writer-dirty-form work-create-form" aria-label={work ? '编辑作品' : '创建新作品'} data-dirty={dirty} data-busy={busy} onSubmit={event=>{event.preventDefault();void save();}}>
       {!embedded && <header className="work-create-header"><h1>{work ? '编辑作品' : '创建新作品'}</h1><button type="button" aria-label={work ? '关闭编辑作品' : '关闭新建作品'} disabled={busy} onClick={close}><X size={20}/></button></header>}
       <div className="work-create-fields">
         <div className="work-create-cover-column">

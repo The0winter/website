@@ -41,7 +41,9 @@ test('chapter workspace preserves cloud drafts, ownership, quota and publication
   try {
     const password = await bcrypt.hash('Writing-test-123', 10);
     const [user, stranger] = await User.create([{username: '写作者', email: 'writer@example.test', password}, {username: '其他人', email: 'other@example.test', password}]);
-    const owner = client(), other = client(), guest = client();
+    const adminUser = await User.create({username: '总编辑', email: 'admin@example.test', password, role: 'admin'});
+    const owner = client(), other = client(), guest = client(), admin = client();
+    assert.equal((await admin('/api/auth/signin', 'POST', {email: adminUser.email, password: 'Writing-test-123'})).status, 200);
     for (const [request, account] of [[owner, user], [other, stranger]]) assert.equal((await request('/api/auth/signin', 'POST', {email: account.email, password: 'Writing-test-123'})).status, 200);
     const key = crypto.randomUUID(), path = `/api/writer/workspace/m_${key}`;
     const original = [{title: '来信', content: '第一章旧正文。', sourceNumber: 1, volumeTitle: '第一卷', volumeNumber: 1}, {title: '远行', content: '第二章旧正文。', sourceNumber: 2, volumeTitle: '第一卷', volumeNumber: 1}];
@@ -87,6 +89,23 @@ test('chapter workspace preserves cloud drafts, ownership, quota and publication
       const catalog = await owner(path); assert.equal(catalog.data.maxNumber, 10);
       assert.deepEqual(catalog.data.published.map(row => row.number), [10, 2]);
       assert.equal((await other(`/api/writer/workspace/b_${bookId}`)).status, 404);
+    });
+    await t.test('admin uses the same workspace with literal title search, ordering and publication checks', async () => {
+      const url = `/api/writer/workspace/b_${bookId}`;
+      const result = await admin(url + '?order=asc');
+      assert.equal(result.status, 200);
+      assert.deepEqual(result.data.published.map(c => c.number), [2, 10]);
+      assert.equal(result.data.cloudDrafts.length, 0); // Other authors' unpublished material stays private.
+      assert.equal((await admin(path)).status, 404);
+      const found = await admin(url + '?search=' + encodeURIComponent('新章'));
+      assert.equal(found.data.total, 1); assert.equal(found.data.maxNumber, 10);
+      assert.equal((await admin(url + '?search=' + encodeURIComponent('.*'))).data.total, 0);
+      const chapter = await Chapter.findById(firstId);
+      const payload = {id: 'admin-edit', title: chapter.title, content: '管理员校对后的正文', number: 2, targetChapterId: firstId, baseUpdatedAt: chapter.updatedAt.toISOString()};
+      assert.equal((await admin(url + '/publish', 'POST', payload)).status, 200);
+      assert.equal((await Book.findById(bookId)).author_id.toString(), user.id);
+      assert.equal((await Chapter.findById(firstId)).content, payload.content);
+      assert.equal((await admin(url + '/publish', 'POST', {...payload, id: 'stale-admin-edit'})).status, 409);
     });
     await t.test('editing preserves the original on a stale revision and protects other books', async () => {
       const chapter = await Chapter.findById(firstId);

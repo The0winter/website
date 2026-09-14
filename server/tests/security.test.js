@@ -63,7 +63,7 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       const entries=[
         ['POST','/api/books'],['PATCH',`/api/books/${book._id}`],['DELETE',`/api/books/${book._id}`],['POST',`/api/books/${book._id}/restore`],
         ['POST','/api/chapters'],['PATCH',`/api/chapters/${chapter._id}`],['DELETE',`/api/chapters/${chapter._id}`],['POST',`/api/chapters/${chapter._id}/restore`],
-        ['PUT',`/api/books/${book._id}/draft`],['POST',`/api/books/${book._id}/draft/publish`],['DELETE',`/api/books/${book._id}/draft`],
+        ['POST',`/api/writer/workspace/b_${book._id}/publish`],['PUT','/api/manuscripts/security-metadata-test'],['DELETE','/api/manuscripts/security-metadata-test'],
         ['POST',`/api/users/${a._id}/bookmarks`],['DELETE',`/api/users/${a._id}/bookmarks/${book._id}`],['POST',`/api/books/${book._id}/reviews`],
         ['POST','/api/upload/cover'],['DELETE','/api/upload/cover'],['PATCH',`/api/users/${a._id}`],
         ['POST','/api/forum/posts'],['POST',`/api/forum/posts/${book._id}/replies`],['POST',`/api/forum/replies/${book._id}/comments`],
@@ -87,28 +87,6 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       assert.equal((await Chapter.findById(chapter._id)).content,'Controlled content');
       assert.equal(await Chapter.countDocuments(),1);
       assert.equal((await owner.write(`/api/books/${book._id}`,'PATCH',{title:'Edited'})).status,200);
-    });
-    await t.test('drafts remain private, publish once, and detect changes to published originals',async()=>{
-      const draftBook=await Book.create({title:'Draft isolation',author_id:a._id});
-      const url=`/api/books/${draftBook._id}/draft`;
-      assert.equal((await guest.request(url)).status,401);
-      assert.equal((await other.write(url,'PUT',{title:'steal',content:'private'})).status,403);
-      const saved=await owner.write(url,'PUT',{title:'Private chapter',content:'Not public'});
-      assert.equal(saved.status,200);assert.equal(await Chapter.countDocuments({bookId:draftBook._id}),0);
-      assert.equal((await other.request(url)).status,403);
-      assert.equal((await guest.request('/api/chapters/'+saved.data.id)).status,404);
-      const requests=await Promise.all(Array.from({length:3},()=>owner.write(url+'/publish','POST',{draftId:saved.data.id})));
-      for(const response of requests)assert.equal(response.status,200);
-      assert.equal(new Set(requests.map(r=>r.data.id)).size,1);assert.equal(await Chapter.countDocuments({bookId:draftBook._id}),1);
-      const published=requests[0].data;
-      const edit=await owner.write(url,'PUT',{targetChapterId:published.id,title:'Edited draft',content:'Private revision'});
-      assert.equal(edit.status,200);assert.equal((await Chapter.findById(published.id)).content,'Not public');
-      await Chapter.updateOne({_id:published.id},{$set:{content:'Concurrent real edit'}});
-      assert.equal((await owner.write(url+'/publish','POST',{draftId:edit.data.id})).status,409);
-      assert.equal((await Chapter.findById(published.id)).content,'Concurrent real edit');
-      assert.equal((await owner.request(url)).data.content,'Private revision');
-      assert.equal((await owner.write(url,'DELETE')).status,200);
-      assert.equal((await owner.request(url)).data,null);
     });
     await t.test('profile styles persist per account and accept only permitted values',async()=>{
       const path = `/api/users/${a._id}`;
@@ -253,9 +231,9 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       assert.equal((await updateStatistics(now)).claimed,false);
       assert.equal((await Job.findById('statistics')).status,'done');
       const activity=await UserDaily.findOne({userId:a._id,day});
-      // Two chapter operations plus one draft publication; three concurrent publish retries count once.
-      assert.equal(activity.views,1);assert.equal(activity.uploads,3);
-      const accountStats=await User.findById(a._id);assert.equal(accountStats.stats.today_views,1);assert.equal(accountStats.weekly_score,151);
+      // The two chapter operations above count once each.
+      assert.equal(activity.views,1);assert.equal(activity.uploads,2);
+      const accountStats=await User.findById(a._id);assert.equal(accountStats.stats.today_views,1);assert.equal(accountStats.weekly_score,101);
       const daily=await mongoose.connection.collection('readdailies').findOne({_id:`${book._id}:${day}`});
       assert.equal(daily.expiresAt, undefined); // Writer trends retain daily totals.
       // A later month must clear period counters without clearing lifetime views.

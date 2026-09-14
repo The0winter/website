@@ -1,9 +1,14 @@
 import { test, expect, type Page } from '@playwright/test';
 
-const base = 'http://127.0.0.1:3000';
+const base = process.env.MANUSCRIPT_BASE_URL || 'http://127.0.0.1:3000';
 async function login(page: Page) {
   await page.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
   page.on('dialog', dialog => dialog.accept());
+  if (process.env.MANUSCRIPT_BASE_URL) {
+    const csrf=await(await page.request.get(base+'/api/auth/csrf')).json();
+    const response=await page.request.post(base+'/api/auth/signin',{headers:{origin:base,'x-csrf-token':csrf.csrfToken},data:{email:'manuscript@example.test',password:'Manuscript-test-123'}});
+    expect(response.ok()).toBe(true); return;
+  }
   await page.goto(`${base}/login`);
   await page.getByPlaceholder('请输入用户名').fill('隔离作者');
   await page.getByPlaceholder('请输入密码').fill('Local-test-12345');
@@ -11,45 +16,37 @@ async function login(page: Page) {
   await expect(page).toHaveURL(`${base}/`);
 }
 
-test('writer creates a book, publishes and edits a chapter that readers can open', async ({ page }) => {
+async function createPublished(page: Page) {
   await login(page);
-  const title = `创作闭环 ${Date.now()}`;
-  await page.goto(`${base}/writer`);
-  await page.getByRole('button', { name: /创建新书|新建/ }).click();
-  await page.getByPlaceholder('请输入书名').fill(title);
-  await page.getByPlaceholder('简单介绍一下你的故事...').fill('仅用于隔离浏览器回归的合成作品。');
-  const created = page.waitForResponse(r => r.url().endsWith('/api/books') && r.request().method() === 'POST');
-  await page.getByRole('button', { name: '立即创建' }).click();
-  const bookResponse = await created;
-  expect(bookResponse.ok()).toBe(true);
-  const book = await bookResponse.json();
-  const card = page.locator('div.group.items-start').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
-  await card.getByRole('button', { name: '快速发布' }).click();
-  await page.getByPlaceholder('请输入章节标题').fill('第一章 浏览器发布');
-  await page.getByPlaceholder('在这里开始你的创作...').fill('这是一段经过浏览器发布的合成正文。');
-  await page.getByRole('button', { name: '发布', exact: true }).click();
-  const published = page.waitForResponse(r => r.url().endsWith('/draft/publish') && r.request().method() === 'POST');
-  await page.getByRole('button', { name: '确认发布', exact: true }).click();
-  const chapterResponse = await published;
-  expect(chapterResponse.ok()).toBe(true);
-  const chapter = await chapterResponse.json();
-  await expect(page.getByText('发布成功', { exact: true })).toBeVisible();
-  await card.getByRole('button', { name: '管理', exact: true }).click();
-  const editButton = page.getByRole('button', { name: '编辑章节：第一章 浏览器发布' });
-  await editButton.hover();
-  await editButton.click();
-  await expect(page.getByPlaceholder('在这里开始你的创作...')).toHaveValue('这是一段经过浏览器发布的合成正文。');
-  await page.getByPlaceholder('在这里开始你的创作...').fill('这是编辑保存后的合成正文，旧章节 URL 应当继续有效。');
-  await page.getByRole('button', { name: '发布', exact: true }).click();
-  const edited=page.waitForResponse(r=>r.url().endsWith('/draft/publish')&&r.request().method()==='POST');
-  await page.getByRole('button', { name: '确认发布', exact: true }).click();
-  const editResponse=await edited;
-  expect(editResponse.ok()).toBe(true);
-  expect((await editResponse.json()).id).toBe(chapter.id||chapter._id);
-  await expect(page.getByPlaceholder('在这里开始你的创作...')).not.toBeVisible();
-  await expect(page.getByText('发布成功', { exact: true })).toBeVisible();
-  await page.goto(`${base}/book/${book.id || book._id}/${chapter.id || chapter._id}`);
-  await expect(page.getByRole('region', { name: '章节阅读', exact: true }).getByText('这是编辑保存后的合成正文，旧章节 URL 应当继续有效。', { exact: true })).toBeVisible();
+  const title = `创作闭环${Date.now().toString().slice(-8)}`;
+  await page.goto(`${base}/writer?action=new`);
+  await page.getByLabel('书名', {exact:true}).fill(title);
+  await page.getByLabel('简介', {exact:true}).fill('仅用于隔离浏览器回归的合成作品。');
+  await page.getByRole('button', {name:'创建',exact:true}).click();
+  await expect(page).toHaveURL(`${base}/writer`);
+  await page.locator('.writer-work').filter({hasText:title}).getByRole('button', {name:'创作',exact:true}).click();
+  await page.getByRole('button', {name:'新建章节',exact:true}).click();
+  await page.getByLabel('章节名', {exact:true}).fill('第一章 浏览器发布');
+  await page.getByLabel('正文', {exact:true}).fill('这是一段经过浏览器发布的合成正文。');
+  const published = page.waitForResponse(r => r.url().includes('/workspace/') && r.url().endsWith('/publish') && r.request().method() === 'POST');
+  await page.getByRole('button', {name:'发布',exact:true}).click();
+  const response = await published; expect(response.ok()).toBe(true);
+  await expect(page.locator('.writing-editor')).toHaveCount(0);
+  return response.json() as Promise<{bookId:string;chapterId:string}>;
+}
+
+test('writer creates a book, publishes and edits a chapter that readers can open', async ({page}) => {
+  const {bookId,chapterId} = await createPublished(page);
+  await page.locator('.writing-chapter').click();
+  await expect(page.getByLabel('正文', {exact:true})).toHaveValue('这是一段经过浏览器发布的合成正文。');
+  await page.getByLabel('正文', {exact:true}).fill('这是编辑保存后的合成正文，旧章节 URL 应当继续有效。');
+  const edited=page.waitForResponse(r=>r.url().includes('/workspace/') && r.url().endsWith('/publish') && r.request().method()==='POST');
+  await page.getByRole('button',{name:'发布',exact:true}).click();
+  const response=await edited; expect(response.ok()).toBe(true);
+  expect((await response.json()).chapterId).toBe(chapterId);
+  await expect(page.locator('.writing-editor')).toHaveCount(0);
+  await page.goto(`${base}/book/${bookId}/${chapterId}`);
+  await expect(page.getByRole('region',{name:'章节阅读',exact:true}).getByText('这是编辑保存后的合成正文，旧章节 URL 应当继续有效。',{exact:true})).toBeVisible();
 });
 
 test('forum question, answer and deep link retain the submitted content', async ({ page }) => {
@@ -95,25 +92,23 @@ test('forum question, answer and deep link retain the submitted content', async 
   await expect(page.getByText('隔离二级评论', { exact: true })).toBeVisible();
 });
 
-test('saved edit drafts survive refresh while public chapter bytes stay unchanged', async ({ page }) => {
-  await login(page);
-  const chapterUrl=`${base}/api/chapters/000000000000000000000101`;
-  const original=await (await page.request.get(chapterUrl)).json();
-  await page.goto(`${base}/writer`);
-  const card=page.locator('div.group.items-start').filter({has:page.getByRole('heading',{name:'隔离测试：山海行记',exact:true})});
-  await card.getByRole('button',{name:'管理',exact:true}).click();
-  await page.getByRole('button',{name:'编辑章节：第1章 山间来信',exact:true}).click();
-  await expect(page.getByPlaceholder('在这里开始你的创作...')).toHaveValue(original.content);
+test('saved edit drafts survive refresh while public chapter bytes stay unchanged', async ({page}) => {
+  const {bookId,chapterId}=await createPublished(page);
+  const chapterUrl=`${base}/api/chapters/${chapterId}`;
+  const original=await(await page.request.get(chapterUrl)).json();
+  await page.locator('.writing-chapter').click();
+  await expect(page.getByLabel('正文',{exact:true})).toHaveValue(original.content);
   const privateText=`尚未公开的编辑草稿 ${Date.now()}`;
-  await page.getByPlaceholder('在这里开始你的创作...').fill(privateText);
-  await page.getByRole('button',{name:'存草稿',exact:true}).click();
-  await expect(page.getByText('草稿已保存，仅本人可见',{exact:true})).toBeVisible();
-  expect((await (await page.request.get(chapterUrl)).json()).content).toBe(original.content);
+  await page.getByLabel('正文',{exact:true}).fill(privateText);
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  await expect(page.locator('.writing-save-state')).toContainText('已保存到本机');
+  expect((await(await page.request.get(chapterUrl)).json()).content).toBe(original.content);
+  await page.goto(`${base}/writer?action=chapters&work=b_${bookId}`);
+  await page.locator('.writing-chapter').click();
+  await expect(page.getByLabel('正文',{exact:true})).toHaveValue(privateText);
   await page.reload();
-  await card.getByRole('button',{name:'管理',exact:true}).click();
-  await page.getByRole('button',{name:'继续草稿',exact:true}).click();
-  await expect(page.getByPlaceholder('在这里开始你的创作...')).toHaveValue(privateText);
-  expect((await (await page.request.get(chapterUrl)).json()).content).toBe(original.content);
+  await expect(page.getByLabel('正文',{exact:true})).toHaveValue(privateText);
+  expect((await(await page.request.get(chapterUrl)).json()).content).toBe(original.content);
 });
 
 test('bookmarks and ratings persist through the public detail and personal shelf',async({page})=>{

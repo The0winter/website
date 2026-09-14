@@ -19,10 +19,17 @@ for(const width of [320,1440]) test(`metadata editing preserves draft chapters a
   let card=await create(page,title);
   const works=await(await page.request.get(base+'/api/writer/works?limit=20')).json();
   const key=works.find((work:{title:string})=>work.title===title).manuscriptKey;
-  const original=await(await page.request.get(base+'/api/manuscripts/'+key)).json();
-  const csrf=await(await page.request.get(base+'/api/auth/csrf')).json();
-  const seed=await page.request.put(base+'/api/manuscripts/'+key,{headers:{origin:base,'x-csrf-token':csrf.csrfToken},multipart:{manuscript:JSON.stringify({...original,action:'draft',chapters:[{title:'第一章 来信',content:'不能丢失的第一章正文。',sourceNumber:1,volumeTitle:'第一卷 风起',volumeNumber:1},{title:'第二章 远行',content:'不能丢失的第二章正文。',sourceNumber:2,volumeTitle:'第一卷 风起',volumeNumber:1}]})}});
-  expect(seed.ok()).toBe(true);
+  await card.getByRole('button',{name:'创作',exact:true}).click();
+  for (const [name, content] of [['第一章 来信', '不能丢失的第一章正文。'], ['第二章 远行', '不能丢失的第二章正文。']]) {
+    await page.getByRole('button',{name:'新建章节',exact:true}).click();
+    await page.getByLabel('章节名',{exact:true}).fill(name);
+    await page.getByLabel('正文',{exact:true}).fill(content);
+    await page.getByRole('button',{name:'保存',exact:true}).click();
+    await expect(page.getByText('已保存到本机',{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'返回草稿箱',exact:true}).click();
+    await expect(page.locator('.writing-editor')).toHaveCount(0);
+  }
+  await page.getByRole('button',{name:'返回创作中心',exact:true}).click();
   const before=await(await page.request.get(base+'/api/manuscripts/'+key)).json();
   await card.getByLabel(`管理《${title}》`).click();
   await card.getByRole('button',{name:'编辑作品',exact:true}).click();
@@ -39,7 +46,7 @@ for(const width of [320,1440]) test(`metadata editing preserves draft chapters a
   await expect(card).toBeVisible();
   const after=await(await page.request.get(base+'/api/manuscripts/'+key)).json();
   expect(after.title).toBe(edited);expect(after.description).toBe('在作品设置中更新后的简介。');expect(after.cover_image).toBeTruthy();
-  expect(after.chapters).toEqual(before.chapters);expect(after.revision).toBe(before.revision+1);
+  expect(after.chapters).toBeUndefined();expect(after.revision).toBe(before.revision+1);
   await card.getByRole('button',{name:'创作',exact:true}).click();
   await expect(page.locator('.writing-heading h2')).toContainText(edited);
   await expect(page.getByLabel('简介',{exact:true})).toHaveCount(0);
@@ -94,4 +101,40 @@ test('cancel and conflicting metadata edits preserve the latest manuscript',asyn
   page.once('dialog',async dialog=>{questions++;await dialog.accept();});
   await editor.getByRole('button',{name:'关闭编辑作品'}).click();
   await expect(editor).toHaveCount(0);expect(questions).toBe(2);
+});
+
+test('administrator searches, edits and withdraws chapters through the shared editor', async ({page})=>{
+  await page.setViewportSize({width:1440,height:900});
+  const title='校对'+Date.now().toString().slice(-8);
+  await create(page,title);
+  const work=(await(await page.request.get(base+'/api/writer/works?limit=20')).json()).find((w:{title:string})=>w.title===title);
+  const csrf=await(await page.request.get(base+'/api/auth/csrf')).json();
+  const published=await page.request.post(base+`/api/writer/workspace/m_${work.manuscriptKey}/publish`,{headers:{origin:base,'x-csrf-token':csrf.csrfToken},data:{id:'admin-fixture',title:'第一章 校对',content:'待校对正文',number:1}});
+  expect(published.ok()).toBe(true);
+  const {chapterId}=await published.json();
+  await page.reload();
+  await page.getByRole('button',{name:'书籍总编辑',exact:true}).click();
+  await page.getByPlaceholder('搜索书名或作者...').fill(title);
+  const result=page.locator('div.group.items-start').filter({hasText:title}).last();
+  await result.getByRole('button',{name:'管理',exact:true}).click();
+  await expect(page.getByRole('tab',{name:/已发布/})).toHaveAttribute('aria-selected','true');
+  await page.getByLabel('搜索章节').fill('不存在');
+  await page.getByRole('button',{name:'搜索',exact:true}).click();
+  await expect(page.locator('.writing-chapter')).toHaveCount(0);
+  await page.getByLabel('搜索章节').fill('校对');
+  await page.getByLabel('章节排序').selectOption('asc');
+  await page.locator('.writing-chapter').click();
+  await expect(page.getByLabel('正文',{exact:true})).toHaveValue('待校对正文');
+  await page.getByLabel('正文',{exact:true}).fill('校对后的正文');
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  expect((await(await page.request.get(base+'/api/chapters/'+chapterId)).json()).content).toBe('待校对正文');
+  page.once('dialog',dialog=>dialog.accept());
+  await page.getByRole('button',{name:'发布',exact:true}).click();
+  await expect(page.locator('.writing-editor')).toHaveCount(0);
+  expect((await(await page.request.get(base+'/api/chapters/'+chapterId)).json()).content).toBe('校对后的正文');
+  page.once('dialog',dialog=>dialog.accept());
+  await page.getByRole('button',{name:'下架章节「第一章 校对」',exact:true}).click();
+  await expect(page.locator('.writing-chapter')).toHaveCount(0);
+  await page.getByRole('button',{name:'返回书籍总编辑'}).click();
+  await expect(page.getByPlaceholder('搜索书名或作者...')).toBeVisible();
 });

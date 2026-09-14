@@ -62,7 +62,7 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
       timer = setTimeout(finish, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260);
     };
     const pop = () => {
-      const form = element.querySelector<HTMLElement>('.mw-view:not([inert]) .manuscript-form');
+      const form = element.querySelector<HTMLElement>('.mw-view:not([inert]) .writer-dirty-form');
       const viewId = form?.closest<HTMLElement>('.mw-view')?.dataset.viewId;
       const removing = history.state?.mobileWriter !== marker || !historyWriterViews().some(view => view.id === viewId);
       if (form && removing) {
@@ -181,6 +181,6 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
         <p className="mw-note">草稿仅自己可见，准备好后再发布。</p>
       </>}
     </div>
-    {views.map((view, index) => <MobileWriterView key={view.id} view={view} covered={index < views.length - 1} refreshVersion={refreshVersion} onBack={() => dismiss.current()} onExited={exitView} onOpenNew={() => openView('/writer?action=new&from=creation')} onChanged={viewWorksChanged}/>)}
+    {views.map((view, index) => <MobileWriterView key={view.id} view={view} covered={index < views.length - 1} onBack={() => dismiss.current()} onExited={exitView} onChanged={viewWorksChanged}/>)}
   </dialog>, document.body);
 }

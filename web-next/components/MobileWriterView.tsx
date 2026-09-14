@@ -5,7 +5,8 @@ import { ArrowLeft, BookOpen, X } from 'lucide-react';
 import {LoadingLogo, LoadingText} from './BrandLoading';
 import WriterStatistics from './WriterStatistics';
 import WritingWorkspace from './WritingWorkspace';
-import type WriterDashboard from './WriterDashboard';
+import WorkCreator from './WorkCreator';
+import {writerEntry} from '@/lib/writer-entry';
 import '@/app/writer/writer-mobile.css';
 import './mobile-writer-view.css';
 
@@ -16,32 +17,28 @@ export function historyWriterViews(): WriterView[] {
   return Array.isArray(views) ? views.filter((view): view is WriterView => Boolean(view && typeof view.id === 'string' && typeof view.entry === 'string')).map(({ id, entry }) => ({ id, entry })) : [];
 }
 
-export default function MobileWriterView({ view, covered, refreshVersion, onBack, onExited, onOpenNew, onChanged }: {
-  view: WriterView; covered: boolean; refreshVersion: number; onBack: () => void; onExited: (id: string) => void; onOpenNew: () => void; onChanged: () => void;
+export default function MobileWriterView({ view, covered, onBack, onExited, onChanged }: {
+  view: WriterView; covered: boolean; onBack: () => void; onExited: (id: string) => void; onChanged: () => void;
 }) {
-  const statistics = new URLSearchParams(view.entry).get('action') === 'statistics';
+  const destination = writerEntry(view.entry);
+  const statistics = destination.kind === 'statistics';
+  const chapters = destination.kind === 'chapters';
+  const create = destination.kind === 'new';
   const title = statistics ? '作品数据' : '创作';
-  const params = new URLSearchParams(view.entry);
-  const chapters = params.get('action') === 'chapters';
-  const create = params.get('action') === 'new' && !params.has('draft');
-  const [Dashboard, setDashboard] = useState<typeof WriterDashboard>();
+  const [draftKey] = useState(() => crypto.randomUUID());
   const [elapsed, setElapsed] = useState(false);
   const [ready, setReady] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
   const panel = useRef<HTMLDivElement>(null);
   const exitRef = useRef(onExited);
   const markReady = useCallback(() => setReady(true), []);
 
   useEffect(() => { exitRef.current = onExited; }, [onExited]);
   useEffect(() => {
-    let active = true;
     let timer: ReturnType<typeof setTimeout>;
     // Start the minimum display time with the first painted loading frame.
     const frame = requestAnimationFrame(() => { timer = setTimeout(() => setElapsed(true), 400); });
-    import('./WriterDashboard').then(module => { if (active) setDashboard(() => module.default); }).catch(() => { if (active) setFailed(true); });
-    return () => { active = false; cancelAnimationFrame(frame); clearTimeout(timer); };
-  }, [attempt]);
+    return () => { cancelAnimationFrame(frame); clearTimeout(timer); };
+  }, []);
 
   useEffect(() => {
     if (!view.closing) { panel.current?.focus({ preventScroll: true }); return; }
@@ -53,9 +50,9 @@ export default function MobileWriterView({ view, covered, refreshVersion, onBack
     return () => { clearTimeout(timer); delete element.dataset.closing; };
   }, [view.closing, view.id]);
 
-  const loaded = elapsed && ready;
+  const loaded = elapsed && (ready || create || destination.kind === 'works');
   const closeNew = () => {
-    const form = panel.current?.querySelector<HTMLElement>('.manuscript-form');
+    const form = panel.current?.querySelector<HTMLElement>('.writer-dirty-form');
     if (form?.dataset.busy === 'true') return;
     const warning = form?.classList.contains('work-create-form') ? '作品还未创建，确定关闭？已填写的内容不会保存。' : '还有未保存的内容，确定关闭？可以先保存草稿，之后继续整理。';
     if (form?.dataset.dirty === 'true' && !confirm(warning)) return;
@@ -71,13 +68,14 @@ export default function MobileWriterView({ view, covered, refreshVersion, onBack
         {create ? <button type="button" aria-label="关闭新建作品" onClick={closeNew}><X size={22}/></button> : <BookOpen size={23}/>}
       </header>
       <div className="mw-view-content">
-        {!loaded && <div className="mw-view-loading" role={failed ? 'alert' : 'status'} aria-live="polite">
-          {failed ? <><p>页面暂时加载失败</p><button type="button" onClick={() => { setFailed(false); setAttempt(value => value + 1); }}>重新加载</button></> : <><LoadingLogo/><p><LoadingText>{create ? '正在准备新作品' : `正在加载${title}`}</LoadingText></p><div className="mw-view-skeleton" aria-hidden="true"><i/><i/><i/></div></>}
+        {!loaded && <div className="mw-view-loading" role="status" aria-live="polite">
+          <LoadingLogo/><p><LoadingText>{create ? '正在准备新作品' : `正在加载${title}`}</LoadingText></p><div className="mw-view-skeleton" aria-hidden="true"><i/><i/><i/></div>
         </div>}
         <div className="mw-view-body" inert={!loaded} aria-hidden={!loaded || undefined}>
           {statistics && elapsed && <WriterStatistics onReady={markReady}/>}
-          {chapters && elapsed && <WritingWorkspace reference={params.get('work') || ''} embedded onExit={onBack} onReady={markReady} onChanged={onChanged}/>}
-          {!statistics && !chapters && Dashboard && elapsed && <Dashboard entry={view.entry} embedded onExit={onBack} onOpenNew={onOpenNew} onReady={markReady} refreshVersion={refreshVersion} onWorksChanged={onChanged}/>}
+          {chapters && elapsed && <WritingWorkspace reference={destination.reference} embedded onExit={onBack} onReady={markReady} onChanged={onChanged}/>}
+          {create && elapsed && <WorkCreator draftKey={draftKey} embedded onClose={onBack} onComplete={() => {onChanged(); onBack();}}/>}
+          {destination.kind === 'works' && <p className="writing-note">请返回创作中心选择作品。</p>}
         </div>
       </div>
     </div>

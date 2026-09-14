@@ -12,14 +12,13 @@ async function setup(page:Page) {
   await page.route('**/api/auth/csrf',route=>route.fulfill({json:{csrfToken:'synthetic-token'}}));
   await page.route('**/api/writer/works?**',route=>route.fulfill({json:state.created ? [{...state.draft,id:'private-work',manuscriptKey:state.keys.at(-1),visibility:'private'}] : []}));
   await page.route('**/api/writer/workspace/**',route=>route.fulfill({json:{work:{reference:'m_'+(state.keys.at(-1)||'representative-draft-key'),title:state.draft.title,bookId:null,visibility:'private'},cloudDrafts:state.draft.chapters.map((c,i)=>({...c,id:'manuscript-'+i,number:i+1})),published:[],total:0,maxNumber:state.draft.chapters.length,publishedDraftIds:[]}}));
-  await page.route('**/api/manuscripts',route=>route.fulfill({json:{drafts:[],remainingCharacters:100000}}));
   await page.route('**/api/upload/cover?purpose=book',async route=>{state.uploads++; await route.fulfill({json:{url:cover}});});
   await page.route('**/api/manuscripts/*',async route=>{
     if(route.request().method()==='GET') return route.fulfill({json:state.draft});
     if(route.request().method()==='DELETE') {state.created=false; return route.fulfill({json:{success:true}});}
     state.attempts++; state.keys.push(new URL(route.request().url()).pathname.split('/').at(-1)!);
     const body=JSON.parse(route.request().postData()!.split('\r\n\r\n')[1].split('\r\n--')[0]);
-    expect(body.action).toBe('draft'); expect(body.chapters).toEqual(state.created ? state.draft.chapters : []); expect(body.revision).toBe(state.created ? state.draft.revision : 0);
+    expect(body.action).toBe('draft'); expect(body.chapters).toBeUndefined(); expect(body.revision).toBe(state.created ? state.draft.revision : 0);
     state.draft={...state.draft,...body,revision:body.revision+1};
     if(state.fail) {state.fail=false; return route.fulfill({status:503,json:{error:'暂时未能创建，请重试'}});}
     state.created=true; await route.fulfill({json:{status:'draft',revision:1}});

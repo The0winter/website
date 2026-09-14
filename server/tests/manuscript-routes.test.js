@@ -12,9 +12,8 @@ import Chapter from "../models/Chapter.js";
 import Manuscript from "../models/Manuscript.js";
 import Media from "../models/Media.js";
 import { hasMediaReferences } from "../services/media-reference.js";
-import { dayKey } from "../services/content.js";
 
-test("whole manuscript drafts are private, transactional, revision protected and idempotent", async (t) => {
+test("work metadata are private, transactional, revision protected and idempotent", async (t) => {
   const repl = await MongoMemoryReplSet.create({
     binary: { version: "7.0.40" },
     replSet: { count: 1, storageEngine: "wiredTiger" },
@@ -90,239 +89,63 @@ test("whole manuscript drafts are private, transactional, revision protected and
         ).status,
         200,
       );
-    const key = crypto.randomUUID(),
-      path = "/api/manuscripts/" + key;
-    let data = {
-      title: "测试书",
-      description: "书籍简介",
-      cover_image: "",
-      category: "仙侠",
-      filename: "文稿.txt",
-      chapters: [
-        { title: "第十章 风起", content: "保留原文顺序。", sourceNumber: 10 },
-        { title: "第二章 来信", content: "完整的第二项。", sourceNumber: 2 },
-      ],
-      revision: 0,
-      action: "draft",
-    };
-    await t.test(
-      "anonymous and CSRF requests rejected; parse is preview only",
-      async () => {
-        assert.equal((await guest.save(key, data)).status, 401);
-        assert.equal((await owner.request(path, "PUT", {}, false)).status, 403);
-        const body = new FormData();
-        body.append("file", new Blob(["第一章\n正文内容。"]), "book.txt");
-        const result = await owner.request(
-          "/api/manuscripts/parse",
-          "POST",
-          body,
-        );
-        assert.equal(result.status, 200);
-        assert.equal(result.data.chapters[0].content, "正文内容。");
-        assert.equal(await Manuscript.countDocuments(), 0);
-      },
-    );
-    await t.test(
-      "save whole draft and retry creates no public book; others cannot read it",
-      async () => {
-        const saved = await owner.save(key, data);
-        assert.equal(saved.status, 200);
-        assert.equal(saved.data.revision, 1);
-        assert.equal((await owner.save(key, data)).data.revision, 1);
-        assert.equal(await Book.countDocuments(), 0);
-        assert.equal(
-          (await owner.request(path)).data.chapters[1].content,
-          data.chapters[1].content,
-        );
-        assert.equal((await stranger.request(path)).status, 404);
-        assert.equal(
-          (await stranger.request("/api/manuscripts")).data.drafts.length,
-          0,
-        );
-      },
-    );
-    await t.test(
-      "field limits, empty chapter and stale revision cannot overwrite draft",
-      async () => {
-        assert.equal(
-          (await owner.save(key, { ...data, title: "新标题" })).status,
-          409,
-        );
-        assert.equal(
-          (
-            await owner.save(key, {
-              ...data,
-              revision: 1,
-              title: "字".repeat(16),
-            })
-          ).status,
-          400,
-        );
-        assert.equal(
-          (
-            await owner.save(key, {
-              ...data,
-              revision: 1,
-              description: "字".repeat(301),
-            })
-          ).status,
-          400,
-        );
-        const bad = await owner.save(key, {
-          ...data,
-          revision: 1,
-          action: "publish",
-          chapters: [{ title: "第一章", content: "" }],
-        });
-        assert.equal(bad.status, 400);
-        assert.match(bad.data.error, /正文为空/);
-        assert.equal((await owner.request(path)).data.title, "测试书");
-      },
-    );
-    await t.test(
-      "draft covers count as references and foreign covers rejected",
-      async () => {
-        const media = await Media.create({
-          owner: user._id,
-          content: Buffer.from("synthetic"),
-          mime: "image/webp",
-          sha256: "a".repeat(64),
-        });
-        data = { ...data, revision: 1, cover_image: "/api/media/" + media._id };
-        assert.equal((await owner.save(key, data)).status, 200);
-        assert.equal(await hasMediaReferences(media), true);
-        assert.equal(
-          (await stranger.save(crypto.randomUUID(), { ...data, revision: 0 }))
-            .status,
-          400,
-        );
-      },
-    );
-    await t.test(
-      "quota failure keeps whole draft and creates neither book nor chapter",
-      async () => {
-        await User.updateOne(
-          { _id: user._id },
-          { $set: { uploadDay: dayKey(), daily_upload_words: 99999 } },
-        );
-        const result = await owner.save(key, {
-          ...data,
-          revision: 2,
-          action: "publish",
-        });
-        assert.equal(result.status, 429);
-        assert.match(result.data.error, /保存草稿/);
-        assert.equal(await Book.countDocuments(), 0);
-        assert.equal(await Chapter.countDocuments(), 0);
-        assert.equal((await owner.request(path)).data.chapters.length, 2);
-        await User.updateOne(
-          { _id: user._id },
-          { $set: { daily_upload_words: 0 } },
-        );
-      },
-    );
-    await t.test(
-      "concurrent submission and retry yield one complete book in document order",
-      async () => {
-        const publish = { ...data, revision: 2, action: "publish" };
-        const results = await Promise.all([
-          owner.save(key, publish),
-          owner.save(key, publish),
-        ]);
-        assert.deepEqual(
-          results.map((r) => r.status),
-          [200, 200],
-        );
-        assert.equal(results[0].data.bookId, results[1].data.bookId);
-        assert.equal(await Book.countDocuments(), 1);
-        assert.equal(await Chapter.countDocuments(), 2);
-        const chapters = await Chapter.find()
-          .sort({ chapter_number: 1 })
-          .lean();
-        assert.deepEqual(
-          chapters.map((c) => c.title),
-          data.chapters.map((c) => c.title),
-        );
-        assert.deepEqual(
-          chapters.map((c) => c.content),
-          data.chapters.map((c) => c.content),
-        );
-        assert.equal(
-          (await owner.request("/api/manuscripts")).data.drafts.length,
-          0,
-        );
-        assert.equal(
-          (await owner.save(key, { ...publish, title: "改名" })).status,
-          409,
-        );
-      },
-    );
-    await t.test(
-      "volume parsing survives draft resume, publication and both reader catalog endpoints",
-      async () => {
-        const body = new FormData();
-        body.append(
-          "file",
-          new Blob([
-            "第二卷 远行\n第二章 归来\n归来正文。\n第一章 启程\n启程正文。\n第一卷 风起\n第二章 来信\n来信正文。\n第一章 初遇\n初遇正文。",
-          ]),
-          "volumes.txt",
-        );
-        const parsed = await owner.request(
-          "/api/manuscripts/parse",
-          "POST",
-          body,
-        );
-        assert.equal(parsed.status, 200);
-        const key = crypto.randomUUID();
-        const draft = {
-          ...data,
-          title: "分卷测试",
-          chapters: parsed.data.chapters,
-          revision: 0,
-        };
-        assert.equal((await owner.save(key, draft)).status, 200);
-        const resumed = (await owner.request("/api/manuscripts/" + key)).data;
-        assert.deepEqual(resumed.chapters, parsed.data.chapters);
-        const published = await owner.save(key, {
-          ...resumed,
-          action: "publish",
-        });
-        assert.equal(published.status, 200);
-        const list = await guest.request(
-          "/api/books/" + published.data.bookId + "/chapters?order=asc",
-        );
-        assert.deepEqual(
-          list.data.map((c) => [c.title, c.volume_title, c.chapter_number]),
-          [
-            ["第一章 初遇", "第一卷 风起", 1],
-            ["第二章 来信", "第一卷 风起", 2],
-            ["第一章 启程", "第二卷 远行", 3],
-            ["第二章 归来", "第二卷 远行", 4],
-          ],
-        );
-        const catalog = await guest.request(
-          "/api/books/" + published.data.bookId + "/catalog",
-        );
-        assert.equal(catalog.status, 200);
-        assert.deepEqual(
-          catalog.data.volumes.map(({ title, start, count }) => ({
-            title,
-            start,
-            count,
-          })),
-          [
-            { title: "第一卷 风起", start: 0, count: 2 },
-            { title: "第二卷 远行", start: 2, count: 2 },
-          ],
-        );
-        const content = await guest.request("/api/chapters/" + list.data[2].id);
-        assert.equal(content.data.content, "启程正文。");
-      },
-    );
-    await t.test('unified private works, publication without chapter names, privacy and reader trends', async () => {
+    const key = crypto.randomUUID(), path = '/api/manuscripts/' + key;
+    let data = {title: '测试书', description: '书籍简介', cover_image: '', revision: 0, action: 'draft'};
+    await t.test('metadata creation is private, authenticated, revision protected and idempotent', async () => {
+      assert.equal((await guest.save(key, data)).status, 401);
+      assert.equal((await owner.request(path, 'PUT', {}, false)).status, 403);
+      const results = await Promise.all([owner.save(key, data), owner.save(key, data)]);
+      assert.deepEqual(results.map(r => r.status), [200, 200]);
+      assert.deepEqual(results.map(r => r.data.revision), [1, 1]);
+      assert.equal(await Book.countDocuments(), 0);
+      assert.equal((await stranger.request(path)).status, 404);
+      assert.equal((await owner.save(key, {...data, title: '冲突标题'})).status, 409);
+      for (const patch of [{title: '字'.repeat(16)}, {description: '字'.repeat(301)}, {description: '  '}])
+        assert.equal((await owner.save(key, {...data, revision: 1, ...patch})).status, 400);
+      assert.equal((await owner.request(path)).data.title, data.title);
+    });
+    await t.test('metadata edits preserve legacy chapter bytes and volumes without returning them', async () => {
+      const chapters = [{title: '第十章 来信', content: '不能丢失的旧正文。', sourceNumber: 10, volumeTitle: '第二卷', volumeNumber: 2}];
+      await Manuscript.updateOne({_id: `${user.id}:${key}`}, {$set: {chapters, totalCharacters: 10, filename: '旧文稿.docx'}});
+      data = {...data, revision: 1, description: '设置中修改的简介'};
+      assert.equal((await owner.save(key, data)).status, 200);
+      const saved = await Manuscript.findById(`${user.id}:${key}`).lean();
+      assert.deepEqual(saved.chapters, chapters);
+      assert.equal(saved.filename, '旧文稿.docx'); assert.equal(saved.totalCharacters, 10);
+      assert.equal((await owner.request(path)).data.chapters, undefined);
+      const workspace = await owner.request(`/api/writer/workspace/m_${key}`);
+      assert.equal(workspace.data.cloudDrafts[0].content, chapters[0].content);
+      assert.equal((await owner.save(key, {...data, revision: 2, chapters: [{title: '覆盖', content: '覆盖'}]})).status, 400);
+      assert.deepEqual((await Manuscript.findById(saved._id).lean()).chapters, chapters);
+    });
+    await t.test('retired import, cloud editing and whole-book publishing cannot mutate data', async () => {
+      assert.equal((await owner.save(key, {...data, revision: 2, action: 'publish'})).status, 400);
+      const uploaded = new FormData(); uploaded.append('file', new Blob(['第一章\n旧导入内容']), 'book.txt');
+      assert.equal((await owner.request('/api/manuscripts/parse', 'POST', uploaded)).status, 400);
+      const book = await Book.create({title: '已存在的作品', author_id: user.id});
+      // Express uses HTML for unknown endpoints; test the HTTP status directly.
+      for (const method of ['GET', 'PUT', 'DELETE']) {
+        const response = await fetch(base + `/api/books/${book.id}/draft`, {method});
+        assert.ok([403, 404].includes(response.status));
+      }
+      assert.equal(await Chapter.countDocuments(), 0);
+      await Book.deleteOne({_id: book.id});
+    });
+    await t.test('cover ownership, retention and private-work deletion remain intact', async () => {
+      const media = await Media.create({owner: user.id, content: Buffer.from('synthetic'), mime: 'image/webp', sha256: 'a'.repeat(64)});
+      data = {...data, revision: 2, cover_image: '/api/media/' + media.id};
+      assert.equal((await owner.save(key, data)).status, 200);
+      assert.equal(await hasMediaReferences(media), true);
+      assert.equal((await stranger.save(crypto.randomUUID(), {...data, revision: 0})).status, 400);
+      assert.equal((await stranger.request(path, 'DELETE')).status, 200);
+      assert.ok(await Manuscript.findById(`${user.id}:${key}`));
+      assert.equal((await owner.request(path, 'DELETE')).status, 200);
+      assert.equal(await hasMediaReferences(media), false);
+      data = {...data, cover_image: ''};
+    });
+    await t.test('unified works, chapter publication, privacy and reader trends', async () => {
       const draftKey = crypto.randomUUID();
-      const payload = {...data, title:'私密管理验证', chapters:[{title:'',content:'没有章名的完整正文。'}], revision:0, action:'draft'};
+      const payload = {...data, title:'私密管理验证', revision:0, action:'draft'};
       assert.equal((await owner.save(draftKey,payload)).status,200);
       const owned = await owner.request('/api/writer/works');
       assert.equal(owned.status,200);
@@ -330,16 +153,13 @@ test("whole manuscript drafts are private, transactional, revision protected and
       assert.equal(saved.visibility,'private');
       assert.ok(!(await stranger.request('/api/writer/works')).data.some(b=>b.manuscriptKey===draftKey));
       assert.equal((await guest.request('/api/writer/works')).status,401);
-      const published = await owner.save(draftKey,{...payload,revision:1,action:'publish'});
+      const published = await owner.request(`/api/writer/workspace/m_${draftKey}/publish`,'POST',{id:'first-local',title:'',content:'没有章名的完整正文。',number:1});
       assert.equal(published.status,200);
       const bid=published.data.bookId;
       const chapters=(await guest.request(`/api/books/${bid}/chapters`)).data;
       assert.equal(chapters[0].title,'第1章');
       const chapter=chapters[0];
-      const draft=(await owner.request(`/api/books/${bid}/draft`,'PUT',{title:'',content:'第二章无标题正文'}));
-      assert.equal(draft.status,200);
-      assert.equal(draft.data.title,'第2章');
-      assert.equal((await owner.request(`/api/books/${bid}/draft/publish`,'POST',{draftId:draft.data.id})).status,200);
+      assert.equal((await owner.request(`/api/writer/workspace/b_${bid}/publish`,'POST',{id:'second-local',title:'',content:'第二章无标题正文',number:2})).status,200);
       const reports=await Promise.all([1,2,3].map(()=>stranger.request(`/api/books/${bid}/views`,'POST',{chapterId:chapter.id})));
       assert.equal(reports.filter(r=>r.data.counted).length,1);
       const daily=mongoose.connection.collection('readdailies');

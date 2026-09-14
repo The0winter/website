@@ -9,7 +9,8 @@ import WriterPublication from '../models/WriterPublication.js';
 import {asyncRoute} from '../security.js';
 import {chargeQuota, contentHash, fail, lockBook, validateChapter} from '../services/content.js';
 
-async function resolve(reference, owner, session = null) {
+async function resolve(reference, actor, session = null) {
+  const owner = actor.id;
   let manuscript, book;
   if (/^m_[a-zA-Z0-9_-]{16,128}$/.test(reference)) {
     manuscript = await Manuscript.findOne({_id: `${owner}:${reference.slice(2)}`, owner}).session(session);
@@ -17,7 +18,7 @@ async function resolve(reference, owner, session = null) {
     if (manuscript.publishedBookId) book = await Book.findOne({_id: manuscript.publishedBookId, author_id: owner, deletedAt: null}).session(session);
     if (manuscript.publishedBookId && !book) fail(404, '作品已删除');
   } else if (/^b_[a-f0-9]{24}$/.test(reference)) {
-    book = await Book.findOne({_id: reference.slice(2), author_id: owner, deletedAt: null}).session(session);
+    book = await Book.findOne({_id: reference.slice(2), ...(actor.role === 'admin' ? {} : {author_id: owner}), deletedAt: null}).session(session);
     if (!book) fail(404, '作品不存在或无权查看');
     manuscript = await Manuscript.findOne({owner, publishedBookId: book._id}).session(session);
   } else fail(400, '作品编号无效');
@@ -27,9 +28,11 @@ async function resolve(reference, owner, session = null) {
 
 export function writingWorkspaceRoutes(app, auth) {
   app.get('/api/writer/workspace/:reference', auth.authenticate, asyncRoute(async (req, res) => {
-    const {manuscript, book, work} = await resolve(req.params.reference, req.user.id);
+    const {manuscript, book, work} = await resolve(req.params.reference, req.user);
     const page = Number(req.query.page || 1);
     if (!Number.isSafeInteger(page) || page < 1 || page > 100000) fail(400, '页码无效');
+    const search = req.query.search || '', order = req.query.order || 'desc';
+    if (typeof search !== 'string' || search.length > 100 || !['asc', 'desc'].includes(order)) fail(400, '筛选参数无效');
     const receipts = await WriterPublication.find({owner: req.user.id, work}).select('draftId').lean();
     const publishedIds = new Set(receipts.map(receipt => receipt.draftId));
     const cloudDrafts = (manuscript?.chapters || []).flatMap((chapter, index) => {
@@ -39,9 +42,9 @@ export function writingWorkspaceRoutes(app, auth) {
     });
     let published = [], total = 0, maxNumber = manuscript?.chapters.length || 0;
     if (book) {
-      const filter = {bookId: book._id, deletedAt: null};
+      const filter = {bookId: book._id, deletedAt: null, ...(search ? {title: {$regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i'}} : {})};
       const [rows, count, last, legacy] = await Promise.all([
-        Chapter.find(filter).select('_id title chapter_number word_count updatedAt').sort({chapter_number: -1}).skip((page - 1) * 50).limit(50).lean(),
+        Chapter.find(filter).select('_id title chapter_number word_count updatedAt').sort({chapter_number: order === 'asc' ? 1 : -1}).skip((page - 1) * 50).limit(50).maxTimeMS(5000).lean(),
         Chapter.countDocuments(filter),
         // Deleted numbers remain reserved by the catalog's unique index.
         Chapter.findOne({bookId: book._id}).sort({chapter_number: -1}).select('chapter_number').lean(),
@@ -71,7 +74,7 @@ export function writingWorkspaceRoutes(app, auth) {
     let result;
     await mongoose.connection.transaction(async session => {
       await User.updateOne({_id: req.user.id}, {$inc: {contentVersion: 1}}, {session});
-      const resolved = await resolve(req.params.reference, req.user.id, session);
+      const resolved = await resolve(req.params.reference, req.user, session);
       let {book} = resolved;
       const {manuscript, work} = resolved;
       const receiptId = `${req.user.id}:${work}:${body.id}`;

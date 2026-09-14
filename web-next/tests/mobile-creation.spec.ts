@@ -9,12 +9,10 @@ const launch = (page: Page) => page.getByRole('button', { name: '创作', exact:
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route('**/api/writer/statistics?**', route => route.fulfill({json:{points:[],totalViews:0,bestChapter:null,historyStart:'2026-09-13',hasPrevious:false,hasNext:false}}));
-  await page.route('**/api/manuscripts', route => route.fulfill({json:{drafts:[],remainingCharacters:100000}}));
   await page.route('**/api/auth/session', route => route.fulfill({ json: { user: account, profile: account } }));
   await page.route('**/api/writer/works?**', route => route.fulfill({ json: [book] }));
   await page.route(`**/api/books/${book.id}/chapters**`, route => route.fulfill({ json: [] }));
   await page.route('**/api/writer/workspace/**',route=>route.fulfill({json:{work:{reference:'b_'+book.id,title:book.title,bookId:book.id,visibility:'public'},cloudDrafts:[{id:'legacy-test',title:'第一章 风起',content:'留给自己的未发布草稿。',number:1}],published:[],total:0,maxNumber:1,publishedDraftIds:[]}}));
-  await page.route(`**/api/books/${book.id}/draft`, route => route.fulfill({ json: { id: 'private-draft', title: '第一章 风起', content: '留给自己的未发布草稿。' } }));
   await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
     const style = document.createElement('style'); style.textContent = 'nextjs-portal{display:none!important}'; document.head.append(style);
   }));
@@ -314,7 +312,6 @@ test('creating a work closes the sheet directly and refreshes the retained cente
   let created = false;
   const newBook = { ...book, id: '000000000000000000000200', title: '新故事' };
   await page.route('**/api/manuscripts/*', async route => {
-    if (route.request().url().endsWith('/parse')) return route.fulfill({json:{chapters:[{title:'第一章',content:'新的第一章正文。',sourceNumber:null,volumeTitle:'第一卷',volumeNumber:1}],warnings:[]}});
     if (route.request().method() !== 'PUT') return route.continue();
     created = true; await route.fulfill({ json: {status:'draft',bookId:newBook.id,revision:1} });
   });
@@ -334,7 +331,7 @@ test('direct desktop writer entry retains its creation form and management page'
   await page.getByRole('button', { name: '创建新书', exact: true }).click();
   await expect(page.getByLabel('书名', {exact:true})).toBeVisible();
   await page.getByRole('button', { name: '关闭新建作品', exact: true }).click();
-  await expect(page.locator('.manuscript-form')).toHaveCount(0);
+  await expect(page.locator('.writer-dirty-form')).toHaveCount(0);
   await expect(page.locator('.writer-work').getByRole('heading', { name: book.title })).toBeVisible();
 });
 
@@ -352,14 +349,12 @@ test('unsaved manuscript survives cancelled native Back and closes after one con
   expect(questions).toBe(2);
 });
 
-for (const width of [320,390]) test(`saved manuscript still offers import guidance at ${width}px`, async ({page},info) => {
-  await page.setViewportSize({width,height:844});
-  const key='saved-manuscript-key';
-  await page.route('**/api/manuscripts/'+key,route=>route.fulfill({json:{title:'已有作品',description:'已创建的故事',cover_image:'',category:'未分类',filename:'',chapters:[],revision:1}}));
-  await page.goto(base+'/writer?action=new&draft='+key);
-  await expect(page.locator('.manuscript-modes button')).toHaveCount(2);
-  await page.getByRole('button',{name:'格式示例',exact:true}).click();
-  await expect(page.locator('.manuscript-guide p')).toHaveText('卷名或章名请单独成行，便于系统识别整理，中文或数字均可');
-  await page.locator('.manuscript-guide').scrollIntoViewIfNeeded();
-  await page.screenshot({path:info.outputPath(`guide-${width}.png`)});
- });
+for (const entry of ['action=new&draft=saved-manuscript-key', `action=manage&book=${book.id}`, `action=write&book=${book.id}`]) test(`legacy URL opens the current chapter workspace: ${entry}`, async ({page}) => {
+  await page.goto(base + '/writer?' + entry);
+  await expect(page.getByRole('tab', {name: /草稿箱/})).toBeVisible();
+  await expect(page.getByRole('tab', {name: /已发布/})).toBeVisible();
+  await expect(page.locator('.manuscript-modes,.writer-manager,.writer-editor')).toHaveCount(0);
+  await page.locator('.writing-chapter').first().click();
+  await expect(page.getByLabel('正文', {exact:true})).toHaveValue('留给自己的未发布草稿。');
+  await expect(page.getByLabel('书名', {exact:true})).toHaveCount(0);
+});
