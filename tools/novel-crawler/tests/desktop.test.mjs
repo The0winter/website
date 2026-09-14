@@ -205,6 +205,18 @@ test('youyouxs follows separate catalog and chapter pagination and retains sourc
   }
 });
 
+test('youyouxs removes complete inherited station signatures without deleting prose', async () => {
+  const spec = specForBook({url: 'https://youyouxs.com/xs_396959', title: '测试', author: '作者'});
+  assert.equal(spec.variant, 'desktop-youyouxs-v4');
+  const signatures = ['щщщ ●тTk an ●c o', 'w тт kдn ￠ 〇', 'wWW● ttκǎ n● ￠ ○', 'WWW● тTk án● C〇', '●тt kǎn ●￠〇'];
+  const retained = ['正文前段。', '他说：“щщщ ●тTk an ●c o”，只是引用。', 'TTK 是字母，〇是数字。', '“WWW.TTKAN.COM”', '正文后段。'];
+  const link = 'https://youyouxs.com/xs_396959/zj_1';
+  const body = `<h1 class="bookname">第1章 第1章 开始 （1/1）</h1><div id="booktxt">${[retained[0], ...signatures, ...retained.slice(1)].map(line => `<p>${line}</p>`).join('')}</div>`;
+  const client = {async get() { return {url: link, body: Buffer.from(body), contentType: 'text/html; charset=utf-8'}; }};
+  const chapter = await getChapter(spec, {link, title: '第1章 开始', chapter_number: 1}, new Set([link]), client);
+  assert.equal(chapter.content, retained.join('\n'));
+});
+
 test('69shuba uses book-specific full catalogs, source order and clean single-chapter text', async t => {
   const site = loadSites().sites.find(s => s.id === '69shuba');
   const stateDir = temp(t);
