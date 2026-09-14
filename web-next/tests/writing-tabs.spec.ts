@@ -66,6 +66,8 @@ test('real touch follows the finger, cancels cleanly and does not open a dragged
   await page.setViewportSize({width: 390, height: 844}); await setup(page);
   await page.goto(base + '/writer?action=chapters&work=m_tabs-test');
   const chapter = page.locator('#writing-drafts .writing-chapter'); await expect(chapter).toBeVisible();
+  // Raw CDP input needs stable coordinates after the workspace's entrance animation.
+  await chapter.click({trial: true});
   const box = (await chapter.boundingBox())!;
   const session = await page.context().newCDPSession(page);
   const x = box.x + box.width / 2, y = box.y + box.height / 2;
