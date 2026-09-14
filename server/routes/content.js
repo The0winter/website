@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import {readChapterBody,chapterResponse} from '../services/chapter-storage.js';
 import Book from '../models/Book.js';
 import Chapter from '../models/Chapter.js';
 import Bookmark from '../models/Bookmark.js';
@@ -78,7 +79,7 @@ export function contentRoutes(app,auth) {
   }));
   app.post('/api/chapters',auth.authenticate,asyncRoute(async(req,res)=>{
     fields(req.body,['bookId','title','content','chapter_number','chapterNumber']);
-    res.status(201).json(jsonDoc(await createChapter(req.user,req.body.bookId,req.body)));
+    res.status(201).json(await chapterResponse(await createChapter(req.user,req.body.bookId,req.body)));
   }));
   app.patch('/api/chapters/:id',auth.authenticate,asyncRoute(async(req,res)=>{
     fields(req.body,['title','content','chapter_number']);
@@ -86,10 +87,11 @@ export function contentRoutes(app,auth) {
     await mongoose.connection.transaction(async session=>{
       const chapter=await Chapter.findById(req.params.id).session(session);if(!chapter||chapter.deletedAt)fail(404,'章节不存在或已下架，请先恢复');
       await lockBook(chapter.bookId,req.user,session);
-      const data=validateChapter({...chapter.toObject(),...req.body});
-      if(data.content!==chapter.content)await chargeQuota(req.user,data.content.length,session);
-      Object.assign(chapter,data);result=await chapter.save({session});
-    });res.json(jsonDoc(result));
+      const currentContent=await readChapterBody(chapter);
+      const data=validateChapter({...chapter.toObject(),content:currentContent,...req.body});
+      if(data.content!==currentContent)await chargeQuota(req.user,data.content.length,session);
+      Object.assign(chapter,data);chapter.contentKey=undefined;chapter.contentSha256=undefined;result=await chapter.save({session});
+    });res.json(await chapterResponse(result));
   }));
   app.delete('/api/chapters/:id',auth.authenticate,asyncRoute(async(req,res)=>{
     await mongoose.connection.transaction(async session=>{
@@ -105,7 +107,7 @@ export function contentRoutes(app,auth) {
       chapter=await Chapter.findById(req.params.id).session(session);if(!chapter)fail(404,'章节不存在');
       await lockBook(chapter.bookId,req.user,session);
       chapter.deletedAt=null;await chapter.save({session});
-    });res.json(jsonDoc(chapter));
+    });res.json(await chapterResponse(chapter));
   }));
   const own=(req,res,next)=>req.params.userId===req.user.id?next():res.status(403).json({error:'只能访问本人书架'});
   app.get('/api/users/:userId/bookmarks',auth.authenticate,own,asyncRoute(async(req,res)=>{

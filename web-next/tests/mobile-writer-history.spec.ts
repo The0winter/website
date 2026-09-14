@@ -8,14 +8,21 @@ const center = (page: Page) => page.locator('.mw-dialog');
 test.beforeEach(async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
   await page.route('**/api/auth/session', route => route.fulfill({json: {user: account, profile: account}}));
+  await page.route('**/api/auth/csrf', route => route.fulfill({json: {csrfToken: 'history-test'}}));
   await page.route('**/api/writer/works?**', route => route.fulfill({json: [book]}));
   await page.route('**/api/books/' + book.id, route => route.fulfill({json: {...book, description: '用于返回检查的作品简介。'}}));
   await page.route('**/api/writer/statistics?**', route => route.fulfill({json: {points: [], totalViews: 0, historyStart: '2026-09-14', hasPrevious: false, hasNext: false}}));
-  await page.route('**/api/writer/workspace/**', route => route.fulfill({json: {
+  await page.route('**/api/writer/workspace/**', route => {
+    if (route.request().method() === 'PUT') {
+      const data = route.request().postDataJSON();
+      return route.fulfill({json: {...data, cloudRevision: data.revision + 1, contentLoaded: true}});
+    }
+    return route.fulfill({json: {
     work: {reference: 'b_' + book.id, title: book.title, bookId: book.id, visibility: 'public'},
-    cloudDrafts: [{id: 'history-draft', title: '风起', content: '反复返回后仍保留的正文。', number: 1}],
+    cloudDrafts: [{id: 'history-draft', title: '风起', content: '反复返回后仍保留的正文。', number: 1, cloudRevision: 1, contentLoaded: true}],
     published: [], total: 0, maxNumber: 1, publishedDraftIds: [],
-  }}));
+  }});
+  });
   await page.addInitScript(() => {
     const events: unknown[] = [];
     Object.assign(window, {writerHistoryTrace: events});

@@ -1,4 +1,5 @@
 import { forumWrites } from './routes/forum-writes.js';
+import {chapterResponse} from './services/chapter-storage.js';
 import {pagination} from './services/pagination.js';
 import {createRequestMetrics,allowMetrics} from './services/observability.js';
 import { readingRoutes } from './routes/reading.js';
@@ -523,7 +524,7 @@ app.get('/api/chapters/:id', async (req, res) => {
       ]);
       navigation={previousId:previous?String(previous._id):null,nextId:next?String(next._id):null};
     }
-    res.json({ ...chapter, ...navigation, id: chapter._id.toString(), bookId: chapter.bookId.toString() });
+    res.json({ ...await chapterResponse(chapter), ...navigation, bookId: chapter.bookId.toString() });
 
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });

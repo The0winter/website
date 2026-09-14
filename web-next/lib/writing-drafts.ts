@@ -2,7 +2,10 @@ export type WritingDraft = {
   id: string; title: string; content: string; number: number; revision: number; updatedAt: string;
   targetChapterId?: string; baseUpdatedAt?: string; legacyBaseHash?: string;
   deleted?: boolean; published?: boolean;
+  cloudRevision?: number; syncedFingerprint?: string; contentLoaded?: boolean; words?: number;
 };
+export const draftFingerprint = (draft: WritingDraft) => JSON.stringify([draft.title, draft.content, draft.number, Boolean(draft.deleted), Boolean(draft.published)]);
+export const needsCloudSave = (draft: WritingDraft) => !draft.published && draft.contentLoaded !== false && draft.syncedFingerprint !== draftFingerprint(draft);
 export type WorkspaceSnapshot = {
   work: {reference: string; title: string; bookId: string | null; visibility: string};
   cloudDrafts: WritingDraft[];
@@ -57,10 +60,13 @@ export async function loadDrafts(scope: string, snapshot?: WorkspaceSnapshot): P
       rows = request.result;
       if (!snapshot) return;
       try {
-      const existing = new Set(rows.map(row => row.id));
-      for (const draft of snapshot.cloudDrafts) if (!existing.has(draft.id)) {
-        const row = {...draft, revision: 1, scope, key: `${scope}:${draft.id}`};
-        store.put(row); rows.push(row);
+      for (const draft of snapshot.cloudDrafts) {
+        const previous = rows.find(row => row.id === draft.id);
+        if (previous && (needsCloudSave(previous) || (previous.cloudRevision || 0) >= (draft.cloudRevision || 0))) continue;
+        const row = {...draft, revision: (previous?.revision || 0) + 1, scope, key: `${scope}:${draft.id}`};
+        if (draft.cloudRevision && draft.contentLoaded !== false) row.syncedFingerprint = draftFingerprint(draft);
+        store.put(row);
+        if (previous) rows[rows.indexOf(previous)] = row; else rows.push(row);
       }
       const published = new Set(snapshot.publishedDraftIds);
       for (const row of rows) if (published.has(row.id) && !row.published) {
@@ -92,5 +98,13 @@ export async function writeDraft(scope: string, draft: WritingDraft, allocateAft
     };
     tx.oncomplete = () => resolve(saved);
     tx.onabort = tx.onerror = () => reject(conflict ? new Error('此草稿已在另一页面更新。你的文字仍在此处，请下载备份后重新打开，避免覆盖。') : unavailable());
+  });
+}
+
+export async function pendingDrafts(scope: string): Promise<WritingDraft[]> {
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction('drafts').objectStore('drafts').index('scope').getAll(scope);
+    request.onsuccess = () => resolve(request.result.filter(needsCloudSave)); request.onerror = () => reject(unavailable());
   });
 }

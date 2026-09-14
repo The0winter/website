@@ -11,7 +11,9 @@ const chapterSchema = new mongoose.Schema({
   },
   
   title: { type: String, required: true, maxLength: 100 },
-  content: { type: String, required: true, maxLength: 60000 },
+  content: { type: String, required: function(){return !this.contentKey;}, maxLength: 60000 },
+  contentKey: { type:String, match:/^chapters\/sha256\/[a-f0-9]{64}\.txt$/ },
+  contentSha256: { type:String, match:/^[a-f0-9]{64}$/ },
   chapter_number: { type: Number, required: true },
   volume_title: { type: String, maxLength: 100 },
   volume_number: { type: Number, min: 1 },

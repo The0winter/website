@@ -13,13 +13,19 @@ import ChapterDraft from '../models/ChapterDraft.js';
 import Manuscript from '../models/Manuscript.js';
 import WriterPublication from '../models/WriterPublication.js';
 import {dayKey} from '../services/content.js';
+import WriterDraft from '../models/WriterDraft.js';
+import WriterBlob from '../models/WriterBlob.js';
+import {cleanupDraftObjects, insertedCharacters} from '../services/writing-drafts.js';
+import {memoryWritingStorage} from './helpers/writing-storage.js';
 
 test('chapter workspace preserves cloud drafts, ownership, quota and publication receipts', async t => {
   const repl = await MongoMemoryReplSet.create({binary: {version: '7.0.40'}, replSet: {count: 1, storageEngine: 'wiredTiger'}});
   const config = readConfig({APP_ENV: 'test', MONGO_URI: repl.getUri('test1_test'), JWT_SECRET: crypto.randomBytes(48).toString('hex')});
   await mongoose.connect(config.uri, {autoIndex: false});
   for (const model of Object.values(mongoose.models)) await model.createIndexes();
-  const server = createApp(config).listen(0, '127.0.0.1');
+  const app = createApp(config), storage = memoryWritingStorage();
+  app.locals.writingStorage = storage;
+  const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   function client() {
@@ -104,7 +110,7 @@ test('chapter workspace preserves cloud drafts, ownership, quota and publication
       const payload = {id: 'admin-edit', title: chapter.title, content: '管理员校对后的正文', number: 2, targetChapterId: firstId, baseUpdatedAt: chapter.updatedAt.toISOString()};
       assert.equal((await admin(url + '/publish', 'POST', payload)).status, 200);
       assert.equal((await Book.findById(bookId)).author_id.toString(), user.id);
-      assert.equal((await Chapter.findById(firstId)).content, payload.content);
+      assert.equal(await storage.readChapter(await Chapter.findById(firstId)), payload.content);
       assert.equal((await admin(url + '/publish', 'POST', {...payload, id: 'stale-admin-edit'})).status, 409);
     });
     await t.test('editing preserves the original on a stale revision and protects other books', async () => {
@@ -116,12 +122,89 @@ test('chapter workspace preserves cloud drafts, ownership, quota and publication
       const otherChapter = await Chapter.create({bookId: otherBook.id, title: '别人的正文', content: '不许覆盖', chapter_number: 2});
       assert.equal((await owner(path + '/publish', 'POST', {...body, targetChapterId: otherChapter.id})).status, 409);
       assert.equal((await owner(path + '/publish', 'POST', body)).status, 200);
-      assert.equal((await Chapter.findById(firstId)).content, body.content);
+      assert.equal(await storage.readChapter(await Chapter.findById(firstId)), body.content);
       assert.equal((await owner(path + '/publish', 'POST', body)).status, 200);
       await Book.updateOne({_id: bookId}, {$set: {deletedAt: new Date()}});
       assert.equal((await owner(path)).status, 404);
     });
+    await t.test('cloud drafts survive another session, deduplicate retries, and reject stale writes', async () => {
+      const cloudKey = crypto.randomUUID(), url = `/api/writer/workspace/m_${cloudKey}`;
+      await Manuscript.create({_id: `${user.id}:${cloudKey}`, owner: user.id, title: '云端作品'});
+      const data = {id: 'cloud-one', title: '第一章', content: '山海😀来信', number: 1, revision: 0};
+      const used = (await User.findById(user.id)).daily_upload_words;
+      const first = await owner(url + '/drafts/cloud-one', 'PUT', data);
+      assert.equal(first.status, 200, JSON.stringify(first));
+      assert.equal(first.data.cloudRevision, 1);
+      assert.equal((await User.findById(user.id)).daily_upload_words, used + 5);
+      const writes = storage.client.writes;
+      assert.equal((await owner(url + '/drafts/cloud-one', 'PUT', data)).status, 200);
+      assert.equal(storage.client.writes, writes);
+      const metadata = (await owner(url)).data.cloudDrafts[0];
+      assert.equal(metadata.content, ''); assert.equal(metadata.contentLoaded, false); assert.equal(metadata.words, 5);
+      const second = client();
+      await second('/api/auth/signin', 'POST', {email: user.email, password: 'Writing-test-123'});
+      assert.equal((await second(url + '/drafts/cloud-one')).data.content, data.content);
+      assert.equal((await other(url + '/drafts/cloud-one')).status, 404);
+      assert.equal((await other(url + '/drafts/cloud-one', 'PUT', data)).status, 404);
+      assert.equal((await owner(url + '/drafts/cloud-one', 'PUT', {...data, content: '另一页面旧内容'})).status, 409);
+      const changed = {...data, revision: 1, content: '江海😀来书'};
+      assert.equal((await owner(url + '/drafts/cloud-one', 'PUT', changed)).status, 200);
+      assert.equal((await User.findById(user.id)).daily_upload_words, used + 7);
+      const record = await WriterDraft.findOne({draftId: data.id});
+      assert.equal(record.toObject().content, undefined); assert.match(record.contentKey, /^drafts\//);
+      storage.client.failWrites = true;
+      assert.equal((await owner(url + '/drafts/cloud-one', 'PUT', {...changed, revision: 2, content: changed.content + '更多文字'})).status, 500);
+      storage.client.failWrites = false;
+      assert.equal((await User.findById(user.id)).daily_upload_words, used + 7);
+      assert.equal((await owner(url + '/drafts/cloud-one')).data.content, changed.content);
+      assert.equal((await WriterDraft.findById(record.id)).revision, 2);
+      const result = await owner(`/api/manuscripts/${cloudKey}`, 'DELETE');
+      assert.equal(result.status, 200);
+      assert.equal((await WriterDraft.findById(record.id)).deleted, true);
+      assert.equal((await User.findById(user.id)).daily_upload_words, used + 7);
+    });
+    await t.test('daily insertions never refund deletion; publication does not charge again; cleanup preserves live objects', async () => {
+      const key = crypto.randomUUID(), url = `/api/writer/workspace/m_${key}`;
+      await Manuscript.create({_id: `${user.id}:${key}`, owner: user.id, title: '额度作品'});
+      await User.updateOne({_id: user.id}, {$set: {uploadDay: dayKey(), daily_upload_words: 0}});
+      const first = {id: 'sixty', title: '六万', content: '甲'.repeat(60000), number: 1, revision: 0};
+      assert.equal((await owner(url + '/drafts/sixty', 'PUT', first)).status, 200);
+      const keyBefore = (await WriterDraft.findOne({draftId: 'sixty'})).contentKey;
+      assert.equal((await owner(url + '/drafts/sixty', 'PUT', {...first, revision: 1, deleted: true})).status, 200);
+      assert.equal((await User.findById(user.id)).daily_upload_words, 60000);
+      const second = {id: 'forty', title: '四万', content: '乙'.repeat(40000), number: 2, revision: 0};
+      assert.equal((await owner(url + '/drafts/forty', 'PUT', second)).status, 200);
+      assert.equal((await owner(url + '/drafts/extra', 'PUT', {...second, id: 'extra', number: 3, content: '多'})).status, 429);
+      assert.equal((await User.findById(user.id)).daily_upload_words, 100000);
+      const {revision, ...body} = second;
+      const published = await owner(url + '/publish', 'POST', {...body, cloudRevision: 1});
+      assert.equal(published.status, 200, JSON.stringify(published));
+      assert.equal((await User.findById(user.id)).daily_upload_words, 100000);
+      const chapter = await Chapter.findById(published.data.chapterId);
+      assert.equal(chapter.content, undefined); assert.equal(await storage.readChapter(chapter), second.content);
+      await User.updateOne({_id: user.id}, {$set: {daily_upload_words: 99999}});
+      const results = await Promise.all(['race-a', 'race-b'].map(id => owner(url + '/drafts/' + id, 'PUT', {id, title: id, content: '字', number: 3, revision: 0})));
+      assert.deepEqual(results.map(r => r.status).sort(), [200, 429]);
+      await User.updateOne({_id: user.id}, {$set: {uploadDay: dayKey(new Date(Date.now() - 86400000)), daily_upload_words: 100000}});
+      assert.equal((await owner(url + '/drafts/new-day', 'PUT', {id: 'new-day', title: '次日', content: '新😀', number: 4, revision: 0})).status, 200);
+      assert.equal((await User.findById(user.id)).daily_upload_words, 2);
+      await cleanupDraftObjects(storage, new Date(Date.now() + 7200000));
+      assert.equal(storage.objects.has(keyBefore), false);
+      assert.equal(await storage.readChapter(chapter), second.content);
+      assert.equal((await owner(url + '/drafts/new-day')).data.content, '新😀');
+      assert.equal(await WriterBlob.countDocuments({retireAt: {$ne: null, $lte: new Date()}}), 0);
+    });
   } finally {
+    app.locals.stopWritingCleanup();
     await new Promise(resolve => server.close(resolve)); await mongoose.disconnect(); await repl.stop();
   }
+});
+
+test('insert counting ignores unchanged text, counts replacements, and handles Unicode characters', () => {
+  assert.equal(insertedCharacters('甲乙丙', '甲乙丙'), 0);
+  assert.equal(insertedCharacters('甲乙丙', '甲丙'), 0);
+  assert.equal(insertedCharacters('甲乙丙', '甲丁丙'), 1);
+  assert.equal(insertedCharacters('甲乙丙丁', '新甲乙丙丁尾'), 2);
+  assert.equal(insertedCharacters('', '甲😀'), 2);
+  assert.equal(insertedCharacters('甲😀', '甲😃'), 1);
 });

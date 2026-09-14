@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import Book from '../models/Book.js';
 import Chapter from '../models/Chapter.js';
@@ -6,6 +5,10 @@ import ChapterDraft from '../models/ChapterDraft.js';
 import Manuscript from '../models/Manuscript.js';
 import User from '../models/User.js';
 import WriterPublication from '../models/WriterPublication.js';
+import WriterDraft from '../models/WriterDraft.js';
+import WriterBlob from '../models/WriterBlob.js';
+import {createWritingStorage} from '../services/writing-storage.js';
+import {cleanupDraftObjects, draftKey, draftJson, saveCloudDraft} from '../services/writing-drafts.js';
 import {asyncRoute} from '../security.js';
 import {chargeQuota, contentHash, fail, lockBook, validateChapter} from '../services/content.js';
 
@@ -27,6 +30,29 @@ async function resolve(reference, actor, session = null) {
 }
 
 export function writingWorkspaceRoutes(app, auth) {
+  let storage, cleaning = false;
+  const getStorage = () => app.locals.writingStorage || (storage ||= createWritingStorage());
+  const cleanup = setInterval(async () => {
+    if (cleaning || mongoose.connection.readyState !== 1 || (!storage && !app.locals.writingStorage && process.env.CHAPTER_STORAGE !== 'r2')) return;
+    cleaning = true;
+    try {await cleanupDraftObjects(getStorage());}
+    catch {console.warn('Draft object cleanup deferred');}
+    finally {cleaning = false;}
+  }, 60000);
+  cleanup.unref();
+  app.locals.stopWritingCleanup = () => clearInterval(cleanup);
+
+  app.put('/api/writer/workspace/:reference/drafts/:draftId', auth.authenticate, asyncRoute(async (req, res) => {
+    if (req.body?.id !== req.params.draftId) fail(400, '草稿编号不一致');
+    const result = await saveCloudDraft({actor: req.user, reference: req.params.reference, body: req.body, resolve, storage: getStorage()});
+    res.set('Cache-Control', 'private, no-store').json(result);
+  }));
+  app.get('/api/writer/workspace/:reference/drafts/:draftId', auth.authenticate, asyncRoute(async (req, res) => {
+    const {work} = await resolve(req.params.reference, req.user);
+    const draft = await WriterDraft.findById(draftKey(req.user, work, req.params.draftId)).lean();
+    if (!draft || draft.deleted || draft.published) fail(404, '草稿已删除或发布');
+    res.set('Cache-Control', 'private, no-store').json(draftJson(draft, await getStorage().read(draft)));
+  }));
   app.get('/api/writer/workspace/:reference', auth.authenticate, asyncRoute(async (req, res) => {
     const {manuscript, book, work} = await resolve(req.params.reference, req.user);
     const page = Number(req.query.page || 1);
@@ -60,17 +86,45 @@ export function writingWorkspaceRoutes(app, auth) {
         maxNumber = Math.max(maxNumber, legacy.chapter_number);
       }
     }
+    const saved = await WriterDraft.find({owner: req.user.id, work}).sort({number: -1}).lean();
+    const savedIds = new Set(saved.map(row => row.draftId));
+    for (const row of saved) if (!row.deleted) maxNumber = Math.max(maxNumber, row.number);
     res.set('Cache-Control', 'private, no-store').json({work: {reference: work, title: (book || manuscript).title,
-      bookId: book ? String(book._id) : null, visibility: book?.visibility || 'private'}, cloudDrafts, published, total, maxNumber, publishedDraftIds: [...publishedIds]});
+      bookId: book ? String(book._id) : null, visibility: book?.visibility || 'private'},
+      cloudDrafts: [...cloudDrafts.filter(row => !savedIds.has(row.id)), ...saved.filter(row => !row.published).map(row => draftJson(row))],
+      published, total, maxNumber, publishedDraftIds: [...publishedIds]});
   }));
 
   app.post('/api/writer/workspace/:reference/publish', auth.authenticate, asyncRoute(async (req, res) => {
     const body = req.body;
-    if (!body || Object.keys(body).some(key => !['id', 'title', 'content', 'number', 'targetChapterId', 'baseUpdatedAt', 'legacyBaseHash'].includes(key)) ||
+    if (!body || Object.keys(body).some(key => !['id', 'title', 'content', 'number', 'targetChapterId', 'baseUpdatedAt', 'legacyBaseHash', 'cloudRevision'].includes(key)) ||
         typeof body.id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(body.id) ||
         (body.targetChapterId && !/^[a-f0-9]{24}$/.test(body.targetChapterId))) fail(400, '发布参数无效');
     const data = validateChapter({...body, chapter_number: body.number});
-    const hash = contentHash(body);
+    const {cloudRevision, ...publicationBody} = body;
+    const hash = contentHash(publicationBody);
+    const initial = await resolve(req.params.reference, req.user);
+    const prior = await WriterPublication.findById(`${req.user.id}:${initial.work}:${body.id}`).lean();
+    if (prior) {
+      if (prior.hash !== hash) fail(409, '此草稿已经发布，请重新打开已发布章节后修改');
+      return res.set('Cache-Control', 'private, no-store').json({bookId: String(prior.bookId), chapterId: String(prior.chapterId)});
+    }
+    if (!body.targetChapterId && initial.book && await Chapter.exists({bookId: initial.book._id, chapter_number: data.chapter_number})) {
+      const receipt = await WriterPublication.findById(`${req.user.id}:${initial.work}:${body.id}`).lean();
+      if (receipt?.hash === hash) return res.set('Cache-Control', 'private, no-store').json({bookId: String(receipt.bookId), chapterId: String(receipt.chapterId)});
+      fail(409, '此章节序号已被使用，请返回草稿箱重新编号后发布');
+    }
+    let cloud;
+    try {
+      cloud = await saveCloudDraft({actor: req.user, reference: req.params.reference,
+        body: {...body, revision: cloudRevision ?? 0}, resolve, storage: getStorage()});
+    } catch (error) {
+      // Another identical publication can finish between the first receipt read and draft save.
+      const receipt = await WriterPublication.findById(`${req.user.id}:${initial.work}:${body.id}`).lean();
+      if (receipt?.hash === hash) return res.set('Cache-Control', 'private, no-store').json({bookId: String(receipt.bookId), chapterId: String(receipt.chapterId)});
+      throw error;
+    }
+    const storedBody = await getStorage().publish(data.content);
     let result;
     await mongoose.connection.transaction(async session => {
       await User.updateOne({_id: req.user.id}, {$inc: {contentVersion: 1}}, {session});
@@ -83,6 +137,9 @@ export function writingWorkspaceRoutes(app, auth) {
         if (receipt.hash !== hash) fail(409, '此草稿已经发布，请重新打开已发布章节后修改');
         result = {bookId: String(receipt.bookId), chapterId: String(receipt.chapterId)}; return;
       }
+      const draft = await WriterDraft.findById(draftKey(req.user, work, body.id)).session(session);
+      if (!draft || draft.deleted || draft.published || draft.revision !== cloud.cloudRevision)
+        fail(409, '草稿已在另一页面更新，请核对后重新发布');
       if (!book) {
         if (body.targetChapterId) fail(400, '章节不存在');
         [book] = await Book.create([{title: manuscript.title, description: manuscript.description, cover_image: manuscript.cover_image,
@@ -104,21 +161,27 @@ export function writingWorkspaceRoutes(app, auth) {
           if (contentHash({title: chapter.title, content, number: chapter.chapter_number}) !== body.legacyBaseHash)
             fail(409, '旧草稿对应的原章节已更新，请核对已发布正文后再修改');
         }
-        const sameBody = typeof chapter.content === 'string' ? chapter.content === data.content : chapter.get('contentSha256') === crypto.createHash('sha256').update(data.content).digest('hex');
-        if (!sameBody) await chargeQuota(req.user, data.content.length, session);
-        Object.assign(chapter, data);
-        chapter.set('contentKey', undefined); chapter.set('contentSha256', undefined);
+        Object.assign(chapter, data, storedBody);
+        chapter.set('content', undefined);
         await chapter.save({session});
       } else {
         if (await Chapter.exists({bookId: book._id, chapter_number: data.chapter_number}).session(session)) fail(409, '此章节序号已被使用，请返回草稿箱重新编号后发布');
-        await chargeQuota(req.user, data.content.length, session);
         const source = /^manuscript-\d+$/.test(body.id) && manuscript?.chapters[Number(body.id.slice(11))];
-        [chapter] = await Chapter.create([{...data, bookId: book._id, ...(source ? {volume_title: source.volumeTitle, volume_number: source.volumeNumber} : {})}], {session});
+        [chapter] = await Chapter.create([{...data, ...storedBody, content: undefined, bookId: book._id, ...(source ? {volume_title: source.volumeTitle, volume_number: source.volumeNumber} : {})}], {session});
       }
+      await chargeQuota(req.user, 0, session);
+      if (draft.contentKey) await WriterBlob.updateOne({_id: draft.contentKey}, {$set: {retireAt: new Date(Date.now() + 300000)}}, {session});
+      draft.published = true; draft.revision++; draft.contentKey = undefined; draft.contentSha256 = undefined;
+      await draft.save({session});
       if (/^legacy-[a-f0-9]{24}$/.test(body.id)) await ChapterDraft.updateOne({_id: body.id.slice(7), bookId: book._id, owner: req.user.id}, {$set: {publishedChapterId: chapter._id}}, {session});
       await WriterPublication.create([{_id: receiptId, owner: req.user.id, work, draftId: body.id, hash, bookId: book._id, chapterId: chapter._id}], {session});
       result = {bookId: String(book._id), chapterId: String(chapter._id)};
     });
     res.set('Cache-Control', 'private, no-store').json(result);
   }));
+  app.use('/api/writer/workspace', (error, req, res, next) => {
+    if (res.headersSent) return next(error);
+    const status = error.status || (error.code === 11000 ? 409 : 500);
+    res.status(status).json({error: status < 500 && error.status ? error.message : '草稿同步暂时失败，请重试；当前文字仍保留'});
+  });
 }

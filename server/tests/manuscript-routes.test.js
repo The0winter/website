@@ -12,6 +12,8 @@ import Chapter from "../models/Chapter.js";
 import Manuscript from "../models/Manuscript.js";
 import Media from "../models/Media.js";
 import { hasMediaReferences } from "../services/media-reference.js";
+import {memoryWritingStorage} from './helpers/writing-storage.js';
+import {configureChapterStorage} from '../services/chapter-storage.js';
 
 test("work metadata are private, transactional, revision protected and idempotent", async (t) => {
   const repl = await MongoMemoryReplSet.create({
@@ -28,6 +30,8 @@ test("work metadata are private, transactional, revision protected and idempoten
     await model.createIndexes();
   const app = createApp(config),
     server = app.listen(0, "127.0.0.1");
+  app.locals.writingStorage = memoryWritingStorage();
+  configureChapterStorage({read: app.locals.writingStorage.readChapter});
   await new Promise((r) => server.once("listening", r));
   const base = `http://127.0.0.1:${server.address().port}`;
   function client() {

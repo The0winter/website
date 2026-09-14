@@ -1,6 +1,7 @@
 import express from "express";
 import multer from "multer";
 import mongoose from "mongoose";
+import {retireWorkspaceDrafts} from '../services/writing-drafts.js';
 import Manuscript from "../models/Manuscript.js";
 import User from "../models/User.js";
 import { asyncRoute } from "../security.js";
@@ -122,10 +123,12 @@ export function manuscriptRoutes(app, auth) {
       let retired;
       await mongoose.connection.transaction(async (session) => {
         retired = undefined;
+        await User.updateOne({_id: req.user.id}, {$inc: {contentVersion: 1}}, {session});
         const draft = await Manuscript.findOneAndDelete(
           { _id: id(req), publishedBookId: null },
           { session },
         );
+        if (draft) await retireWorkspaceDrafts(req.user.id, `m_${req.params.key}`, session);
         if (draft?.cover_image)
           retired = await retireUnreferencedCover(draft.cover_image, session);
       });
