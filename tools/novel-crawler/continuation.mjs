@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {load} from 'cheerio';
 import {atomicWrite, readJson, hash} from './storage.mjs';
 import {normalizedIdentity} from './identity.mjs';
 import {qualityReport} from './quality.mjs';
 import {getCatalog, getChapter} from './adapters.mjs';
-import {makeClient} from './http.mjs';
+import {makeClient, decode, httpUrl} from './http.mjs';
 import {browserProfile} from './browser-session.mjs';
 import {failureDetails} from './diagnostics.mjs';
 import {formatChapterForExport} from './titles.mjs';
@@ -249,6 +250,42 @@ export function recordContinuationNoticeReview(spec, options, {link, contentHash
   return decision;
 }
 
+// A small backward numbering reset can be reviewed only with three adjacent
+// complete source chapters and a saved independent catalog showing their order.
+// Preserve every title and body; this is never permission to skip a chapter.
+export function recordContinuationNumberReset(spec, options, {links, hashes, reference, reason}) {
+  if (!Array.isArray(links) || links.length !== 3 || new Set(links).size !== 3 || !Array.isArray(hashes) || hashes.length !== 3 || !reference || typeof reason !== 'string' || !reason.trim()) throw Error('章号回退核对需要连续三章、完整正文哈希、独立目录及理由');
+  const sourceDir = sourceDirectory(options.stateDir, spec, options.extraction), catalog = readJson(path.join(sourceDir, 'catalog.json'));
+  const positions = links.map(link => catalog?.findIndex(c => c.link === link));
+  if (!positions.every((p, i) => Number.isInteger(p) && p >= 0 && (!i || p === positions[0] + i))) throw Error('章号回退只能核对来源目录中相邻的三章');
+  const chapters = links.map((link, i) => {
+    const saved = readJson(path.join(sourceDir, 'chapters', hash(link) + '.json'));
+    if (!saved?.chapter || saved.hash !== hash(saved.chapter) || saved.chapter.link !== link || hash(saved.chapter.content) !== hashes[i] || saved.catalogTitle !== catalog[positions[i]].title || saved.chapter.chapter_number !== positions[i] + 1) throw Error('章号回退的完整来源检查点已变化');
+    const chapter = saved.chapter, identity = chapterIdentity(chapter.title);
+    if (!identity || chapterPartIdentity(chapter.title) || normalize(chapter.title) !== normalize(saved.catalogTitle) || bodyKey(chapter.content, chapter.title).length < 100) throw Error('章号回退不能代替拆章、缺正文或目录标题核对');
+    return chapter;
+  });
+  const ids = chapters.map(c => chapterIdentity(c.title)), delta = ids[0].number + 1 - ids[1].number;
+  if (delta < 1 || delta > 10 || ids[2].number !== ids[1].number + 1 || ids.some((id, i) => ids.some((other, j) => i !== j && compatibleNames(id.name, other.name)))) throw Error('仅支持不同标题连续正文的小范围编号回退，不能豁免缺章或重复版本');
+  const referenceUrl = httpUrl(reference.url), raw = fs.readFileSync(reference.bodyFile);
+  if (new URL(referenceUrl).hostname === new URL(spec.sourceUrl).hostname || hash(raw) !== reference.hash || !Array.isArray(reference.chapters) || reference.chapters.length !== 3) throw Error('独立目录证据或原始页面哈希无效');
+  const $ = load(decode(raw, reference.contentType, reference.encoding));
+  if (!normalize($('title').text()).includes(normalize(spec.title)) || !normalize($.text()).includes(normalize(spec.author))) throw Error('独立目录未核实同书同作者');
+  const refs = reference.chapters.map(c => ({title: c.title, link: httpUrl(c.link, referenceUrl)}));
+  const all = $('a[href]').toArray().map(el => ({title: $(el).text().trim(), link: (() => { try { return httpUrl($(el).attr('href'), referenceUrl); } catch { return ''; } })()})).filter(c => chapterIdentity(c.title));
+  const at = refs.map(c => all.flatMap((a, i) => a.link === c.link && normalize(a.title) === normalize(c.title) ? [i] : []));
+  if (at.some(a => a.length !== 1) || !at.every((a, i) => !i || a[0] === at[0][0] + i)) throw Error('独立目录须唯一列出相邻三章，不能省略中间正文');
+  const refIds = refs.map(c => chapterIdentity(c.title));
+  if (refIds.some((id, i) => !id || !compatibleNames(id.name, ids[i].name) || id.number !== ids[1].number + i - 1)) throw Error('独立目录标题或连续章号与回退衔接不对应');
+  const window = chapters.map(c => ({...reviewFingerprint(c), sourcePosition: c.chapter_number}));
+  const decision = {key: hash(window), window, reference: {url: referenceUrl, hash: reference.hash, chapters: refs}, reason: reason.trim(), reviewedAt: new Date().toISOString()};
+  const state = loadReviews(spec, options);
+  state.numberResets = [...(state.numberResets || []).filter(d => d.key !== decision.key), decision];
+  atomicWrite(path.join(sourceDir, 'references', reference.hash + '.bin'), raw);
+  atomicWrite(path.join(sourceDir, 'reviews.json'), sealed(state));
+  return decision;
+}
+
 // A completed mirror may end inside a local edition's existing appendices and
 // use volume numbers. Review its entire ending block before adopting the source;
 // this operation only changes the binding, never the local book or its order.
@@ -309,17 +346,21 @@ export async function bindReviewedCompletedSource(spec, options, {file, exportHa
 
 // Resolve only decisions backed by complete content or the chapter page's own
 // heading. A repeated number with different prose is still an unresolved version.
-export function createContinuationReviewer(book, reviews = [], noticeReviews = [], partPolicy) {
+export function createContinuationReviewer(book, reviews = [], noticeReviews = [], partPolicy, numberResets = []) {
   const accepted = [...book.chapters], originals = new Set(book.chapters), skipped = [], resolutions = [];
   let number = numbered(accepted).at(-1)?.number;
+  let requiredAfterReset = null;
+  const resetFingerprint = c => ({...reviewFingerprint(c), sourcePosition: c.sourceChapterNumber || c.chapter_number});
   const paired = partPolicy?.kind === 'paired';
   let openPart = paired ? chapterPartIdentity(accepted.filter(c => chapterIdentity(c.title)).at(-1)?.title) : null;
   if (openPart?.part !== 1) openPart = null;
   if (!number) throw Error('原书缺少可核对的正文章号');
   return {
     skipped, resolutions,
-    finish() { if (openPart) throw Error(`拆章缺少下篇：第 ${openPart.number} 章「${openPart.baseTitle}」，旧书已保留`); },
+    finish() { if (requiredAfterReset) throw Error('章号回退的后续核对章缺失，旧书已保留'); if (openPart) throw Error(`拆章缺少下篇：第 ${openPart.number} 章「${openPart.baseTitle}」，旧书已保留`); },
     accept(entry, value) {
+      const completesReset = requiredAfterReset && hash(resetFingerprint(value)) === hash(requiredAfterReset);
+      if (requiredAfterReset && !completesReset) throw Error('章号回退的后续核对章已变化，需重新核对');
       const listed = chapterIdentity(entry.title), actual = chapterIdentity(value.title);
       if (!!listed !== !!actual || (listed && !compatibleNames(listed.name, actual.name))) throw Error(`目录与正文标题无法对应：「${entry.title}」 / 「${value.title}」`);
       const part = paired ? chapterPartIdentity(value.title) : null;
@@ -359,8 +400,14 @@ export function createContinuationReviewer(book, reviews = [], noticeReviews = [
       if (actual) {
         const secondPart = followsPart(openPart, part);
         if (openPart ? !secondPart : part?.part === 2 || actual.number !== number + 1) {
-          const reason = peers.length ? '同章号正文不同，不能自动选择版本' : '缺章或章号顺序无法确定';
-          throw Error(`新来源衔接后章号冲突：应为第 ${openPart ? number + ' 章下篇' : number + 1 + ' 章'}，实际为「${value.title}」；${reason}`);
+          const previous = accepted.at(-1), reset = !openPart && !part && !peers.length && !originals.has(previous) && numberResets.find(d =>
+            d.key === hash(d.window) && d.window.length === 3 && hash(d.window[0]) === hash(resetFingerprint(previous)) && hash(d.window[1]) === hash(resetFingerprint(value)));
+          if (!reset) {
+            const reason = peers.length ? '同章号正文不同，不能自动选择版本' : '缺章或章号顺序无法确定';
+            throw Error(`新来源衔接后章号冲突：应为第 ${openPart ? number + ' 章下篇' : number + 1 + ' 章'}，实际为「${value.title}」；${reason}`);
+          }
+          requiredAfterReset = reset.window[2];
+          resolutions.push({kind: 'reviewed-number-reset', title: value.title, link: value.link, sourcePosition: entry.chapter_number, previousLink: previous.link, previousTitle: previous.title, contentHash: hash(value.content), reviewKey: reset.key, reference: reset.reference, reason: reset.reason});
         }
         if (listed.number !== actual.number) resolutions.push({kind: 'catalog-number', title: entry.title, link: entry.link, sourcePosition: entry.chapter_number,
           acceptedTitle: value.title, catalogNumber: listed.number, pageNumber: actual.number, contentHash: hash(value.content),
@@ -375,6 +422,7 @@ export function createContinuationReviewer(book, reviews = [], noticeReviews = [
         if (reviewed) resolutions.push({kind: 'reviewed-notice', title: value.title, link: value.link, contentHash: hash(value.content), reviewKey: reviewed.key, reason: reviewed.reason, reviewedAt: reviewed.reviewedAt});
       }
       accepted.push(value);
+      if (completesReset) requiredAfterReset = null;
       return true;
     },
   };
@@ -395,7 +443,7 @@ export async function acquireContinuation(spec, options) {
   if (book.chapters.some((chapter, index) => index && chapter.chapter_number <= book.chapters[index - 1].chapter_number)) throw Error('原书顺序号未严格递增，请先核对');
   const lastOrdinal = book.chapters.at(-1).chapter_number;
   const reviewState = loadReviews(spec, options);
-  const reviewer = createContinuationReviewer(book, reviewState.decisions, reviewState.noticeDecisions, reviewState.partPolicy);
+  const reviewer = createContinuationReviewer(book, reviewState.decisions, reviewState.noticeDecisions, reviewState.partPolicy, reviewState.numberResets);
   const switching = !binding || binding.source.url !== spec.sourceUrl;
   if (!switching && binding.source.extraction !== extraction) throw Error('当前续更来源的提取规则已变化，请先核对适配，旧文件已保留');
   const sourceDir = sourceDirectory(stateDir, spec, extraction);

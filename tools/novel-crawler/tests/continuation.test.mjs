@@ -6,7 +6,7 @@ import path from 'node:path';
 import http from 'node:http';
 import puppeteer from 'puppeteer';
 import {acquire, localBookState, validateSpec, extractionHash} from '../core.mjs';
-import {continuationKey, continuationState, recoverContinuation, recordContinuationReview, recordContinuationAnchorReview, recordContinuationNoticeReview, recordContinuationPartPolicy, chapterPartIdentity, createContinuationReviewer, bindReviewedCompletedSource} from '../continuation.mjs';
+import {continuationKey, continuationState, recoverContinuation, recordContinuationReview, recordContinuationAnchorReview, recordContinuationNoticeReview, recordContinuationPartPolicy, chapterPartIdentity, createContinuationReviewer, bindReviewedCompletedSource, recordContinuationNumberReset} from '../continuation.mjs';
 import {atomicWrite, readJson, hash, acquireLock} from '../storage.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 import {loadSites, parseSearch} from '../desktop/sources.mjs';
@@ -57,6 +57,61 @@ async function completedFixture(t) {
     matches: [4, 5, 6].map(n => ({oldNumber: n, newLink: f.base + '/new/c/' + n, oldHash: hash(body(n)), newHash: hash(body(n)), reason: '分卷编号不同，同题完整正文一致。'}))};
   return {...f, review, reviewOptions: {...f.options, extraction: extractionHash(f.spec)}};
 }
+
+async function numberResetFixture(t) {
+  const f = await fixture(t); f.state.count = 8;
+  for (const n of [6, 7, 8]) f.state.titles[n] = `第${n - 2}章 山间故事${n}`;
+  const report = await f.run({stopOnFailure: false}), sourceDir = path.dirname(report.reportFile);
+  const links = [5, 6, 7].map(n => f.base + '/new/c/' + n), bodyFile = path.join(f.options.stateDir, 'reference.html');
+  const chapters = [5, 6, 7].map(n => ({title: `第${n - 2}章 山间故事${n}`, link: 'https://reference.example/c/' + n}));
+  const html = `<title>${f.spec.title}</title><p>${f.spec.author}</p><nav>${chapters.map(c => `<a href="${c.link}">${c.title}</a>`).join('')}</nav>`;
+  fs.writeFileSync(bodyFile, html);
+  return {...f, sourceDir, html, reviewOptions: {...f.options, extraction: extractionHash(f.spec)}, review: {links, hashes: [5, 6, 7].map(n => hash(body(n))), reference: {url: 'https://reference.example/book', bodyFile, hash: hash(Buffer.from(html)), chapters}, reason: '独立目录中同题三章连续；来源前章编号偏2，当前回退恢复，保留全部源站正文及顺序。'}};
+}
+
+test('a reviewed number reset preserves all source titles and bodies and resumes ordinary updates', async t => {
+  const f = await numberResetFixture(t), original = fs.readFileSync(f.file);
+  recordContinuationNumberReset(f.spec, f.reviewOptions, f.review);
+  assert.equal(hash(fs.readFileSync(path.join(f.sourceDir, 'references', f.review.reference.hash + '.bin'))), f.review.reference.hash);
+  assert.deepEqual(fs.readFileSync(f.file), original);
+  const report = await f.run();
+  assert.equal(report.continuationAdded, 4, JSON.stringify(report.failures));
+  assert.equal(report.resolutions.filter(r => r.kind === 'reviewed-number-reset').length, 1);
+  const book = readJson(f.file); assert.deepEqual(book.chapters.slice(0, 4), f.book.chapters);
+  assert.deepEqual(book.chapters.slice(4).map(c => c.content), [5, 6, 7, 8].map(body));
+  assert.deepEqual(book.chapters.slice(4).map(c => c.title), [title(5), f.state.titles[6], f.state.titles[7], f.state.titles[8]]);
+  assert.equal((await f.run()).continuationAdded, 0);
+  f.state.count = 9; f.state.titles[9] = '第7章 山间故事9';
+  assert.equal((await f.run()).continuationAdded, 1);
+});
+
+test('number reset review rejects changed bodies, independent evidence gaps, wrong identity and nonadjacent source links', async t => {
+  const f = await numberResetFixture(t), original = fs.readFileSync(f.file);
+  const attempt = change => recordContinuationNumberReset(f.spec, f.reviewOptions, {...f.review, ...change});
+  assert.throws(() => attempt({hashes: [hash('stale'), ...f.review.hashes.slice(1)]}), /检查点/);
+  assert.throws(() => attempt({links: [f.review.links[0], f.base + '/new/c/8', f.review.links[2]]}), /相邻/);
+  assert.throws(() => attempt({reference: {...f.review.reference, hash: hash('stale')}}), /哈希/);
+  for (const html of [f.html.replace(f.spec.author, '另一作者'), f.html.replace('</a>', '</a><a href="https://reference.example/missing">第4章 缺失正文</a>')]) {
+    fs.writeFileSync(f.review.reference.bodyFile, html);
+    assert.throws(() => attempt({reference: {...f.review.reference, hash: hash(Buffer.from(html))}}));
+  }
+  assert.deepEqual(fs.readFileSync(f.file), original);
+});
+
+test('number reset decisions expire when any of the three source bodies changes and require the following chapter', async t => {
+  const f = await numberResetFixture(t), original = fs.readFileSync(f.file);
+  recordContinuationNumberReset(f.spec, f.reviewOptions, f.review);
+  for (const n of [5, 6, 7]) {
+    const file = path.join(f.sourceDir, 'chapters', hash(f.base + '/new/c/' + n) + '.json'), saved = readJson(file);
+    atomicWrite(file, {...saved, chapter: {...saved.chapter, content: saved.chapter.content + '变化'}, hash: hash({...saved.chapter, content: saved.chapter.content + '变化'})});
+    assert.equal((await f.run()).completeAgainstSource, false);
+    assert.deepEqual(fs.readFileSync(f.file), original); atomicWrite(file, saved);
+  }
+  const state = readJson(path.join(f.sourceDir, 'reviews.json')).value;
+  const reviewer = createContinuationReviewer(f.book, [], [], undefined, state.numberResets);
+  for (const n of [5, 6]) { const c = readJson(path.join(f.sourceDir, 'chapters', hash(f.base + '/new/c/' + n) + '.json')).chapter; reviewer.accept(c, {...c, sourceChapterNumber: n}); }
+  assert.throws(() => reviewer.finish(), /后续核对章缺失/);
+});
 
 test('reviewed completed sources bind volume-numbered endings without changing any local chapter or extra', async t => {
   const f = await completedFixture(t), original = fs.readFileSync(f.file), mtime = fs.statSync(f.file).mtimeMs;

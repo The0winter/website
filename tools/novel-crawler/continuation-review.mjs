@@ -3,17 +3,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {parseArgs} from 'node:util';
 import {validateSpec, extractionHash, defaultStateDir} from './core.mjs';
-import {continuationKey, recordContinuationReview, recordContinuationAnchorReview, recordContinuationNoticeReview, recordContinuationPartPolicy, bindReviewedCompletedSource} from './continuation.mjs';
+import {continuationKey, recordContinuationReview, recordContinuationAnchorReview, recordContinuationNoticeReview, recordContinuationPartPolicy, bindReviewedCompletedSource, recordContinuationNumberReset} from './continuation.mjs';
 import {withLock} from './storage.mjs';
 
 try {
-  const {values} = parseArgs({options: {...Object.fromEntries(['spec', 'state-dir', 'output-dir', 'first', 'second', 'keep', 'reason', 'anchor-file', 'old-number', 'new-link', 'old-hash', 'new-hash', 'notice-link', 'chapter-parts', 'completed-source'].map(name => [name, {type: 'string'}])),
+  const {values} = parseArgs({options: {...Object.fromEntries(['spec', 'state-dir', 'output-dir', 'first', 'second', 'keep', 'reason', 'anchor-file', 'old-number', 'new-link', 'old-hash', 'new-hash', 'notice-link', 'chapter-parts', 'completed-source', 'number-reset'].map(name => [name, {type: 'string'}])),
     'part-link': {type: 'string', multiple: true}, 'part-hash': {type: 'string', multiple: true}}});
   if (!values.spec) throw Error('需要 --spec 来源.json --first 链接 --second 链接 --keep 保留链接 --reason 核对理由');
   const spec = validateSpec(JSON.parse(fs.readFileSync(values.spec, 'utf8'))), stateDir = path.resolve(values['state-dir'] || defaultStateDir);
   if (values['chapter-parts'] && values['chapter-parts'] !== 'paired') throw Error('--chapter-parts 仅支持 paired');
   if (values['part-link'] && values['new-link'] || values['part-hash'] && values['new-hash']) throw Error('单章与拆章参数不能混用');
-  const result = await withLock(path.join(stateDir, 'book-locks', continuationKey(spec) + '.lock'), () => values['completed-source']
+  const result = await withLock(path.join(stateDir, 'book-locks', continuationKey(spec) + '.lock'), () => values['number-reset']
+    ? recordContinuationNumberReset(spec, {stateDir, extraction: extractionHash(spec)}, JSON.parse(fs.readFileSync(values['number-reset'], 'utf8')))
+    : values['completed-source']
     ? bindReviewedCompletedSource(spec, {stateDir, extraction: extractionHash(spec), outputDir: path.resolve(values['output-dir'] || 'downloads')}, JSON.parse(fs.readFileSync(values['completed-source'], 'utf8')))
     : values['chapter-parts']
     ? recordContinuationPartPolicy(spec, {stateDir, extraction: extractionHash(spec)}, {reason: values.reason})
