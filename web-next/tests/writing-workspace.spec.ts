@@ -70,7 +70,7 @@ for (const width of [320, 390, 1440]) test(`draft library and local editor at ${
     expect((await page.getByRole('tablist').boundingBox())!.y).toBeLessThan(90);
   } else {await page.goto(base + '/writer'); await page.locator('.writer-work').getByRole('button', {name: '创作', exact: true}).click();}
   await expect(page.getByRole('tab', {name: /草稿箱/})).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('.writing-tab-panel:not([inert]) .writing-chapters')).toContainText('海上的信');
+  await expect(page.getByRole('tabpanel').locator('.writing-chapters')).toContainText('海上的信');
   await page.screenshot({path: info.outputPath('draft-library.png')});
   await page.getByRole('button', {name: '新建章节', exact: true}).click();
   const editor = page.getByRole('dialog', {name: '创建新章节', exact: true});
@@ -111,7 +111,7 @@ for (const width of [320, 390, 1440]) test(`draft library and local editor at ${
   await page.getByRole('button', {name: '返回草稿箱'}).click();
   await expect(editor).toHaveCount(0);
   await page.goto(base + '/writer?action=chapters&work=' + reference);
-  await expect(page.locator('.writing-tab-panel:not([inert]) .writing-chapters')).toContainText('潮声');
+  await expect(page.getByRole('tabpanel').locator('.writing-chapters')).toContainText('潮声');
   await expect(page.getByRole('tab', {name: /草稿箱/})).toContainText('3');
 });
 
@@ -132,7 +132,7 @@ test('local drafts survive network failure and are isolated by account', async (
   await page.getByRole('button', {name: '返回草稿箱'}).click();
   state.account = '000000000000000000000098';
   await page.reload();
-  await expect(page.locator('.writing-tab-panel:not([inert]) .writing-chapters')).toHaveCount(0);
+  await expect(page.getByRole('tabpanel').locator('.writing-chapters')).toHaveCount(0);
   expect(state.mutations).toBe(1);
 });
 
@@ -150,7 +150,7 @@ test('publishing failure retains local content; retry publishes exactly that cha
   await expect(page.locator('.writing-editor')).toHaveCount(0);
   await expect(page.getByRole('tab', {name: /已发布/})).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('tab', {name: /草稿箱/}).click();
-  await expect(page.locator('.writing-tab-panel:not([inert]) .writing-chapters li')).toHaveCount(1);
+  await expect(page.getByRole('tabpanel').locator('.writing-chapters li')).toHaveCount(1);
   expect(state.mutations).toBe(3);
 });
 
