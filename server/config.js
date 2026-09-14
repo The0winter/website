@@ -1,9 +1,22 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+
 export function readConfig(env = process.env) {
   const mode = env.APP_ENV;
   if (!['test', 'development', 'production'].includes(mode)) throw new Error('APP_ENV must be explicit');
-  const uri = env.MONGO_URI;
-  if (!uri) throw new Error('MONGO_URI is required');
-  if (mode !== 'production' && !/^mongodb:\/\/(127\.0\.0\.1|localhost):\d+\/test1_(test|dev)(\?|$)/.test(uri)) {
+  const uri = env.DATABASE_URL || env.MONGO_URI;
+  if (!uri) throw new Error('DATABASE_URL is required');
+  const sqlite = uri.startsWith('sqlite:');
+  if(mode==='production' && !/^(d1:\/\/[a-f0-9]{32}\/[a-f0-9-]{36}|mongodb(?:\+srv)?:\/\/.+)$/.test(uri)) throw new Error('Production DATABASE_URL must select D1 or the legacy MongoDB source');
+  if(sqlite) {
+    const filename=fileURLToPath(uri.replace(/^sqlite:/,'file:'));
+    const root=fs.realpathSync(fileURLToPath(new URL('../.runtime/test-tmp/',import.meta.url)));
+    const parent=fs.realpathSync(path.dirname(filename));
+    const relative=path.relative(root,parent);
+    if(relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative))throw new Error('SQLite fixtures must stay inside project test temporary storage');
+  }
+  if (mode !== 'production' && !sqlite && !/^mongodb:\/\/(127\.0\.0\.1|localhost):\d+\/test1_(test|dev)(\?|$)/.test(uri)) {
     throw new Error('Local execution requires a loopback test1_test/test1_dev database');
   }
   if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) throw new Error('JWT_SECRET must contain at least 32 characters');

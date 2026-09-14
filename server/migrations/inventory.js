@@ -16,7 +16,7 @@ export async function inventory(connection,models){
   for(const [collection,fields] of [['chapters',['bookId','chapter_number']],['users',['email']],['users',['username']],['reviews',['book','user']],['bookmarks',['bookId','user_id']]])await duplicates(collection,fields);
   for(const relation of [['chapters','bookId','books'],['reviews','book','books'],['reviews','user','users'],['bookmarks','bookId','books'],['bookmarks','user_id','users'],['forumreplies','postId','forumposts'],['forumreplycomments','replyId','forumreplies']])await orphan(...relation);
   if(present.has('chapters')){
-    const count=await db.collection('chapters').countDocuments({$or:[{chapter_number:{$not:{$type:'number'}}},{chapter_number:{$lte:0}},{title:{$not:{$type:'string'}}},{content:{$not:{$type:'string'}}}]},{maxTimeMS:10000});
+    const count=await db.collection('chapters').countDocuments({$or:[{chapter_number:{$not:{$type:'number'}}},{chapter_number:{$lte:0}},{title:{$not:{$type:'string'}}},{$and:[{content:{$not:{$type:'string'}}},{contentKey:{$not:{$type:'string'}}}]}]},{maxTimeMS:10000});
     if(count)issues.push({type:'invalid-chapter-fields',count});
   }
   for(const model of Object.values(models)){

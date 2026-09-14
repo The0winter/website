@@ -1,6 +1,6 @@
 import '../tools/test-env.cjs';
 // This entry deliberately never loads existing .env files or old data.
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { TestDatabase } from './database/testing.js';
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import { spawn } from 'node:child_process';
@@ -13,9 +13,9 @@ import bcrypt from 'bcryptjs';
 import fs from 'node:fs';
 import {capturedMail} from './utils/sendEmail.js';
 
-const repl = await MongoMemoryReplSet.create({ binary: { version: '7.0.40' }, replSet: { count: 1, storageEngine: 'wiredTiger' }, instanceOpts: [{ port: 27028 }] });
-Object.assign(process.env, { APP_ENV: 'development', MONGO_URI: repl.getUri('test1_dev'), JWT_SECRET: crypto.randomBytes(48).toString('hex'), EXTERNAL_SERVICES: 'disabled', MAIL_MODE: 'capture', INTERNAL_API_SECRET:crypto.randomBytes(32).toString('hex') });
-await mongoose.connect(process.env.MONGO_URI, { autoIndex: false, serverSelectionTimeoutMS: 5000 });
+const repl = await TestDatabase.create();
+Object.assign(process.env, { APP_ENV: 'development', DATABASE_URL: repl.getUri('test1_dev'), JWT_SECRET: crypto.randomBytes(48).toString('hex'), EXTERNAL_SERVICES: 'disabled', MAIL_MODE: 'capture', INTERNAL_API_SECRET:crypto.randomBytes(32).toString('hex') });
+await mongoose.connect(process.env.DATABASE_URL, { autoIndex: false, serverSelectionTimeoutMS: 5000 });
 for (const model of Object.values(mongoose.models)) await model.createIndexes();
 const user = await User.create({ _id: '000000000000000000000001', username: '隔离作者', email: 'reader@example.test', password: await bcrypt.hash('Local-test-12345', 10) });
 await User.create({username:'隔离管理员',email:'admin@example.test',password:await bcrypt.hash('Admin-test-12345',10),role:'admin'});

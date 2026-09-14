@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
-import {MongoMemoryReplSet} from 'mongodb-memory-server';
+import {TestDatabase} from '../database/testing.js';
 import {createApp} from '../app.js';
 import {readConfig} from '../config.js';
 import User from '../models/User.js';
@@ -14,8 +14,8 @@ import Bookmark from '../models/Bookmark.js';
 import ReadingHistory from '../models/ReadingHistory.js';
 
 test('library: durable progress, global sorting, pagination and private management', async () => {
-  const repl = await MongoMemoryReplSet.create({binary: {version: '7.0.40'}, replSet: {count: 1, storageEngine: 'wiredTiger'}});
-  const config = readConfig({APP_ENV: 'test', MONGO_URI: repl.getUri('test1_test'), JWT_SECRET: crypto.randomBytes(48).toString('hex')});
+  const repl = await TestDatabase.create();
+  const config = readConfig({APP_ENV: 'test', DATABASE_URL: repl.getUri('test1_test'), JWT_SECRET: crypto.randomBytes(48).toString('hex')});
   await mongoose.connect(config.uri, {autoIndex: false});
   for (const model of Object.values(mongoose.models)) await model.createIndexes();
   const server = createApp(config).listen(0, '127.0.0.1');

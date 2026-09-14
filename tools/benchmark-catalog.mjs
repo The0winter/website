@@ -2,14 +2,14 @@ import './test-env.cjs';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import mongoose from '../server/node_modules/mongoose/index.js';
-import {MongoMemoryReplSet} from '../server/node_modules/mongodb-memory-server/index.js';
+import {TestDatabase} from '../server/database/testing.js';
 import {chromium} from '../web-next/node_modules/@playwright/test/index.mjs';
 import {createApp} from '../server/app.js';
 import {readConfig} from '../server/config.js';
 import Book from '../server/models/Book.js';
 import Chapter from '../server/models/Chapter.js';
 
-const repl = await MongoMemoryReplSet.create({binary: {version: '7.0.40'}, replSet: {count: 1}});
+const repl = await TestDatabase.create();
 await mongoose.connect(repl.getUri('test1_test'), {autoIndex: false});
 let server, browser;
 const results = [];
@@ -21,7 +21,7 @@ try {
     const chapters = await Chapter.insertMany(Array.from({length: total}, (_, index) => ({bookId: book.id, chapter_number: index + 1, title: `第${index + 1}章 山间来信，新的旅程开始了（合成目录测试）`, content: '合成正文。'})));
     books.push({id: book.id, total, anchor: chapters[Math.floor(total * .8)].id});
   }
-  const app = createApp(readConfig({APP_ENV: 'test', MONGO_URI: repl.getUri('test1_test'), JWT_SECRET: crypto.randomBytes(48).toString('hex')}));
+  const app = createApp(readConfig({APP_ENV: 'test', DATABASE_URL: repl.getUri('test1_test'), JWT_SECRET: crypto.randomBytes(48).toString('hex')}));
   app.get('/', (_req, res) => res.send('<!doctype html><title>Catalog benchmark</title>'));
   server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   browser = await chromium.launch({channel: 'chrome', headless: true});

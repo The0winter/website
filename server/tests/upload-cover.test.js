@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import sharp from 'sharp';
-import {MongoMemoryReplSet} from 'mongodb-memory-server';
+import {TestDatabase} from '../database/testing.js';
 import Book from '../models/Book.js';
 import Media from '../models/Media.js';
 import User from '../models/User.js';
@@ -22,7 +22,7 @@ test('cover CLI requires one exact selector and rejects ambiguous or unsafe argu
 });
 
 test('shared cover upload uses real MongoDB transactions and existing image storage services',async t=>{
-  const repl=await MongoMemoryReplSet.create({binary:{version:'7.0.40'},replSet:{count:1,storageEngine:'wiredTiger'}});
+  const repl=await TestDatabase.create();
   await mongoose.connect(repl.getUri('cover_cli_test'),{autoIndex:false});
   try {
     for(const model of [Book,Media,User]) await model.createCollection();

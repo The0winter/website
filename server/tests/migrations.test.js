@@ -2,12 +2,12 @@ import '../../tools/test-env.cjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
-import {MongoMemoryReplSet} from 'mongodb-memory-server';
+import {TestDatabase} from '../database/testing.js';
 import {inventory} from '../migrations/inventory.js';
 import Book from '../models/Book.js';
 import Chapter from '../models/Chapter.js';
 test('migration inventory preserves legacy bytes and reports conflicts before index creation',async()=>{
-  const replica=await MongoMemoryReplSet.create({binary:{version:'7.0.40'},replSet:{count:1,storageEngine:'wiredTiger'}});
+  const replica=await TestDatabase.create();
   await mongoose.connect(replica.getUri('test1_test'),{autoIndex:false,autoCreate:false,serverSelectionTimeoutMS:5000});
   try{
     const clean=await inventory(mongoose.connection,mongoose.models);assert.deepEqual(clean.issues,[]);

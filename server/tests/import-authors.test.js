@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
-import {MongoMemoryReplSet} from 'mongodb-memory-server';
+import {TestDatabase} from '../database/testing.js';
 import {createApp} from '../app.js';
 import Author from '../models/Author.js';
 import Book from '../models/Book.js';
@@ -19,7 +19,7 @@ test('whole-file preflight catches cross-batch duplicates and bad final chapters
  assert.throws(()=>prepareImport({...sample,chapters:[...chapters,{chapter_number:22,title:'bad',content:''}]}),/正文/);
 });
 test('import attribution, metadata, replay, rollback and account separation',async()=>{
- const repl=await MongoMemoryReplSet.create({binary:{version:'7.0.40'},replSet:{count:1}});
+ const repl=await TestDatabase.create();
  const oldSecret=process.env.IMPORT_SECRET;process.env.IMPORT_SECRET=crypto.randomBytes(32).toString('hex');
  let server;
  try{

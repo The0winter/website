@@ -1,11 +1,13 @@
 import mongoose from 'mongoose';
 import { readConfig } from './config.js';
 import { createApp } from './app.js';
+import {connectDatabase, startExpiryCleanup} from './database/index.js';
 
 try {
   const config = readConfig();
   mongoose.set('bufferCommands', false);
-  await mongoose.connect(config.uri, { autoIndex: false, autoCreate: false, serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000, socketTimeoutMS: 10000, maxPoolSize: 20 });
+  await connectDatabase(config.uri, {maxPoolSize:20});
+  const stopCleanup = config.writeMode === 'readwrite' ? startExpiryCleanup() : () => {};
   const app = createApp(config);
   const server = app.listen(config.port, config.host, () => console.log('API ready on configured loopback/private endpoint'));
   server.requestTimeout = 15000;
@@ -14,6 +16,7 @@ try {
   const stop = () => {
     if (stopping) return;
     stopping = true;
+    stopCleanup();
     const timer = setTimeout(() => process.exit(1), 10000);
     timer.unref();
     server.close(async () => { await mongoose.disconnect(); clearTimeout(timer); });

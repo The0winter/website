@@ -47,6 +47,8 @@ export function importRoutes(app) {
         if(data.dryRun){result={dryRun:true,newBook:true,insert:validated.length};return;}
         [book]=await Book.create([{title:data.title,author:typeof data.author==='string'?data.author:'未知',sourceUrl:data.sourceUrl,importManaged:true,category:data.category||'未分类'}],{session});
       } else if(!data.dryRun) await lockBook(book._id,{role:'import'},session);
+      // One partition read replaces hundreds of D1 round trips in this batch.
+      await session.prefetch?.('chapters',{bookId:book._id});
       if(!data.dryRun){
         const previousCover=book.cover_image;
         if(metadata.cover_image && metadata.cover_image!==previousCover)await claimImportedCover(metadata.cover_image,session);

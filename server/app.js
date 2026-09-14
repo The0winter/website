@@ -14,6 +14,7 @@ import Session from './models/Session.js';
 ﻿import { readConfig } from './config.js'; 
 import express from 'express';
 import mongoose from 'mongoose';
+import {databaseReady} from './database/index.js';
 import crypto from 'crypto';
 import cors from 'cors';
 
@@ -108,12 +109,12 @@ app.use(express.json({ limit: '256kb' }));
 app.use(express.urlencoded({ limit: '256kb', extended: false, parameterLimit:100 }));
 app.use(mongoSanitize());
 app.get('/health/live', (req, res) => res.json({status:'live'}));
-app.get('/health/metrics', (req,res)=>{
+app.get('/health/metrics', async (req,res)=>{
   if(!allowMetrics(req))return res.status(404).end();
-  res.set('Cache-Control','private, no-store').json({...metrics.snapshot(),databaseReady:mongoose.connection.readyState===1});
+  res.set('Cache-Control','private, no-store').json({...metrics.snapshot(),databaseReady:await databaseReady(),databaseBackend:mongoose.connection.transport?.remote?'d1':mongoose.connection.transport?'sqlite':'mongodb',databaseUsage:mongoose.connection.transport?.metrics});
 });
-app.get('/health/ready', (req, res) => res.status(mongoose.connection.readyState === 1 ? 200 : 503).json({ready:mongoose.connection.readyState === 1}));
-app.use('/api', (req, res, next) => mongoose.connection.readyState === 1 ? next() : res.status(503).json({error:'数据库暂不可用'}));
+app.get('/health/ready', async (req, res) => {const ready=await databaseReady();res.status(ready?200:503).json({ready});});
+app.use('/api', async (req, res, next) => await databaseReady() ? next() : res.status(503).json({error:'数据库暂不可用'}));
 
 // ================= 2. 限流配置 =================
 

@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import mongoose from '../server/node_modules/mongoose/index.js';
+import {connectDatabase} from '../server/database/index.js';
 import {S3Client} from '../server/node_modules/@aws-sdk/client-s3/dist-cjs/index.js';
 import {coverConfig,createCoverStorage} from '../server/services/cover-storage.js';
 import {cleanUnusedCovers} from '../server/services/cover-retention.js';
@@ -20,7 +21,7 @@ export async function main(args=process.argv.slice(2)) {
   }
   const client=new S3Client({region:'auto',endpoint:config.endpoint,credentials:config.credentials,maxAttempts:2});
   try {
-    await mongoose.connect(process.env.MONGO_URI,{autoIndex:false,autoCreate:false,serverSelectionTimeoutMS:10000});
+    await connectDatabase();
     const report=await cleanUnusedCovers({storage:createCoverStorage(config,client),bucket:config.bucket,apply});
     if(apply && process.env.STATE_DIRECTORY){
       const target=path.join(process.env.STATE_DIRECTORY,'last-run.json');

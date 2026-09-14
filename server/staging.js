@@ -1,6 +1,6 @@
 import '../tools/test-env.cjs';
-// Equivalent local staging: real replica set + production Next build + nginx.
-import {MongoMemoryReplSet} from 'mongodb-memory-server';
+// Equivalent local staging: SQLite database + production Next build + nginx.
+import {TestDatabase} from './database/testing.js';
 import mongoose from 'mongoose';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -19,12 +19,12 @@ function sourceManifest(directory){for(const name of fs.readdirSync(directory)){
 sourceManifest(path.join(root,'server'));sourceManifest(path.join(root,'web-next'));
 fs.mkdirSync('artifacts',{recursive:true});
 fs.writeFileSync('artifacts/staging-source.json',JSON.stringify({startedAt:new Date().toISOString(),files:sourceFiles},null,2));
-const repl=await MongoMemoryReplSet.create({binary:{version:'7.0.40'},replSet:{count:1,storageEngine:'wiredTiger'},instanceOpts:[{args:['--wiredTigerCacheSizeGB','0.5']}]});
-const env={...process.env,APP_ENV:'test',MONGO_URI:repl.getUri('test1_test'),JWT_SECRET:crypto.randomBytes(48).toString('hex'),INTERNAL_API_SECRET:crypto.randomBytes(32).toString('hex'),EXTERNAL_SERVICES:'disabled',MAIL_MODE:'capture',PORT:'5001',INTERNAL_API_URL:'http://127.0.0.1:5001/api',NEXT_PUBLIC_API_URL:'',NEXT_PUBLIC_SITE_URL:'http://127.0.0.1:8088',NEXT_PUBLIC_EXTERNAL_SERVICES:'disabled',NEXT_DIST_DIR:'.next-stage',ALLOWED_ORIGINS:'http://127.0.0.1:8088',LOG_REQUESTS:'enabled'};
+const repl=await TestDatabase.create();
+const env={...process.env,APP_ENV:'test',DATABASE_URL:repl.getUri('test1_test'),JWT_SECRET:crypto.randomBytes(48).toString('hex'),INTERNAL_API_SECRET:crypto.randomBytes(32).toString('hex'),EXTERNAL_SERVICES:'disabled',MAIL_MODE:'capture',PORT:'5001',INTERNAL_API_URL:'http://127.0.0.1:5001/api',NEXT_PUBLIC_API_URL:'',NEXT_PUBLIC_SITE_URL:'http://127.0.0.1:8088',NEXT_PUBLIC_EXTERNAL_SERVICES:'disabled',NEXT_DIST_DIR:'.next-stage',ALLOWED_ORIGINS:'http://127.0.0.1:8088',LOG_REQUESTS:'enabled'};
 env.IMPORT_SECRET=crypto.randomBytes(32).toString('hex');env.TRUST_PROXY='loopback';
 Object.assign(process.env,env);
 mongoose.set('bufferCommands',false);
-await mongoose.connect(env.MONGO_URI,{autoIndex:false,autoCreate:false,serverSelectionTimeoutMS:5000,socketTimeoutMS:10000,maxPoolSize:20});
+await mongoose.connect(env.DATABASE_URL,{autoIndex:false,autoCreate:false,serverSelectionTimeoutMS:5000,socketTimeoutMS:10000,maxPoolSize:20});
 for(const model of Object.values(mongoose.models))await model.createIndexes();
 const books=Array.from({length:1000},(_,i)=>({_id:new mongoose.Types.ObjectId((100000+i).toString(16).padStart(24,'0')),title:`合成作品 ${i}`,author:'合成署名',description:'隔离负载数据',category:'玄幻',views:i,weekly_views:i%100}));
 await Book.insertMany(books);
@@ -39,8 +39,8 @@ for(let b=0;b<1000;b++){
 if(batch.length)await Chapter.insertMany(batch);
 const server=createApp(readConfig(env)).listen(5001,'127.0.0.1');
 fs.mkdirSync('artifacts',{recursive:true});fs.mkdirSync('.runtime',{recursive:true});
-fs.writeFileSync('.runtime/staging.json',JSON.stringify({uri:env.MONGO_URI,env:Object.fromEntries(['APP_ENV','MONGO_URI','JWT_SECRET','INTERNAL_API_SECRET','IMPORT_SECRET','TRUST_PROXY','EXTERNAL_SERVICES','MAIL_MODE','PORT','INTERNAL_API_URL','NEXT_PUBLIC_API_URL','NEXT_PUBLIC_SITE_URL','NEXT_PUBLIC_EXTERNAL_SERVICES','NEXT_DIST_DIR','ALLOWED_ORIGINS'].map(k=>[k,env[k]])),bookId:String(books[0]._id),chapterId:(1000000).toString(16).padStart(24,'0')}));
-fs.writeFileSync('artifacts/staging-environment.json',JSON.stringify({node:process.version,mongodb:'7.0.40',nginx:'1.30.4',platform:os.platform(),release:os.release(),cpus:os.cpus().length,cpu:os.cpus()[0].model,totalMemory:os.totalmem(),books:1000,chapters:serial,topology:'one-node replica set',externalServices:'disabled'},null,2));
+fs.writeFileSync('.runtime/staging.json',JSON.stringify({uri:env.DATABASE_URL,env:Object.fromEntries(['APP_ENV','DATABASE_URL','JWT_SECRET','INTERNAL_API_SECRET','IMPORT_SECRET','TRUST_PROXY','EXTERNAL_SERVICES','MAIL_MODE','PORT','INTERNAL_API_URL','NEXT_PUBLIC_API_URL','NEXT_PUBLIC_SITE_URL','NEXT_PUBLIC_EXTERNAL_SERVICES','NEXT_DIST_DIR','ALLOWED_ORIGINS'].map(k=>[k,env[k]])),bookId:String(books[0]._id),chapterId:(1000000).toString(16).padStart(24,'0')}));
+fs.writeFileSync('artifacts/staging-environment.json',JSON.stringify({node:process.version,database:'SQLite (D1-compatible)',nginx:'1.30.4',platform:os.platform(),release:os.release(),cpus:os.cpus().length,cpu:os.cpus()[0].model,totalMemory:os.totalmem(),books:1000,chapters:serial,topology:'isolated SQLite',externalServices:'disabled'},null,2));
 async function run(args,log){return new Promise((resolve,reject)=>{const fd=fs.openSync(log,'w');const child=spawn(process.execPath,args,{env,stdio:['ignore',fd,fd],windowsHide:true});child.on('exit',code=>{fs.closeSync(fd);code===0?resolve():reject(new Error('Child failed: '+args[0]));});child.on('error',reject);});}
 await run(['web-next/node_modules/next/dist/bin/next','build','web-next'],'artifacts/staging-build.txt');
 const nextLog=fs.openSync('artifacts/staging-next.log','w');

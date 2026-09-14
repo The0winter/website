@@ -99,7 +99,7 @@ async function remoteWorker(run,job) {
       if (!response?.ok) throw Object.assign(new Error(),{coverMessage:'网站 API 暂不可用，请恢复后重试'});
     };
     await checkWritable();
-    await mongoose.connect(process.env.MONGO_URI,{autoIndex:false,autoCreate:false,serverSelectionTimeoutMS:10000});
+    await (await load('database/index.js')).connectDatabase();
     const result=await run(job,{mongoose,Book,Media,User,prepareCover,config,lockBook,claimMedia,retireUnreferencedCover,finishCoverRetirement,hash,checkWritable,
       storage:createCoverStorage(config,storageClient),newId:()=>String(new mongoose.Types.ObjectId()),
       verifyImage:async(url,expected)=>{
@@ -127,7 +127,7 @@ export async function main(args) {
   if (!stat.isFile() || !stat.size || stat.size>8*1024*1024) throw Error('请选择 8 MB 以内的图片文件');
   const bytes=await fs.readFile(image),runId='cover-'+crypto.randomUUID();
   const job={runId,book:options.book,bookId:options.bookId,author:options.author,admin:options.admin,apply:options.apply,imageBase64:bytes.toString('base64'),sourceSha256:crypto.createHash('sha256').update(bytes).digest('hex')};
-  const command='sudo -n /opt/node-v22.23.2-linux-x64/bin/node --env-file=/etc/test1/api.env --input-type=module';
+  const command='sudo -n /opt/node-v22.23.2-linux-x64/bin/node --env-file=/etc/test1/api.env --env-file-if-exists=/etc/test1/d1.env --input-type=module';
   const result=await new Promise((resolve,reject)=>{
     const child=spawn('ssh',['-i',options.identity,'-o','BatchMode=yes','-o','ConnectTimeout=15',options.host,command],{stdio:['pipe','pipe','pipe'],windowsHide:true});
     let stdout=''; const timer=setTimeout(()=>{child.kill();reject(Error(`SSH 超时；重新执行会检查现有封面。记录 ID：${runId}`));},180000);

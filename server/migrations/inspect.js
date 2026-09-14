@@ -1,6 +1,7 @@
 // No dotenv, implicit target, destructive fixes or automatic index drops.
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
+import {connectDatabase} from '../database/index.js';
 import {readConfig} from '../config.js';
 import {inventory} from './inventory.js';
 import '../app.js';
@@ -9,7 +10,7 @@ const config=readConfig(),apply=process.argv.includes('--apply');
 const option=name=>process.argv.find(arg=>arg.startsWith(`--${name}=`))?.slice(name.length+3);
 const target=crypto.createHash('sha256').update(config.uri).digest('hex');
 if(config.mode==='production'&&option('production-target')!==target)throw new Error('Production requires the exact reviewed URI fingerprint; this is not deployment authorization');
-await mongoose.connect(config.uri,{autoIndex:false,autoCreate:false,serverSelectionTimeoutMS:5000,socketTimeoutMS:15000,maxPoolSize:3});
+await connectDatabase(config.uri,{maxPoolSize:3});
 try{
   const report=await inventory(mongoose.connection,mongoose.models);
   console.log(JSON.stringify({...report,target,dryRun:!apply},null,2));

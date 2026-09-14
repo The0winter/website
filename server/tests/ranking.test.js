@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
-import {MongoMemoryReplSet} from 'mongodb-memory-server';
+import {TestDatabase} from '../database/testing.js';
 import {createApp} from '../app.js';
 import {readConfig} from '../config.js';
 import Book from '../models/Book.js';
@@ -11,8 +11,8 @@ import {dayKey} from '../services/content.js';
 import {rankingPipeline} from '../services/ranking.js';
 
 test('rankings combine real period views and ratings before pagination; browsing ignores ratings', async () => {
-  const repl = await MongoMemoryReplSet.create({binary: {version: '7.0.40'}, replSet: {count: 1}});
-  const config = readConfig({APP_ENV: 'test', MONGO_URI: repl.getUri('test1_test'), JWT_SECRET: crypto.randomBytes(48).toString('hex')});
+  const repl = await TestDatabase.create();
+  const config = readConfig({APP_ENV: 'test', DATABASE_URL: repl.getUri('test1_test'), JWT_SECRET: crypto.randomBytes(48).toString('hex')});
   await mongoose.connect(config.uri, {autoIndex: false});
   const server = createApp(config).listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));

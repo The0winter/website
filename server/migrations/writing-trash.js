@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import {connectDatabase} from '../database/index.js';
 import {readConfig} from '../config.js';
 import Chapter from '../models/Chapter.js';
 import WriterDraft from '../models/WriterDraft.js';
@@ -8,7 +9,7 @@ import {trashDeadline} from '../services/writing-trash.js';
 // Run once on rollout with the service environment. Only already-deleted chapters are adopted;
 // their existing content gets a full seven-day recovery window starting at rollout.
 const config = readConfig();
-await mongoose.connect(config.uri, {autoIndex:false,autoCreate:false,serverSelectionTimeoutMS:10000});
+await connectDatabase(config.uri);
 try {
   const filter = {deletedAt:{$ne:null},trashUntil:{$exists:false}};
   if (!process.argv.includes('--apply')) {

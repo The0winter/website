@@ -2,7 +2,7 @@ import '../../tools/test-env.cjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
-import {MongoMemoryReplSet} from 'mongodb-memory-server';
+import {TestDatabase} from '../database/testing.js';
 import Media from '../models/Media.js';
 import Book from '../models/Book.js';
 import User from '../models/User.js';
@@ -11,7 +11,7 @@ import {cleanUnusedCovers,finishCoverRetirement} from '../services/cover-retenti
 import {createCoverStorage} from '../services/cover-storage.js';
 
 test('immediate cover deletion: real transactions, active uploads, reference races and retries',async t=>{
-  const repl=await MongoMemoryReplSet.create({binary:{version:'7.0.40'},replSet:{count:1,storageEngine:'wiredTiger'}});
+  const repl=await TestDatabase.create();
   await mongoose.connect(repl.getUri('cover_retention_test'),{autoIndex:false});
   const config={bucket:'test-covers',baseUrl:'https://img.example.test'};
   const owner=new mongoose.Types.ObjectId(),start=new Date('2027-01-01T00:00:00Z');

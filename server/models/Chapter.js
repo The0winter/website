@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import {storeChapterBody} from '../services/chapter-storage.js';
 
 const chapterSchema = new mongoose.Schema({
   deletedAt:{type:Date,default:null},
@@ -28,6 +29,15 @@ const chapterSchema = new mongoose.Schema({
 // 这是一个好习惯，能防止同一本书出现重复的章节号
 chapterSchema.index({ bookId: 1, chapter_number: 1 },{unique:true});
 chapterSchema.index({trashUntil: 1}, {sparse: true});
+
+// The legacy chapter editing API shares the same R2 storage as imports and the
+// writing workspace when D1 is active. Content-addressed uploads are retry-safe.
+chapterSchema.pre('save', async function() {
+  if(this.constructor.db.transport?.remote && process.env.CHAPTER_STORAGE==='r2' && this.isModified('content') && typeof this.content==='string') {
+    Object.assign(this,await storeChapterBody(this.content));
+    this.content=undefined;
+  }
+});
 
 // ✅ 步骤 2：检查模型是否存在 (防止热更新报错)
 const Chapter = mongoose.models.Chapter || mongoose.model('Chapter', chapterSchema);

@@ -1,7 +1,7 @@
 [Unit]
 Description=Test1 single statistics worker
-After=network.target test1-mongo.service
-Wants=test1-mongo.service
+After=network-online.target
+Wants=network-online.target
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
@@ -12,6 +12,7 @@ Group=test1-jobs
 WorkingDirectory=/srv/test1/current/server
 Environment=NODE_ENV=production
 EnvironmentFile=/etc/test1/jobs.env
+EnvironmentFile=-/etc/test1/d1.env
 ExecStart=/opt/node-v22.23.2-linux-x64/bin/node --max-old-space-size=192 jobs/index.js
 Restart=on-failure
 RestartSec=5
