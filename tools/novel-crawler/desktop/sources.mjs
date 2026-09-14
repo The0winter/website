@@ -27,6 +27,7 @@ export function loadSites(directory = sitesDir) {
       for (const host of site.hosts) if (new URL(normalizeWebsite(host)).hostname !== host || host.includes('/')) throw Error('hosts 必须是小写域名');
       if (!site.hosts.includes(new URL(normalizeWebsite(site.home)).hostname)) throw Error('home 不在 hosts 内');
       new RegExp(site.book.urlPattern, 'u');
+      if (site.search?.delayMs !== undefined && (!Number.isFinite(site.search.delayMs) || site.search.delayMs < 200 || site.search.delayMs > 60000)) throw Error('search.delayMs 必须为 200–60000 毫秒');
       if (sites.some(s => s.id === site.id || s.hosts.some(h => site.hosts.includes(h)))) throw Error('站点 ID 或域名重复');
       sites.push(site);
     } catch (error) { errors.push(`${file}：${error.message}`); }
@@ -125,7 +126,7 @@ export async function searchBooks({website, title, author = '', stateDir = defau
   const normalize = value => normalizedIdentity(value, site.spec.identityNormalization);
   const query = normalize(title), requestedAuthor = normalize(author);
   if (!query) throw Error('请输入有效的书名或关键词');
-  const client = makeSiteClient(site, stateDir, {onStatus, shouldStop, signal});
+  const client = makeSiteClient(site, stateDir, {delayMs: site.search?.delayMs ?? site.spec.delayMs, onStatus, shouldStop, signal});
   onClient(client);
   try {
     if (new URL(website).pathname !== '/') {

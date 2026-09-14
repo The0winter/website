@@ -83,7 +83,7 @@ test('browser search submits the normal form; select pagination waits for actual
   const dir = temp(t), submissions = [];
   const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    if (req.url === '/search') return res.end(`<form action="/results" method="post" onsubmit="document.querySelector('#signature').value='from-handler'"><input id="keyword" name="keyword"><input id="signature" name="signature" type="hidden"><button id="submit">搜索</button></form>`);
+    if (req.url === '/search') return res.end(`<form action="/results" method="post" onsubmit="document.querySelector('#signature').value='from-handler'"><input id="keyword" name="keyword"><input type="hidden" name="action" value="search"><input id="signature" name="signature" type="hidden"><button id="submit">搜索</button></form>`);
     if (req.url === '/results') {
       let body = ''; req.on('data', data => body += data); req.on('end', () => { submissions.push(Object.fromEntries(new URLSearchParams(body))); res.end('<div id="results">搜索完成</div>'); }); return;
     }
@@ -104,7 +104,7 @@ test('browser search submits the normal form; select pagination waits for actual
   const form = {input: '#keyword', submit: '#submit', value: '春天 & 秋天'};
   const result = await client.get(base + '/search', {render: true, readySelector: '#results', searchForm: form});
   assert.equal(result.url, base + '/results');
-  assert.deepEqual(submissions, [{keyword: '春天 & 秋天', signature: 'from-handler'}]);
+  assert.deepEqual(submissions, [{keyword: '春天 & 秋天', action: 'search', signature: 'from-handler'}]);
   await client.get(base + '/search', {render: true, readySelector: '#results', searchForm: {...form, value: '另一部书'}});
   assert.equal(submissions.length, 2); // Search terms must not share a cached response.
   const selectPages = {selector: '#pages', content: '#list', maxPages: 3};

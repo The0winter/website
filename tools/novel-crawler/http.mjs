@@ -231,7 +231,11 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
             const inputs = await page.$$(searchForm.input), buttons = await page.$$(searchForm.submit);
             try {
               if (inputs.length !== 1 || buttons.length !== 1) throw Error('搜索表单控件必须唯一');
-              const actionUrl = await inputs[0].evaluate(el => el.form?.action);
+              const actionUrl = await inputs[0].evaluate(el => {
+                const form = el.form;
+                // A named input such as name="action" shadows form.action.
+                return form ? Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, 'action').get.call(form) : null;
+              });
               if (!actionUrl) throw Error('搜索输入框没有所属表单');
               assertUrl(actionUrl);
               await inputs[0].click({clickCount: 3});

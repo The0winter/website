@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "id": "deqixs",
+  "name": "得奇小说网",
+  "home": "https://www.deqixs.org/",
+  "hosts": ["www.deqixs.org", "deqixs.org"],
+  "search": {
+    "url": "https://www.deqixs.org/modules/article/search.php",
+    "transport": "browser",
+    "delayMs": 5500,
+    "form": {"input": "#searchkey", "submit": "form[name='articlesearch'] button[type='submit']"},
+    "readySelector": ".container",
+    "items": ".container .item",
+    "title": ".itemtxt h3 a",
+    "author": {"selector": ".itemtxt a[href*='/modules/article/authorarticle.php?']", "pattern": "^作者[：:]\\s*(.+)$"},
+    "link": ".itemtxt h3 a",
+    "maxPages": 1
+  },
+  "book": {
+    "urlPattern": "^/(?<bookId>[0-9]+)/$",
+    "metadata": {
+      "title": ".itemtxt h1 > a",
+      "author": {"selector": ".itemtxt a[href*='/modules/article/authorarticle.php?']", "pattern": "^作者[：:]\\s*(.+)$"},
+      "description": ".container > .des:first",
+      "status": ".itemtxt > h1 + p > span:first-child"
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-deqixs-v1",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": ["www.deqixs.org", "deqixs.org"],
+    "browser": {"headless": true},
+    "delayMs": 1800,
+    "retries": 1,
+    "timeoutMs": 20000,
+    "metadata": {
+      "title": ".itemtxt h1 > a",
+      "author": {"selector": ".itemtxt a[href*='/modules/article/authorarticle.php?']", "pattern": "^作者[：:]\\s*(.+)$"},
+      "description": ".container > .des:first",
+      "status": ".itemtxt > h1 + p > span:first-child"
+    },
+    "catalog": {
+      "links": "#list > ul > li > a",
+      "next": "#pages a.gr:contains('下一页')"
+    },
+    "chapter": {
+      "title": {"selector": "h1", "pattern": ">\\s*(.+?)(?:\\s*[（(]\\s*[0-9]+\\s*/\\s*[0-9]+\\s*[）)])?$"},
+      "content": ".container > .con",
+      "next": ".prenext a:contains('下一页')",
+      "maxPages": 20
+    }
+  }
+}
