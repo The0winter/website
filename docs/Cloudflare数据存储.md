@@ -22,6 +22,8 @@
 
 通用工具为 `infra/cloudflare-data.mjs`，在 VPS 使用 Node 22 并加载 `/etc/test1/api.env` 和 `/etc/test1/d1.env`。工具只输出数量、哈希和操作状态，不输出业务文档或凭据。
 
+切换完成后，当前 `api.env` 已移除 `MONGO_URI`。只有需要重新核对历史 MongoDB 源时，才为 `snapshot-mongo` 加载保留的 `/etc/test1/api.env.before-d1`；不要把这个旧配置恢复给正在运行的网站。每日 D1 备份的成功清单在 `/var/lib/test1-cloudflare-backup/latest.json`。
+
 1. `snapshot-mongo`：对 MongoDB 做一致性快照，保留原始 BSON EJSON、ID 和日期；压缩包存到私有 R2，并下载回读校验 SHA-256。迁移源副本保存在 `/srv/test1/backups/cloudflare/`，不删除 MongoDB。
 2. `import --file=绝对快照路径 --inactive-target=数据库ID --chapter-bodies=r2`：只允许 `WRITE_MODE=readonly` 且明确指定的未启用目标。按完整快照对齐目标记录，包含删除目标中源已不存在的记录；绝不能对正在提供写入的数据库执行。重复运行仅改动有差异的记录。旧内嵌章节正文转存 R2 后，每个集合再次逐条比对。
 3. `verify --file=绝对快照路径 --chapter-bodies=r2`：独立回读、核对记录数量和全部文档。无该参数时按原快照原样比对。
