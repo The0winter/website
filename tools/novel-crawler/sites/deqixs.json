@@ -28,7 +28,7 @@
   "spec": {
     "version": 1,
     "kind": "html",
-    "variant": "desktop-deqixs-v1",
+    "variant": "desktop-deqixs-v2",
     "title": "${title}",
     "author": "${author}",
     "sourceUrl": "${sourceUrl}",
@@ -50,6 +50,9 @@
     "chapter": {
       "title": {"selector": "h1", "pattern": ">\\s*(.+?)(?:\\s*[（(]\\s*[0-9]+\\s*/\\s*[0-9]+\\s*[）)])?$"},
       "content": ".container > .con",
+      "removeText": [
+        "(?:^|\\n)[\\t \\u00a0\\u3000]*求书、催更、报错 \\+ 官方纸飞机（电报群）：https://t\\.me/deqixs[\\t \\u00a0\\u3000]*(?=\\r?\\n|$)"
+      ],
       "next": ".prenext a:contains('下一页')",
       "maxPages": 20
     }

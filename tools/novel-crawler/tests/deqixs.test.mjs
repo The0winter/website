@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {load} from 'cheerio';
 import {loadSites, specForBook, parseSearch} from '../desktop/sources.mjs';
-import {getCatalog, getChapter} from '../adapters.mjs';
+import {cleanHtml, getCatalog, getChapter} from '../adapters.mjs';
 
 test('deqixs keeps full catalogs, strips page counters and stops at the next chapter', async () => {
   const loaded = loadSites(), site = loaded.sites.find(s => s.id === 'deqixs');
@@ -52,5 +53,17 @@ test('site search delay rejects invalid values when loading adapters', t => {
   for (const delayMs of ['5500', -1, 100, 60001]) {
     fs.writeFileSync(path.join(dir, 'site.json'), JSON.stringify({...site, search: {...site.search, delayMs}}));
     const result = loadSites(dir); assert.equal(result.sites.length, 0); assert.match(result.errors[0], /search.delayMs/);
+  }
+});
+
+test('deqixs removes only the complete standalone promotion signature', () => {
+  const rule = loadSites().sites.find(s => s.id === 'deqixs').spec.chapter;
+  const signature = '求书、催更、报错 + 官方纸飞机（电报群）：https://t.me/deqixs';
+  const prose = ['他提到求书、催更、报错，也说起电报群。', `他说：“${signature}。”`, signature + '/another', '时间：12:30。'];
+  for (const html of [
+    `${signature}<br>${prose.join('<br>')}<br>　${signature}　`,
+    `<p>${signature}</p>${prose.map(s => `<p>${s}</p>`).join('')}<p>${signature}</p>`
+  ]) {
+    assert.equal(cleanHtml(load(`<div class="container"><div class="con">${html}</div></div>`), rule.content, rule.remove, rule.removeText), prose.join('\n'));
   }
 });
