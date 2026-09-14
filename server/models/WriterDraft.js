@@ -19,4 +19,5 @@ const schema = new mongoose.Schema({
   published: {type: Boolean, default: false},
 }, {timestamps: true});
 schema.index({owner: 1, work: 1, number: -1});
+schema.index({contentKey: 1}, {sparse: true});
 export default mongoose.model('WriterDraft', schema);
