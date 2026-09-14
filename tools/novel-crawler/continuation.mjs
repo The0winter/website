@@ -139,6 +139,23 @@ function bodyKey(content, title) {
   }
   return normalize(text.replace(/\s*[（(]?本章(?:完|结束)[）)]?\s*$/u, ''));
 }
+// Only explicit suffixes are parts: words such as “下克上” are ordinary titles.
+export function chapterPartIdentity(title) {
+  const text = String(title).normalize('NFKC').trim();
+  const match = /(?:\s+([上下])|\(([上下]|[12](?:\/2)?)\)|【([上下])】|\[([上下])\])$/u.exec(text);
+  if (!match) return null;
+  const baseTitle = text.slice(0, match.index).trim(), identity = chapterIdentity(baseTitle);
+  if (!identity?.name) return null;
+  const label = match[1] || match[2] || match[3] || match[4];
+  return {...identity, baseTitle, part: /^(?:上|1)/u.test(label) ? 1 : 2,
+    family: /[上下]/u.test(label) ? 'upper-lower' : label.includes('/') ? 'fraction' : 'numeric'};
+}
+const samePart = (a, b) => !a && !b || !!a && !!b && a.number === b.number && a.name === b.name && a.family === b.family && a.part === b.part;
+const followsPart = (a, b) => a?.part === 1 && b?.part === 2 && a.number === b.number && a.name === b.name && a.family === b.family;
+const completePair = pair => {
+  const [a, b] = pair.map(chapter => chapterPartIdentity(chapter.title));
+  return pair.length === 2 && followsPart(a, b);
+};
 function numbered(chapters) {
   const result = [];
   for (const [index, chapter] of chapters.entries()) {
@@ -180,26 +197,40 @@ export function recordContinuationReview(spec, options, {firstLink, secondLink, 
 }
 
 const anchorReviewKey = (book, file, previous, incoming) => hash({sourceUrl: book.sourceUrl, file,
-  oldPosition: previous.chapter_number, old: reviewFingerprint(previous), incoming: reviewFingerprint(incoming)});
+  oldPosition: previous.chapter_number, old: reviewFingerprint(previous), incoming: Array.isArray(incoming) ? incoming.map(reviewFingerprint) : reviewFingerprint(incoming)});
+
+export function recordContinuationPartPolicy(spec, options, {reason}) {
+  if (typeof reason !== 'string' || !reason.trim()) throw Error('接受拆章需要明确的核对理由');
+  const state = loadReviews(spec, options);
+  state.partPolicy = {kind: 'paired', reason: reason.trim(), reviewedAt: new Date().toISOString()};
+  atomicWrite(path.join(sourceDirectory(options.stateDir, spec, options.extraction), 'reviews.json'), sealed(state));
+  return state.partPolicy;
+}
 
 // Explicit review records a verified correspondence, never a replacement for the
 // old prose. Both complete bodies must still match the hashes the reviewer saw.
-export function recordContinuationAnchorReview(spec, options, {file, oldNumber, newLink, oldHash, newHash, reason}) {
-  if (!Number.isSafeInteger(oldNumber) || !oldHash || !newHash || typeof reason !== 'string' || !reason.trim()) throw Error('衔接核对需要旧顺序号、双方正文哈希及具体核对理由');
+export function recordContinuationAnchorReview(spec, options, {file, oldNumber, newLink, newLinks, oldHash, newHash, newHashes, reason}) {
+  const links = newLinks || [newLink], hashes = newHashes || [newHash];
+  if (!Number.isSafeInteger(oldNumber) || !oldHash || !Array.isArray(links) || ![1, 2].includes(links.length) || newLinks && links.length !== 2 || !Array.isArray(hashes) || hashes.length !== links.length || hashes.some(h => !h) || typeof reason !== 'string' || !reason.trim()) throw Error('衔接核对需要旧顺序号、双方正文哈希及具体核对理由');
   const book = readJson(targetPath(options.outputDir, file));
   if (!book || !sameBook(book, spec)) throw Error('衔接核对的本地作品身份不匹配');
   const ending = numbered(book.chapters).slice(-3), previous = book.chapters.find(chapter => chapter.chapter_number === oldNumber);
   if (!previous || !ending.some(item => book.chapters[item.index] === previous)) throw Error('只能核对原书末尾三个正文章节');
   const sourceDir = sourceDirectory(options.stateDir, spec, options.extraction);
-  const saved = readJson(path.join(sourceDir, 'chapters', hash(newLink) + '.json'));
-  if (!saved?.chapter || saved.hash !== hash(saved.chapter) || saved.chapter.link !== newLink) throw Error('新来源衔接章完整检查点缺失或损坏');
-  const incoming = saved.chapter, a = chapterIdentity(previous.title), b = chapterIdentity(incoming.title);
-  if (!b || a.number !== b.number || !compatibleNames(a.name, b.name)) throw Error('衔接核对要求同章号且标题对应，不能接受拆章或缺章');
-  if (hash(previous.content) !== oldHash || hash(incoming.content) !== newHash) throw Error('衔接正文已变化，请重新核对双方完整正文');
-  if (bodyKey(previous.content, previous.title).length < 100 || bodyKey(incoming.content, incoming.title).length < 100) throw Error('衔接正文过短，无法确认对应关系');
-  const state = loadReviews(spec, options), key = anchorReviewKey(book, file, previous, incoming);
+  const parts = links.map(link => {
+    const saved = readJson(path.join(sourceDir, 'chapters', hash(link) + '.json'));
+    if (!saved?.chapter || saved.hash !== hash(saved.chapter) || saved.chapter.link !== link) throw Error('新来源衔接章完整检查点缺失或损坏');
+    return saved.chapter;
+  });
+  const state = loadReviews(spec, options), paired = parts.length === 2;
+  if (paired && (state.partPolicy?.kind !== 'paired' || !completePair(parts) || parts[1].chapter_number !== parts[0].chapter_number + 1 || chapterPartIdentity(previous.title))) throw Error('拆章衔接需要已确认的完整相邻上下篇，不能缺篇或跨章');
+  const incoming = paired ? parts : parts[0], a = chapterIdentity(previous.title), b = paired ? chapterPartIdentity(parts[0].title) : chapterIdentity(parts[0].title);
+  if (!b || a.number !== b.number || !compatibleNames(a.name, b.name) || !paired && !samePart(chapterPartIdentity(previous.title), chapterPartIdentity(parts[0].title))) throw Error('衔接核对要求同章号且标题对应，不能接受未配对拆章或缺章');
+  if (hash(previous.content) !== oldHash || parts.some((part, index) => hash(part.content) !== hashes[index])) throw Error('衔接正文已变化，请重新核对双方完整正文');
+  if (bodyKey(previous.content, previous.title).length < 100 || parts.some(part => bodyKey(part.content, part.title).length < 100)) throw Error('衔接正文过短，无法确认对应关系');
+  const key = anchorReviewKey(book, file, previous, incoming);
   const decision = {key, file, originalSourceUrl: book.sourceUrl, oldPosition: oldNumber,
-    old: reviewFingerprint(previous), incoming: reviewFingerprint(incoming), reason: reason.trim(), reviewedAt: new Date().toISOString()};
+    old: reviewFingerprint(previous), incoming: paired ? parts.map(reviewFingerprint) : reviewFingerprint(incoming), reason: reason.trim(), reviewedAt: new Date().toISOString()};
   state.anchorDecisions = [...(state.anchorDecisions || []).filter(item => item.key !== key), decision];
   atomicWrite(path.join(sourceDir, 'reviews.json'), sealed(state));
   return decision;
@@ -220,18 +251,24 @@ export function recordContinuationNoticeReview(spec, options, {link, contentHash
 
 // Resolve only decisions backed by complete content or the chapter page's own
 // heading. A repeated number with different prose is still an unresolved version.
-export function createContinuationReviewer(book, reviews = [], noticeReviews = []) {
+export function createContinuationReviewer(book, reviews = [], noticeReviews = [], partPolicy) {
   const accepted = [...book.chapters], originals = new Set(book.chapters), skipped = [], resolutions = [];
   let number = numbered(accepted).at(-1)?.number;
+  const paired = partPolicy?.kind === 'paired';
+  let openPart = paired ? chapterPartIdentity(accepted.filter(c => chapterIdentity(c.title)).at(-1)?.title) : null;
+  if (openPart?.part !== 1) openPart = null;
   if (!number) throw Error('原书缺少可核对的正文章号');
   return {
     skipped, resolutions,
+    finish() { if (openPart) throw Error(`拆章缺少下篇：第 ${openPart.number} 章「${openPart.baseTitle}」，旧书已保留`); },
     accept(entry, value) {
       const listed = chapterIdentity(entry.title), actual = chapterIdentity(value.title);
       if (!!listed !== !!actual || (listed && !compatibleNames(listed.name, actual.name))) throw Error(`目录与正文标题无法对应：「${entry.title}」 / 「${value.title}」`);
+      const part = paired ? chapterPartIdentity(value.title) : null;
+      if (paired && !samePart(chapterPartIdentity(entry.title), part)) throw Error(`目录与正文拆章标记无法对应：「${entry.title}」 / 「${value.title}」`);
       const peers = accepted.filter(previous => {
         const identity = chapterIdentity(previous.title);
-        return actual ? identity?.number === actual.number && compatibleNames(identity.name, actual.name) : !identity && normalize(previous.title) === normalize(value.title);
+        return actual ? identity?.number === actual.number && compatibleNames(identity.name, actual.name) && (!paired || samePart(chapterPartIdentity(previous.title), part)) : !identity && normalize(previous.title) === normalize(value.title);
       });
       const content = bodyKey(value.content, value.title);
       const duplicate = (actual ? content.length >= 100 : !!content) && peers.find(previous => bodyKey(previous.content, previous.title) === content);
@@ -262,14 +299,17 @@ export function createContinuationReviewer(book, reviews = [], noticeReviews = [
         return false;
       }
       if (actual) {
-        if (actual.number !== number + 1) {
+        const secondPart = followsPart(openPart, part);
+        if (openPart ? !secondPart : part?.part === 2 || actual.number !== number + 1) {
           const reason = peers.length ? '同章号正文不同，不能自动选择版本' : '缺章或章号顺序无法确定';
-          throw Error(`新来源衔接后章号冲突：应为第 ${number + 1} 章，实际为「${value.title}」；${reason}`);
+          throw Error(`新来源衔接后章号冲突：应为第 ${openPart ? number + ' 章下篇' : number + 1 + ' 章'}，实际为「${value.title}」；${reason}`);
         }
         if (listed.number !== actual.number) resolutions.push({kind: 'catalog-number', title: entry.title, link: entry.link, sourcePosition: entry.chapter_number,
           acceptedTitle: value.title, catalogNumber: listed.number, pageNumber: actual.number, contentHash: hash(value.content),
           reason: '目录与正文页标题名称一致，正文页章号接续原书；沿用正文页标题，保留原目录标题'});
         number = actual.number;
+        if (part) resolutions.push({kind: 'chapter-part', title: value.title, link: value.link, number: part.number, part: part.part, family: part.family, contentHash: hash(value.content), reason: partPolicy.reason});
+        openPart = part?.part === 1 ? part : null;
       } else {
         const reviewed = noticeReviews.find(item => item.key === hash(reviewFingerprint(value)));
         if (!notice(value.title) && !reviewed) throw Error(`无法确定新增条目是否为公告或番外：「${value.title}」，需核对后接续`);
@@ -297,7 +337,7 @@ export async function acquireContinuation(spec, options) {
   if (book.chapters.some((chapter, index) => index && chapter.chapter_number <= book.chapters[index - 1].chapter_number)) throw Error('原书顺序号未严格递增，请先核对');
   const lastOrdinal = book.chapters.at(-1).chapter_number;
   const reviewState = loadReviews(spec, options);
-  const reviewer = createContinuationReviewer(book, reviewState.decisions, reviewState.noticeDecisions);
+  const reviewer = createContinuationReviewer(book, reviewState.decisions, reviewState.noticeDecisions, reviewState.partPolicy);
   const switching = !binding || binding.source.url !== spec.sourceUrl;
   if (!switching && binding.source.extraction !== extraction) throw Error('当前续更来源的提取规则已变化，请先核对适配，旧文件已保留');
   const sourceDir = sourceDirectory(stateDir, spec, extraction);
@@ -336,15 +376,28 @@ export async function acquireContinuation(spec, options) {
       const ending = oldNumbers.slice(-3);
       for (const [index, old] of ending.entries()) {
         if (index && old.number !== ending[index - 1].number + 1) throw Error('原书末尾正文章号不连续，需先核对缺章');
-        const matches = newNumbers.filter(item => item.number === old.number && compatibleNames(item.name, old.name) && (boundary === undefined || item.index > boundary));
+        const matches = newNumbers.filter(item => {
+          const part = chapterPartIdentity(catalog[item.index].title), previousPart = chapterPartIdentity(book.chapters[old.index].title);
+          if (part && !previousPart) return reviewState.partPolicy?.kind === 'paired' && part.part === 1 && part.number === old.number && compatibleNames(part.name, old.name) && (boundary === undefined || item.index > boundary);
+          return item.number === old.number && compatibleNames(item.name, old.name) && samePart(part, previousPart) && (boundary === undefined || item.index > boundary);
+        });
         if (!matches.length || matches.length > 8) throw Error(`新来源无法对齐「${book.chapters[old.index].title}」，可能缺章、改名或拆合章`);
         const previous = book.chapters[old.index], oldBody = bodyKey(previous.content, previous.title);
-        let actual, match, anchorReview;
+        let actual, match, anchorReview, anchorParts;
         for (const candidate of matches) {
-          const value = await chapter(catalog[candidate.index], links);
-          if (oldBody.length >= 100 && oldBody === bodyKey(value.content, value.title)) { actual = value; match = candidate; break; }
-          const review = (reviewState.anchorDecisions || []).find(item => item.key === anchorReviewKey(book, selected.file, previous, value));
-          if (review) { actual = value; match = candidate; anchorReview = review; break; }
+          const entry = catalog[candidate.index], pair = chapterPartIdentity(entry.title) && !chapterPartIdentity(previous.title);
+          const entries = pair ? catalog.slice(candidate.index, candidate.index + 2) : [entry];
+          if (pair && !completePair(entries)) continue;
+          const values = [];
+          for (const item of entries) values.push(await chapter(item, links));
+          if (pair && !completePair(values)) continue;
+          // Page headings must agree with the catalog's exact part and number.
+          if (values.some((value, index) => chapterIdentity(value.title)?.number !== old.number || !samePart(chapterPartIdentity(value.title), chapterPartIdentity(entries[index].title)))) continue;
+          const combined = values.map(value => bodyKey(value.content, value.title)).join('');
+          const review = (reviewState.anchorDecisions || []).find(item => item.key === anchorReviewKey(book, selected.file, previous, pair ? values : values[0]));
+          if (oldBody.length >= 100 && values.every(value => bodyKey(value.content, value.title).length >= 100) && oldBody === combined || review) {
+            actual = values[0]; match = {...candidate, index: candidate.index + values.length - 1}; anchorReview = review; anchorParts = pair ? values : null; break;
+          }
         }
         if (!actual) {
           const entry = catalog[matches[0].index];
@@ -354,6 +407,7 @@ export async function acquireContinuation(spec, options) {
           });
         }
         anchors.push({oldPosition: old.index + 1, sourcePosition: match.index + 1, oldLink: previous.link, newLink: actual.link, oldHash: hash(previous.content), newHash: hash(actual.content),
+          ...(anchorParts ? {parts: anchorParts.map(reviewFingerprint)} : {}),
           ...(anchorReview ? {reviewKey: anchorReview.key, reason: anchorReview.reason, reviewedAt: anchorReview.reviewedAt} : {})});
         boundary = match.index;
       }
@@ -362,7 +416,8 @@ export async function acquireContinuation(spec, options) {
       boundary = binding.catalog.length - 1;
     }
     const pending = catalog.slice(boundary + 1);
-    const targets = mode === 'probe' ? pending.slice(0, 3) : pending;
+    const probeEndsWithUpper = reviewState.partPolicy?.kind === 'paired' && chapterPartIdentity(pending[2]?.title)?.part === 1;
+    const targets = mode === 'probe' ? pending.slice(0, probeEndsWithUpper ? 4 : 3) : pending;
     atomicWrite(path.join(sourceDir, 'catalog.json'), catalog);
     options.onProgress?.({jobId: id, mode, downloaded: 0, total: targets.length, failed: 0});
     for (const entry of targets) {
@@ -381,6 +436,7 @@ export async function acquireContinuation(spec, options) {
       }
       options.onProgress?.({jobId: id, mode, downloaded: tail.length + skipped.length, total: targets.length, failed: failures.length});
     }
+    reviewer.finish();
     nextBook = {...book, chapters: [...book.chapters, ...tail]};
     // Preserve stable import identity, author mapping, cover and all old chapters.
     if (source.actual?.description) nextBook.description = source.actual.description;

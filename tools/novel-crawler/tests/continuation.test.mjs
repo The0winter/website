@@ -6,7 +6,7 @@ import path from 'node:path';
 import http from 'node:http';
 import puppeteer from 'puppeteer';
 import {acquire, localBookState, validateSpec, extractionHash} from '../core.mjs';
-import {continuationKey, continuationState, recoverContinuation, recordContinuationReview, recordContinuationAnchorReview, recordContinuationNoticeReview} from '../continuation.mjs';
+import {continuationKey, continuationState, recoverContinuation, recordContinuationReview, recordContinuationAnchorReview, recordContinuationNoticeReview, recordContinuationPartPolicy, chapterPartIdentity, createContinuationReviewer} from '../continuation.mjs';
 import {atomicWrite, readJson, hash, acquireLock} from '../storage.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 import {loadSites, parseSearch} from '../desktop/sources.mjs';
@@ -140,6 +140,94 @@ test('an explicitly reviewed unnumbered notice retains its title and cannot bypa
   assert.equal(complete.resolutions[0].kind, 'reviewed-notice');
   assert.equal(readJson(f.file).chapters[4].title, '第五册预告');
   assert.equal(readJson(f.file).chapters.at(-1).title, title(5));
+});
+
+test('paired suffixes are explicit and every family requires a matching second part', () => {
+  for (const [a, b] of [[' 上', ' 下'], ['(上)', '(下)'], ['【上】', '【下】'], ['[上]', '[下]'], ['(1)', '(2)'], ['（1/2）', '（2/2）']]) {
+    const book = {chapters: [{title: title(4), content: body(4), link: 'old', chapter_number: 4}]};
+    const reviewer = createContinuationReviewer(book, [], [], {kind: 'paired', reason: '已接受上下篇'});
+    const upper = {title: title(5) + a, content: body(5), link: 'upper', chapter_number: 5};
+    const lower = {title: title(5) + b, content: body(50), link: 'lower', chapter_number: 6};
+    assert.equal(chapterPartIdentity(upper.title).part, 1); assert.equal(chapterPartIdentity(lower.title).part, 2);
+    assert.throws(() => reviewer.accept(lower, lower), /章号冲突/);
+    assert.equal(reviewer.accept(upper, upper), true);
+    assert.throws(() => reviewer.finish(), /缺少下篇/);
+    assert.throws(() => reviewer.accept({...lower, title: title(6)}, {...lower, title: title(6)}), /章号冲突/);
+    assert.throws(() => reviewer.accept({...lower, title: '第5章 别的故事' + b}, {...lower, title: '第5章 别的故事' + b}), /章号冲突/);
+    assert.equal(reviewer.accept(lower, lower), true); reviewer.finish();
+    assert.equal(reviewer.accept({...upper, link: 'duplicate'}, {...upper, link: 'duplicate'}), false);
+    assert.throws(() => reviewer.accept({...lower, content: body(51)}, {...lower, content: body(51)}), /正文不同/);
+    assert.equal(reviewer.accept({title: title(6)}, {title: title(6), content: body(6)}), true);
+  }
+  for (const text of ['第1章 下克上', '第1章 一起上', '第1章 修为(10/10)', '第1章 路途(3)', '请假 上']) assert.equal(chapterPartIdentity(text), null);
+});
+
+test('part markers cannot disagree with the page or mix pair families', () => {
+  const reviewer = createContinuationReviewer({chapters: [{title: title(4), content: body(4)}]}, [], [], {kind: 'paired'});
+  const upper = {title: title(5) + '(1/2)', content: body(5)};
+  assert.equal(reviewer.accept(upper, upper), true);
+  const wrong = {title: title(5) + '(2)', content: body(6)};
+  assert.throws(() => reviewer.accept(wrong, wrong), /章号冲突/);
+  assert.throws(() => reviewer.accept({title: title(5) + '(2/2)'}, wrong), /无法对应/);
+});
+
+test('opted-in complete pairs align whole old anchors and export new parts separately across updates', async t => {
+  const f = await fixture(t);
+  f.book.chapters[1].content = body(2) + body(20); atomicWrite(f.file, f.book);
+  f.state.order = [1, 2, 20, 3, 4, 5, 50, 6];
+  f.state.titles[2] = title(2) + ' 上'; f.state.titles[20] = title(2) + ' 下';
+  f.state.titles[5] = title(5) + '(1/2)'; f.state.titles[50] = title(5) + '(2/2)';
+  const original = fs.readFileSync(f.file);
+  assert.equal((await f.run()).completeAgainstSource, false);
+  recordContinuationPartPolicy(f.spec, {...f.options, extraction: extractionHash(f.spec)}, {reason: '用户接受完整上下拆章'});
+  const report = await f.run();
+  assert.equal(report.completeAgainstSource, true, JSON.stringify(report.failures)); assert.equal(report.continuationAdded, 3);
+  assert.equal(report.anchors[0].parts.length, 2); assert.equal(report.anchors[0].sourcePosition, 3);
+  assert.deepEqual(readJson(f.file).chapters.slice(0, 4), f.book.chapters);
+  assert.deepEqual(fs.readFileSync(path.join(f.dir, 'original.json')), original);
+  assert.deepEqual(readJson(f.file).chapters.slice(4).map(c => c.title), [title(5) + '(1/2)', title(5) + '(2/2)', title(6)]);
+  const mtime = fs.statSync(f.file).mtimeMs;
+  assert.equal((await f.run()).reusedExport, true); assert.equal(fs.statSync(f.file).mtimeMs, mtime);
+  f.state.order.push(7); assert.equal((await f.run()).continuationAdded, 1);
+});
+
+test('a paired anchor review checks both hashes and cannot authorize a half, a reversed pair or stale prose', async t => {
+  const f = await fixture(t), options = {...f.options, extraction: extractionHash(f.spec)};
+  f.book.chapters[1].content = body(2) + body(20); atomicWrite(f.file, f.book);
+  f.state.order = [1, 2, 20, 3, 4, 5, 6]; f.state.titles[2] = title(2) + ' 上'; f.state.titles[20] = title(2) + ' 下';
+  f.state.bodies[2] = body(2) + '来源勘误';
+  recordContinuationPartPolicy(f.spec, options, {reason: '用户接受配对拆章'});
+  const report = await f.run(), links = [2, 20].map(n => f.base + '/new/c/' + n);
+  assert.equal(report.failures[0].code, 'continuation-body-conflict');
+  const choice = {file: path.basename(f.file), oldNumber: 2, oldHash: hash(f.book.chapters[1].content), newLinks: links, newHashes: [hash(f.state.bodies[2]), hash(body(20))], reason: '上下合起来全文核对，唯一变化是上篇末尾的勘误；保留旧文'};
+  assert.throws(() => recordContinuationAnchorReview(f.spec, options, {...choice, newHashes: [choice.newHashes[0], hash('stale')]}), /正文已变化/);
+  assert.throws(() => recordContinuationAnchorReview(f.spec, options, {...choice, newLinks: [...links].reverse()}), /完整相邻/);
+  assert.throws(() => recordContinuationAnchorReview(f.spec, options, {...choice, newLinks: undefined, newHashes: undefined, newLink: links[0], newHash: choice.newHashes[0]}), /未配对拆章/);
+  const review = recordContinuationAnchorReview(f.spec, options, choice);
+  const checkpoint = path.join(path.dirname(report.reportFile), 'chapters', hash(links[1]) + '.json'), saved = readJson(checkpoint);
+  saved.chapter.content += '未经核对'; saved.hash = hash(saved.chapter); atomicWrite(checkpoint, saved);
+  assert.equal((await f.run()).failures[0].code, 'continuation-body-conflict');
+  saved.chapter.content = body(20); saved.hash = hash(saved.chapter); atomicWrite(checkpoint, saved);
+  const complete = await f.run(); assert.equal(complete.completeAgainstSource, true, JSON.stringify(complete.failures));
+  assert.equal(complete.anchors[0].reviewKey, review.key); assert.deepEqual(readJson(f.file).chapters.slice(0, 4), f.book.chapters);
+});
+
+test('an unfinished pair cannot bind the source; cached upper resumes when the lower appears', async t => {
+  const f = await fixture(t), original = fs.readFileSync(f.file);
+  recordContinuationPartPolicy(f.spec, {...f.options, extraction: extractionHash(f.spec)}, {reason: '接受配对拆章'});
+  f.state.count = 5; f.state.titles[5] = title(5) + '【上】';
+  const blocked = await f.run(); assert.equal(blocked.completeAgainstSource, false); assert.match(blocked.failures[0].error, /缺少下篇/);
+  assert.deepEqual(fs.readFileSync(f.file), original); assert.equal(fs.existsSync(path.join(f.dir, 'binding.json')), false);
+  f.state.count = 6; f.state.titles[6] = title(5) + '【下】';
+  const complete = await f.run(); assert.equal(complete.completeAgainstSource, true, JSON.stringify(complete.failures)); assert.equal(complete.continuationAdded, 2);
+});
+
+test('a probe includes the lower when its normal sample ends with an upper', async t => {
+  const f = await fixture(t);
+  recordContinuationPartPolicy(f.spec, {...f.options, extraction: extractionHash(f.spec)}, {reason: '接受配对拆章'});
+  f.state.count = 8; f.state.titles[7] = title(7) + '(上)'; f.state.titles[8] = title(7) + '(下)';
+  const report = await f.run({mode: 'probe'});
+  assert.equal(report.structuralPass, true, JSON.stringify(report.failures)); assert.equal(report.checkedNew, 4); assert.equal(report.completeAgainstSource, false);
 });
 
 test('old notices stay in place; equal new-source notices are not appended twice', async t => {
