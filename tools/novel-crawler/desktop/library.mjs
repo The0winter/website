@@ -138,11 +138,12 @@ export async function updateLibrary({stateDir, outputDir, sites, shouldStop = ()
             onPhase('download', item);
             report = await collect(spec, {...options, mode: 'download'});
           }
-          if (report.exportFile && report.completeAgainstSource) {
+          if (report.exportFile && report.structuralPass && (report.completeAgainstSource || report.completeSelectedScope)) {
             if (path.resolve(report.exportFile) !== file) throw Error('更新输出与原文件不一致，请核对来源绑定');
             item.added = Math.max(0, report.expected - item.count);
             item.state = report.reusedExport ? 'unchanged' : 'updated';
             item.message = item.added ? `新增 ${item.added} 章，现有 ${report.expected} 章` : report.reusedExport ? '已是最新' : '章节无新增，书籍信息已更新';
+            if (report.sourceGaps?.length) item.message = `${item.added ? `新增 ${item.added} 章` : '已保留核实的阅读版'}；另有 ${report.sourceGaps.length} 处已记录缺文`;
           } else if (bookStopped() || report.paused) {
             item.state = 'stopped'; item.message = '已停止，已保存的章节可续传';
           } else throw Object.assign(Error(report.failures?.[0]?.error || '来源检查未通过，原文件保留'), report.failures?.[0]);

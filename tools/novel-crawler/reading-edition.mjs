@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {atomicWrite, readJson, hash} from './storage.mjs';
-import {checkIdentity, qualityReport, normalizedTitle} from './quality.mjs';
+import {checkIdentity, qualityReport, normalizedTitle, placeholderEvidence} from './quality.mjs';
 import {formatChapterForExport} from './titles.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
 
@@ -114,7 +114,7 @@ function checkNewIssues(report, after = 0) {
 }
 
 function verifySourceOrderReview(review, catalog, raw, book, seen) {
-  if (!review || review.catalogHash !== hash(catalog) || !Array.isArray(review.pairs) || !review.pairs.length || typeof review.reason !== 'string' || !review.reason.trim()) throw Error('来源顺序验收需要目录哈希、逐项重复核对和具体理由');
+  if (!review || review.catalogHash !== hash(catalog) || !Array.isArray(review.pairs) || (review.gaps !== undefined && !Array.isArray(review.gaps)) || !(review.pairs.length || review.gaps?.length) || typeof review.reason !== 'string' || !review.reason.trim()) throw Error('来源顺序验收需要目录哈希、逐项重复或缺文核对和具体理由');
   let previous = 0;
   for (const [index, chapter] of book.chapters.entries()) {
     if (chapter.chapter_number !== index + 1) throw Error('阅读版顺序号不连续');
@@ -128,6 +128,18 @@ function verifySourceOrderReview(review, catalog, raw, book, seen) {
     if (!Number.isInteger(pair.omit) || !Number.isInteger(pair.keep) || !omit || !keep || seen.has(omit.link) || !seen.has(keep.link) || omissions.has(omit.link) || pair.omitHash !== hash(omit.content) || pair.keepHash !== hash(keep.content) || typeof pair.reason !== 'string' || !pair.reason.trim()) throw Error('重复项核对与保留章节、正文哈希不匹配');
     if (!issues.some(i => ['duplicate-body', 'duplicate-title-body'].includes(i.code) && ((i.chapter === pair.omit && i.otherChapter === pair.keep) || (i.chapter === pair.keep && i.otherChapter === pair.omit)))) throw Error('不能将未检测为重复的正文从阅读版排除');
     omissions.add(omit.link);
+  }
+  for (const gap of review.gaps || []) {
+    const chapter = raw[gap.position - 1];
+    if (!Number.isInteger(gap.position) || !chapter || seen.has(chapter.link) || omissions.has(chapter.link) || gap.link !== chapter.link || gap.contentHash !== hash(chapter.content) || typeof gap.reason !== 'string' || !gap.reason.trim()) throw Error('缺文核对与来源位置、链接及正文哈希不匹配');
+    if (!gap.evidence || !/^https?:\/\//u.test(gap.evidence.url || '') || !Number.isFinite(Date.parse(gap.evidence.checkedAt)) || typeof gap.evidence.detail !== 'string' || !gap.evidence.detail.trim()) throw Error('缺文核对必须保存独立证据地址、时间和说明');
+    if (gap.kind === 'placeholder') {
+      if (!placeholderEvidence(chapter.content)) throw Error('缺文提示验收不能排除普通正文');
+    } else if (gap.kind === 'truncated') {
+      const actual = chapter.content.replace(/\s/gu, '').length;
+      if (gap.actualCharacters !== actual || !Number.isInteger(gap.expectedCharacters) || gap.expectedCharacters < 1000 || gap.expectedCharacters > 60000 || actual >= gap.expectedCharacters * 0.8) throw Error('残缺章节验收需要显著缺文的实际字数和独立预期字数');
+    } else throw Error('未支持的缺文章节验收类型');
+    omissions.add(chapter.link);
   }
   if (raw.some(c => !seen.has(c.link) && !omissions.has(c.link))) throw Error('来源顺序验收不得遗漏未核对的目录项');
   return {...review, reviewedAt: new Date().toISOString()};
@@ -205,7 +217,7 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
   if (failure) { quality.failures.push(failure); quality.errors++; quality.structuralPass = false; }
   return {...rawReport, ...quality, readingEdition: true, sourceExpected: rawReport.expected, sourceDownloaded: rawReport.downloaded, sourceErrors: rawReport.errors, sourceWarnings: rawReport.warnings,
     ...(state.sourceOrderReview ? {acceptedSourceOrder: state.sourceOrderReview} : {}),
-    completeAgainstSource: !!exportFile, exportFile, reusedExport, readingAdded: added,
+    completeAgainstSource: !!exportFile && !state.sourceOrderReview?.gaps?.length, completeSelectedScope: !!exportFile, sourceGaps: state.sourceOrderReview?.gaps || [], exportFile, reusedExport, readingAdded: added,
     mappingFile: stateFile(dir), mapping: book.chapters.map(c => ({chapter_number: c.chapter_number, title: c.title, sourcePosition: c.sourceChapterNumber, sourceUrl: c.link, sourceHash: hash(c.content)})),
     limitation: '沿用这本书已核对的来源映射，阅读版章序保持稳定。新发现的重复、乱码、章号跳转会暂停更新，旧阅读版和原始采集记录保留。只检查可检测异常，不能保证源站无删文或错配。',
   };

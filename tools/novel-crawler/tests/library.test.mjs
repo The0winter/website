@@ -63,6 +63,19 @@ async function until(check) {
   assert.fail('timed out');
 }
 
+test('batch accepts a reviewed scope while retaining the explicit source gap', async t => {
+  const f = await fixture(t), rawFile = await f.seed('alpha');
+  const source = readJson(rawFile), omitted = source.chapters[1];
+  const book = {...source,chapters:source.chapters.filter((_,i)=>i!==1).map((c,i)=>({...c,chapter_number:i+1,sourceChapterNumber:c.chapter_number,sourceChapterUrl:c.link}))};
+  const file = path.join(f.options.outputDir,'reviewed.json'); atomicWrite(file,book);
+  const catalog = readJson(path.join(f.options.stateDir,'jobs',jobId(f.spec('alpha')),'catalog.json'));
+  const review = {catalogHash:hash(catalog),reason:'独立字数证据显示中间章节残缺，保留原始记录和其他章序',pairs:[],gaps:[{position:2,link:omitted.link,contentHash:hash(omitted.content),kind:'truncated',actualCharacters:omitted.content.length,expectedCharacters:3000,reason:'完整分页仍显著缺文',evidence:{url:f.base+'/original-catalog',checkedAt:new Date().toISOString(),detail:'独立目录字数3000'}}]};
+  await bindReadingEdition(f.spec('alpha'),file,{...f.options,sourceOrderReview:review});
+  const result = await updateLibrary(f.options);
+  assert.equal(result.unchanged,1); assert.equal(result.skipped,0); assert.match(result.items[0].message,/1 处已记录缺文/);
+  assert.deepEqual(readJson(file),book); assert.deepEqual(readJson(rawFile),source);
+});
+
 test('batch appends only new raw chapters, continues after manual skip, and reuses unchanged exports', async t => {
   const f = await fixture(t), alpha = await f.seed('alpha'), beta = await f.seed('beta');
   const original = readJson(alpha), betaBytes = fs.readFileSync(beta), betaTime = fs.statSync(beta).mtimeMs;

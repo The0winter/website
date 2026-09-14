@@ -47,6 +47,12 @@ export function mojibakeEvidence(text) {
   return {markers: matches.length, distinct};
 }
 
+export function placeholderEvidence(text) {
+  const value = String(text || '').replace(/\s/gu, '');
+  if (value.length > 500) return false;
+  return /^(?:请到手机端QQAPP查看本章|出于版权保护[，,]?本章暂不支持网页(?:阅读)?)(?:[。.!！]|（还有耶）)*$/u.test(value);
+}
+
 function shingles(text) {
   const result = new Set();
   // A bounded signature is enough to flag suspected duplication, never to delete.
@@ -61,6 +67,7 @@ export function qualityReport(catalog, chapters, failures = [], mode = 'download
   const lengths = chapters.map(c => c.content.trim().length).sort((a, b) => a - b);
   const medianLength = lengths[Math.floor(lengths.length / 2)] || 0;
   for (const chapter of chapters) {
+    if (placeholderEvidence(chapter.content)) issues.push({level: 'error', code: 'placeholder', chapter: chapter.chapter_number, detail: '来源仅提供缺文提示，不能计为完整正文；保留原始记录'});
     const mojibake = mojibakeEvidence(chapter.content);
     if (mojibake) issues.push({level: 'error', code: 'mojibake', chapter: chapter.chapter_number, detail: '正文密集出现 UTF-8/GBK 二次乱码特征，不能仅凭没有替换字符判定可读；保留原文等待核对', ...mojibake});
     const text = normalizedText(chapter.content);

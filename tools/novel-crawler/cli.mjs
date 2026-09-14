@@ -44,7 +44,7 @@ try {
       }});
       const {issues, missing = [], ...summary} = result;
       console.log(JSON.stringify({...summary, issueCounts: Object.fromEntries([...new Set(issues.map(i => i.code))].map(code => [code, issues.filter(i => i.code === code).length])), missingCount: missing.length}, null, 2));
-      if (!result.structuralPass || (command === 'download' && !result.completeAgainstSource)) process.exitCode = 2;
+      if (!result.structuralPass || (command === 'download' && !result.completeAgainstSource && !result.completeSelectedScope)) process.exitCode = 2;
     } else if (command === 'report') {
       if (!/^[a-f0-9]{20}$/.test(values.job || '') || !['probe', 'download'].includes(values.mode || 'download')) throw Error('需要有效 --job 和 --mode');
       const report = readJson(path.join(stateDir, 'jobs', values.job, `${values.mode || 'download'}-report.json`));

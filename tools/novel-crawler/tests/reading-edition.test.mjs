@@ -66,6 +66,43 @@ test('source-order review pins duplicate omissions while preserving historical n
   assert.equal(blocked.exportFile, null); assert.deepEqual(readJson(f.file), book);
 });
 
+test('source gaps require pinned evidence, preserve raw text and never report source completeness', async t => {
+  const f = await fixture(t, {sourceOrder: true});
+  f.state.bodies[4] = '出于版权保护，本章暂不支持网页阅读';
+  await acquire(f.spec, {...f.options, mode: 'download', refresh: true});
+  const rawReport = readJson(path.join(f.dir, 'download-report.json'));
+  assert.ok(rawReport.issues.some(i => i.code === 'placeholder' && i.chapter === 4));
+  assert.equal(rawReport.exportFile, null);
+  const book = {...f.book, chapters: [1,2,5].map((n,i) => ({...formatChapterForExport(f.raw(n)), chapter_number: i+1, sourceChapterNumber: n, sourceChapterUrl: f.raw(n).link}))};
+  atomicWrite(f.file, book);
+  const review = {catalogHash: hash(readJson(path.join(f.dir, 'catalog.json'))), reason: '核实原文重复和缺文提示，保留其他章节顺序。', pairs: [{omit: 3, keep: 1, omitHash: hash(f.raw(3).content), keepHash: hash(f.raw(1).content), reason: '完整正文相同'}], gaps: [{position: 4, link: f.raw(4).link, contentHash: hash(f.raw(4).content), kind: 'placeholder', reason: '只有缺文提示', evidence: {url: f.raw(4).link, checkedAt: new Date().toISOString(), detail: '源页仅含提示'}}]};
+  const bind = r => bindReadingEdition(f.spec, f.file, {...f.options, sourceOrderReview:r});
+  for (const gap of [{...review.gaps[0],contentHash:'wrong'}, {...review.gaps[0],evidence:{}}, {...review.gaps[0],kind:'unknown'}, {...review.gaps[0],kind:'truncated',actualCharacters:1,expectedCharacters:3000}]) await assert.rejects(bind({...review,gaps:[gap]}));
+  await assert.rejects(bind({...review,gaps:[]}), /不得遗漏/);
+  await bind(review);
+  const report = await acquire(f.spec, {...f.options, mode:'download'});
+  assert.equal(report.structuralPass,true); assert.equal(report.completeAgainstSource,false);
+  assert.equal(report.completeSelectedScope,true); assert.equal(report.sourceGaps.length,1);
+  assert.deepEqual(readJson(f.file),book); assert.equal(f.raw(4).content,f.state.bodies[4]);
+  f.state.count = 6; f.state.titles[6] = '第3章 新增缺文'; f.state.bodies[6] = '请到手机端QQAPP查看本章';
+  const blocked = await acquire(f.spec, {...f.options, mode:'download'});
+  assert.equal(blocked.exportFile,null); assert.equal(blocked.structuralPass,false); assert.deepEqual(readJson(f.file),book);
+});
+
+test('reviewed truncated tail cannot silently skip a hole on the next update', async t => {
+  const f = await fixture(t, {sourceOrder:true});
+  const book = {...f.book,chapters:[1,2,4].map((n,i)=>({...formatChapterForExport(f.raw(n)),chapter_number:i+1,sourceChapterNumber:n,sourceChapterUrl:f.raw(n).link}))};
+  atomicWrite(f.file,book);
+  const gap={position:5,link:f.raw(5).link,contentHash:hash(f.raw(5).content),kind:'truncated',actualCharacters:f.raw(5).content.replace(/\s/gu,'').length,expectedCharacters:3000,reason:'完整分页仍显著少于独立字数证据',evidence:{url:f.base+'/original-catalog',checkedAt:new Date().toISOString(),detail:'独立目录字数3000'}};
+  const review={catalogHash:hash(readJson(path.join(f.dir,'catalog.json'))),reason:'仅保留核实可读部分',pairs:[{omit:3,keep:1,omitHash:hash(f.raw(3).content),keepHash:hash(f.raw(1).content),reason:'相同正文'}],gaps:[gap]};
+  await assert.rejects(bindReadingEdition(f.spec,f.file,{...f.options,sourceOrderReview:{...review,gaps:[{...gap,expectedCharacters:800}]}}),/实际字数/);
+  await bindReadingEdition(f.spec,f.file,{...f.options,sourceOrderReview:review});
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).completeSelectedScope,true);
+  f.state.count=6; f.state.titles[6]='第4章 新增章节';
+  const report=await acquire(f.spec,{...f.options,mode:'download'});
+  assert.equal(report.exportFile,null); assert.match(report.failures[0].error,/章号不连续/); assert.deepEqual(readJson(f.file),book);
+});
+
 test('bound updates preserve reviewed order, bypass only pinned source errors, and append after restart', async t => {
   const f = await fixture(t);
   const original = fs.readFileSync(f.file), mtime = fs.statSync(f.file).mtimeMs;
