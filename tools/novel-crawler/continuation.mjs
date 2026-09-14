@@ -179,9 +179,48 @@ export function recordContinuationReview(spec, options, {firstLink, secondLink, 
   return decision;
 }
 
+const anchorReviewKey = (book, file, previous, incoming) => hash({sourceUrl: book.sourceUrl, file,
+  oldPosition: previous.chapter_number, old: reviewFingerprint(previous), incoming: reviewFingerprint(incoming)});
+
+// Explicit review records a verified correspondence, never a replacement for the
+// old prose. Both complete bodies must still match the hashes the reviewer saw.
+export function recordContinuationAnchorReview(spec, options, {file, oldNumber, newLink, oldHash, newHash, reason}) {
+  if (!Number.isSafeInteger(oldNumber) || !oldHash || !newHash || typeof reason !== 'string' || !reason.trim()) throw Error('衔接核对需要旧顺序号、双方正文哈希及具体核对理由');
+  const book = readJson(targetPath(options.outputDir, file));
+  if (!book || !sameBook(book, spec)) throw Error('衔接核对的本地作品身份不匹配');
+  const ending = numbered(book.chapters).slice(-3), previous = book.chapters.find(chapter => chapter.chapter_number === oldNumber);
+  if (!previous || !ending.some(item => book.chapters[item.index] === previous)) throw Error('只能核对原书末尾三个正文章节');
+  const sourceDir = sourceDirectory(options.stateDir, spec, options.extraction);
+  const saved = readJson(path.join(sourceDir, 'chapters', hash(newLink) + '.json'));
+  if (!saved?.chapter || saved.hash !== hash(saved.chapter) || saved.chapter.link !== newLink) throw Error('新来源衔接章完整检查点缺失或损坏');
+  const incoming = saved.chapter, a = chapterIdentity(previous.title), b = chapterIdentity(incoming.title);
+  if (!b || a.number !== b.number || !compatibleNames(a.name, b.name)) throw Error('衔接核对要求同章号且标题对应，不能接受拆章或缺章');
+  if (hash(previous.content) !== oldHash || hash(incoming.content) !== newHash) throw Error('衔接正文已变化，请重新核对双方完整正文');
+  if (bodyKey(previous.content, previous.title).length < 100 || bodyKey(incoming.content, incoming.title).length < 100) throw Error('衔接正文过短，无法确认对应关系');
+  const state = loadReviews(spec, options), key = anchorReviewKey(book, file, previous, incoming);
+  const decision = {key, file, originalSourceUrl: book.sourceUrl, oldPosition: oldNumber,
+    old: reviewFingerprint(previous), incoming: reviewFingerprint(incoming), reason: reason.trim(), reviewedAt: new Date().toISOString()};
+  state.anchorDecisions = [...(state.anchorDecisions || []).filter(item => item.key !== key), decision];
+  atomicWrite(path.join(sourceDir, 'reviews.json'), sealed(state));
+  return decision;
+}
+
+export function recordContinuationNoticeReview(spec, options, {link, contentHash, reason}) {
+  if (!link || !contentHash || typeof reason !== 'string' || !reason.trim()) throw Error('公告核对需要链接、正文哈希及具体理由');
+  const sourceDir = sourceDirectory(options.stateDir, spec, options.extraction);
+  const saved = readJson(path.join(sourceDir, 'chapters', hash(link) + '.json'));
+  if (!saved?.chapter || saved.hash !== hash(saved.chapter) || saved.chapter.link !== link || hash(saved.chapter.content) !== contentHash) throw Error('公告完整检查点缺失、损坏或正文已变化');
+  if (chapterIdentity(saved.chapter.title)) throw Error('不能把带章号的正文核对为公告来绕过章号检查');
+  const fingerprint = reviewFingerprint(saved.chapter), key = hash(fingerprint), state = loadReviews(spec, options);
+  const decision = {key, ...fingerprint, reason: reason.trim(), reviewedAt: new Date().toISOString()};
+  state.noticeDecisions = [...(state.noticeDecisions || []).filter(item => item.key !== key), decision];
+  atomicWrite(path.join(sourceDir, 'reviews.json'), sealed(state));
+  return decision;
+}
+
 // Resolve only decisions backed by complete content or the chapter page's own
 // heading. A repeated number with different prose is still an unresolved version.
-export function createContinuationReviewer(book, reviews = []) {
+export function createContinuationReviewer(book, reviews = [], noticeReviews = []) {
   const accepted = [...book.chapters], originals = new Set(book.chapters), skipped = [], resolutions = [];
   let number = numbered(accepted).at(-1)?.number;
   if (!number) throw Error('原书缺少可核对的正文章号');
@@ -232,8 +271,10 @@ export function createContinuationReviewer(book, reviews = []) {
           reason: '目录与正文页标题名称一致，正文页章号接续原书；沿用正文页标题，保留原目录标题'});
         number = actual.number;
       } else {
-        if (!notice(value.title)) throw Error(`无法确定新增条目是否为公告或番外：「${value.title}」，需核对后接续`);
-        if (peers.length) throw Error(`同名公告或番外内容冲突：「${value.title}」，两个版本均已保留，原书未改写`);
+        const reviewed = noticeReviews.find(item => item.key === hash(reviewFingerprint(value)));
+        if (!notice(value.title) && !reviewed) throw Error(`无法确定新增条目是否为公告或番外：「${value.title}」，需核对后接续`);
+        if (peers.length && !reviewed) throw Error(`同名公告或番外内容冲突：「${value.title}」，两个版本均已保留，原书未改写`);
+        if (reviewed) resolutions.push({kind: 'reviewed-notice', title: value.title, link: value.link, contentHash: hash(value.content), reviewKey: reviewed.key, reason: reviewed.reason, reviewedAt: reviewed.reviewedAt});
       }
       accepted.push(value);
       return true;
@@ -255,7 +296,8 @@ export async function acquireContinuation(spec, options) {
   prepareImport(book);
   if (book.chapters.some((chapter, index) => index && chapter.chapter_number <= book.chapters[index - 1].chapter_number)) throw Error('原书顺序号未严格递增，请先核对');
   const lastOrdinal = book.chapters.at(-1).chapter_number;
-  const reviewer = createContinuationReviewer(book, loadReviews(spec, options).decisions);
+  const reviewState = loadReviews(spec, options);
+  const reviewer = createContinuationReviewer(book, reviewState.decisions, reviewState.noticeDecisions);
   const switching = !binding || binding.source.url !== spec.sourceUrl;
   if (!switching && binding.source.extraction !== extraction) throw Error('当前续更来源的提取规则已变化，请先核对适配，旧文件已保留');
   const sourceDir = sourceDirectory(stateDir, spec, extraction);
@@ -297,10 +339,12 @@ export async function acquireContinuation(spec, options) {
         const matches = newNumbers.filter(item => item.number === old.number && compatibleNames(item.name, old.name) && (boundary === undefined || item.index > boundary));
         if (!matches.length || matches.length > 8) throw Error(`新来源无法对齐「${book.chapters[old.index].title}」，可能缺章、改名或拆合章`);
         const previous = book.chapters[old.index], oldBody = bodyKey(previous.content, previous.title);
-        let actual, match;
+        let actual, match, anchorReview;
         for (const candidate of matches) {
           const value = await chapter(catalog[candidate.index], links);
           if (oldBody.length >= 100 && oldBody === bodyKey(value.content, value.title)) { actual = value; match = candidate; break; }
+          const review = (reviewState.anchorDecisions || []).find(item => item.key === anchorReviewKey(book, selected.file, previous, value));
+          if (review) { actual = value; match = candidate; anchorReview = review; break; }
         }
         if (!actual) {
           const entry = catalog[matches[0].index];
@@ -309,7 +353,8 @@ export async function acquireContinuation(spec, options) {
             nextStep: '来源正文与本地末尾章节不完全一致，原书保留。可先跳过这本，将失败章节交给 Codex 核对具体文字或版本差异。',
           });
         }
-        anchors.push({oldPosition: old.index + 1, sourcePosition: match.index + 1, oldLink: previous.link, newLink: actual.link, oldHash: hash(previous.content), newHash: hash(actual.content)});
+        anchors.push({oldPosition: old.index + 1, sourcePosition: match.index + 1, oldLink: previous.link, newLink: actual.link, oldHash: hash(previous.content), newHash: hash(actual.content),
+          ...(anchorReview ? {reviewKey: anchorReview.key, reason: anchorReview.reason, reviewedAt: anchorReview.reviewedAt} : {})});
         boundary = match.index;
       }
     } else {

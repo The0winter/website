@@ -25,7 +25,7 @@
   "spec": {
     "version": 1,
     "kind": "html",
-    "variant": "desktop-shudugu-v5",
+    "variant": "desktop-shudugu-v7",
     "title": "${title}",
     "author": "${author}",
     "sourceUrl": "${sourceUrl}",
@@ -39,12 +39,12 @@
       "title": "h1 > a",
       "author": {"selector": ".itemtxt a[href^='/zuozhe/']", "pattern": "^作者：[\\s]*(.+)$"}
     },
-    "catalog": {"links": "#list > ul > li > a"},
+    "catalog": {"links": "#list > ul > li > a", "next": "#pages > a.gr:contains('下一页')", "maxPages": 30},
     "chapter": {
       "title": {"selector": "h1", "pattern": ">\\s*(.+)$"},
       "content": ".con",
       "remove": ["script", "style"],
-      "removeText": ["(?:^|[\\r\\n])[^\\S\\r\\n]*[:：]+[^\\S\\r\\n]*(?=[\\r\\n]|$)", "(?:^|[\\r\\n])[^\\S\\r\\n]*本章节来源于(?=[?？.。…·°A-Za-z0-9]*[?？])[?？.。…·°A-Za-z0-9]{1,40}[^\\S\\r\\n]*(?=[\\r\\n]|$)"],
+      "removeText": ["(?:^|[\\r\\n])[^\\S\\r\\n]*[:：]+[^\\S\\r\\n]*(?=[\\r\\n]|$)", "(?:^|[\\r\\n])[^\\S\\r\\n]*本章节来源于(?=[?？.。…·°A-Za-z0-9]*[?？])[?？.。…·°A-Za-z0-9]{1,40}[^\\S\\r\\n]*(?=[\\r\\n]|$)", "(?:^|[\\r\\n])[^\\S\\r\\n]*(?:解闷好[，,][^\\S\\r\\n]*)?(?=[?？.。A-Za-z0-9]*[?？])[?？.。A-Za-z0-9]{3,100}(?:随时看[^\\S\\r\\n]*)?全手打无错站[^\\S\\r\\n]*(?=[\\r\\n]|$)"],
       "next": "a:contains('下一页')",
       "maxPages": 10
     }

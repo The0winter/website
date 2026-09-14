@@ -6,7 +6,7 @@ import path from 'node:path';
 import http from 'node:http';
 import puppeteer from 'puppeteer';
 import {acquire, localBookState, validateSpec, extractionHash} from '../core.mjs';
-import {continuationKey, continuationState, recoverContinuation, recordContinuationReview} from '../continuation.mjs';
+import {continuationKey, continuationState, recoverContinuation, recordContinuationReview, recordContinuationAnchorReview, recordContinuationNoticeReview} from '../continuation.mjs';
 import {atomicWrite, readJson, hash, acquireLock} from '../storage.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 import {loadSites, parseSearch} from '../desktop/sources.mjs';
@@ -84,6 +84,62 @@ test('an anchor decode failure retains the actual chapter URL and encoding advic
   assert.equal(failure.code, 'decode-error'); assert.match(failure.nextStep, /编码/);
   assert.deepEqual(f.state.requests, ['/new/book', '/new/c/2']);
   assert.deepEqual(fs.readFileSync(f.file), original);
+});
+
+test('explicit anchor reviews accept only the reviewed full bodies and preserve all old prose', async t => {
+  const f = await fixture(t), original = fs.readFileSync(f.file);
+  f.state.bodies[2] = body(2) + '单字勘误';
+  const probe = await f.run({mode: 'probe'});
+  assert.equal(probe.structuralPass, false); assert.equal(probe.failures[0].code, 'continuation-body-conflict');
+  const options = {...f.options, extraction: extractionHash(f.spec)};
+  const choice = {file: path.basename(f.file), oldNumber: 2, newLink: f.base + '/new/c/2', oldHash: hash(body(2)), newHash: hash(f.state.bodies[2]), reason: '已逐项核对完整正文，差异为末尾勘误标记；旧正文保留。'};
+  assert.throws(() => recordContinuationAnchorReview(f.spec, options, {...choice, oldHash: hash('stale')}), /正文已变化/);
+  assert.throws(() => recordContinuationAnchorReview(f.spec, options, {...choice, oldNumber: 1}), /末尾三个/);
+  assert.throws(() => recordContinuationAnchorReview(f.spec, options, {...choice, oldNumber: 3}), /同章号/);
+  const review = recordContinuationAnchorReview(f.spec, options, choice);
+  assert.deepEqual(fs.readFileSync(f.file), original);
+  const report = await f.run();
+  assert.equal(report.completeAgainstSource, true, JSON.stringify(report.failures));
+  assert.equal(report.anchors[0].reviewKey, review.key);
+  assert.deepEqual(readJson(f.file).chapters.slice(0, 4), f.book.chapters);
+});
+
+test('anchor reviews expire when either complete body changes and never authorize another variant', async t => {
+  const f = await fixture(t);
+  f.state.bodies[2] = body(2) + '已核对差异';
+  const probe = await f.run({mode: 'probe'}), options = {...f.options, extraction: extractionHash(f.spec)};
+  recordContinuationAnchorReview(f.spec, options, {file: path.basename(f.file), oldNumber: 2, newLink: f.base + '/new/c/2', oldHash: hash(body(2)), newHash: hash(f.state.bodies[2]), reason: '核对差异并保留旧文'});
+  const checkpoint = path.join(path.dirname(probe.reportFile), 'chapters', hash(f.base + '/new/c/2') + '.json'), saved = readJson(checkpoint);
+  saved.chapter.content += '未经核对变化'; saved.hash = hash(saved.chapter); atomicWrite(checkpoint, saved);
+  assert.equal((await f.run({mode: 'probe'})).failures[0].code, 'continuation-body-conflict');
+  saved.chapter.content = f.state.bodies[2]; saved.hash = hash(saved.chapter); atomicWrite(checkpoint, saved);
+  f.book.chapters[1].content += '旧文变化'; atomicWrite(f.file, f.book);
+  assert.equal((await f.run({mode: 'probe'})).failures[0].code, 'continuation-body-conflict');
+  atomicWrite(f.file, {...f.book, chapters: f.book.chapters.map((c, i) => i === 1 ? {...c, content: body(2)} : c)});
+  const changed = {...f.spec, variant: 'another-rule'};
+  const report = await acquire(changed, {...f.options, continuation: localBookState(changed, f.options).continuation, mode: 'probe'});
+  assert.equal(report.failures[0].code, 'continuation-body-conflict');
+});
+
+test('an explicitly reviewed unnumbered notice retains its title and cannot bypass numbered or changed content', async t => {
+  const f = await fixture(t);
+  f.state.titles[5] = '第五册预告'; f.state.bodies[5] = '实体书第五册开始预售，感谢各位读者支持。';
+  f.state.titles[6] = title(5); f.state.bodies[6] = body(5);
+  const report = await f.run({stopOnFailure: true});
+  assert.equal(report.completeAgainstSource, false); assert.match(report.failures[0].error, /公告或番外/);
+  const options = {...f.options, extraction: extractionHash(f.spec)}, choice = {link: f.base + '/new/c/5', contentHash: hash(f.state.bodies[5]), reason: '完整正文是实体书预售通知，独立保留。'};
+  assert.throws(() => recordContinuationNoticeReview(f.spec, options, {...choice, contentHash: hash('stale')}), /正文已变化/);
+  assert.throws(() => recordContinuationNoticeReview(f.spec, options, {link: f.base + '/new/c/2', contentHash: hash(body(2)), reason: '不是公告'}), /带章号/);
+  recordContinuationNoticeReview(f.spec, options, choice);
+  const checkpoint = path.join(path.dirname(report.reportFile), 'chapters', hash(choice.link) + '.json'), saved = readJson(checkpoint);
+  saved.chapter.content += '改变'; saved.hash = hash(saved.chapter); atomicWrite(checkpoint, saved);
+  assert.equal((await f.run({stopOnFailure: true})).completeAgainstSource, false);
+  saved.chapter.content = f.state.bodies[5]; saved.hash = hash(saved.chapter); atomicWrite(checkpoint, saved);
+  const complete = await f.run();
+  assert.equal(complete.completeAgainstSource, true, JSON.stringify(complete.failures));
+  assert.equal(complete.resolutions[0].kind, 'reviewed-notice');
+  assert.equal(readJson(f.file).chapters[4].title, '第五册预告');
+  assert.equal(readJson(f.file).chapters.at(-1).title, title(5));
 });
 
 test('old notices stay in place; equal new-source notices are not appended twice', async t => {
