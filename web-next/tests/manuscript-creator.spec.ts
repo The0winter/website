@@ -6,7 +6,8 @@ async function createAndOpen(page: Page) {
   const title = await page.getByLabel("书名", {exact:true}).inputValue();
   await page.getByRole("button", {name:"创建",exact:true}).click();
   await page.locator('.writer-work').filter({hasText:title}).getByRole('button',{name:'创作',exact:true}).click();
-  await expect(page.getByLabel("书名", {exact:true})).toHaveValue(title);
+  await expect(page.locator(".manuscript-work-title")).toHaveText(title);
+  await expect(page.getByLabel("书名", {exact:true})).toHaveCount(0);
 }
 test.beforeEach(async ({ page }) => {
   const csrf = await (await page.request.get(base + "/api/auth/csrf")).json();
@@ -28,7 +29,8 @@ for (const width of [320, 390, 1440])
       .getByLabel("简介", { exact: true })
       .fill("一封信，让两个陌生人相遇。");
     await createAndOpen(page);
-    await expect(page.getByText("非必须", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("简介", {exact:true})).toHaveCount(0);
+    await expect(page.locator("input[type=file][accept*=image]")).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "直接粘贴", exact: true }),
     ).toHaveCount(0);

@@ -741,7 +741,7 @@ body:has(.manuscript-page) [data-site-chrome] { display:none; }
   .manuscript-page .manuscript-steps i { width:32px; height:32px; }
   .manuscript-page .manuscript-steps b { width:110px; }
   .manuscript-page .manuscript-content { flex:1; width:100%; max-width:1360px; margin:0 auto; padding:0 40px 36px; }
-  .manuscript-page .manuscript-step-1 { display:grid; grid-template-columns:minmax(300px,.85fr) minmax(0,1.15fr); gap:28px; align-content:start; align-items:start; }
+  .manuscript-page .manuscript-step-1 { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; max-width:1000px; align-content:start; align-items:start; }
   .manuscript-page .manuscript-details,.manuscript-page .manuscript-import { padding:30px; border:1px solid #e5d6ca; border-radius:18px; background:#fffaf6; min-width:0; }
   .manuscript-page .manuscript-meta { flex-wrap:wrap; margin-bottom:0; }
   .manuscript-page .manuscript-category { width:100%; display:flex; justify-content:space-between; align-items:center; }
@@ -774,3 +774,5 @@ body:has(.manuscript-page) [data-site-chrome] { display:none; }
   .manuscript-page .manuscript-step-1 { grid-template-columns:1fr; }
   .manuscript-page .manuscript-drop { min-height:220px; }
 }
+.manuscript-work-title { display:flex; align-items:center; gap:10px; margin-bottom:18px; font-size:17px; color:inherit; }
+.manuscript-work-title strong { overflow-wrap:anywhere; }

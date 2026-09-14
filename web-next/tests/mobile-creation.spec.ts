@@ -98,7 +98,7 @@ for (const width of [320, 390]) test(`creator actions open the matching creation
   await page.screenshot({ path: info.outputPath(`editor-${width}.png`) });
   await page.goBack(); await expect(page.locator('.mw-view')).toHaveCount(0); await expect(modal(page)).toBeVisible();
   await modal(page).getByRole('link', { name: '创作', exact: true }).click();
-  await expect(page.getByText('目录与设置', { exact: true })).toBeVisible();
+  await expect(page.getByText('章节创作', { exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath(`manager-${width}.png`) });
   await page.getByRole('button', { name: '继续草稿', exact: true }).click();
   await expect(page.getByPlaceholder('在这里开始你的创作...')).toHaveValue('留给自己的未发布草稿。');

@@ -1,14 +1,16 @@
 'use client';
 import {useRef, useState} from 'react';
-import {LockKeyhole, Trash2, Settings} from 'lucide-react';
+import {LockKeyhole, Trash2, Settings, Pencil} from 'lucide-react';
 import {type Book} from '@/lib/api';
 import {safeFetch} from '@/lib/request';
 import './work-actions.css';
+import WorkEditor from './WorkEditor';
 
 export default function WorkActions({book, onChanged}: {book: Book; onChanged: () => void}) {
   const menu = useRef<HTMLDetailsElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [editing, setEditing] = useState(false);
   const change = async (action: 'delete' | 'private') => {
     if (busy) return;
     if (action === 'delete' && !confirm(`确定删除《${book.title}》？${book.manuscriptKey ? '文稿删除后无法恢复。' : '删除后作品及章节将不再显示。'}`)) return;
@@ -27,10 +29,12 @@ export default function WorkActions({book, onChanged}: {book: Book; onChanged: (
     <details ref={menu} onKeyDown={event => {if (event.key === 'Escape' && menu.current) {menu.current.open = false; menu.current.querySelector('summary')?.focus();}}}>
       <summary aria-label={`管理《${book.title}》`} title="管理作品"><Settings size={22} aria-hidden="true"/></summary>
       <div className="work-management-menu">
+        <button type="button" disabled={busy} onClick={()=>{if(menu.current)menu.current.open=false;setEditing(true);}}><Pencil size={16}/>编辑作品</button>
         <button type="button" disabled={busy || book.visibility === 'private'} onClick={() => void change('private')}><LockKeyhole size={16}/>{book.visibility === 'private' ? '已为私密' : '转为私密'}</button>
         <button type="button" className="work-delete" disabled={busy} onClick={() => void change('delete')}><Trash2 size={16}/>删除作品</button>
       </div>
     </details>
     {error && <p role="alert">{error}</p>}
+    {editing && <WorkEditor book={book} onClose={()=>setEditing(false)} onChanged={onChanged}/>}
   </div>;
 }

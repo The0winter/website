@@ -501,7 +501,7 @@ const openBookManager = (book: Book) => {
           onWorksChanged?.();
           if(standaloneCreate){onExit?.();return;}
           closeCreate();setResumingManuscript(false);
-          setToast({msg:published?'作品与章节已提交':'作品已保存为私密，可在我的作品继续创作',type:'success'});
+          setToast({msg:published?'作品与章节已提交':'草稿已保存',type:'success'});
           void fetchMyData();
         }}/> : <WorkCreator key={bookCreationKey} draftKey={bookCreationKey} embedded={embedded && standaloneCreate} onClose={closeCreate} onComplete={() => {
           onWorksChanged?.();
@@ -520,7 +520,7 @@ const openBookManager = (book: Book) => {
       <header className="writer-mobile-header"><button type="button" aria-label={fromCreationCenter ? '返回创作中心' : '返回阅读'} onClick={() => onExit ? onExit() : fromCreationCenter ? router.back() : router.push('/')}><ArrowLeft size={20}/></button><div><span>九天 · 创作者空间</span><h1>{currentView === 'statistics' ? '作品数据' : '作品管理'}</h1></div><PenTool size={23} aria-hidden="true"/></header>
       {/* Toast */}
       {toast && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[110] animate-in fade-in slide-in-from-top-4">
+        <div className="writer-toast fixed top-4 left-1/2 transform -translate-x-1/2 z-[110] animate-in fade-in slide-in-from-top-4">
           <div className={`px-6 py-3 rounded-full shadow-lg text-white font-medium flex items-center gap-2 ${toast.type === 'success' ? 'bg-green-600' : toast.type === 'error' ? 'bg-red-600' : 'bg-blue-600'}`}>
             {toast.type === 'success' ? <CheckCircle2 className="h-5 w-5"/> : <AlertCircle className="h-5 w-5"/>}
             <span>{toast.msg}</span>
@@ -603,7 +603,7 @@ const openBookManager = (book: Book) => {
                                 <div className="writer-work-cover w-20 aspect-[3/4] h-auto md:w-24 md:aspect-[3/4] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
                                     {book.cover_image ? <BookCover src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
                                 </div>
-                                <div className="flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
+                                <div className="writer-work-info flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
                                     <div>
                                         <div className="flex justify-between items-start">
                                             <h4 className="text-base md:text-xl font-bold text-gray-900 mb-1 line-clamp-1">{book.title}{book.visibility === 'private' && <span className="work-private ml-3">私密</span>}</h4>
@@ -871,7 +871,7 @@ const openBookManager = (book: Book) => {
               <div className="p-4 md:p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center shrink-0">
                  <div>
                     <h3 className="text-lg md:text-xl font-bold text-gray-900 truncate max-w-[200px]">{activeBook.title}</h3>
-                    <p className="text-xs text-gray-500">目录与设置</p>
+                    <p className="text-xs text-gray-500">章节创作</p>
                  </div>
                  <button onClick={() => setShowBookManager(false)} aria-label="关闭作品管理" className="p-2 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors cursor-pointer"><X className="h-5 w-5 text-gray-600" /></button>
               </div>
@@ -880,7 +880,7 @@ const openBookManager = (book: Book) => {
               <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-white space-y-6">
 
                  {/* 🔴 问题2修复：删掉了 open 属性，默认收起！ */}
-                 <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                 {currentView === 'adminBooks' && <details className="group bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                     {/* 🔴 问题1修复：强制加上 cursor-pointer，鼠标放上去必变小手 */}
                     <summary className="flex items-center justify-between p-4 cursor-pointer list-none select-none bg-gray-50 hover:bg-blue-50 transition-colors group-open:bg-blue-50/50">
                         <span className="text-base font-extrabold text-gray-900 flex items-center gap-2">
@@ -992,7 +992,7 @@ const openBookManager = (book: Book) => {
                             </div>
                         </div>
                     </div>
-                 </details>
+                 </details>}
 
                  {/* 章节列表标题与操作区 */}
                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between px-1 mb-4 gap-3">

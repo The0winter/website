@@ -19,8 +19,9 @@ export default function MobileWriterView({ view, covered, refreshVersion, onBack
   view: WriterView; covered: boolean; refreshVersion: number; onBack: () => void; onExited: (id: string) => void; onOpenNew: () => void; onChanged: () => void;
 }) {
   const statistics = new URLSearchParams(view.entry).get('action') === 'statistics';
-  const title = statistics ? '作品数据' : '继续创作';
-  const create = new URLSearchParams(view.entry).get('action') === 'new';
+  const title = statistics ? '作品数据' : '创作';
+  const params = new URLSearchParams(view.entry);
+  const create = params.get('action') === 'new' && !params.has('draft');
   const [Dashboard, setDashboard] = useState<typeof WriterDashboard>();
   const [elapsed, setElapsed] = useState(false);
   const [ready, setReady] = useState(false);

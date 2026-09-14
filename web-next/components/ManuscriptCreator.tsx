@@ -7,14 +7,12 @@ import {
   Check,
   ChevronDown,
   FileText,
-  ImagePlus,
   Loader2,
   PenLine,
   Upload,
   X,
 } from "lucide-react";
 import { safeFetch } from "@/lib/request";
-import BookCover from "./BookCover";
 import { LoadingLogo } from "./BrandLoading";
 import "./manuscript-creator.css";
 
@@ -170,8 +168,6 @@ export default function ManuscriptCreator({
   const [showExample, setShowExample] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [encoding, setEncoding] = useState("");
-  const [coverFile, setCoverFile] = useState<File | null>(null);
-  const [coverPreview, setCoverPreview] = useState("");
   const [selected, setSelected] = useState(0);
   const [editing, setEditing] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -270,12 +266,6 @@ export default function ManuscriptCreator({
       active = false;
     };
   }, [draftKey, resume]);
-  useEffect(() => {
-    if (!coverFile) return;
-    const url = URL.createObjectURL(coverFile);
-    setCoverPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [coverFile]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (e: BeforeUnloadEvent) => {
@@ -403,33 +393,17 @@ export default function ManuscriptCreator({
         invalidChapters.length ||
         !draft.chapters.length)
     ) {
-      setError("请补全简介和章节，并确认已核对预览");
+      setError(!draft.description.trim() ? "请先在作品设置的「编辑作品」中补全简介，再提交章节" : "请补全章节，并确认已核对预览");
       return;
     }
     lock.current = true;
     setBusy(action);
     setError("");
     try {
-      let cover = draft.cover_image;
-      if (coverFile) {
-        const body = new FormData();
-        body.append("file", coverFile);
-        const uploaded = await responseJson(
-          await safeFetch("/api/upload/cover?purpose=book", {
-            method: "POST",
-            body,
-            signal: AbortSignal.timeout(90000),
-          }),
-        );
-        cover = uploaded.url;
-        setDraft((d) => ({ ...d, cover_image: cover }));
-        setCoverFile(null);
-        setCoverPreview("");
-      }
       const body = new FormData();
       body.append(
         "manuscript",
-        JSON.stringify({ ...draft, cover_image: cover, action }),
+        JSON.stringify({ ...draft, action }),
       );
       const result = await responseJson(
         await safeFetch("/api/manuscripts/" + draftKey, {
@@ -471,18 +445,18 @@ export default function ManuscriptCreator({
         data-busy={Boolean(busy)}
         role={embedded || fullPage ? undefined : "dialog"}
         aria-modal={embedded || fullPage ? undefined : true}
-        aria-label="创建新作品"
+        aria-label="创作"
         onSubmit={(e) => e.preventDefault()}
       >
         {!embedded && (
           <header className="manuscript-header">
             <div>
               <LoadingLogo size={32} />
-<div><span className="manuscript-eyebrow">九天 · 创作者空间</span><h2>创建新作品</h2></div>
+<div><span className="manuscript-eyebrow">九天 · 创作者空间</span><h2>创作</h2></div>
             </div>
             <button
               type="button"
-              aria-label="关闭新建作品"
+              aria-label="关闭创作"
               disabled={Boolean(busy)}
               onClick={close}
             >
@@ -492,7 +466,7 @@ export default function ManuscriptCreator({
         )}
         <div className="manuscript-steps" aria-label="创建进度">
           <span aria-current={step === 1 ? "step" : undefined}>
-            <i>{step > 1 ? <Check size={14} /> : 1}</i>资料与文稿
+            <i>{step > 1 ? <Check size={14} /> : 1}</i>准备正文
           </span>
           <b />
           <span aria-current={step === 2 ? "step" : undefined}>
@@ -518,136 +492,7 @@ export default function ManuscriptCreator({
               )}
               {step === 1 ? (
                 <>
-                  <section className="manuscript-details"><h3 className="manuscript-section-title">作品资料</h3><p className="manuscript-section-caption">为故事写下第一印象</p>
-                  <div className="manuscript-field">
-                    <label htmlFor="manuscript-title">
-                      书名{" "}
-                      <small
-                        className={length(draft.title) > 15 ? "is-error" : ""}
-                      >
-                        {length(draft.title)} / 15
-                      </small>
-                    </label>
-                    <input
-                      id="manuscript-title"
-                      aria-label="书名"
-                      value={draft.title}
-                      disabled={Boolean(busy)}
-                      onChange={(e) => patch({ title: e.target.value })}
-                      placeholder="给你的故事一个名字"
-                      aria-invalid={length(draft.title) > 15}
-                    />
-                  </div>
-                  <div className="manuscript-field">
-                    <label htmlFor="manuscript-description">
-                      简介{" "}
-                      <small
-                        className={
-                          length(draft.description) > 300 ? "is-error" : ""
-                        }
-                      >
-                        {length(draft.description)} / 300
-                      </small>
-                    </label>
-                    <textarea
-                      id="manuscript-description"
-                      aria-label="简介"
-                      rows={4}
-                      value={draft.description}
-                      disabled={Boolean(busy)}
-                      onChange={(e) => patch({ description: e.target.value })}
-                      placeholder="介绍故事、人物，或最想让读者知道的悬念"
-                      aria-invalid={length(draft.description) > 300}
-                    />
-                  </div>
-                  <div className="manuscript-meta">
-                    <div className="manuscript-cover-field">
-                      <label className="manuscript-cover">
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          aria-label="上传封面（非必须）"
-                          disabled={Boolean(busy)}
-                          onChange={(e) => {
-                            const image = e.target.files?.[0];
-                            e.target.value = "";
-                            if (!image) return;
-                            if (
-                              ![
-                                "image/jpeg",
-                                "image/png",
-                                "image/webp",
-                              ].includes(image.type) ||
-                              image.size > 8 * 1024 * 1024
-                            ) {
-                              setError("封面支持 8 MB 以内的 JPG、PNG、WebP");
-                              return;
-                            }
-                            setCoverFile(image);
-                            setDirty(true);
-                            setConfirmed(false);
-                          }}
-                        />
-                        {coverPreview || draft.cover_image ? (
-                          <BookCover
-                            src={coverPreview || draft.cover_image}
-                            sizes="96px"
-                          />
-                        ) : (
-                          <>
-                            <ImagePlus size={23} />
-                            <span>上传封面</span>
-                          </>
-                        )}
-                      </label>
-                      <div>
-                        <strong>
-                          封面 <small>非必须</small>
-                        </strong>
-                        <p>
-                          JPG / PNG / WebP · 8 MB 内<br />
-                          建议 3:4 竖图，可稍后补充
-                        </p>
-                        {(coverPreview || draft.cover_image) && (
-                          <button
-                            type="button"
-                            disabled={Boolean(busy)}
-                            onClick={() => {
-                              setCoverFile(null);
-                              setCoverPreview("");
-                              patch({ cover_image: "" });
-                            }}
-                          >
-                            移除封面
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    <label className="manuscript-category">
-                      作品分类
-                      <select
-                        value={draft.category}
-                        disabled={Boolean(busy)}
-                        onChange={(e) => patch({ category: e.target.value })}
-                      >
-                        {[
-                          "未分类",
-                          "玄幻",
-                          "仙侠",
-                          "都市",
-                          "历史",
-                          "科幻",
-                          "奇幻",
-                          "体育",
-                          "军事",
-                          "悬疑",
-                        ].map((c) => (
-                          <option key={c}>{c}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  </section>
+                  <div className="manuscript-work-title"><BookOpen size={20}/><strong>{draft.title}</strong></div>
                   <section className="manuscript-import">
                     <div className="manuscript-import-heading">
                       <h4>导入正文</h4>
@@ -810,7 +655,7 @@ export default function ManuscriptCreator({
                       disabled={Boolean(busy)}
                       onClick={() => setStep(1)}
                     >
-                      修改资料
+                      调整正文
                     </button>
                   </div>
                   {!!warnings.length && (
