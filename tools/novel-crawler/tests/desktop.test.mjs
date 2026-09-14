@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
 import puppeteer from 'puppeteer';
+import iconv from 'iconv-lite';
 import {createDesktop} from '../desktop/server.mjs';
 import {rememberWebsite, readSettings, normalizeWebsite, loadSites, parseSearch, fillTemplate, searchBooks, specForBook} from '../desktop/sources.mjs';
 import {acquire} from '../core.mjs';
@@ -152,6 +153,28 @@ test('shudugu details adapter handles variable book IDs and chapter pages withou
     assert.match(book.chapters[0].content, /第一页[\s\S]*第二页/);
     assert.equal(book.chapters[0].content, '第一页的合成正文。\n……\n他说：“时间是12:30。”\n他说，全手打无错站也会有错字。\n第二页的合成正文。\n......\n「：」\n本章节来源于这段对话。\n本章节来源于1984');
     assert.equal(book.chapters[0].provenance.length, 2);
+  }
+});
+
+test('qiufengshuwu canonicalizes details and catalog inputs, follows the real catalog link and preserves volume order', async t => {
+  const site = loadSites().sites.find(s => s.id === 'qiufengshuwu');
+  assert.equal(site.name, '秋风书屋'); assert.equal(site.search, undefined);
+  for (const id of ['128', '9401']) {
+    const catalogUrl = `${site.home}7/${id}/`, detail = `${site.home}book/${id}.html`;
+    for (const url of [catalogUrl, detail]) assert.equal(specForBook({url, title: `测试${id}`, author: '测试作者'}).sourceUrl, detail);
+    assert.throws(() => specForBook({url: catalogUrl + '888.html', title: '测试', author: '作者'}), /不是章节/);
+    const spec = specForBook({url: catalogUrl, title: `测试${id}`, author: '测试作者'}), requests = [];
+    const link = n => `${catalogUrl}${n}.html`, pages = new Map([
+      [detail, `<div class="cataloginfo"><h3>测试${id}</h3><div class="infotype"><p><a href="/author/test">测试作者</a></p><p>作品状态：已完结</p></div></div><div class="infolink"><a href="${catalogUrl}">章节目录</a></div><div class="list_xm"><a href="${link(2)}">最新章节</a></div>`],
+      [catalogUrl, `<ul class="chapters"><li class="juan">卷一</li><li><a href="${link(1)}">第一章 起点</a></li><li class="juan">卷二</li><li><a href="${link(2)}">第一章 终点</a></li><li><a href="${site.home}9/9999/3.html">他书</a></li></ul>`],
+      [link(1), `<h1 id="chaptertitle">第一章 起点</h1><div id="novelcontent"><p>保留故事正文和“下一章”的对话。</p><script>ad()</script><div><ul class="novelbutton"><li><a href="${link(2)}">下一章</a></li></ul><div class="footer">站点导航</div></div></div>`]
+    ]);
+    const client = {assertUrl(url) { assert.equal(new URL(url).host, new URL(site.home).host); return url; }, async get(url) { requests.push(url); assert.ok(pages.has(url)); return {url, body: iconv.encode(pages.get(url), 'gb18030'), contentType: 'text/html; charset=gbk'}; }};
+    const {catalog, actual} = await getCatalog(spec, client);
+    assert.equal(actual.status, '完结'); assert.deepEqual(catalog.map(c => c.title), ['第一章 起点', '第一章 终点']);
+    const chapter = await getChapter(spec, catalog[0], new Set(catalog.map(c => c.link)), client);
+    assert.equal(chapter.content, '保留故事正文和“下一章”的对话。'); assert.equal(chapter.provenance.length, 1);
+    assert.deepEqual(requests, [detail, catalogUrl, link(1)]);
   }
 });
 

@@ -249,6 +249,64 @@ export function recordContinuationNoticeReview(spec, options, {link, contentHash
   return decision;
 }
 
+// A completed mirror may end inside a local edition's existing appendices and
+// use volume numbers. Review its entire ending block before adopting the source;
+// this operation only changes the binding, never the local book or its order.
+export async function bindReviewedCompletedSource(spec, options, {file, exportHash, catalogHash, matches, reason}) {
+  if (spec.kind !== 'html' || !Array.isArray(matches) || matches.length < 3 || matches.length > 10 || typeof reason !== 'string' || !reason.trim()) throw Error('完结来源绑定需要3–10个连续末尾条目的核对映射及具体理由');
+  if (hasContinuation(spec, options.stateDir)) throw Error('已有换源绑定，请使用检查更新，不能覆盖原绑定');
+  const target = targetPath(options.outputDir, file), original = fs.readFileSync(target), book = JSON.parse(original);
+  if (hash(original) !== exportHash || !sameBook(book, spec) || book.status !== '完结') throw Error('本地完结作品身份、状态或文件哈希不匹配');
+  prepareImport(book);
+  if (book.chapters.some((c, i) => i && c.chapter_number <= book.chapters[i - 1].chapter_number)) throw Error('原书顺序号未严格递增');
+  if (new Set(matches.map(m => m.oldNumber)).size !== matches.length) throw Error('末尾映射不能重复使用同一个旧章');
+  const sourceDir = sourceDirectory(options.stateDir, spec, options.extraction);
+  const client = options.client || makeClient({cacheDir: path.join(options.stateDir, 'cache'), profileDir: browserProfile(options.stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, browser: spec.browser});
+  try {
+    const source = await getCatalog(spec, client), catalog = source.catalog;
+    if (source.actual.status !== '完结' || hash(catalog) !== catalogHash) throw Error('新来源未确认完结或目录已变化，请重新核对');
+    const ending = catalog.slice(-matches.length), links = new Set(catalog.map(c => c.link)), anchors = [], checkpoints = [];
+    if (ending.length !== matches.length) throw Error('新来源末尾条目不足');
+    const name = title => {
+      const text = String(title).replace(/^\s*\d+[.．]\s*/u, '');
+      let result = chapterIdentity(text)?.name || normalize(text);
+      if (result.startsWith('附录')) result = result.slice(2);
+      const author = normalize(book.author);
+      if (result.endsWith(author)) result = result.slice(0, -author.length);
+      return result;
+    };
+    for (const [index, entry] of ending.entries()) {
+      const mapping = matches[index], previous = book.chapters.find(c => c.chapter_number === mapping.oldNumber);
+      if (!previous || mapping.newLink !== entry.link || !name(previous.title) || name(previous.title) !== name(entry.title)) throw Error('末尾映射须按新目录顺序、标题对应且旧章存在');
+      const incoming = await getChapter(spec, entry, links, client);
+      const quality = qualityReport([entry], [incoming], [], 'probe');
+      if (quality.issues.some(issue => issue.level !== 'info' && issue.code !== 'short-outlier')) throw Error('新来源末尾章节未通过结构检查');
+      if (name(incoming.title) !== name(entry.title) || hash(previous.content) !== mapping.oldHash || hash(incoming.content) !== mapping.newHash) throw Error('末尾完整正文或标题已变化，请重新核对');
+      if (bodyKey(previous.content, previous.title).length < 100 || bodyKey(incoming.content, incoming.title).length < 100 || typeof mapping.reason !== 'string' || !mapping.reason.trim()) throw Error('每个末尾条目须有完整正文及具体差异核对依据');
+      const checkpoint = {hash: hash(incoming), chapter: incoming, catalogTitle: entry.title};
+      const saved = readJson(path.join(sourceDir, 'chapters', hash(entry.link) + '.json'));
+      if (saved && (saved.hash !== hash(saved.chapter) || hash(saved.chapter.content) !== mapping.newHash || saved.chapter.title !== incoming.title || saved.chapter.link !== entry.link || saved.chapter.chapter_number !== entry.chapter_number || saved.catalogTitle !== entry.title)) throw Error('末尾来源检查点冲突或损坏');
+      checkpoints.push({link: entry.link, value: saved || checkpoint});
+      anchors.push({kind: 'reviewed-completed-ending', oldPosition: book.chapters.indexOf(previous) + 1, oldNumber: previous.chapter_number, sourcePosition: entry.chapter_number,
+        oldLink: previous.link, newLink: incoming.link, oldHash: mapping.oldHash, newHash: mapping.newHash, oldTitle: previous.title, newTitle: incoming.title, reason: mapping.reason});
+    }
+    if (hash(fs.readFileSync(target)) !== exportHash || hasContinuation(spec, options.stateDir)) throw Error('核对期间原书或绑定已变化，拒绝覆盖');
+    const updatedAt = new Date().toISOString(), review = {catalogHash, exportHash, reason: reason.trim(), anchors, reviewedAt: updatedAt};
+    const binding = {version: 1, revision: 1, title: book.title, author: book.author, file, outputPath: target, originalSourceUrl: book.sourceUrl,
+      source: {url: spec.sourceUrl, title: spec.title, author: spec.author, variant: spec.variant || '', extraction: options.extraction},
+      count: book.chapters.length, exportHash, catalog: catalog.map(({title, link}) => ({title, link})), anchors, skipped: [], resolutions: [],
+      previousSourceUrl: book.sourceUrl, completedSourceReview: review, updatedAt};
+    validateBinding(binding, spec, options.outputDir);
+    for (const checkpoint of checkpoints) atomicWrite(path.join(sourceDir, 'chapters', hash(checkpoint.link) + '.json'), checkpoint.value);
+    atomicWrite(path.join(sourceDir, 'catalog.json'), catalog);
+    atomicWrite(path.join(sourceDir, 'completed-source-review.json'), sealed(review));
+    const dir = directory(options.stateDir, spec);
+    if (!fs.existsSync(path.join(dir, 'original.json'))) atomicWrite(path.join(dir, 'original.json'), original);
+    atomicWrite(path.join(dir, 'binding.json'), sealed(binding));
+    return {sourceUrl: spec.sourceUrl, file, sourceEntries: catalog.length, reviewedEnding: anchors.length, added: 0, unchangedExport: true};
+  } finally { if (!options.client) await client.close(); }
+}
+
 // Resolve only decisions backed by complete content or the chapter page's own
 // heading. A repeated number with different prose is still an unresolved version.
 export function createContinuationReviewer(book, reviews = [], noticeReviews = [], partPolicy) {
@@ -451,6 +509,7 @@ export async function acquireContinuation(spec, options) {
       const nextHash = hash(bytes(nextBook));
       const next = {version: 1, revision: (binding?.revision || 0) + 1, title: book.title, author: book.author, file: selected.file, outputPath: file, originalSourceUrl: book.sourceUrl,
         source: {url: spec.sourceUrl, title: spec.title, author: spec.author, variant: spec.variant || '', extraction}, count: nextBook.chapters.length, exportHash: nextHash, catalog: catalog.map(({title, link}) => ({title, link})),
+        ...(!switching && binding?.completedSourceReview ? {completedSourceReview: binding.completedSourceReview} : {}),
         anchors: switching ? anchors : binding.anchors, skipped, resolutions: [...(binding?.resolutions || []), ...resolutions], previousSourceUrl: switching ? binding?.source.url || book.sourceUrl : binding.previousSourceUrl, updatedAt: new Date().toISOString()};
       reusedExport = originalHash === nextHash;
       if (switching || !reusedExport || hash(next.catalog) !== hash(binding.catalog)) {

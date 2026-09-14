@@ -98,6 +98,7 @@ export async function getCatalog(spec, client) {
   const catalog = [], seenPages = new Set(), seenLinks = new Set();
   let url = spec.catalog?.url ? client.assertUrl(httpUrl(spec.catalog.url, spec.sourceUrl)) : first.url;
   const config = spec.catalog;
+  if (config?.link) url = client.assertUrl(httpUrl(selectValue($, typeof config.link === 'string' ? {selector: config.link, attribute: 'href'} : config.link), first.url));
   if (config?.json) {
     const page = await client.get(url, {encoding: spec.encoding, fresh: true, request: config.request});
     const parsed = JSON.parse(decode(page.body, page.contentType, spec.encoding));

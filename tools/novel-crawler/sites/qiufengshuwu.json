@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "id": "qiufengshuwu",
+  "name": "秋风书屋",
+  "home": "https://www.qiufengshuwu.com/",
+  "hosts": ["www.qiufengshuwu.com"],
+  "book": {
+    "urlPattern": "^/(?:book|[0-9]+)/(?<bookId>[0-9]+)(?:\\.html|/)$",
+    "metadata": {
+      "title": {"selector": "title", "pattern": "^(.+?)(?:最新章节免费阅读|章节目录)_.+_秋风书屋$"},
+      "author": {"selector": "title", "pattern": "^.+(?:最新章节免费阅读|章节目录)_(.+)_秋风书屋$"},
+      "description": "#intro > p",
+      "status": ".cataloginfo .infotype > p:contains('作品状态')"
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-qiufengshuwu-v1",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "https://www.qiufengshuwu.com/book/${bookId}.html",
+    "allowedHosts": ["www.qiufengshuwu.com"],
+    "encoding": "gb18030",
+    "browser": {"headless": true},
+    "delayMs": 1500,
+    "retries": 1,
+    "timeoutMs": 25000,
+    "metadata": {
+      "title": ".cataloginfo > h3",
+      "author": ".cataloginfo .infotype > p > a[href*='/author/']",
+      "description": "#intro > p",
+      "status": ".cataloginfo .infotype > p:contains('作品状态')"
+    },
+    "catalog": {
+      "link": ".infolink a:contains('章节目录')",
+      "links": ".chapters > li:not(.juan) > a[href*='/${bookId}/']"
+    },
+    "chapter": {
+      "title": "#chaptertitle",
+      "content": "#novelcontent",
+      "remove": ["script", "style", ".novelbutton", ".footer", "iframe"]
+    }
+  }
+}

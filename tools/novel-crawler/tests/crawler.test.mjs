@@ -49,6 +49,20 @@ function specFor(base) {
 }
 const prose = label => `${label}。山间的路从村庄一直通往远方，读者可以从这里出发。`;
 
+test('catalog entry links must be unique, remain allowed and cannot hide behind incompatible modes', async t => {
+  let catalogLinks = '<a class="full" href="/catalog">完整目录</a>';
+  const f = await fixture(t, (req, res) => res.end(req.url === '/book' ? heading + catalogLinks : req.url === '/catalog' ? '<div id="catalog"><a href="/a">第一章</a></div>' : '<h1>第一章</h1><div id="content">完整的合成正文。</div>'));
+  const spec = {...specFor(f.base), catalog: {link: '.full', links: '#catalog a'}};
+  assert.equal((await acquire(spec, f.options)).completeAgainstSource, true);
+  catalogLinks = '<a class="full" href="https://outside.example/catalog">完整目录</a>';
+  assert.equal((await acquire(spec, f.options)).completeAgainstSource, false);
+  catalogLinks = '<a class="full" href="/catalog">目录一</a><a class="full" href="/other">目录二</a>';
+  assert.match((await acquire(spec, f.options)).failures[0].error, /应唯一匹配/);
+  catalogLinks = '';
+  assert.equal((await acquire(spec, f.options)).completeAgainstSource, false);
+  for (const extra of [{url: '/catalog'}, {json: {}}, {selectPages: {}}, {walk: {}}]) assert.throws(() => validateSpec({...spec, catalog: {...spec.catalog, ...extra}}), /目录入口/);
+});
+
 test('paged catalogs preserve notices, volume resets and source order; resume and export protect user edits', async t => {
   const f = await fixture(t, (req, res) => {
     const pages = {

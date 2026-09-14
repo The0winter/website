@@ -6,7 +6,7 @@ import path from 'node:path';
 import http from 'node:http';
 import puppeteer from 'puppeteer';
 import {acquire, localBookState, validateSpec, extractionHash} from '../core.mjs';
-import {continuationKey, continuationState, recoverContinuation, recordContinuationReview, recordContinuationAnchorReview, recordContinuationNoticeReview, recordContinuationPartPolicy, chapterPartIdentity, createContinuationReviewer} from '../continuation.mjs';
+import {continuationKey, continuationState, recoverContinuation, recordContinuationReview, recordContinuationAnchorReview, recordContinuationNoticeReview, recordContinuationPartPolicy, chapterPartIdentity, createContinuationReviewer, bindReviewedCompletedSource} from '../continuation.mjs';
 import {atomicWrite, readJson, hash, acquireLock} from '../storage.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 import {loadSites, parseSearch} from '../desktop/sources.mjs';
@@ -21,7 +21,7 @@ async function fixture(t) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     if (req.url.endsWith('/book')) {
       const prefix = req.url.slice(0, -5), numbers = state.order || Array.from({length: state.count}, (_, i) => i + 1);
-      return res.end(`<h1>换源测试书</h1><b>${state.author}</b><nav>${numbers.map(n => `<a href="${prefix}/c/${n}">${state.titles[n] || title(n)}</a>`).join('')}${state.notice ? `<a href="${prefix}/notice">2026一月月票抽奖活动！</a>` : ''}</nav>`);
+      return res.end(`<h1>换源测试书</h1><b>${state.author}</b>${state.status ? `<i>${state.status}</i>` : ''}<nav>${numbers.map(n => `<a href="${prefix}/c/${n}">${state.titles[n] || title(n)}</a>`).join('')}${state.notice ? `<a href="${prefix}/notice">2026一月月票抽奖活动！</a>` : ''}</nav>`);
     }
     if (req.url.endsWith('/notice')) return res.end('<h1>2026一月月票抽奖活动！</h1><article>感谢各位读者支持本书。月票抽奖活动开始了。</article>');
     const n = Number(req.url.split('/').at(-1));
@@ -44,6 +44,58 @@ async function fixture(t) {
   const dir = path.join(stateDir, 'continuations', continuationKey(spec));
   return {state, spec, book, file, options, choose, run, dir, base};
 }
+
+async function completedFixture(t) {
+  const f = await fixture(t);
+  f.spec.metadata.status = 'i'; f.state.status = '已完结'; f.book.status = '完结';
+  for (const n of [5, 6]) f.book.chapters.push({chapter_number: n, title: title(n), content: body(n), link: `https://old.example/c/${n}`});
+  f.book.chapters.push({chapter_number: 7, title: '同人附录', content: body(30), link: 'https://old.example/extra'});
+  for (const n of [4, 5, 6]) f.state.titles[n] = `第${n - 3}章 山间故事${n}`;
+  atomicWrite(f.file, f.book);
+  const catalog = Array.from({length: 6}, (_, i) => ({title: f.state.titles[i + 1] || title(i + 1), link: f.base + '/new/c/' + (i + 1), sourceOrder: i + 1, chapter_number: i + 1}));
+  const review = {file: path.basename(f.file), exportHash: hash(fs.readFileSync(f.file)), catalogHash: hash(catalog), reason: '核对完结来源最后三章，旧书已有全文和额外同人；保留旧顺序及正文。',
+    matches: [4, 5, 6].map(n => ({oldNumber: n, newLink: f.base + '/new/c/' + n, oldHash: hash(body(n)), newHash: hash(body(n)), reason: '分卷编号不同，同题完整正文一致。'}))};
+  return {...f, review, reviewOptions: {...f.options, extraction: extractionHash(f.spec)}};
+}
+
+test('reviewed completed sources bind volume-numbered endings without changing any local chapter or extra', async t => {
+  const f = await completedFixture(t), original = fs.readFileSync(f.file), mtime = fs.statSync(f.file).mtimeMs;
+  const result = await bindReviewedCompletedSource(f.spec, f.reviewOptions, f.review);
+  assert.equal(result.added, 0); assert.equal(result.reviewedEnding, 3); assert.equal(result.unchangedExport, true);
+  assert.deepEqual(fs.readFileSync(f.file), original); assert.equal(fs.statSync(f.file).mtimeMs, mtime);
+  assert.equal(continuationState(f.spec, f.options).state, 'complete');
+  const unchanged = await f.run(); assert.equal(unchanged.completeAgainstSource, true, JSON.stringify(unchanged.failures)); assert.equal(unchanged.continuationAdded, 0);
+  assert.equal(readJson(path.join(f.dir, 'binding.json')).value.completedSourceReview.catalogHash, f.review.catalogHash);
+  assert.deepEqual(fs.readFileSync(f.file), original);
+  await assert.rejects(bindReviewedCompletedSource(f.spec, f.reviewOptions, f.review), /已有换源绑定/);
+  f.state.count = 7; f.state.titles[7] = '公告：附录更新';
+  const update = await f.run(); assert.equal(update.continuationAdded, 1, JSON.stringify(update.failures));
+  assert.equal(readJson(path.join(f.dir, 'binding.json')).value.completedSourceReview.anchors.length, 3);
+  assert.deepEqual(readJson(f.file).chapters.slice(0, 7), f.book.chapters);
+});
+
+test('completed-source review rejects stale files, catalogs, either body, wrong titles and reordered or repeated mappings', async t => {
+  const f = await completedFixture(t), original = fs.readFileSync(f.file), stale = hash('stale');
+  const withFirst = change => ({...f.review, matches: f.review.matches.map((m, i) => i ? m : {...m, ...change})});
+  for (const review of [{...f.review, exportHash: stale}, {...f.review, catalogHash: stale}, withFirst({oldHash: stale}), withFirst({newHash: stale}), withFirst({oldNumber: 1}), {...f.review, matches: [...f.review.matches].reverse()}, withFirst({oldNumber: 5})]) {
+    await assert.rejects(bindReviewedCompletedSource(f.spec, f.reviewOptions, review));
+    assert.deepEqual(fs.readFileSync(f.file), original); assert.equal(fs.existsSync(path.join(f.dir, 'binding.json')), false);
+  }
+  f.state.status = '连载中';
+  await assert.rejects(bindReviewedCompletedSource(f.spec, f.reviewOptions, f.review), /未确认完结/);
+  assert.deepEqual(fs.readFileSync(f.file), original);
+});
+
+test('completed-source binding rechecks the local file after network work', async t => {
+  const f = await completedFixture(t);
+  const {makeClient} = await import('../http.mjs');
+  const client = makeClient({cacheDir: path.join(f.options.stateDir, 'cache'), allowedHosts: ['127.0.0.1'], delayMs: 200, retries: 0});
+  const get = client.get.bind(client);
+  client.get = async (...args) => { const response = await get(...args); if (args[0].endsWith('/c/6')) fs.appendFileSync(f.file, '\n'); return response; };
+  try { await assert.rejects(bindReviewedCompletedSource(f.spec, {...f.reviewOptions, client}, f.review), /核对期间原书/); }
+  finally { await client.close(); }
+  assert.equal(fs.existsSync(path.join(f.dir, 'binding.json')), false); assert.equal(fs.readFileSync(f.file, 'utf8').endsWith('\n\n'), true);
+});
 
 test('switching checks three ending bodies, appends in the original file and remembers the source across runs', async t => {
   const f = await fixture(t), original = fs.readFileSync(f.file);

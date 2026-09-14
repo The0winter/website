@@ -40,6 +40,7 @@ export function validateSpec(input) {
   if (spec.description !== undefined && (typeof spec.description !== 'string' || spec.description.length > 5000)) throw Error('简介须为不超过 5000 字符的文本');
   if (spec.status !== undefined && !['连载', '完结'].includes(spec.status)) throw Error('作品状态必须为连载或完结');
   if (spec.kind === 'html' && (!(spec.catalog?.links || spec.catalog?.json) || !spec.chapter?.content || !spec.chapter?.title)) throw Error('HTML 来源需配置目录及章节选择器');
+  if (spec.catalog?.link && (spec.catalog.url || spec.catalog.json || spec.catalog.selectPages || spec.catalog.walk)) throw Error('目录入口 link 不能与 url、JSON、下拉或顺序目录混用');
   if (spec.chapter?.removeText !== undefined) {
     if (!Array.isArray(spec.chapter.removeText) || spec.chapter.removeText.some(pattern => typeof pattern !== 'string' || !pattern || pattern.length > 2000)) throw Error('chapter.removeText 必须为非空正则表达式数组');
     for (const pattern of spec.chapter.removeText) if (new RegExp(pattern, 'gu').test('')) throw Error('正文噪声规则不能匹配空字符串');
