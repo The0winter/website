@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "id": "xszj",
+  "name": "小说集",
+  "home": "https://xszj.tw/",
+  "hosts": [
+    "xszj.tw"
+  ],
+  "search": {
+    "url": "https://xszj.tw/search?keyword=${query}",
+    "items": ".novel-info",
+    "title": "h2 > a.novel-title",
+    "author": ".novel-tags > a[href^='/author/']",
+    "link": "h2 > a.novel-title",
+    "maxPages": 1
+  },
+  "book": {
+    "urlPattern": "^/book/(?<bookId>[0-9]+)$",
+    "metadata": {
+      "title": "h1.detail-title",
+      "author": {
+        "selector": ".detail-author > a[href^='/author/']",
+        "pattern": "^作者[：:]\\s*(.+)$"
+      },
+      "status": ".detail-status"
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-xszj-v2",
+    "identityNormalization": "chinese-simplified",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": [
+      "xszj.tw"
+    ],
+    "delayMs": 1200,
+    "timeoutMs": 25000,
+    "retries": 1,
+    "browser": {
+      "headless": true
+    },
+    "metadata": {
+      "title": "h1.detail-title",
+      "author": {
+        "selector": ".detail-author > a[href^='/author/']",
+        "pattern": "^作者[：:]\\s*(.+)$"
+      },
+      "status": ".detail-status"
+    },
+    "catalog": {
+      "url": "https://xszj.tw/book/${bookId}/catalog/1",
+      "links": ".chapter-grid > a[href^='/book/${bookId}/chapter-']",
+      "titlePattern": "^(?:第[0-9]+章\\s+(?=第[0-9]+章))?(.+)$",
+      "next": "a:contains('下一頁'):first"
+    },
+    "chapter": {
+      "title": {
+        "selector": "h1.reading-title",
+        "pattern": "^(?:第[0-9]+章\\s+(?=第[0-9]+章))?(.+)$"
+      },
+      "content": "#reading-body",
+      "remove": [
+        "script",
+        "style",
+        "iframe"
+      ]
+    }
+  }
+}

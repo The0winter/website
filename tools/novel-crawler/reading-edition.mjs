@@ -3,6 +3,7 @@ import path from 'node:path';
 import {atomicWrite, readJson, hash} from './storage.mjs';
 import {checkIdentity, qualityReport, normalizedTitle, placeholderEvidence} from './quality.mjs';
 import {formatChapterForExport} from './titles.mjs';
+import {chapterIdentity} from './continuation.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
 
 // A local, explicitly reviewed edition is bound to one extraction job. Source
@@ -94,10 +95,10 @@ function orderedChapters(chapters, reviewedPrefix = 0) {
   for (const [index, chapter] of chapters.entries()) {
     if (chapter.chapter_number !== index + 1) throw Error('阅读版顺序号不连续');
     const title = chapter.title.normalize('NFKC').trim();
-    const match = /^(?:第([0-9]+)章|([0-9]+)[、.])/u.exec(title);
-    if (index < reviewedPrefix) { if (match) number = Number(match[1] || match[2]); continue; }
-    if (match) {
-      const current = Number(match[1] || match[2]);
+    const match = /^([0-9]+)[、.]/u.exec(title);
+    const current = chapterIdentity(title)?.number ?? (match ? Number(match[1]) : null);
+    if (index < reviewedPrefix) { if (current !== null) number = current; continue; }
+    if (current !== null) {
       if (!Number.isSafeInteger(current) || current !== number + 1) throw Error(`阅读版章号不连续：应为第 ${number + 1} 章，实际为“${chapter.title}”`);
       number = current;
     } else if (!/^(?:番外|IF番外|(?:[一二三四五六七八九十0-9]+月)?总结|请假|公告|通知|活动|感言|后记|月票)/iu.test(title)) {

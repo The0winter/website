@@ -11,9 +11,9 @@ import {formatChapterForExport} from '../titles.mjs';
 import {loadReadingEdition} from '../reading-edition.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 
-async function fixture(t, {sourceOrder = false} = {}) {
+async function fixture(t, {sourceOrder = false, titles = {}} = {}) {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'novel-edition-'));
-  const state = {count: 5, titles: {}, bodyTitles: {}, bodies: sourceOrder ? {4: '核实过的独立完整正文。'.repeat(90)} : {}, requests: []};
+  const state = {count: 5, titles: {...titles}, bodyTitles: {}, bodies: sourceOrder ? {4: '核实过的独立完整正文。'.repeat(90)} : {}, requests: []};
   const ids = [90, 12, 70, 21, 60, 31, 50, 41];
   const title = n => state.titles[n] || `第${[1,3,1,2,2][n - 1] || n - 2}章 场景${n === 3 ? 1 : n}`;
   const body = n => state.bodies[n] || (n === 4 ? '銆锛鈥鐨勬姹熸'.repeat(100) : Array.from({length: 100}, (_, i) => String.fromCodePoint(0x4e00 + (n === 3 ? 1 : n) * 200 + i)).join('').repeat(8));
@@ -67,6 +67,27 @@ test('source-order review pins duplicate omissions while preserving historical n
   assert.equal(blocked.exportFile, null); assert.deepEqual(readJson(f.file), book);
 });
 
+test('Chinese chapter numbers preserve reviewed exports, append in sequence and still reject new gaps', async t => {
+  const f = await fixture(t, {sourceOrder: true, titles:{1:'第一章 开始', 2:'第二章 经过', 3:'第一章 开始', 4:'第三章 转折', 5:'第四章 后续'}});
+  const book = {...f.book, chapters:[1,2,4,5].map((n,i)=>({...formatChapterForExport(f.raw(n)), chapter_number:i+1, sourceChapterNumber:n, sourceChapterUrl:f.raw(n).link}))};
+  atomicWrite(f.file, book);
+  const review = {catalogHash:hash(readJson(path.join(f.dir,'catalog.json'))), reason:'核实中文章号与重复项，保持来源顺序', pairs:[{omit:3, keep:1, omitHash:hash(f.raw(3).content), keepHash:hash(f.raw(1).content), reason:'完整正文相同'}]};
+  await bindReadingEdition(f.spec, f.file, {...f.options, sourceOrderReview:review});
+  const original = fs.readFileSync(f.file);
+  const unchanged = await acquire(f.spec, {...f.options, mode:'download'});
+  assert.equal(unchanged.structuralPass, true); assert.equal(unchanged.reusedExport, true);
+  assert.deepEqual(fs.readFileSync(f.file), original);
+  f.state.count = 6; f.state.titles[6] = '第五章 新章';
+  const update = await acquire(f.spec, {...f.options, mode:'download'});
+  assert.equal(update.completeAgainstSource, true); assert.equal(update.readingAdded, 1);
+  const appended = fs.readFileSync(f.file);
+  assert.equal(readJson(f.file).chapters.at(-1).title, '第五章 新章');
+  f.state.count = 7; f.state.titles[7] = '第七章 未补齐第六章';
+  const blocked = await acquire(f.spec, {...f.options, mode:'download'});
+  assert.equal(blocked.exportFile, null); assert.match(blocked.failures[0].error, /章号不连续/);
+  assert.deepEqual(fs.readFileSync(f.file), appended);
+});
+
 test('title mismatch review pins exact retained text and blocks unreviewed or changed source titles', async t => {
   const f = await fixture(t, {sourceOrder: true});
   f.state.bodyTitles[4] = '第2章 正文页的原名';
@@ -105,7 +126,7 @@ test('source gaps require pinned evidence, preserve raw text and never report so
   await assert.rejects(bind({...review,gaps:[]}), /不得遗漏/);
   await bind(review);
   const report = await acquire(f.spec, {...f.options, mode:'download'});
-  assert.equal(report.structuralPass,true); assert.equal(report.completeAgainstSource,false);
+  assert.equal(report.structuralPass,true,JSON.stringify(report.failures)); assert.equal(report.completeAgainstSource,false);
   assert.equal(report.completeSelectedScope,true); assert.equal(report.sourceGaps.length,1);
   assert.deepEqual(readJson(f.file),book); assert.equal(f.raw(4).content,f.state.bodies[4]);
   f.state.count = 6; f.state.titles[6] = '第3章 新增缺文'; f.state.bodies[6] = '请到手机端QQAPP查看本章';
