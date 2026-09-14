@@ -52,6 +52,11 @@ const prose = label => `${label}。山间的路从村庄一直通往远方，读
 test('a processing placeholder is not a completed chapter and ordinary mentions remain prose', () => {
   assert.equal(placeholderEvidence('内容还在处理中,请稍后重试！'), true);
   assert.equal(placeholderEvidence('他说：“内容还在处理中,请稍后重试！”随后关上了门。'), false);
+  for (const content of ['请到手机端qqapp查看本章', '请到手机端QqApp查看本章。']) {
+    const mobilePlaceholder = {chapter_number: 1, title: '第一章 开始', content};
+    assert.equal(qualityReport([mobilePlaceholder], [mobilePlaceholder]).structuralPass, false);
+  }
+  assert.equal(placeholderEvidence('他读到“请到手机端qqapp查看本章”，随即关闭了手机。'), false);
   const chapter={chapter_number:1,title:'第一章 开始',content:'内容还在处理中,请稍后重试！'};
   assert.equal(chapterQuality(chapter).some(i=>i.level==='error'), false);
   assert.equal(qualityReport([chapter],[chapter]).structuralPass, false);
