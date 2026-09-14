@@ -6,7 +6,7 @@ import path from 'node:path';
 import http from 'node:http';
 import puppeteer from 'puppeteer';
 import {acquire, localBookState, validateSpec, extractionHash} from '../core.mjs';
-import {continuationKey, continuationState, recoverContinuation, recordContinuationReview, recordContinuationAnchorReview, recordContinuationNoticeReview, recordContinuationPartPolicy, chapterPartIdentity, createContinuationReviewer, bindReviewedCompletedSource, recordContinuationNumberReset, recordContinuationNumberCorrection} from '../continuation.mjs';
+import {continuationKey, continuationState, recoverContinuation, recordContinuationReview, recordContinuationAnchorReview, recordContinuationNoticeReview, recordContinuationPartPolicy, chapterPartIdentity, createContinuationReviewer, bindReviewedCompletedSource, recordContinuationNumberReset, recordContinuationNumberCorrection, recordContinuationSourceDefect} from '../continuation.mjs';
 import {atomicWrite, readJson, hash, acquireLock} from '../storage.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 import {loadSites, parseSearch} from '../desktop/sources.mjs';
@@ -57,6 +57,59 @@ async function completedFixture(t) {
     matches: [4, 5, 6].map(n => ({oldNumber: n, newLink: f.base + '/new/c/' + n, oldHash: hash(body(n)), newHash: hash(body(n)), reason: '分卷编号不同，同题完整正文一致。'}))};
   return {...f, review, reviewOptions: {...f.options, extraction: extractionHash(f.spec)}};
 }
+
+async function sourceDefectFixture(t) {
+  const f = await fixture(t); f.state.count = 8;
+  for (const n of [6, 7, 8]) f.state.titles[n] = `第${n + 2}章 山间故事${n}`;
+  const report = await f.run({stopOnFailure: false}), sourceDir = path.dirname(report.reportFile);
+  const evidenceFile = path.join(f.options.stateDir, 'source-comparison.json'), evidence = JSON.stringify({finding: '来源从5跳到8，完整相邻页面可读；接受源站编号缺陷，保留缺章可能性。'});
+  fs.writeFileSync(evidenceFile, evidence);
+  return {...f, sourceDir, reviewOptions: {...f.options, extraction: extractionHash(f.spec)}, review: {links: [5, 6, 7].map(n => f.base + '/new/c/' + n), hashes: [5, 6, 7].map(n => hash(body(n))), evidenceFile, evidenceHash: hash(evidence), reason: '比选后接受本来源的5到8编号跳跃，未确认缺失的6/7正文，不生成补文，报告保留缺陷。'}};
+}
+
+test('accepted source numbering defects retain prose and remain reported on later updates', async t => {
+  const f = await sourceDefectFixture(t), original = fs.readFileSync(f.file);
+  const decision = recordContinuationSourceDefect(f.spec, f.reviewOptions, f.review);
+  assert.deepEqual(fs.readFileSync(f.file), original);
+  const report = await f.run();
+  assert.equal(report.continuationAdded, 4, JSON.stringify(report.failures)); assert.equal(report.completeAgainstSource, true);
+  assert.equal(report.acceptedSourceDefects.length, 1); assert.equal(report.warnings, 1); assert.equal(report.automaticResolutions, 0);
+  assert.equal(report.acceptedSourceDefects[0].reviewKey, decision.key);
+  const book = readJson(f.file); assert.deepEqual(book.chapters.slice(0, 4), f.book.chapters);
+  assert.deepEqual(book.chapters.slice(4).map(c => c.content), [5, 6, 7, 8].map(body));
+  assert.deepEqual(book.chapters.slice(4).map(c => c.title), [title(5), f.state.titles[6], f.state.titles[7], f.state.titles[8]]);
+  const next = await f.run(); assert.equal(next.continuationAdded, 0); assert.equal(next.warnings, 1); assert.equal(next.acceptedSourceDefects.length, 1);
+  assert.match(fs.readFileSync(next.summaryFile, 'utf8'), /已接受来源缺陷/);
+});
+
+test('source defect acceptance is limited to complete unchanged adjacent entries and saved evidence', async t => {
+  const f = await sourceDefectFixture(t), original = fs.readFileSync(f.file), attempt = change => recordContinuationSourceDefect(f.spec, f.reviewOptions, {...f.review, ...change});
+  assert.throws(() => attempt({hashes: [hash('changed'), ...f.review.hashes.slice(1)]}), /检查点/);
+  assert.throws(() => attempt({links: [f.review.links[0], f.review.links[2], f.review.links[1]]}), /相邻/);
+  assert.throws(() => attempt({evidenceHash: hash('changed')}), /证据/);
+  const decision = attempt({});
+  for (const n of [5, 6, 7]) {
+    const file = path.join(f.sourceDir, 'chapters', hash(f.base + '/new/c/' + n) + '.json'), saved = readJson(file), chapter = {...saved.chapter, content: saved.chapter.content + '变化'};
+    atomicWrite(file, {...saved, chapter, hash: hash(chapter)}); assert.equal((await f.run()).completeAgainstSource, false);
+    assert.deepEqual(fs.readFileSync(f.file), original); atomicWrite(file, saved);
+  }
+  const reviewer = createContinuationReviewer(f.book, [], [], undefined, [], [], [decision]);
+  for (const n of [5, 6]) { const c = readJson(path.join(f.sourceDir, 'chapters', hash(f.base + '/new/c/' + n) + '.json')).chapter; reviewer.accept(c, {...c, sourceChapterNumber: n}); }
+  assert.throws(() => reviewer.finish(), /后续核对章缺失/);
+  fs.writeFileSync(path.join(f.sourceDir, 'references', f.review.evidenceHash + '.bin'), 'changed');
+  await assert.rejects(f.run(), /证据缺失或变化/); assert.deepEqual(fs.readFileSync(f.file), original);
+});
+
+test('selected split families do not turn an ordinary numeric title suffix into a missing lower part', async t => {
+  const f = await fixture(t); f.state.count = 8;
+  Object.assign(f.state.titles, {5: '第5章 双篇(上)', 6: '第5章 双篇(下)', 7: '第6章 完整章(2)', 8: '第7章 继续'});
+  const options = {...f.options, extraction: extractionHash(f.spec)};
+  assert.throws(() => recordContinuationPartPolicy(f.spec, options, {reason: 'test', families: ['unknown']}), /拆章类型/);
+  recordContinuationPartPolicy(f.spec, options, {reason: '本书只有上下与分数配对，数字2是普通章名后缀。', families: ['upper-lower', 'fraction']});
+  const report = await f.run(); assert.equal(report.continuationAdded, 4, JSON.stringify(report.failures)); assert.equal(report.errors, 0);
+  assert.equal(report.resolutions.filter(r => r.kind === 'chapter-part').length, 2);
+  assert.equal(readJson(f.file).chapters[6].title, '第6章 完整章(2)');
+});
 
 async function numberResetFixture(t) {
   const f = await fixture(t); f.state.count = 8;

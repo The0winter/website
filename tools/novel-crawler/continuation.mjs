@@ -157,6 +157,10 @@ const completePair = pair => {
   const [a, b] = pair.map(chapter => chapterPartIdentity(chapter.title));
   return pair.length === 2 && followsPart(a, b);
 };
+function policyPart(title, policy) {
+  const part = chapterPartIdentity(title);
+  return part && (!policy?.families || policy.families.includes(part.family)) ? part : null;
+}
 function numbered(chapters) {
   const result = [];
   for (const [index, chapter] of chapters.entries()) {
@@ -200,10 +204,11 @@ export function recordContinuationReview(spec, options, {firstLink, secondLink, 
 const anchorReviewKey = (book, file, previous, incoming) => hash({sourceUrl: book.sourceUrl, file,
   oldPosition: previous.chapter_number, old: reviewFingerprint(previous), incoming: Array.isArray(incoming) ? incoming.map(reviewFingerprint) : reviewFingerprint(incoming)});
 
-export function recordContinuationPartPolicy(spec, options, {reason}) {
+export function recordContinuationPartPolicy(spec, options, {reason, families}) {
   if (typeof reason !== 'string' || !reason.trim()) throw Error('接受拆章需要明确的核对理由');
+  if (families !== undefined && (!Array.isArray(families) || !families.length || new Set(families).size !== families.length || families.some(f => !['upper-lower', 'fraction', 'numeric'].includes(f)))) throw Error('拆章类型只能选择 upper-lower、fraction 或 numeric');
   const state = loadReviews(spec, options);
-  state.partPolicy = {kind: 'paired', reason: reason.trim(), reviewedAt: new Date().toISOString()};
+  state.partPolicy = {kind: 'paired', ...(families ? {families} : {}), reason: reason.trim(), reviewedAt: new Date().toISOString()};
   atomicWrite(path.join(sourceDirectory(options.stateDir, spec, options.extraction), 'reviews.json'), sealed(state));
   return state.partPolicy;
 }
@@ -288,6 +293,33 @@ export function recordContinuationNumberReset(spec, options, {links, hashes, ref
 
 const numberingFingerprint = (chapter, catalogTitle) => ({...reviewFingerprint(chapter),
   catalogTitle: normalize(catalogTitle), sourcePosition: chapter.sourceChapterNumber || chapter.chapter_number});
+
+// Explicitly accept a known source numbering defect, without correcting, filling,
+// dropping or reordering prose. Three adjacent complete entries bind its scope.
+export function recordContinuationSourceDefect(spec, options, {links, hashes, evidenceFile, evidenceHash, reason}) {
+  if (!Array.isArray(links) || links.length !== 3 || new Set(links).size !== 3 || !Array.isArray(hashes) || hashes.length !== 3 || !evidenceFile || !evidenceHash || typeof reason !== 'string' || !reason.trim()) throw Error('接受来源编号缺陷需要相邻三项、完整正文哈希、证据文件及具体理由');
+  const sourceDir = sourceDirectory(options.stateDir, spec, options.extraction), catalog = readJson(path.join(sourceDir, 'catalog.json'));
+  const positions = links.map(link => catalog?.findIndex(c => c.link === link));
+  if (!positions.every((p, i) => Number.isInteger(p) && p >= 0 && (!i || p === positions[0] + i))) throw Error('来源缺陷核对窗口必须是相邻三项');
+  const chapters = links.map((link, i) => {
+    const saved = readJson(path.join(sourceDir, 'chapters', hash(link) + '.json')), entry = catalog[positions[i]];
+    if (!saved?.chapter || saved.hash !== hash(saved.chapter) || saved.chapter.link !== link || hash(saved.chapter.content) !== hashes[i] || saved.catalogTitle !== entry.title || saved.chapter.chapter_number !== entry.chapter_number) throw Error('来源缺陷的完整检查点已变化');
+    const value = saved.chapter, quality = qualityReport([entry], [value], [], 'probe');
+    if (quality.issues.some(issue => issue.level !== 'info' && issue.code !== 'short-outlier') || normalize(value.title) !== normalize(entry.title) || i && (!chapterIdentity(value.title) || bodyKey(value.content, value.title).length < 100)) throw Error('来源编号缺陷不能接受访问页、乱码、空正文或标题错配');
+    return formatChapterForExport(value);
+  });
+  const previousNumber = numbered(catalog.slice(0, positions[1])).at(-1)?.number, current = chapterIdentity(chapters[1].title);
+  if (!previousNumber || current.number === previousNumber + 1 || policyPart(chapters[1].title, loadReviews(spec, options).partPolicy)) throw Error('来源编号缺陷只能接受实际跳号、重号或回退，拆章需单独核对');
+  const evidence = fs.readFileSync(evidenceFile);
+  if (!evidence.length || evidence.length > 2_000_000 || hash(evidence) !== evidenceHash) throw Error('来源缺陷证据缺失、过大或哈希不符');
+  const window = chapters.map((c, i) => numberingFingerprint(c, catalog[positions[i]].title));
+  const key = hash({previousNumber, window}), decision = {key, kind: 'numbering', previousNumber, window, evidenceHash, reason: reason.trim(), reviewedAt: new Date().toISOString()};
+  const state = loadReviews(spec, options);
+  state.sourceDefects = [...(state.sourceDefects || []).filter(d => d.window[1].link !== links[1]), decision];
+  atomicWrite(path.join(sourceDir, 'references', evidenceHash + '.bin'), evidence);
+  atomicWrite(path.join(sourceDir, 'reviews.json'), sealed(state));
+  return decision;
+}
 
 // Correct an explicitly reviewed, bounded numbering error between two unchanged
 // chapters. An independent catalog must contain the same complete adjacent window.
@@ -387,20 +419,25 @@ export async function bindReviewedCompletedSource(spec, options, {file, exportHa
 
 // Resolve only decisions backed by complete content or the chapter page's own
 // heading. A repeated number with different prose is still an unresolved version.
-export function createContinuationReviewer(book, reviews = [], noticeReviews = [], partPolicy, numberResets = [], numberCorrections = []) {
+export function createContinuationReviewer(book, reviews = [], noticeReviews = [], partPolicy, numberResets = [], numberCorrections = [], sourceDefects = []) {
   const accepted = [...book.chapters], originals = new Set(book.chapters), skipped = [], resolutions = [];
   let number = numbered(accepted).at(-1)?.number;
   let requiredAfterReset = null;
   let correctionWindow = null;
+  let requiredAfterDefect = null;
   const resetFingerprint = c => ({...reviewFingerprint(c), sourcePosition: c.sourceChapterNumber || c.chapter_number});
   const paired = partPolicy?.kind === 'paired';
-  let openPart = paired ? chapterPartIdentity(accepted.filter(c => chapterIdentity(c.title)).at(-1)?.title) : null;
+  let openPart = paired ? policyPart(accepted.filter(c => chapterIdentity(c.title)).at(-1)?.title, partPolicy) : null;
   if (openPart?.part !== 1) openPart = null;
   if (!number) throw Error('原书缺少可核对的正文章号');
   return {
     skipped, resolutions,
-    finish() { if (correctionWindow) throw Error('章号校正的后续核对章缺失，旧书已保留'); if (requiredAfterReset) throw Error('章号回退的后续核对章缺失，旧书已保留'); if (openPart) throw Error(`拆章缺少下篇：第 ${openPart.number} 章「${openPart.baseTitle}」，旧书已保留`); },
+    finish() { if (requiredAfterDefect) throw Error('来源缺陷的后续核对章缺失，旧书已保留'); if (correctionWindow) throw Error('章号校正的后续核对章缺失，旧书已保留'); if (requiredAfterReset) throw Error('章号回退的后续核对章缺失，旧书已保留'); if (openPart) throw Error(`拆章缺少下篇：第 ${openPart.number} 章「${openPart.baseTitle}」，旧书已保留`); },
     accept(entry, value) {
+      if (requiredAfterDefect) {
+        if (hash(numberingFingerprint(value, entry.title)) !== hash(requiredAfterDefect)) throw Error('来源缺陷的后续完整核对章已变化');
+        requiredAfterDefect = null;
+      }
       const completesReset = requiredAfterReset && hash(resetFingerprint(value)) === hash(requiredAfterReset);
       if (requiredAfterReset && !completesReset) throw Error('章号回退的后续核对章已变化，需重新核对');
       const listed = chapterIdentity(entry.title), originalTitle = value.title;
@@ -418,11 +455,11 @@ export function createContinuationReviewer(book, reviews = [], noticeReviews = [
       }
       const actual = chapterIdentity(value.title);
       if (!!listed !== !!actual || (listed && !compatibleNames(listed.name, actual.name))) throw Error(`目录与正文标题无法对应：「${entry.title}」 / 「${value.title}」`);
-      const part = paired ? chapterPartIdentity(value.title) : null;
-      if (paired && !samePart(chapterPartIdentity(entry.title), part)) throw Error(`目录与正文拆章标记无法对应：「${entry.title}」 / 「${value.title}」`);
+      const part = paired ? policyPart(value.title, partPolicy) : null;
+      if (paired && !samePart(policyPart(entry.title, partPolicy), part)) throw Error(`目录与正文拆章标记无法对应：「${entry.title}」 / 「${value.title}」`);
       const peers = accepted.filter(previous => {
         const identity = chapterIdentity(previous.title);
-        return actual ? identity?.number === actual.number && compatibleNames(identity.name, actual.name) && (!paired || samePart(chapterPartIdentity(previous.title), part)) : !identity && normalize(previous.title) === normalize(value.title);
+        return actual ? identity?.number === actual.number && compatibleNames(identity.name, actual.name) && (!paired || samePart(policyPart(previous.title, partPolicy), part)) : !identity && normalize(previous.title) === normalize(value.title);
       });
       const content = bodyKey(value.content, value.title);
       const duplicate = (actual ? content.length >= 100 : !!content) && peers.find(previous => bodyKey(previous.content, previous.title) === content);
@@ -457,12 +494,20 @@ export function createContinuationReviewer(book, reviews = [], noticeReviews = [
         if (openPart ? !secondPart : part?.part === 2 || actual.number !== number + 1) {
           const previous = accepted.at(-1), reset = !openPart && !part && !peers.length && !originals.has(previous) && numberResets.find(d =>
             d.key === hash(d.window) && d.window.length === 3 && hash(d.window[0]) === hash(resetFingerprint(previous)) && hash(d.window[1]) === hash(resetFingerprint(value)));
-          if (!reset) {
+          const defect = !openPart && !part && !peers.length && !originals.has(previous) && sourceDefects.find(d =>
+            d.kind === 'numbering' && d.key === hash({previousNumber: d.previousNumber, window: d.window}) && d.previousNumber === number && d.window.length === 3 &&
+            hash(d.window[0]) === hash(numberingFingerprint(previous, previous.catalogTitle || previous.title)) && hash(d.window[1]) === hash(numberingFingerprint(value, entry.title)));
+          if (!reset && !defect) {
             const reason = peers.length ? '同章号正文不同，不能自动选择版本' : '缺章或章号顺序无法确定';
             throw Error(`新来源衔接后章号冲突：应为第 ${openPart ? number + ' 章下篇' : number + 1 + ' 章'}，实际为「${value.title}」；${reason}`);
           }
-          requiredAfterReset = reset.window[2];
-          resolutions.push({kind: 'reviewed-number-reset', title: value.title, link: value.link, sourcePosition: entry.chapter_number, previousLink: previous.link, previousTitle: previous.title, contentHash: hash(value.content), reviewKey: reset.key, reference: reset.reference, reason: reset.reason});
+          if (defect) {
+            requiredAfterDefect = defect.window[2];
+            resolutions.push({kind: 'accepted-source-defect', defect: 'numbering', title: value.title, link: value.link, acceptedPosition: value.chapter_number, sourcePosition: entry.chapter_number, previousLink: previous.link, previousTitle: previous.title, contentHash: hash(value.content), reviewKey: defect.key, evidenceHash: defect.evidenceHash, reason: defect.reason, reviewedAt: defect.reviewedAt});
+          } else {
+            requiredAfterReset = reset.window[2];
+            resolutions.push({kind: 'reviewed-number-reset', title: value.title, link: value.link, sourcePosition: entry.chapter_number, previousLink: previous.link, previousTitle: previous.title, contentHash: hash(value.content), reviewKey: reset.key, reference: reset.reference, reason: reset.reason});
+          }
         }
         if (correction && normalize(originalTitle) !== normalize(value.title)) resolutions.push({kind: 'reviewed-number-correction', title: entry.title, originalTitle, acceptedTitle: value.title, link: entry.link, sourcePosition: entry.chapter_number,
           contentHash: hash(value.content), reviewKey: correction.key, reference: correction.reference, reason: correction.reason, reviewedAt: correction.reviewedAt});
@@ -501,10 +546,14 @@ export async function acquireContinuation(spec, options) {
   if (book.chapters.some((chapter, index) => index && chapter.chapter_number <= book.chapters[index - 1].chapter_number)) throw Error('原书顺序号未严格递增，请先核对');
   const lastOrdinal = book.chapters.at(-1).chapter_number;
   const reviewState = loadReviews(spec, options);
-  const reviewer = createContinuationReviewer(book, reviewState.decisions, reviewState.noticeDecisions, reviewState.partPolicy, reviewState.numberResets, reviewState.numberCorrections);
+  const reviewer = createContinuationReviewer(book, reviewState.decisions, reviewState.noticeDecisions, reviewState.partPolicy, reviewState.numberResets, reviewState.numberCorrections, reviewState.sourceDefects);
   const switching = !binding || binding.source.url !== spec.sourceUrl;
   if (!switching && binding.source.extraction !== extraction) throw Error('当前续更来源的提取规则已变化，请先核对适配，旧文件已保留');
   const sourceDir = sourceDirectory(stateDir, spec, extraction);
+  for (const defect of reviewState.sourceDefects || []) {
+    const evidenceFile = path.join(sourceDir, 'references', defect.evidenceHash + '.bin');
+    if (!fs.existsSync(evidenceFile) || hash(fs.readFileSync(evidenceFile)) !== defect.evidenceHash) throw Error('已接受来源缺陷的证据缺失或变化');
+  }
   for (const correction of reviewState.numberCorrections || []) {
     const referenceFile = path.join(sourceDir, 'references', correction.reference.hash + '.bin');
     if (!fs.existsSync(referenceFile) || hash(fs.readFileSync(referenceFile)) !== correction.reference.hash) throw Error('章号校正的独立原始页面证据缺失或已变化');
@@ -545,7 +594,7 @@ export async function acquireContinuation(spec, options) {
       for (const [index, old] of ending.entries()) {
         if (index && old.number !== ending[index - 1].number + 1) throw Error('原书末尾正文章号不连续，需先核对缺章');
         const matches = newNumbers.filter(item => {
-          const part = chapterPartIdentity(catalog[item.index].title), previousPart = chapterPartIdentity(book.chapters[old.index].title);
+          const part = policyPart(catalog[item.index].title, reviewState.partPolicy), previousPart = policyPart(book.chapters[old.index].title, reviewState.partPolicy);
           if (part && !previousPart) return reviewState.partPolicy?.kind === 'paired' && part.part === 1 && part.number === old.number && compatibleNames(part.name, old.name) && (boundary === undefined || item.index > boundary);
           return item.number === old.number && compatibleNames(item.name, old.name) && samePart(part, previousPart) && (boundary === undefined || item.index > boundary);
         });
@@ -553,7 +602,7 @@ export async function acquireContinuation(spec, options) {
         const previous = book.chapters[old.index], oldBody = bodyKey(previous.content, previous.title);
         let actual, match, anchorReview, anchorParts;
         for (const candidate of matches) {
-          const entry = catalog[candidate.index], pair = chapterPartIdentity(entry.title) && !chapterPartIdentity(previous.title);
+          const entry = catalog[candidate.index], pair = policyPart(entry.title, reviewState.partPolicy) && !policyPart(previous.title, reviewState.partPolicy);
           const entries = pair ? catalog.slice(candidate.index, candidate.index + 2) : [entry];
           if (pair && !completePair(entries)) continue;
           const values = [];
@@ -584,7 +633,7 @@ export async function acquireContinuation(spec, options) {
       boundary = binding.catalog.length - 1;
     }
     const pending = catalog.slice(boundary + 1);
-    const probeEndsWithUpper = reviewState.partPolicy?.kind === 'paired' && chapterPartIdentity(pending[2]?.title)?.part === 1;
+    const probeEndsWithUpper = reviewState.partPolicy?.kind === 'paired' && policyPart(pending[2]?.title, reviewState.partPolicy)?.part === 1;
     const targets = mode === 'probe' ? pending.slice(0, probeEndsWithUpper ? 4 : 3) : pending;
     atomicWrite(path.join(sourceDir, 'catalog.json'), catalog);
     options.onProgress?.({jobId: id, mode, downloaded: 0, total: targets.length, failed: 0});
@@ -634,11 +683,12 @@ export async function acquireContinuation(spec, options) {
     paused ||= !!stopped();
     if (!paused) failures.push(failureDetails(error, error.chapter ? {chapter: error.chapter, title: error.title, link: error.link} : {}));
   } finally { if (!options.client) await client.close(); }
-  const issues = quality.issues.filter(issue => issue.chapter > lastOrdinal);
+  const acceptedSourceDefects = [...new Map([...(binding?.resolutions || []), ...resolutions].filter(d => d.kind === 'accepted-source-defect').map(d => [d.reviewKey, d])).values()];
+  const issues = [...quality.issues.filter(issue => issue.chapter > lastOrdinal), ...acceptedSourceDefects.map(d => ({level: 'warning', code: 'accepted-source-defect', chapter: d.acceptedPosition, link: d.link, reviewKey: d.reviewKey, detail: d.reason}))];
   const errors = failures.length + issues.filter(issue => issue.level === 'error').length;
   const result = {title: book.title, author: book.author, sourceUrl: spec.sourceUrl, originalSourceUrl: book.sourceUrl, mode, jobId: id, continuation: true, switching,
     expected: exportFile ? nextBook.chapters.length : book.chapters.length + tail.length, downloaded: exportFile ? nextBook.chapters.length : book.chapters.length,
-    originalCount: book.chapters.length, sourceExpected: catalog.length, continuationAdded: added, checkedNew: tail.length, anchors, skipped, resolutions, automaticResolutions: resolutions.length, evidence, issues, failures,
+    originalCount: book.chapters.length, sourceExpected: catalog.length, continuationAdded: added, checkedNew: tail.length, anchors, skipped, resolutions, acceptedSourceDefects, automaticResolutions: resolutions.filter(r => r.kind !== 'accepted-source-defect').length, evidence, issues, failures,
     errors, warnings: issues.filter(issue => issue.level === 'warning').length, information: issues.filter(issue => issue.level === 'info').length,
     structuralPass: !errors && !paused, completeAgainstSource: !!exportFile, paused, exportFile, reusedExport, description: nextBook.description, status: nextBook.status,
     checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: Object.fromEntries(Object.entries(client.stats).map(([key, value]) => [key, value - initialStats[key]])),
@@ -646,6 +696,6 @@ export async function acquireContinuation(spec, options) {
   result.reportFile = path.join(sourceDir, `${mode}-report.json`);
   result.summaryFile = path.join(sourceDir, `${mode}-report.md`);
   atomicWrite(result.reportFile, result);
-  atomicWrite(result.summaryFile, `# 换源续更报告\n\n原有 ${result.originalCount} 项；本次追加 ${added} 项；衔接核对 ${anchors.length} 章；本次自动核对处理 ${resolutions.length} 项。\n\n${result.limitation}\n\n${resolutions.map(item => `${item.title}：${item.reason}（${item.link}）`).join('\n\n')}\n\n${failures.map(item => item.error).join('\n\n')}\n`);
+  atomicWrite(result.summaryFile, `# 换源续更报告\n\n原有 ${result.originalCount} 项；本次追加 ${added} 项；衔接核对 ${anchors.length} 章；本次自动核对处理 ${result.automaticResolutions} 项；已接受的来源缺陷 ${acceptedSourceDefects.length} 项，仍作为警告保留。\n\n${result.limitation}\n\n${resolutions.map(item => `${item.title}：${item.reason}（${item.link}）`).join('\n\n')}\n\n${acceptedSourceDefects.map(item => `已接受来源缺陷：${item.title}，${item.reason}（${item.link}）`).join('\n\n')}\n\n${failures.map(item => item.error).join('\n\n')}\n`);
   return result;
 }
