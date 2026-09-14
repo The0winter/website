@@ -1,17 +1,23 @@
 .writing-workspace { --writing-paper:#fffaf6; --writing-bg:#f7efe9; --writing-ink:#42362f; --writing-muted:#998675; --writing-line:#e8dcd1; --writing-accent:#a84c51; position:relative; min-height:100dvh; color:var(--writing-ink); background:var(--writing-bg); font-family:inherit; animation:writing-enter-left 350ms cubic-bezier(.2,.75,.25,1) backwards; }
 .writing-embedded { min-height:100%; animation:none; }
 .writing-library { max-width:840px; margin:auto; padding:0 22px 32px; }
-.writing-heading { padding:26px 0 20px; }
+.writing-heading { padding:26px 0 20px; text-align:center; }
 .writing-heading>p { font-size:11px; color:var(--writing-muted); margin:0 0 6px; }
 .writing-heading h2 { font-size:22px; line-height:1.4; font-weight:700; overflow-wrap:anywhere; margin:0; }
-.writing-compact-header .writing-heading { display:flex; align-items:center; gap:12px; padding:calc(8px + env(safe-area-inset-top)) 0 8px; }
-.writing-compact-header .writing-heading>button { display:grid; place-items:center; flex:0 0 44px; height:44px; margin-left:-6px; border:1px solid var(--writing-line); border-radius:50%; }
+.writing-compact-header .writing-heading { display:grid; grid-template-columns:32px minmax(0,1fr) 32px; align-items:center; gap:7px; padding:calc(8px + env(safe-area-inset-top)) 0 8px; }
+.writing-compact-header .writing-heading>button { display:grid; place-items:center; width:32px; height:44px; border:0; border-radius:50%; color:inherit; }
+.writing-compact-header .writing-heading>button:hover { background:var(--writing-line); }
 .writing-compact-header .writing-heading h2 { min-width:0; font-size:20px; }
-.writing-tabs { display:flex; gap:26px; border-bottom:1px solid var(--writing-line); }
-.writing-tabs button { position:relative; display:flex; align-items:center; gap:7px; min-height:48px; color:var(--writing-muted); font-size:16px; font-weight:600; }
+.writing-tabs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border-bottom:1px solid var(--writing-line); }
+.writing-tabs button { position:relative; display:flex; justify-content:center; align-items:center; gap:7px; min-width:0; min-height:48px; color:var(--writing-muted); font-size:16px; font-weight:600; }
 .writing-tabs button[aria-selected=true] { color:var(--writing-ink); }
 .writing-tabs button[aria-selected=true]:after { content:''; position:absolute; bottom:-1px; height:3px; border-radius:3px; left:0; right:0; background:var(--writing-accent); }
 .writing-tabs span { font-size:11px; font-weight:500; }
+.writing-tab-view { touch-action:pan-y; }
+.writing-tab-panels { position:relative; overflow:hidden; min-height:calc(100dvh - 180px); }
+.writing-tab-panel { width:100%; transition:transform 300ms cubic-bezier(.22,.7,.25,1); }
+.writing-tab-panel[aria-hidden=true] { position:absolute; top:0; left:0; }
+.writing-tab-view[data-dragging=true] .writing-tab-panel { transition:none; user-select:none; }
 .writing-draft-tools { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:20px 0 16px; }
 .writing-add { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px; padding:0 14px; border:1px solid var(--writing-line); border-radius:10px; color:var(--writing-accent); background:var(--writing-paper); font-size:14px; font-weight:600; }
 .writing-draft-tools>span,.writing-storage-note,.writing-note { color:var(--writing-muted); font-size:11px; line-height:1.7; }
@@ -70,4 +76,4 @@ html .writing-workspace .writing-form :is(input,textarea):focus-visible { outlin
 @media(min-width:768px) { .writing-workspace { padding-bottom:40px; } .writing-heading { padding-top:34px; } .writing-editor .writing-header { padding-inline:max(24px,calc((100vw - 840px)/2)); } .writing-editor-footer { min-height:80px; } }
 @media(max-height:600px) { .writing-editor { overflow-y:auto; } .writing-form.writer-dirty-form { min-height:330px; } }
 html.dark .writing-workspace { --writing-paper:#24211e; --writing-bg:#1b1917; --writing-ink:#eaded2; --writing-muted:#a99887; --writing-line:#433a32; --writing-accent:#bd6b6d; }
-@media(prefers-reduced-motion:reduce) { .writing-workspace,.writing-editor { animation-duration:.01ms; } }
+@media(prefers-reduced-motion:reduce) { .writing-workspace,.writing-editor { animation-duration:.01ms; } .writing-tab-panel { transition:none; } }

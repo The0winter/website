@@ -5,6 +5,7 @@ import {ArrowLeft, Plus, FileText, ChevronRight, Download, Trash2, Check, Loader
 import {useAuth} from '@/contexts/AuthContext';
 import {safeFetch} from '@/lib/request';
 import {lockBodyScroll} from '@/lib/body-scroll-lock';
+import WritingTabs from './WritingTabs';
 import {cachedWorkspace, cacheWorkspace, draftScope, loadDrafts, writeDraft, pendingDrafts, needsCloudSave, draftFingerprint as fingerprint, type WritingDraft, type WorkspaceSnapshot} from '@/lib/writing-drafts';
 import './writing-workspace.css';
 
@@ -339,21 +340,22 @@ function WorkspaceContent({reference, embedded = false, moderation = false, comp
   return <section className={`writing-workspace${embedded ? ' writing-embedded' : ''}${compactHeader ? ' writing-compact-header' : ''}`} aria-label="章节创作">
     <div className="writing-library" inert={Boolean(editor)} aria-hidden={Boolean(editor) || undefined}>
       {!embedded && <header className="writing-header"><button type="button" aria-label="返回创作中心" onClick={onExit}><ArrowLeft size={20}/></button><h1>创作</h1></header>}
-      <div className="writing-heading">{compactHeader ? <button type="button" aria-label="返回创作中心" onClick={onExit}><ArrowLeft size={20}/></button> : <p>我的作品</p>}<h2>{snapshot?.work.title || '创作'}</h2></div>
-      <div className="writing-tabs" role="tablist" aria-label="章节分类">
-        <button type="button" role="tab" id="writing-drafts-tab" aria-controls="writing-drafts" aria-selected={tab === 'drafts'} onClick={() => setTab('drafts')}>草稿箱{drafts.length > 0 && <span>{drafts.length}</span>}</button>
-        <button type="button" role="tab" id="writing-published-tab" aria-controls="writing-published" aria-selected={tab === 'published'} onClick={() => setTab('published')}>已发布{Boolean(snapshot?.total) && <span>{snapshot?.total}</span>}</button>
-      </div>
+      <div className="writing-heading">{compactHeader ? <button type="button" aria-label="返回创作中心" onClick={onExit}><ArrowLeft size={21}/></button> : <p>我的作品</p>}<h2>{snapshot?.work.title || '创作'}</h2></div>
+      <WritingTabs value={tab} onChange={setTab} draftCount={drafts.length} publishedCount={snapshot?.total || 0} disabled={loading || editing} notice={<>
       {offline && <p className="writing-note">当前离线，文字会暂存；联网后继续同步到线上。</p>}
       {error && <div className="writing-error" role="alert">{error}<button type="button" onClick={() => {setError(''); void refresh(page).catch(reason => setError(reason.message));}}>重试</button></div>}
-      {loading ? <p className="writing-empty" role="status"><Loader2 className="writing-spinner" size={24}/>正在打开章节…</p> : tab === 'drafts' ? <div role="tabpanel" id="writing-drafts" aria-labelledby="writing-drafts-tab">
+      {loading && <p className="writing-empty" role="status"><Loader2 className="writing-spinner" size={24}/>正在打开章节…</p>}
+      </>}>
+      <div hidden={loading}>
         <div className="writing-draft-tools"><button className="writing-add" type="button" aria-label="新建章节" disabled={working || !snapshot} onClick={() => void create()}><Plus size={22}/><span>新建章节</span></button><span>每分钟自动同步</span></div>
         {drafts.length ? <ol className="writing-chapters">{drafts.map(draft => <li key={draft.id}><button type="button" className="writing-chapter" onClick={() => openEditor(draft)}><span className="writing-chapter-number">{String(draft.number).padStart(2, '0')}</span><span><strong>{chapterTitle(draft)}</strong><small>{draft.targetChapterId ? '修改稿 · ' : ''}{(draft.contentLoaded === false ? draft.words || 0 : Array.from(draft.content).length).toLocaleString()} 字</small></span><ChevronRight size={17}/></button><button type="button" className="writing-delete" aria-label={`删除草稿「${chapterTitle(draft)}」`} onClick={() => void remove(draft)}><Trash2 size={16}/></button></li>)}</ol> : <div className="writing-empty"><FileText size={34}/><h3>下一章，从这里开始</h3><p>点上方加号，写下故事的第一句。</p></div>}
         {drafts.some(needsCloudSave) && <p className="writing-storage-note">有草稿等待同步，保持页面打开即可；进入章节后也可点“保存”。</p>}
-      </div> : <div role="tabpanel" id="writing-published" aria-labelledby="writing-published-tab">
+      </div>
+      <div hidden={loading}>
         {moderation && <form className="writing-filters" onSubmit={event => {event.preventDefault(); filter.current={search,order}; void refresh().catch(reason => setError(reason.message));}}><input aria-label="搜索章节" value={search} maxLength={100} onChange={event => setSearch(event.target.value)} placeholder="搜索章节名"/><select aria-label="章节排序" value={order} onChange={event => {const value=event.target.value as 'asc'|'desc'; setOrder(value); filter.current={search,order:value}; void refresh().catch(reason => setError(reason.message));}}><option value="desc">倒序</option><option value="asc">正序</option></select><button type="submit">搜索</button></form>}
         {snapshot?.published.length ? <><ol className="writing-chapters">{snapshot.published.map(chapter => <li key={chapter.id}><button className="writing-chapter" type="button" disabled={working} onClick={() => void editPublished(chapter)}><span className="writing-chapter-number">{String(chapter.number).padStart(2, '0')}</span><span><strong>{chapterTitle(chapter)}</strong><small>{chapter.words.toLocaleString()} 字 · 已发布</small></span><ChevronRight size={17}/></button><button type="button" className="writing-delete" disabled={working} aria-label={`下架章节「${chapterTitle(chapter)}」`} onClick={() => void deletePublished(chapter)}><Trash2 size={16}/></button></li>)}</ol>{snapshot.total > 50 && <nav className="writing-pagination" aria-label="已发布章节分页"><button disabled={page === 1 || working} onClick={() => void refresh(page - 1).catch(reason => setError(reason.message))}>上一页</button><span>{page} / {Math.ceil(snapshot.total / 50)}</span><button disabled={page * 50 >= snapshot.total || working} onClick={() => void refresh(page + 1).catch(reason => setError(reason.message))}>下一页</button></nav>}</> : <div className="writing-empty"><FileText size={34}/><h3>还没有已发布章节</h3><p>草稿准备好后，就可以发布了。</p></div>}
-      </div>}
+      </div>
+      </WritingTabs>
     </div>
     {editor && <div className="writing-editor" ref={editorPanel} role="dialog" aria-modal="true" aria-label={editor.targetChapterId ? '修改章节' : '创建新章节'} tabIndex={-1} data-closing={closing || undefined}>
       <header className="writing-header"><button type="button" aria-label="返回草稿箱" disabled={publishing} onClick={() => void closeEditor()}><ArrowLeft size={20}/></button><div><p>{snapshot?.work.title}</p><h2>第 {editor.number} 章</h2></div><button type="button" className="writing-save" disabled={publishing} onClick={() => void save()}>保存</button></header>

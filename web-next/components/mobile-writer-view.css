@@ -15,7 +15,7 @@
 .mw-view-panel[data-ready=false] .mw-view-body { visibility:hidden; pointer-events:none; }
 .mw-view-loading { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:24px; color:#a36059; background:#fffaf6; font-size:13px; }
 .mw-view-loading button { min-height:44px; padding:0 22px; border:1px solid #dcc3aa; border-radius:22px; }
-.mw-view-loading .mw-view-loading-back { position:absolute; top:calc(8px + env(safe-area-inset-top)); left:16px; display:grid; place-items:center; width:44px; padding:0; }
+.mw-view-loading .mw-view-loading-back { position:absolute; top:calc(8px + env(safe-area-inset-top)); left:22px; display:grid; place-items:center; width:32px; padding:0; border:0; color:#42362f; }
 .mw-view-skeleton { display:grid; gap:13px; width:min(100%,300px); margin-top:15px; }
 .mw-view-skeleton i { display:block; height:44px; background:#f0e6dd; border-radius:9px; }
 .mw-view-skeleton i:last-child { height:90px; }

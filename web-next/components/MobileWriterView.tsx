@@ -69,7 +69,7 @@ export default function MobileWriterView({ view, covered, onBack, onExited, onCh
       </header>}
       <div className="mw-view-content">
         {!loaded && <div className="mw-view-loading" role="status" aria-live="polite">
-          {chapters && <button type="button" className="mw-view-loading-back" aria-label="返回创作中心" onClick={onBack}><ArrowLeft size={20}/></button>}
+          {chapters && <button type="button" className="mw-view-loading-back" aria-label="返回创作中心" onClick={onBack}><ArrowLeft size={21}/></button>}
           <LoadingLogo/><p><LoadingText>{create ? '正在准备新作品' : `正在加载${title}`}</LoadingText></p><div className="mw-view-skeleton" aria-hidden="true"><i/><i/><i/></div>
         </div>}
         <div className="mw-view-body" inert={!loaded} aria-hidden={!loaded || undefined}>
