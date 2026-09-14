@@ -12,7 +12,7 @@ import {createDesktop} from '../desktop/server.mjs';
 
 async function fixture(t, {sourceOrder = false} = {}) {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'novel-edition-'));
-  const state = {count: 5, titles: {}, bodies: sourceOrder ? {4: '核实过的独立完整正文。'.repeat(90)} : {}, requests: []};
+  const state = {count: 5, titles: {}, bodyTitles: {}, bodies: sourceOrder ? {4: '核实过的独立完整正文。'.repeat(90)} : {}, requests: []};
   const ids = [90, 12, 70, 21, 60, 31, 50, 41];
   const title = n => state.titles[n] || `第${[1,3,1,2,2][n - 1] || n - 2}章 场景${n === 3 ? 1 : n}`;
   const body = n => state.bodies[n] || (n === 4 ? '銆锛鈥鐨勬姹熸'.repeat(100) : Array.from({length: 100}, (_, i) => String.fromCodePoint(0x4e00 + (n === 3 ? 1 : n) * 200 + i)).join('').repeat(8));
@@ -24,7 +24,7 @@ async function fixture(t, {sourceOrder = false} = {}) {
     if (req.url === '/book/A.html') return res.end(`<h1>测试书</h1><b>甲作者</b><i>${state.count}</i><ul>${[1,2].map(anchor).join('')}</ul><aside>${[state.count,state.count-1].map(anchor).join('')}</aside>`);
     const n = ids.findIndex(id => req.url === `/book/A-${id}.html`) + 1;
     if (!n || n > state.count) { res.statusCode = 404; return res.end(); }
-    res.end(`<h1>${title(n)}</h1><article>${body(n)}</article><nav><a class="book" href="/book/A.html">目录</a><a class="next" href="${n < state.count ? chapterPath(n+1) : '/book/A.html'}">下一章</a></nav>`);
+    res.end(`<h1>${state.bodyTitles[n] || title(n)}</h1><article>${body(n)}</article><nav><a class="book" href="/book/A.html">目录</a><a class="next" href="${n < state.count ? chapterPath(n+1) : '/book/A.html'}">下一章</a></nav>`);
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => { await new Promise(resolve => server.close(resolve)); assert.equal(path.dirname(stateDir), os.tmpdir()); assert.ok(path.basename(stateDir).startsWith('novel-edition-')); fs.rmSync(stateDir, {recursive: true, force: true}); });
@@ -64,6 +64,29 @@ test('source-order review pins duplicate omissions while preserving historical n
   f.state.count = 6; f.state.titles[6] = '第99章 未核对跳号';
   const blocked = await acquire(f.spec, {...f.options, mode: 'download'});
   assert.equal(blocked.exportFile, null); assert.deepEqual(readJson(f.file), book);
+});
+
+test('title mismatch review pins exact retained text and blocks unreviewed or changed source titles', async t => {
+  const f = await fixture(t, {sourceOrder: true});
+  f.state.bodyTitles[4] = '第2章 正文页的原名';
+  await acquire(f.spec, {...f.options, mode: 'download', refresh: true});
+  const book = {...f.book, chapters: [1,2,4,5].map((n,i) => ({...formatChapterForExport(f.raw(n)), chapter_number:i+1, sourceChapterNumber:n, sourceChapterUrl:f.raw(n).link}))};
+  atomicWrite(f.file, book);
+  const chapter = f.raw(4), item = {position:4, link:chapter.link, title:chapter.title, catalogTitle:chapter.catalogTitle, contentHash:hash(chapter.content), reason:'已逐项核对正文页标题和原始顺序', evidence:{url:chapter.link, checkedAt:new Date().toISOString(), detail:'目录旧名与正文页原名有差异，保留两者及完整正文'}};
+  const review = {catalogHash:hash(readJson(path.join(f.dir,'catalog.json'))), reason:'核实目录旧名和重复项', pairs:[{omit:3,keep:1,omitHash:hash(f.raw(3).content),keepHash:hash(f.raw(1).content),reason:'完整正文相同'}], titleMappings:[item]};
+  const bind = r => bindReadingEdition(f.spec,f.file,{...f.options,sourceOrderReview:r});
+  await assert.rejects(bind({...review,titleMappings:[]}), /title-mismatch/);
+  for (const bad of [{...item,contentHash:'stale'}, {...item,title:'其他标题'}, {...item,evidence:{}}, {...item,position:3}]) await assert.rejects(bind({...review,titleMappings:[bad]}));
+  await bind(review);
+  assert.deepEqual(readJson(f.file),book);
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).structuralPass,true);
+  f.state.count=6; f.state.titles[6]='第3章 新章目录'; f.state.bodyTitles[6]='第3章 新章异名';
+  const blocked=await acquire(f.spec,{...f.options,mode:'download'});
+  assert.equal(blocked.exportFile,null); assert.deepEqual(readJson(f.file),book);
+  const changedChapter = {...f.raw(4), title:'第2章 又一次变化'};
+  atomicWrite(path.join(f.dir,'chapters',hash(changedChapter.link)+'.json'), {chapter:changedChapter,hash:hash(changedChapter)});
+  const changed=await acquire(f.spec,{...f.options,mode:'download'});
+  assert.equal(changed.exportFile,null); assert.deepEqual(readJson(f.file),book);
 });
 
 test('source gaps require pinned evidence, preserve raw text and never report source completeness', async t => {

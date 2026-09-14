@@ -64,6 +64,10 @@ export function validateSpec(input) {
   if (spec.kind !== 'html' && !(spec.resource?.url || spec.resource?.link || spec.resource?.parts)) throw Error('文件来源需配置下载地址或链接选择器');
   if (spec.resource?.decodeTitleEntities !== undefined && (spec.kind !== 'txt' || typeof spec.resource.decodeTitleEntities !== 'boolean')) throw Error('decodeTitleEntities 只支持 TXT 布尔值');
   if (spec.resource?.decodeContentEntities !== undefined && (spec.kind !== 'txt' || typeof spec.resource.decodeContentEntities !== 'boolean')) throw Error('decodeContentEntities 只支持 TXT 布尔值');
+  if (spec.resource?.catalogPrefix !== undefined) {
+    const prefix = spec.resource.catalogPrefix;
+    if (spec.kind !== 'txt' || !spec.catalog || !spec.chapter?.title || !spec.chapter?.content || !Number.isInteger(prefix?.count) || prefix.count < 1 || prefix.count > 20000 || typeof prefix.reason !== 'string' || !prefix.reason.trim() || prefix.reason.length > 2000) throw Error('catalogPrefix 需要 TXT、在线目录、正文规则、已核实的前缀数量和原因');
+  }
   if (spec.resource?.parts !== undefined) {
     const {parts, url, link, compression} = spec.resource;
     if (spec.kind !== 'txt' || url || link || compression || !spec.catalog || !Array.isArray(parts) || !parts.length || parts.length > 40) throw Error('分段 TXT 需要在线目录和 1–40 个文件，不能混用单文件或压缩格式');

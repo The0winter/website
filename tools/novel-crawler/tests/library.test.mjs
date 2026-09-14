@@ -76,6 +76,20 @@ test('batch accepts a reviewed scope while retaining the explicit source gap', a
   assert.deepEqual(readJson(file),book); assert.deepEqual(readJson(rawFile),source);
 });
 
+test('HTML reading bindings retain background-window preferences but still reject changed extraction rules', async t => {
+  const f=await fixture(t), spec={...f.spec('alpha'),browser:{headless:true}};
+  const report=await acquire(spec,{...f.options,mode:'download'}), original=readJson(report.exportFile);
+  const book={...original,chapters:original.chapters.map(c=>({...c,sourceChapterNumber:c.chapter_number,sourceChapterUrl:c.link}))};
+  const file=path.join(f.options.outputDir,'reviewed.json');atomicWrite(file,book);
+  await bindReadingEdition(spec,file,f.options);
+  const plan=planLibrary(f.options)[0];
+  assert.equal(plan.state,'pending');assert.equal(plan.spec.browser.headless,true);
+  assert.equal((await updateLibrary(f.options)).unchanged,1);
+  f.site.spec.chapter.content='section';
+  assert.equal(planLibrary(f.options)[0].state,'blocked');
+  assert.deepEqual(readJson(file),book);
+});
+
 test('batch appends only new raw chapters, continues after manual skip, and reuses unchanged exports', async t => {
   const f = await fixture(t), alpha = await f.seed('alpha'), beta = await f.seed('beta');
   const original = readJson(alpha), betaBytes = fs.readFileSync(beta), betaTime = fs.statSync(beta).mtimeMs;

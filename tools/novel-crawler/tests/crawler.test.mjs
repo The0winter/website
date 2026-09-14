@@ -8,7 +8,7 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import iconv from 'iconv-lite';
 import {acquire, sourcePlan, localBookState, validateSpec} from '../core.mjs';
-import {chapterQuality, qualityReport, checkIdentity} from '../quality.mjs';
+import {chapterQuality, qualityReport, checkIdentity, placeholderEvidence} from '../quality.mjs';
 import {decode, makeClient} from '../http.mjs';
 import {splitText} from '../adapters.mjs';
 import {readJson, atomicWrite, withLock, hash} from '../storage.mjs';
@@ -48,6 +48,47 @@ function specFor(base) {
   };
 }
 const prose = label => `${label}。山间的路从村庄一直通往远方，读者可以从这里出发。`;
+
+test('a processing placeholder is not a completed chapter and ordinary mentions remain prose', () => {
+  assert.equal(placeholderEvidence('内容还在处理中,请稍后重试！'), true);
+  assert.equal(placeholderEvidence('他说：“内容还在处理中,请稍后重试！”随后关上了门。'), false);
+  const chapter={chapter_number:1,title:'第一章 开始',content:'内容还在处理中,请稍后重试！'};
+  assert.equal(chapterQuality(chapter).some(i=>i.level==='error'), false);
+  assert.equal(qualityReport([chapter],[chapter]).structuralPass, false);
+});
+
+test('reviewed TXT prefix replaces a stale tail from same-source HTML and still blocks missing chapters', async t => {
+  let broken = false;
+  const f = await fixture(t, (req, res) => {
+    if (req.url === '/book') return res.end(heading + '<div id="catalog"><a href="/a">第一章 出发</a><a href="/b">第二章 归来</a></div>');
+    if (req.url === '/text') { res.setHeader('Content-Type', 'text/plain; charset=utf-8'); return res.end('第一章 出发\n' + prose('出发') + '\n第二章 旧版标题\n' + prose('旧版')); }
+    if (req.url === '/b' && !broken) return res.end('<h1>第二章 归来</h1><div id="content">' + prose('归来') + '</div>');
+    res.statusCode = 404; res.end('missing');
+  });
+  const spec = {...specFor(f.base), kind: 'txt', resource: {url: f.base + '/text', expectedCount: 2, catalogPrefix: {count: 1, reason: '第二项标题与完整网页目录不同，改采同站网页正文'}}};
+  const result = await acquire(spec, f.options);
+  assert.equal(result.completeAgainstSource, true);
+  const book = readJson(result.exportFile);
+  assert.deepEqual(book.chapters.map(c => c.title), ['第一章 出发', '第二章 归来']);
+  assert.equal(book.chapters[1].content, prose('归来'));
+  assert.equal(f.counts.get('/a'), undefined);
+  const record = readJson(path.join(f.options.stateDir, 'jobs', result.jobId, 'resource-catalog-check.json'));
+  assert.equal(record.sourceResourceChapters, 2);
+  assert.equal(record.matchedPrefix, 1);
+  const mismatch = await acquire({...spec, variant: 'bad-prefix', resource: {...spec.resource, catalogPrefix: {count: 2, reason: 'test'}}}, f.options);
+  assert.equal(mismatch.exportFile, null);
+  assert.match(mismatch.failures[0].error, /第2项标题不同/);
+  const short = await acquire({...spec, variant: 'too-long', resource: {...spec.resource, catalogPrefix: {count: 3, reason: 'test'}}}, f.options);
+  assert.equal(short.exportFile, null);
+  assert.match(short.failures[0].error, /前缀超过/);
+  broken = true;
+  const missing = await acquire({...spec, variant: 'missing-html'}, {...f.options, refresh: true});
+  assert.equal(missing.completeAgainstSource, false);
+  assert.equal(missing.exportFile, null);
+  assert.equal(missing.failures.length, 1);
+  for (const catalogPrefix of [null, {}, {count: 0, reason: 'test'}, {count: 1, reason: ''}]) assert.throws(() => validateSpec({...spec, resource: {...spec.resource, catalogPrefix}}));
+  assert.throws(() => validateSpec({...spec, chapter: undefined}));
+});
 
 test('catalog title extraction preserves source labels, notices and order; unmatched rules block export', async t => {
   const f = await fixture(t, (req, res) => res.end(req.url === '/book' ? heading + '<div id="catalog"><a href="/a">第901章 第703章 归来</a><a href="/b">第902章 请假说明</a></div>' : req.url === '/a' ? `<h1>第703章 归来</h1><div id="content">${prose('归来')}</div>` : '<h1>请假说明</h1><div id="content">今天出门办事，更新暂缓。</div>'));

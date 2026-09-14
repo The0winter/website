@@ -141,6 +141,14 @@ function verifySourceOrderReview(review, catalog, raw, book, seen) {
     } else throw Error('未支持的缺文章节验收类型');
     omissions.add(chapter.link);
   }
+  if (review.titleMappings !== undefined && !Array.isArray(review.titleMappings)) throw Error('标题差异验收必须是逐项记录');
+  const mapped = new Set();
+  for (const item of review.titleMappings || []) {
+    const chapter = raw[item.position - 1];
+    if (!Number.isInteger(item.position) || !chapter || !seen.has(chapter.link) || mapped.has(item.position) || item.link !== chapter.link || item.contentHash !== hash(chapter.content) || item.title !== chapter.title || item.catalogTitle !== chapter.catalogTitle || typeof item.reason !== 'string' || !item.reason.trim()) throw Error('标题差异核对与保留章节、标题及正文哈希不匹配');
+    if (!item.evidence || !/^https?:\/\//u.test(item.evidence.url || '') || !Number.isFinite(Date.parse(item.evidence.checkedAt)) || typeof item.evidence.detail !== 'string' || !item.evidence.detail.trim() || !issues.some(i => i.code === 'title-mismatch' && i.chapter === item.position)) throw Error('标题差异验收需要已检测的差异和独立核对证据');
+    mapped.add(item.position);
+  }
   if (raw.some(c => !seen.has(c.link) && !omissions.has(c.link))) throw Error('来源顺序验收不得遗漏未核对的目录项');
   return {...review, reviewedAt: new Date().toISOString()};
 }
@@ -168,7 +176,9 @@ export function adoptReadingEdition(dir, spec, extraction, file, outputDir, sour
   let acceptedSourceOrder;
   if (sourceOrderReview) acceptedSourceOrder = verifySourceOrderReview(sourceOrderReview, catalog, raw, book, seen);
   else orderedChapters(book.chapters);
-  checkNewIssues(editionQuality(book));
+  const quality = editionQuality(book);
+  const reviewedTitles = new Set(acceptedSourceOrder?.titleMappings?.map(item => item.position) || []);
+  checkNewIssues({...quality, issues: quality.issues.filter(issue => issue.code !== 'title-mismatch' || !reviewedTitles.has(book.chapters[issue.chapter - 1]?.sourceChapterNumber))});
   prepareImport(book);
   const state = {
     version: 1, revision: 1, identity: {title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, variant: spec.variant || ''},

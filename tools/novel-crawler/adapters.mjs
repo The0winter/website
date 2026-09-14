@@ -339,6 +339,13 @@ export async function getResource(spec, client, jobDir) {
   if (!chapters.length || chapters.length > 20000) throw Error('资源章节数量无效');
   if (chapters.preamble) atomicWrite(path.join(jobDir, 'source-preamble.txt'), chapters.preamble);
   let complete = chapters.map((c, i) => ({...c, catalogTitle: c.catalogTitle || c.title, chapter_number: i + 1, sourceOrder: i + 1, ...(!config.parts ? {link: `${response.url}#chapter-${i + 1}`, contentFetchedAt: response.fetchedAt, provenance: [{url: response.url, hash: response.hash, fetchedAt: response.fetchedAt}]} : {})}));
+  const sourceResourceChapters = complete.length;
+  if (config.catalogPrefix) {
+    if (config.catalogPrefix.count > complete.length) throw Error('已核实的 TXT 前缀超过实际文件章节数');
+    // Keep the complete response and its hash; fetch every remaining catalog item
+    // through the same source's normal chapter rules instead of guessing a map.
+    complete = complete.slice(0, config.catalogPrefix.count);
+  }
   let catalog = complete.map(({content, ...c}) => c);
   if (spec.catalog) {
     const reference = await getCatalog(spec, client);
@@ -348,7 +355,7 @@ export async function getResource(spec, client, jobDir) {
       if (normalizedTitle(complete[i].catalogTitle) !== normalizedTitle(catalog[i].title)) throw Error(`文件与在线目录第${i + 1}项标题不同，拒绝按近似标题合并`);
       complete[i] = {...complete[i], link: catalog[i].link, chapter_number: catalog[i].chapter_number, sourceOrder: catalog[i].sourceOrder};
     }
-    atomicWrite(path.join(jobDir, 'resource-catalog-check.json'), {resourceChapters: complete.length, onlineChapters: catalog.length, matchedPrefix: complete.length, missing: catalog.slice(complete.length), evidence: reference.evidence});
+    atomicWrite(path.join(jobDir, 'resource-catalog-check.json'), {resourceChapters: complete.length, sourceResourceChapters, onlineChapters: catalog.length, matchedPrefix: complete.length, ...(config.catalogPrefix ? {catalogPrefix: config.catalogPrefix} : {}), missing: catalog.slice(complete.length), evidence: reference.evidence});
   }
   atomicWrite(path.join(jobDir, 'resource-metadata.json'), resourceMetadata || {url: response.url, hash: response.hash, bytes: response.bytes});
   return {actual, catalog, chapters: complete, evidence: {url: evidence.url, hash: evidence.hash, fetchedAt: evidence.fetchedAt}};

@@ -75,6 +75,13 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites}) {
       // it with the site's HTML template abandons checkpoints/reading bindings.
       const savedSpec = reading?.spec || rawJob?.spec;
       const currentSpec = savedSpec?.kind === 'txt' && savedSpec.sourceUrl === siteSpec.sourceUrl ? savedSpec : siteSpec;
+      // Preserve the book's background-window preference without concealing
+      // changes to the site's selectors, transport or other extraction rules.
+      if (currentSpec !== savedSpec && savedSpec?.sourceUrl === siteSpec.sourceUrl) {
+        for (const field of ['headless', 'minimized']) if (typeof savedSpec.browser?.[field] === 'boolean') {
+          currentSpec.browser = {...currentSpec.browser, [field]: savedSpec.browser[field]};
+        }
+      }
       const spec = applyVerifiedBookStatus(currentSpec, stateDir, currentSpec.identityNormalization);
       if (binding && (binding.source.variant !== (spec.variant || '') || binding.source.extraction !== extractionHash(spec))) throw Error('当前续更来源规则已变化，请先核对适配；原文件保留');
       if (reading && (jobId(reading.spec) !== jobId(spec) || extractionHash(reading.spec) !== extractionHash(spec))) throw Error('阅读版来源规则已变化，请先核对映射；原文件保留');
