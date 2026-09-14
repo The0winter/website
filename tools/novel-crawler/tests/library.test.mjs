@@ -29,6 +29,7 @@ async function fixture(t) {
     const [, kind, id, number] = req.url.split('/');
     if (id === state.fail) { res.statusCode = 503; return res.end('source unavailable'); }
     if (kind === 'book') return res.end(`<h1>${id}故事</h1><b>测试作者</b><nav>${Array.from({length: state.counts[id] || 3}, (_, i) => `<a href="/chapter/${id}/${i+1}">${title(i+1)}</a>`).join('')}</nav>`);
+    if (kind === 'text') return res.end(Array.from({length: 3}, (_, i) => `${title(i+1)}\n${body(i+1)}`).join('\n'));
     res.end(`<h1>${title(Number(number))}</h1><article>${body(Number(number))}</article>`);
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -120,6 +121,38 @@ test('reading bindings select the reviewed file once and keep old raw exports un
   assert.deepEqual(fs.readFileSync(rawFile), originalRaw);
   f.site.spec.variant = 'library-v2';
   assert.equal(planLibrary(f.options)[0].state, 'blocked');
+});
+
+test('TXT exports and reading editions keep their verified spec and append through the same catalog', async t => {
+  for (const readingEdition of [false, true]) {
+    const f = await fixture(t);
+    const spec = {...f.spec('alpha'), kind: 'txt', variant: 'verified-txt-v1',
+      resource: {url: f.base + '/text/alpha', removeText: ['【合成广告】']}};
+    const seeded = await acquire(spec, {...f.options, mode: 'download'});
+    assert.equal(seeded.structuralPass, true);
+    let file = seeded.exportFile;
+    if (readingEdition) {
+      const reading = readJson(file);
+      reading.chapters = reading.chapters.map(c => ({...c, sourceChapterNumber: c.chapter_number, sourceChapterUrl: c.link}));
+      file = path.join(f.options.outputDir, 'reading.json'); atomicWrite(file, reading);
+      await bindReadingEdition(spec, file, f.options);
+    }
+    const original = readJson(file);
+    const [plan] = planLibrary(f.options);
+    assert.equal(plan.state, 'pending'); assert.equal(plan.spec.kind, 'txt');
+    assert.equal(plan.spec.variant, spec.variant); assert.equal(plan.continuation, undefined);
+    assert.deepEqual(plan.spec.resource, spec.resource);
+    f.state.counts.alpha = 4; f.state.requests = [];
+    const result = await updateLibrary(f.options);
+    assert.equal(result.added, 1, JSON.stringify(result.items));
+    assert.deepEqual(readJson(file).chapters.slice(0, 3), original.chapters);
+    assert.deepEqual(f.state.requests.filter(url => url.startsWith('/chapter/')), ['/chapter/alpha/4']);
+    const bytes = fs.readFileSync(file);
+    assert.equal((await updateLibrary(f.options)).unchanged, 1);
+    assert.deepEqual(fs.readFileSync(file), bytes);
+    fs.appendFileSync(file, '\n');
+    assert.equal(planLibrary(f.options)[0].state, 'blocked');
+  }
 });
 
 test('modified exports, duplicate versions and damaged bindings are protected before source requests', async t => {

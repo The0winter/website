@@ -70,7 +70,11 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites}) {
           }
         }
       }
-      const currentSpec = specForBook(book, sites);
+      const siteSpec = specForBook(book, sites);
+      // A verified TXT job owns its file boundaries and cleanup rules. Replacing
+      // it with the site's HTML template abandons checkpoints/reading bindings.
+      const savedSpec = reading?.spec || rawJob?.spec;
+      const currentSpec = savedSpec?.kind === 'txt' && savedSpec.sourceUrl === siteSpec.sourceUrl ? savedSpec : siteSpec;
       const spec = applyVerifiedBookStatus(currentSpec, stateDir, currentSpec.identityNormalization);
       if (binding && (binding.source.variant !== (spec.variant || '') || binding.source.extraction !== extractionHash(spec))) throw Error('当前续更来源规则已变化，请先核对适配；原文件保留');
       if (reading && (jobId(reading.spec) !== jobId(spec) || extractionHash(reading.spec) !== extractionHash(spec))) throw Error('阅读版来源规则已变化，请先核对映射；原文件保留');

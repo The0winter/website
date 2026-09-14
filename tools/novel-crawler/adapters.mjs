@@ -270,6 +270,12 @@ export function splitText(text, spec) {
       const inner = new RegExp(config.innerHeadingPattern, 'u').exec(lines[0]);
       if (inner) { sourceTitle = (inner[1] || inner[0]).trim(); title = titleText(sourceTitle); lines.shift(); content = lines.join('\n').trim(); }
     }
+    // Split the original resource first; cleanup must never create/remove chapter boundaries.
+    if (config.decodeContentEntities) content = load(content.replaceAll('<', '&lt;').replaceAll('>', '&gt;'), {}, false).text();
+    for (const pattern of config.removeText || []) content = content.replace(new RegExp(pattern, 'gu'), match => {
+      if (!match.length) throw Error('正文噪声规则不能匹配空字符串');
+      return '';
+    }).trim();
     chapters.push({title, catalogTitle, content, ...(title !== sourceTitle ? {sourceTitle} : {}), ...(catalogTitle !== sourceCatalogTitle ? {sourceCatalogTitle} : {})});
   }
   chapters.preamble = preamble;

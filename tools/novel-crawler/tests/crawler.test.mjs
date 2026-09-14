@@ -223,6 +223,35 @@ test('TXT title entity decoding is explicit, single-layer and preserves raw titl
   assert.equal(chapter.content, '正文 &amp; 保留原样。');
 });
 
+test('TXT cleanup is opt-in, preserves prose and literal tags, and runs after segmentation', () => {
+  const text = '第1章 德旗\n仲德的旗帜 <原文> &lt;保留&gt; &amp;amp; &#183;\n【合成广告】\n末段。\n第2章 后续\n德与旗都是正文。';
+  assert.match(splitText(text, {})[0].content, /【合成广告】/);
+  const chapters = splitText(text, {resource: {decodeContentEntities: true, removeText: ['(?:^|\\n)【合成广告】(?=\\n|$)']}});
+  assert.deepEqual(chapters.map(c => c.title), ['第1章 德旗', '第2章 后续']);
+  assert.equal(chapters[0].content, '仲德的旗帜 <原文> <保留> &amp; ·\n末段。');
+  assert.equal(chapters[1].content, '德与旗都是正文。');
+  assert.throws(() => splitText(text, {resource: {removeText: ['(?=仲)']}}), /空字符串/);
+  const base = {...specFor('https://example.org'), kind: 'txt', resource: {url: 'https://example.org/book.txt'}};
+  for (const removeText of ['广告', [''], ['.*']]) assert.throws(() => validateSpec({...base, resource: {...base.resource, removeText}}));
+  assert.throws(() => validateSpec({...base, resource: {...base.resource, decodeContentEntities: 'true'}}), /布尔值/);
+  assert.throws(() => validateSpec({...base, kind: 'epub', resource: {...base.resource, removeText: ['广告']}}), /只支持 TXT/);
+});
+
+test('cleaned TXT retains original response provenance and rejects changed cleanup on resume', async t => {
+  const original = '第一章 开始\n仲德的旗帜完整保留。&#183;【合成广告】正文继续，字面<标签>也保留。';
+  const f = await fixture(t, (req, res) => res.end(req.url === '/book' ? heading : original));
+  const {catalog, chapter, ...base} = specFor(f.base);
+  const spec = {...base, kind: 'txt', resource: {url: f.base + '/book.txt', decodeContentEntities: true, removeText: ['【合成广告】']}};
+  const report = await acquire(spec, f.options);
+  assert.equal(report.completeAgainstSource, true);
+  assert.equal(report.structuralPass, true);
+  const book = readJson(report.exportFile);
+  assert.equal(book.chapters[0].content, '仲德的旗帜完整保留。·正文继续，字面<标签>也保留。');
+  assert.equal(book.chapters[0].provenance[0].hash, hash(Buffer.from(original)));
+  assert.equal((await acquire(spec, f.options)).reusedExport, true);
+  await assert.rejects(acquire({...spec, resource: {...spec.resource, removeText: []}}, f.options), /提取规则发生变化/);
+});
+
 test('multipart TXT validates every part and catalog position, preserves notices and per-file evidence', async t => {
   let second = '请假条\n今天暂时请假。\n第一章 新卷\n新卷开始了，完整正文保留。';
   const f = await fixture(t, (req, res) => res.end(req.url === '/book' ? heading + '<div id="catalog"><a href="/a">第一章 开始</a><a href="/b">请假条</a><a href="/c">第一章 新卷</a></div>' : req.url === '/one.txt' ? '第一章 开始\n这是开头，合成测试的完整正文。' : second));

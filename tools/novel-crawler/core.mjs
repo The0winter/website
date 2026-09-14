@@ -46,9 +46,11 @@ export function validateSpec(input) {
     if (spec.catalog.json || typeof pattern !== 'string' || !pattern || pattern.length > 2000) throw Error('catalog.titlePattern 需要有效的 HTML 目录标题正则表达式');
     if (new RegExp(pattern, 'u').test('')) throw Error('目录标题规则不能匹配空字符串');
   }
-  if (spec.chapter?.removeText !== undefined) {
-    if (!Array.isArray(spec.chapter.removeText) || spec.chapter.removeText.some(pattern => typeof pattern !== 'string' || !pattern || pattern.length > 2000)) throw Error('chapter.removeText 必须为非空正则表达式数组');
-    for (const pattern of spec.chapter.removeText) if (new RegExp(pattern, 'gu').test('')) throw Error('正文噪声规则不能匹配空字符串');
+  for (const field of ['chapter', 'resource']) if (spec[field]?.removeText !== undefined) {
+    if (field === 'resource' && spec.kind !== 'txt') throw Error('resource.removeText 只支持 TXT');
+    const patterns = spec[field].removeText;
+    if (!Array.isArray(patterns) || patterns.some(pattern => typeof pattern !== 'string' || !pattern || pattern.length > 2000)) throw Error(`${field}.removeText 必须为非空正则表达式数组`);
+    for (const pattern of patterns) if (new RegExp(pattern, 'gu').test('')) throw Error('正文噪声规则不能匹配空字符串');
   }
   if (spec.catalog?.selectPages) {
     const config = spec.catalog.selectPages;
@@ -61,6 +63,7 @@ export function validateSpec(input) {
   }
   if (spec.kind !== 'html' && !(spec.resource?.url || spec.resource?.link || spec.resource?.parts)) throw Error('文件来源需配置下载地址或链接选择器');
   if (spec.resource?.decodeTitleEntities !== undefined && (spec.kind !== 'txt' || typeof spec.resource.decodeTitleEntities !== 'boolean')) throw Error('decodeTitleEntities 只支持 TXT 布尔值');
+  if (spec.resource?.decodeContentEntities !== undefined && (spec.kind !== 'txt' || typeof spec.resource.decodeContentEntities !== 'boolean')) throw Error('decodeContentEntities 只支持 TXT 布尔值');
   if (spec.resource?.parts !== undefined) {
     const {parts, url, link, compression} = spec.resource;
     if (spec.kind !== 'txt' || url || link || compression || !spec.catalog || !Array.isArray(parts) || !parts.length || parts.length > 40) throw Error('分段 TXT 需要在线目录和 1–40 个文件，不能混用单文件或压缩格式');
