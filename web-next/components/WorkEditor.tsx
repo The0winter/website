@@ -4,6 +4,7 @@ import {useEffect, useRef} from 'react';
 import {createPortal} from 'react-dom';
 import type {Book} from '@/lib/api';
 import WorkCreator from './WorkCreator';
+import {lockBodyScroll} from '@/lib/body-scroll-lock';
 
 export default function WorkEditor({book, onClose, onChanged}: {book:Book; onClose:()=>void; onChanged:()=>void}) {
   const dialog=useRef<HTMLDialogElement>(null);
@@ -15,7 +16,7 @@ export default function WorkEditor({book, onClose, onChanged}: {book:Book; onClo
   useEffect(()=>{
     const element=dialog.current!;
     const opener=document.activeElement as HTMLElement | null;
-    const overflow=document.body.style.overflow;
+    const unlockScroll=lockBodyScroll();
     marker.current ||= crypto.randomUUID();
     const id=marker.current;
     if(history.state?.workEditor!==id)history.pushState({...history.state,workEditor:id},'',location.href);
@@ -29,11 +30,10 @@ export default function WorkEditor({book, onClose, onChanged}: {book:Book; onClo
     close.current=()=>{if(history.state?.workEditor===id)history.back();};
     window.addEventListener('popstate',pop);
     element.showModal();
-    document.body.style.overflow='hidden';
     return ()=>{
       window.removeEventListener('popstate',pop);
       element.close();
-      document.body.style.overflow=overflow;
+      unlockScroll();
       if(opener?.isConnected)opener.focus({preventScroll:true});
     };
   },[]);

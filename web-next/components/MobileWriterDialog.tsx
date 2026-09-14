@@ -11,6 +11,7 @@ import Link from './PrefetchLink';
 import './mobile-writer.css';
 import WorkActions from './WorkActions';
 import MobileWriterView, { historyWriterViews, type WriterView } from './MobileWriterView';
+import {lockBodyScroll} from '@/lib/body-scroll-lock';
 
 type WorksResult = { key: string; books: Book[]; error?: string };
 
@@ -34,6 +35,7 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
   const userId = user?.id;
   const onCloseRef = useRef(onClose);
   const historyMarker = useRef<string | null>(null);
+  const backPending = useRef(false);
   const finishOpening = useCallback(() => {
     if (dialog.current?.dataset.closing === 'true') return;
     entered.current = true;
@@ -45,11 +47,17 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
   useEffect(() => {
     const element = dialog.current!;
     const previousFocus = document.activeElement as HTMLElement | null;
-    const overflow = document.body.style.overflow;
+    const unlockScroll = lockBodyScroll();
     const marker = historyMarker.current || history.state?.mobileWriter || crypto.randomUUID();
     let closing = false;
+    let disposed = false;
+    let finished = false;
     let timer: ReturnType<typeof setTimeout>;
-    const finish = () => { element.close(); onCloseRef.current(); };
+    const finish = () => {
+      if (finished || disposed) return;
+      finished = true;
+      element.close(); onCloseRef.current();
+    };
     const animateClose = () => {
       if (closing) return;
       closing = true;
@@ -73,12 +81,26 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
         form.dataset.dirty = 'false';
       }
       if (history.state?.mobileWriter !== marker) { animateClose(); return; }
+      // A cancelled native traversal or Forward can restore this visit before
+      // its exit animation ends. The old timer must not tear it down later.
+      closing = false;
+      clearTimeout(timer);
+      delete element.dataset.closing;
       const next = historyWriterViews();
+      backPending.current = [...element.querySelectorAll<HTMLElement>('.mw-view')].some(view => !next.some(item => item.id === view.dataset.viewId));
       setViews(previous => [...next, ...previous.filter(view => !next.some(item => item.id === view.id)).map(view => ({ ...view, closing: true }))]);
     };
     dismiss.current = () => {
-      if (history.state?.mobileWriter === marker) history.back();
+      if (backPending.current || closing) return;
+      if (history.state?.mobileWriter === marker) { backPending.current = true; history.back(); }
       else animateClose();
+    };
+    const nativeClose = () => {
+      if (disposed || finished || element.open) return;
+      // Older browsers can close a dialog despite preventDefault on a
+      // non-cancelable close request. Keep DOM visibility in sync with history.
+      if (!closing && history.state?.mobileWriter === marker) element.showModal();
+      else finish();
     };
     const clearHistoryMarker = () => {
       if (history.state?.mobileWriter === marker) {
@@ -98,8 +120,12 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
       element.style.setProperty('--mw-reveal-start', String(76 / radius));
     };
     sizeReveal();
+    // Child views already have real history entries. A second native close
+    // watcher would consume system Back and eventually force-close the whole
+    // retained dialog when its cancel event is no longer cancelable.
+    element.setAttribute('closedby', 'none');
+    element.addEventListener('close', nativeClose);
     element.showModal();
-    document.body.style.overflow = 'hidden';
     window.addEventListener('popstate', pop);
     const desktop = matchMedia('(min-width: 768px)');
     const resize = () => { if (desktop.matches) history.go(-(historyWriterViews().length + 1)); };
@@ -108,12 +134,14 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
     // Animation events can be interrupted when the tab or motion setting changes.
     const openingTimer = setTimeout(finishOpening, 380);
     return () => {
+      disposed = true;
       clearTimeout(timer);
       clearTimeout(openingTimer);
       window.removeEventListener('popstate', pop);
       desktop.removeEventListener('change', resize);
       window.removeEventListener('resize', sizeReveal);
-      document.body.style.overflow = overflow;
+      element.removeEventListener('close', nativeClose);
+      unlockScroll();
       if (element.open) element.close();
       if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
     };
@@ -145,6 +173,7 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
     setViews(next);
   };
   const exitView = (id: string) => {
+    backPending.current = false;
     setViews(previous => previous.filter(view => view.id !== id || !view.closing));
     requestAnimationFrame(() => {
       viewFocus.current.get(id)?.focus({ preventScroll: true });
@@ -160,7 +189,10 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
 
   const writerHref = (book: Book) => `/writer?action=chapters&work=${encodeURIComponent(book.manuscriptKey ? `m_${book.manuscriptKey}` : `b_${book.id}`)}&from=creation`;
 
-  return createPortal(<dialog ref={dialog} className="mw-dialog" aria-labelledby="mw-title" onCancel={event => { event.preventDefault(); dismiss.current(); }}>
+  return createPortal(<dialog ref={dialog} className="mw-dialog" aria-labelledby="mw-title" onCancel={event => { event.preventDefault(); event.stopPropagation(); dismiss.current(); }} onKeyDown={event => {
+    if (event.key !== 'Escape' || event.defaultPrevented || (event.target as Element).closest('dialog') !== event.currentTarget) return;
+    event.preventDefault(); event.stopPropagation(); dismiss.current();
+  }}>
     <div className="mw-reveal" aria-hidden="true"/>
     <div className="mw-scroll" inert={views.length > 0} aria-hidden={views.length > 0 || undefined} onAnimationEnd={event => { if (event.target === event.currentTarget && event.animationName === 'mw-content-in') finishOpening(); }}>
       <header className="mw-header"><button type="button" className="mw-back" aria-label="返回上一页" onClick={() => dismiss.current()}><ArrowLeft size={21}/></button><h2 id="mw-title">创作中心</h2></header>

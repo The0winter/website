@@ -4,6 +4,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {ArrowLeft, Plus, FileText, ChevronRight, Download, Trash2, Check, Loader2} from 'lucide-react';
 import {useAuth} from '@/contexts/AuthContext';
 import {safeFetch} from '@/lib/request';
+import {lockBodyScroll} from '@/lib/body-scroll-lock';
 import {cachedWorkspace, cacheWorkspace, draftScope, loadDrafts, writeDraft, type WritingDraft, type WorkspaceSnapshot} from '@/lib/writing-drafts';
 import './writing-workspace.css';
 
@@ -147,8 +148,7 @@ function WorkspaceContent({reference, embedded = false, moderation = false, comp
 
   useEffect(() => {
     if (!editing) return;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlockScroll = lockBodyScroll();
     const interval = setInterval(() => {if (!publishBusy.current) void save();}, 2000);
     const visibility = () => {if (document.visibilityState === 'hidden') void flush();};
     const unload = (event: BeforeUnloadEvent) => {
@@ -172,7 +172,7 @@ function WorkspaceContent({reference, embedded = false, moderation = false, comp
     return () => {
       clearInterval(interval); document.removeEventListener('visibilitychange', visibility);
       window.removeEventListener('beforeunload', unload); window.removeEventListener('keydown', keyboard, true);
-      document.body.style.overflow = overflow;
+      unlockScroll();
     };
   }, [editing, closeEditor, flush, save]);
 
