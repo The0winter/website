@@ -1,6 +1,6 @@
 .writing-workspace { --writing-paper:#fffaf6; --writing-bg:#f7efe9; --writing-ink:#42362f; --writing-muted:#998675; --writing-line:#e8dcd1; --writing-accent:#a84c51; position:relative; min-height:100dvh; color:var(--writing-ink); background:var(--writing-bg); font-family:inherit; animation:writing-enter-left 350ms cubic-bezier(.2,.75,.25,1) backwards; }
 .writing-embedded { min-height:100%; animation:none; }
-.writing-library { max-width:840px; margin:auto; padding:0 22px 32px; }
+.writing-library { max-width:840px; margin:auto; padding:0 22px calc(108px + env(safe-area-inset-bottom)); }
 .writing-heading { padding:26px 0 20px; text-align:center; }
 .writing-heading>p { font-size:11px; color:var(--writing-muted); margin:0 0 6px; }
 .writing-heading h2 { font-size:22px; line-height:1.4; font-weight:700; overflow-wrap:anywhere; margin:0; }
@@ -18,7 +18,11 @@
 .writing-tab-panel { width:100%; transition:transform 300ms cubic-bezier(.22,.7,.25,1); }
 .writing-tab-panel[aria-hidden=true] { position:absolute; top:0; left:0; }
 .writing-tab-view[data-dragging=true] .writing-tab-panel { transition:none; user-select:none; }
-.writing-draft-tools { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:20px 0 16px; }
+.writing-draft-tools { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:60px; padding:10px 0 6px; }
+.writing-manage { margin-left:auto; min-height:44px; color:var(--writing-muted); font-size:12px; }
+.writing-selection-tools { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; font-size:12px; }
+.writing-selection-tools button { min-height:44px; min-width:44px; color:var(--writing-accent); }
+.writing-selection-tools span { color:var(--writing-muted); }
 .writing-add { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px; padding:0 14px; border:1px solid var(--writing-line); border-radius:10px; color:var(--writing-accent); background:var(--writing-paper); font-size:14px; font-weight:600; }
 .writing-draft-tools>span,.writing-storage-note,.writing-note { color:var(--writing-muted); font-size:11px; line-height:1.7; }
 .writing-storage-note { margin-top:22px; }
@@ -28,13 +32,30 @@
 .writing-filters :is(input,select,button) { min-height:44px; padding:8px 10px; border:1px solid var(--writing-line); border-radius:8px; color:var(--writing-ink); background:var(--writing-paper); font-size:14px; }
 .writing-filters button { color:var(--writing-accent); }
 .writing-chapters li { display:flex; align-items:center; border-bottom:1px solid var(--writing-line); }
-.writing-chapter { flex:1; min-width:0; display:flex; text-align:left; align-items:center; gap:13px; min-height:86px; padding:14px 0; }
-.writing-chapter-number { flex:0 0 31px; color:var(--writing-muted); font-size:16px; font-variant-numeric:tabular-nums; }
-.writing-chapter>span:nth-child(2) { min-width:0; flex:1; }
+.writing-chapter { flex:1; min-width:0; display:flex; text-align:left; align-items:center; min-height:62px; padding:9px 0; user-select:none; -webkit-touch-callout:none; transition:background-color 200ms ease; }
+.writing-chapter-details { min-width:0; flex:1; }
 .writing-chapter strong { display:block; font-size:15px; line-height:1.5; font-weight:600; overflow-wrap:anywhere; }
-.writing-chapter small { display:block; margin-top:5px; font-size:11px; color:var(--writing-muted); }
-.writing-chapter>svg { flex:none; color:var(--writing-muted); }
-.writing-delete { width:40px; height:44px; display:grid; place-items:center; flex:none; color:var(--writing-muted); }
+.writing-chapter-meta { display:flex; flex-wrap:wrap; justify-content:space-between; gap:2px 8px; margin-top:3px; color:var(--writing-muted); font-size:10px; line-height:1.5; }
+.writing-chapter small { font-size:11px; }
+.writing-chapter time { margin-left:auto; text-align:right; white-space:nowrap; }
+.writing-selection { display:grid; flex:0 0 0px; width:0; opacity:0; overflow:hidden; transition:flex-basis 260ms cubic-bezier(.2,.75,.25,1),opacity 180ms ease; }
+.writing-selection>span { display:grid; place-items:center; width:21px; height:21px; border:1px solid var(--writing-line); border-radius:50%; color:#fffaf6; transition:background-color 180ms ease,border-color 180ms ease; }
+.writing-workspace[data-managing=true] .writing-selection { flex-basis:32px; opacity:1; }
+.writing-chapters li[data-selected=true] .writing-selection>span { background:var(--writing-accent); border-color:var(--writing-accent); }
+.writing-chapters li[data-selected=true] .writing-selection svg { animation:writing-check-in 220ms ease both; }
+.writing-chapters li[data-selected=true] .writing-chapter { background:color-mix(in srgb,var(--writing-accent) 5%,transparent); }
+.writing-batch-bar { position:fixed; z-index:30; bottom:0; left:0; right:0; display:flex; justify-content:center; gap:16px; padding:14px 22px calc(18px + env(safe-area-inset-bottom)); border-top:1px solid var(--writing-line); background:var(--writing-paper); box-shadow:0 -6px 26px #21160d0a; transform:translateY(110%); visibility:hidden; transition:transform 280ms cubic-bezier(.2,.75,.25,1),visibility 280ms; }
+.writing-workspace[data-managing=true] .writing-batch-bar { transform:translateY(0); visibility:visible; }
+.writing-batch-bar button { display:flex; align-items:center; justify-content:center; gap:8px; flex:1; max-width:300px; min-height:46px; border:1px solid var(--writing-line); border-radius:999px; font-size:14px; font-weight:600; }
+.writing-batch-delete { color:var(--writing-accent); }
+.writing-batch-publish { background:var(--writing-accent); color:#fffaf6; }
+.writing-batch-dialog { width:min(360px,calc(100vw - 40px)); margin:auto; padding:24px; border:1px solid var(--writing-line); border-radius:18px; background:var(--writing-paper); color:var(--writing-ink); box-shadow:0 16px 60px #21160d30; animation:writing-confirm-in 200ms ease both; }
+.writing-batch-dialog::backdrop { background:#21160d66; }
+.writing-batch-dialog h2 { margin:0 0 12px; font-size:18px; font-weight:600; }
+.writing-batch-dialog p { color:var(--writing-muted); font-size:13px; line-height:1.8; }
+.writing-batch-dialog>div { display:flex; gap:12px; margin-top:22px; }
+.writing-batch-dialog button { flex:1; min-height:44px; border:1px solid var(--writing-line); border-radius:999px; font-size:13px; }
+.writing-batch-dialog .writing-confirm { background:var(--writing-accent); color:#fffaf6; border-color:var(--writing-accent); }
 .writing-empty { min-height:235px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; color:var(--writing-muted); }
 .writing-empty h3 { color:var(--writing-ink); font-size:15px; font-weight:600; margin:3px 0 0; }
 .writing-empty p { font-size:12px; line-height:1.7; margin:0; }
@@ -70,10 +91,20 @@ html .writing-workspace .writing-form :is(input,textarea):focus-visible { outlin
 .writing-pagination button { min-height:44px; }
 .writing-spinner { animation:writing-spin 1s linear infinite; }
 @keyframes writing-spin { to { transform:rotate(360deg); } }
+@keyframes writing-check-in { from { transform:scale(.5); opacity:0; } to { transform:scale(1); opacity:1; } }
+@keyframes writing-confirm-in { from { transform:translateY(8px); opacity:0; } to { transform:translateY(0); opacity:1; } }
 @keyframes writing-enter-left { from { transform:translateX(-100%); } to { transform:translateX(0); } }
 @keyframes writing-enter-right { from { transform:translateX(100%); } to { transform:translateX(0); } }
 @keyframes writing-exit-right { to { transform:translateX(100%); } }
 @media(min-width:768px) { .writing-workspace { padding-bottom:40px; } .writing-heading { padding-top:34px; } .writing-editor .writing-header { padding-inline:max(24px,calc((100vw - 840px)/2)); } .writing-editor-footer { min-height:80px; } }
+@media(max-width:767px) {
+  .writing-heading { padding:12px 0 4px; }
+  .writing-compact-header .writing-heading { padding:calc(4px + env(safe-area-inset-top)) 0 0; }
+  .writing-tabs button { min-height:44px; }
+  .writing-draft-tools { min-height:42px; padding:0; }
+  .writing-manage,.writing-selection-tools button { min-height:42px; }
+  .writing-add { position:fixed; z-index:20; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%); min-height:48px; padding:0 23px; border:0; border-radius:999px; color:#fffaf6; background:var(--writing-accent); box-shadow:0 6px 24px #70353a30; white-space:nowrap; }
+}
 @media(max-height:600px) { .writing-editor { overflow-y:auto; } .writing-form.writer-dirty-form { min-height:330px; } }
 html.dark .writing-workspace { --writing-paper:#24211e; --writing-bg:#1b1917; --writing-ink:#eaded2; --writing-muted:#a99887; --writing-line:#433a32; --writing-accent:#bd6b6d; }
-@media(prefers-reduced-motion:reduce) { .writing-workspace,.writing-editor { animation-duration:.01ms; } .writing-tab-panel { transition:none; } }
+@media(prefers-reduced-motion:reduce) { .writing-workspace,.writing-editor,.writing-batch-dialog,.writing-chapters li[data-selected=true] .writing-selection svg { animation-duration:.01ms; } .writing-tab-panel,.writing-selection,.writing-selection>span,.writing-chapter,.writing-batch-bar { transition:none; } }

@@ -102,7 +102,7 @@ for (const width of [320, 390, 1440]) test(`draft library and local editor at ${
   await expect(page.getByLabel('正文', {exact: true})).toHaveValue(first.content + '\n返回前最后输入的一句。');
   await page.goBack();
   await expect(editor).toHaveCount(0);
-  await page.getByRole('button', {name: /09.*潮声/}).click();
+  await page.getByRole('button', {name: /第9章.*潮声/}).click();
   await expect(page.getByLabel('正文', {exact: true})).toHaveValue(first.content + '\n返回前最后输入的一句。');
   await page.getByRole('button', {name: '返回草稿箱'}).click();
   await expect(editor).toHaveCount(0);

@@ -6,11 +6,11 @@ import {sectionSwipeThreshold} from '@/lib/section-swipe';
 type Tab = 'drafts' | 'published';
 type Props = {
   value: Tab; onChange: (tab: Tab) => void; draftCount: number; publishedCount: number;
-  disabled?: boolean; notice?: ReactNode; children: [ReactNode, ReactNode];
+  disabled?: boolean; swipeDisabled?: boolean; notice?: ReactNode; children: [ReactNode, ReactNode];
 };
 const tabs = ['drafts', 'published'] as const;
 
-export default function WritingTabs({value, onChange, draftCount, publishedCount, disabled, notice, children}: Props) {
+export default function WritingTabs({value, onChange, draftCount, publishedCount, disabled, swipeDisabled, notice, children}: Props) {
   const viewport = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const gesture = useRef<{id: number; x: number; y: number; horizontal: boolean; origin: number} | null>(null);
@@ -34,13 +34,14 @@ export default function WritingTabs({value, onChange, draftCount, publishedCount
 
   function start(event: PointerEvent<HTMLDivElement>) {
     cancel(); suppressClick.current = false;
-    if (!event.isPrimary || event.button !== 0 || disabled ||
+    if (!event.isPrimary || event.button !== 0 || disabled || swipeDisabled ||
       (event.target as Element).closest('input, textarea, select, [contenteditable], button:not(.writing-chapter)')) return;
     const active = viewport.current?.querySelector<HTMLElement>('[aria-hidden="false"]');
     const origin = active ? new DOMMatrix(getComputedStyle(active).transform).m41 : 0;
     gesture.current = {id: event.pointerId, x: event.clientX, y: event.clientY, horizontal: false, origin};
   }
   function move(event: PointerEvent<HTMLDivElement>) {
+    if (disabled || swipeDisabled) {cancel(); return;}
     const current = gesture.current;
     if (!current || current.id !== event.pointerId) return;
     const dx = event.clientX - current.x, dy = event.clientY - current.y;
@@ -56,6 +57,7 @@ export default function WritingTabs({value, onChange, draftCount, publishedCount
     setOffset(bounded + index * width);
   }
   function end(event: PointerEvent<HTMLDivElement>) {
+    if (disabled || swipeDisabled) {cancel(); return;}
     const current = gesture.current;
     if (!current || current.id !== event.pointerId) return;
     const dx = event.clientX - current.x, dy = event.clientY - current.y;
@@ -64,7 +66,7 @@ export default function WritingTabs({value, onChange, draftCount, publishedCount
     }
     cancel();
   }
-  function select(next: Tab) {cancel(); onChange(next);}
+  function select(next: Tab) {if (!disabled) {cancel(); onChange(next);}}
 
   return <div ref={root} className="writing-tab-view" data-dragging={dragging || undefined}
     onDragStart={event => event.preventDefault()}
@@ -72,12 +74,12 @@ export default function WritingTabs({value, onChange, draftCount, publishedCount
     onLostPointerCapture={event => {if (event.target === event.currentTarget && gesture.current) cancel();}}
     onClickCapture={event => {if (suppressClick.current && event.nativeEvent.isTrusted) {event.preventDefault(); event.stopPropagation(); suppressClick.current = false;}}}>
     <div className="writing-tabs" role="tablist" aria-label="章节分类" onKeyDown={event => {
-      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      if (disabled || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
       const next = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : (index + 1) % 2;
       select(tabs[next]); root.current?.querySelector<HTMLButtonElement>(`#writing-${tabs[next]}-tab`)?.focus();
     }}>
-      {tabs.map((tab, i) => <button key={tab} type="button" role="tab" id={`writing-${tab}-tab`} aria-controls={`writing-${tab}`} aria-selected={value === tab} tabIndex={value === tab ? 0 : -1} onClick={() => select(tab)}>
+      {tabs.map((tab, i) => <button key={tab} type="button" role="tab" disabled={disabled} id={`writing-${tab}-tab`} aria-controls={`writing-${tab}`} aria-selected={value === tab} tabIndex={value === tab ? 0 : -1} onClick={() => select(tab)}>
         {i === 0 ? '草稿箱' : '已发布'}{(i === 0 ? draftCount : publishedCount) > 0 && <span>{i === 0 ? draftCount : publishedCount}</span>}
       </button>)}
     </div>
