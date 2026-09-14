@@ -42,9 +42,14 @@ for (const width of [320, 390, 1440]) test(`draft library and local editor at ${
     await page.locator('.mw-book').getByRole('link', {name: '创作', exact: true}).click();
     const motion = await page.locator('.mw-view-panel').evaluate(element => {
       const animation = element.getAnimations()[0];
-      return (animation.effect as KeyframeEffect).getKeyframes()[0].transform;
+      const time = animation.currentTime;
+      animation.pause(); animation.currentTime = 0;
+      const transform = new DOMMatrix(getComputedStyle(element).transform);
+      animation.currentTime = time; animation.play();
+      return {x: transform.m41, y: transform.m42, width: element.getBoundingClientRect().width};
     });
-    expect(motion).toBe('translate3d(100%, 0px, 0px)');
+    expect(motion.x).toBeCloseTo(motion.width, 0);
+    expect(motion.y).toBe(0);
     await expect(page.locator('.mw-view-header')).toHaveCount(0);
     await expect(page.locator('.writing-heading')).toHaveText('山海来信');
     await expect(page.locator('.writing-heading').getByRole('button', {name: '返回创作中心'})).toBeVisible();
