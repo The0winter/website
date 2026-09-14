@@ -59,21 +59,22 @@ export default function MobileWriterView({ view, covered, onBack, onExited, onCh
     if (form) form.dataset.dirty = 'false';
     onBack();
   };
-  return <div className="mw-view" data-view-id={view.id} data-kind={create ? 'new' : 'works'} data-direction={chapters ? 'left' : undefined} data-closing={view.closing || undefined} inert={covered} aria-hidden={covered || undefined}>
+  return <div className="mw-view" data-view-id={view.id} data-kind={create ? 'new' : 'works'} data-closing={view.closing || undefined} inert={covered} aria-hidden={covered || undefined}>
     <div className="mw-view-scrim" aria-hidden="true"/>
     <div ref={panel} className="mw-view-panel" role="dialog" aria-modal="true" aria-label={create ? '新建作品' : title} tabIndex={-1} data-ready={loaded}>
-      <header className="mw-view-header">
+      {!chapters && <header className="mw-view-header">
         {create ? <LoadingLogo size={32}/> : <button type="button" aria-label="返回创作中心" onClick={onBack}><ArrowLeft size={20}/></button>}
         <div>{!create && <span>九天 · 创作者空间</span>}<h2>{create ? '创建新作品' : title}</h2></div>
         {create ? <button type="button" aria-label="关闭新建作品" onClick={closeNew}><X size={22}/></button> : <BookOpen size={23}/>}
-      </header>
+      </header>}
       <div className="mw-view-content">
         {!loaded && <div className="mw-view-loading" role="status" aria-live="polite">
+          {chapters && <button type="button" className="mw-view-loading-back" aria-label="返回创作中心" onClick={onBack}><ArrowLeft size={20}/></button>}
           <LoadingLogo/><p><LoadingText>{create ? '正在准备新作品' : `正在加载${title}`}</LoadingText></p><div className="mw-view-skeleton" aria-hidden="true"><i/><i/><i/></div>
         </div>}
         <div className="mw-view-body" inert={!loaded} aria-hidden={!loaded || undefined}>
           {statistics && elapsed && <WriterStatistics onReady={markReady}/>}
-          {chapters && elapsed && <WritingWorkspace reference={destination.reference} embedded onExit={onBack} onReady={markReady} onChanged={onChanged}/>}
+          {chapters && elapsed && <WritingWorkspace reference={destination.reference} embedded compactHeader onExit={onBack} onReady={markReady} onChanged={onChanged}/>}
           {create && elapsed && <WorkCreator draftKey={draftKey} embedded onClose={onBack} onComplete={() => {onChanged(); onBack();}}/>}
           {destination.kind === 'works' && <p className="writing-note">请返回创作中心选择作品。</p>}
         </div>

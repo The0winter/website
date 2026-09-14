@@ -178,7 +178,6 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
           </article>)}</div> : <div className="mw-empty"><FilePenLine size={34}/><h4>{page === 1 ? '第一部作品，从这里开始' : '这一页还没有作品'}</h4><p>{page === 1 ? '先给故事起个名字，再慢慢写下它的世界。' : '返回上一页，继续你的故事。'}</p></div>}
           {(page > 1 || books.length === 20) && <nav className="mw-pagination" aria-label="作品分页"><button type="button" disabled={loading || page === 1} onClick={() => setPage(value => value - 1)}><ChevronLeft size={17}/>上一页</button><span>{page}</span><button type="button" disabled={loading || Boolean(error) || books.length < 20} onClick={() => setPage(value => value + 1)}>下一页<ChevronRight size={17}/></button></nav>}
         </section>
-        <p className="mw-note">草稿仅自己可见，准备好后再发布。</p>
       </>}
     </div>
     {views.map((view, index) => <MobileWriterView key={view.id} view={view} covered={index < views.length - 1} onBack={() => dismiss.current()} onExited={exitView} onChanged={viewWorksChanged}/>)}

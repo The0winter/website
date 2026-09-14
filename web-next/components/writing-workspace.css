@@ -4,6 +4,9 @@
 .writing-heading { padding:26px 0 20px; }
 .writing-heading>p { font-size:11px; color:var(--writing-muted); margin:0 0 6px; }
 .writing-heading h2 { font-size:22px; line-height:1.4; font-weight:700; overflow-wrap:anywhere; margin:0; }
+.writing-compact-header .writing-heading { display:flex; align-items:center; gap:12px; padding:calc(8px + env(safe-area-inset-top)) 0 8px; }
+.writing-compact-header .writing-heading>button { display:grid; place-items:center; flex:0 0 44px; height:44px; margin-left:-6px; border:1px solid var(--writing-line); border-radius:50%; }
+.writing-compact-header .writing-heading h2 { min-width:0; font-size:20px; }
 .writing-tabs { display:flex; gap:26px; border-bottom:1px solid var(--writing-line); }
 .writing-tabs button { position:relative; display:flex; align-items:center; gap:7px; min-height:48px; color:var(--writing-muted); font-size:16px; font-weight:600; }
 .writing-tabs button[aria-selected=true] { color:var(--writing-ink); }

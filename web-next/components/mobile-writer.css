@@ -19,7 +19,7 @@
 .mw-action span { font-size:11px; opacity:.8; }
 .mw-action-primary { color:#fff8ed; background:linear-gradient(135deg,#c7535b,#a93844); border-color:#b4444c; box-shadow:0 5px 13px #b4484d20; }
 .mw-section-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:14px; }
-.mw-section-heading h3 { font-size:18px; font-weight:700; }
+.mw-section-heading h3 { font-size:22px; font-weight:700; }
 .mw-book-list { display:grid; gap:12px; }
 .mw-book { display:grid; grid-template-columns:76px minmax(0,1fr); column-gap:16px; row-gap:12px; align-items:center; padding:16px; border:1px solid #e9ddd3; border-radius:16px; background:#fffaf6; }
 .mw-cover { grid-row:1 / 3; display:grid; place-items:center; width:76px; height:102px; overflow:hidden; border-radius:6px; color:#a7967f; background:#ece2d6; box-shadow:0 4px 10px #49302014; }
@@ -28,11 +28,12 @@
 .mw-book-info h4 { overflow-wrap:anywhere; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; font-size:16px; font-weight:600; line-height:1.5; }
 .mw-book-info>p { margin-top:6px; font-size:12px; color:#927a68; }
 .mw-book-info .work-private { margin-top:5px; font-size:11px; padding:1px 6px; }
-.mw-book-actions { grid-column:2; display:flex; align-items:start; align-self:start; gap:8px; }
+.mw-book-actions { position:relative; grid-column:2; display:flex; justify-content:flex-end; align-items:start; align-self:start; gap:8px; }
 .mw-book-actions>a { display:flex; justify-content:center; align-items:center; min-height:40px; min-width:76px; padding:0 16px; border-radius:9px; background:#b8424c; color:#fffaf6; font-size:15px; font-weight:600; white-space:nowrap; }
 .mw-book-actions .work-management summary { width:40px; min-height:40px; height:40px; padding:0; border-radius:9px; }
 .mw-book-actions .work-management summary svg { width:19px; height:19px; }
-.mw-book-actions .work-management-menu { left:0; right:auto; }
+.mw-book-actions .work-management { position:static; }
+.mw-book-actions .work-management-menu { left:auto; right:0; }
 .mw-book-info>div { display:flex; align-items:center; justify-content:space-between; gap:4px; margin-top:8px; }
 .mw-book-info a { display:flex; gap:3px; align-items:center; min-height:44px; font-size:12px; color:#9c5250; white-space:nowrap; }
 .mw-book-info a:last-child { color:#7b6656; }
@@ -40,7 +41,6 @@
 .mw-empty h4,.mw-guest h3 { margin-top:16px; font-size:15px; color:#705d4d; font-weight:600; }
 .mw-empty p,.mw-guest p { margin-top:10px; font-size:12px; line-height:1.9; color:#a28d7c; }
 .mw-primary { display:flex; align-items:center; justify-content:center; gap:12px; margin-top:24px; min-height:46px; padding:0 22px; border-radius:24px; background:#b8424c; color:#fff6ed; font-size:14px; }
-.mw-note { margin-top:24px; text-align:center; font-size:10px; color:#b29b89; }
 .mw-status { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; align-items:center; min-height:130px; padding:24px; font-size:13px; color:#99816e; }
 .mw-status button { min-height:44px; padding:0 15px; color:#ad4149; }
 .mw-pagination { display:flex; align-items:center; justify-content:center; gap:20px; margin-top:16px; font-size:12px; }

@@ -18,13 +18,13 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
 type WorkspaceProps = {
   reference: string; embedded?: boolean; onExit: () => void; onReady?: () => void; onChanged?: () => void;
-  moderation?: boolean;
+  moderation?: boolean; compactHeader?: boolean;
 };
 export default function WritingWorkspace(props: WorkspaceProps) {
   const {user} = useAuth();
   return user ? <WorkspaceContent {...props} key={user.id + props.reference} accountId={user.id}/> : <p className="writing-note">请登录后继续创作。</p>;
 }
-function WorkspaceContent({reference, embedded = false, moderation = false, onExit, onReady, onChanged, accountId}: WorkspaceProps & {accountId: string}) {
+function WorkspaceContent({reference, embedded = false, moderation = false, compactHeader = false, onExit, onReady, onChanged, accountId}: WorkspaceProps & {accountId: string}) {
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot>();
   const [drafts, setDrafts] = useState<WritingDraft[]>([]);
   const [tab, setTab] = useState<'drafts' | 'published'>(moderation ? 'published' : 'drafts');
@@ -265,10 +265,10 @@ function WorkspaceContent({reference, embedded = false, moderation = false, onEx
     } catch (reason) {setEditorError((reason as Error).message);}
   };
 
-  return <section className={`writing-workspace${embedded ? ' writing-embedded' : ''}`} aria-label="章节创作">
+  return <section className={`writing-workspace${embedded ? ' writing-embedded' : ''}${compactHeader ? ' writing-compact-header' : ''}`} aria-label="章节创作">
     <div className="writing-library" inert={Boolean(editor)} aria-hidden={Boolean(editor) || undefined}>
       {!embedded && <header className="writing-header"><button type="button" aria-label="返回创作中心" onClick={onExit}><ArrowLeft size={20}/></button><h1>创作</h1></header>}
-      <div className="writing-heading"><p>我的作品</p><h2>{snapshot?.work.title || '创作'}</h2></div>
+      <div className="writing-heading">{compactHeader ? <button type="button" aria-label="返回创作中心" onClick={onExit}><ArrowLeft size={20}/></button> : <p>我的作品</p>}<h2>{snapshot?.work.title || '创作'}</h2></div>
       <div className="writing-tabs" role="tablist" aria-label="章节分类">
         <button type="button" role="tab" id="writing-drafts-tab" aria-controls="writing-drafts" aria-selected={tab === 'drafts'} onClick={() => setTab('drafts')}>草稿箱{drafts.length > 0 && <span>{drafts.length}</span>}</button>
         <button type="button" role="tab" id="writing-published-tab" aria-controls="writing-published" aria-selected={tab === 'published'} onClick={() => setTab('published')}>已发布{Boolean(snapshot?.total) && <span>{snapshot?.total}</span>}</button>

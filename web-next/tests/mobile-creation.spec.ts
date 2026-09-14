@@ -36,6 +36,19 @@ for (const width of [320, 390, 430]) {
     await expect(modal(page).getByRole('heading', { name: book.title })).toBeVisible();
     await expect(modal(page)).toHaveAttribute('data-ready', 'true');
     await expect(modal(page)).toHaveCSS('clip-path', 'none');
+    await expect(modal(page).getByRole('heading', {name: '我的作品', exact: true})).toHaveCSS('font-size', '22px');
+    await expect(modal(page)).not.toContainText('草稿仅');
+    const card = page.locator('.mw-book').first();
+    const rightEdges = await card.evaluate(element => {
+      const card = element.getBoundingClientRect(), action = element.querySelector('.mw-book-actions>a')!.getBoundingClientRect();
+      return {gap: card.right - action.right, padding: parseFloat(getComputedStyle(element).paddingRight)};
+    });
+    expect(rightEdges.gap).toBeCloseTo(rightEdges.padding + 1, 0);
+    await card.locator('summary').click();
+    const menu = (await card.locator('.work-management-menu').boundingBox())!;
+    expect(menu.x).toBeGreaterThanOrEqual(0);
+    expect(menu.x + menu.width).toBeLessThanOrEqual(width);
+    await card.locator('summary').click();
     expect(await modal(page).evaluate(element => element.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: info.outputPath(`center-${width}.png`) });
   });
@@ -239,7 +252,7 @@ for (const width of [320, 390]) for (const action of ['新建作品', '作品数
       const box = element.getBoundingClientRect();
       return { height: box.height, top: box.top, viewport: innerHeight };
     });
-    if (action === '新建作品') { expect(geometry.height).toBeLessThan(geometry.viewport); expect(geometry.top).toBeGreaterThan(0); }
+    if (action === '新建作品') { expect(geometry.height).toBeLessThan(geometry.viewport); expect(geometry.top + geometry.height / 2).toBeCloseTo(geometry.viewport / 2, 0); }
     else expect(geometry.height).toBe(geometry.viewport);
     await page.screenshot({ path: info.outputPath(`loaded-${action}-${width}.png`) });
     if (action === '新建作品') await page.getByRole('button', { name: '关闭新建作品', exact: true }).click();

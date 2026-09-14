@@ -40,7 +40,15 @@ for (const width of [320, 390, 1440]) test(`draft library and local editor at ${
   if (width < 768) {
     await page.goto(base); await page.getByRole('button', {name: '创作', exact: true}).click();
     await page.locator('.mw-book').getByRole('link', {name: '创作', exact: true}).click();
-    await expect(page.locator('.mw-view')).toHaveAttribute('data-direction', 'left');
+    const motion = await page.locator('.mw-view-panel').evaluate(element => {
+      const animation = element.getAnimations()[0];
+      return (animation.effect as KeyframeEffect).getKeyframes()[0].transform;
+    });
+    expect(motion).toBe('translate3d(100%, 0px, 0px)');
+    await expect(page.locator('.mw-view-header')).toHaveCount(0);
+    await expect(page.locator('.writing-heading')).toHaveText('山海来信');
+    await expect(page.locator('.writing-heading').getByRole('button', {name: '返回创作中心'})).toBeVisible();
+    expect((await page.getByRole('tablist').boundingBox())!.y).toBeLessThan(90);
   } else {await page.goto(base + '/writer'); await page.locator('.writer-work').getByRole('button', {name: '创作', exact: true}).click();}
   await expect(page.getByRole('tab', {name: /草稿箱/})).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.writing-chapters')).toContainText('海上的信');
