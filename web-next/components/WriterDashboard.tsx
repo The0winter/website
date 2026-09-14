@@ -3,6 +3,7 @@ import BookCover from '@/components/BookCover';
 import ManuscriptCreator from './ManuscriptCreator';
 import WorkCreator from './WorkCreator';
 import WorkActions from './WorkActions';
+import WritingWorkspace from './WritingWorkspace';
 import WriterStatistics from './WriterStatistics';
 import './writer-desktop.css';
 import {LoadingLogo, LoadingText} from './BrandLoading';
@@ -54,6 +55,7 @@ export default function WriterDashboard({ entry, embedded = false, onExit, onOpe
   const entryParams = new URLSearchParams(entry);
   const entryBook = entryParams.get('book') || '';
   const entryAction = entryParams.get('action');
+  const [writingReference, setWritingReference] = useState(entryAction === 'chapters' ? entryParams.get('work') || '' : '');
   const fromCreationCenter = entryParams.get('from') === 'creation';
   const requestedPage = Number(entryParams.get('page') || 1);
 
@@ -511,6 +513,7 @@ const openBookManager = (book: Book) => {
           if (worksPage !== 1) setWorksPage(1);
           else void fetchMyData();
         }}/>;
+  if (user && writingReference) return <WritingWorkspace key={user.id + writingReference} reference={writingReference} embedded={embedded} onReady={onReady} onExit={() => {if (entryAction === 'chapters') {if (onExit) onExit(); else router.replace('/writer');} else {setWritingReference(''); void fetchMyData();}}} onChanged={onWorksChanged}/>;
   if (user && !embedded && showCreateBookModal) return creator;
 
   if (authLoading || !user) return <div className="writer-page min-h-screen flex flex-col gap-4 items-center justify-center" role="status"><LoadingLogo/><p><LoadingText>正在准备创作中心</LoadingText></p></div>;
@@ -613,7 +616,7 @@ const openBookManager = (book: Book) => {
                                     </div>
                                     <div className="writer-work-actions">
                                         <WorkActions book={book} onChanged={() => {onWorksChanged?.(); if(myBooks.length === 1 && worksPage > 1) setWorksPage(worksPage - 1); else void fetchMyData();}}/>
-                                        <button onClick={() => { if (book.manuscriptKey) {setBookCreationKey(book.manuscriptKey); setResumingManuscript(true); setShowCreateBookModal(true);} else openBookManager(book); }} className="writer-continue">创作</button>
+                                        <button onClick={() => setWritingReference(book.manuscriptKey ? `m_${book.manuscriptKey}` : `b_${book.id}`)} className="writer-continue">创作</button>
                                     </div>
                                 </div>
                             </div>

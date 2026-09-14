@@ -11,6 +11,7 @@ async function setup(page:Page) {
   await page.route('**/api/auth/session',route=>route.fulfill({json:{user:account,profile:account}}));
   await page.route('**/api/auth/csrf',route=>route.fulfill({json:{csrfToken:'synthetic-token'}}));
   await page.route('**/api/writer/works?**',route=>route.fulfill({json:state.created ? [{...state.draft,id:'private-work',manuscriptKey:state.keys.at(-1),visibility:'private'}] : []}));
+  await page.route('**/api/writer/workspace/**',route=>route.fulfill({json:{work:{reference:'m_'+(state.keys.at(-1)||'representative-draft-key'),title:state.draft.title,bookId:null,visibility:'private'},cloudDrafts:state.draft.chapters.map((c,i)=>({...c,id:'manuscript-'+i,number:i+1})),published:[],total:0,maxNumber:state.draft.chapters.length,publishedDraftIds:[]}}));
   await page.route('**/api/manuscripts',route=>route.fulfill({json:{drafts:[],remainingCharacters:100000}}));
   await page.route('**/api/upload/cover?purpose=book',async route=>{state.uploads++; await route.fulfill({json:{url:cover}});});
   await page.route('**/api/manuscripts/*',async route=>{
@@ -95,9 +96,9 @@ test('failed creation keeps input and cover, prevents duplicate clicks and retri
   await expect(page.locator('.writer-work')).toHaveCount(1);
   expect(state.attempts).toBe(2);expect(state.uploads).toBe(1);expect(new Set(state.keys).size).toBe(1);
   await page.getByRole('button',{name:'创作',exact:true}).click();
-  await expect(page.locator('.manuscript-work-title')).toHaveText(title);
+  await expect(page.locator('.writing-heading h2')).toHaveText(title);
   await expect(page.getByLabel('书名',{exact:true})).toHaveCount(0);
-  await expect(page.locator('.manuscript-modes button')).toHaveCount(2);
+  await expect(page.getByRole('tab')).toHaveCount(2);
 });
 
 test('creating from a later works page returns to the new card on a short screen',async({page})=>{
@@ -145,11 +146,11 @@ for(const width of [320,390,1440]) test(`settings edit metadata while creation o
   expect(state.draft.chapters).toEqual(chapters);expect(state.draft.revision).toBe(2);
   if(width<768)await card.getByRole('link',{name:'创作',exact:true}).click();
   else await card.getByRole('button',{name:'创作',exact:true}).click();
-  await expect(page.locator('.manuscript-book-summary')).toContainText('山海来信续篇');
+  await expect(page.locator('.writing-heading h2')).toContainText('山海来信续篇');
   await expect(page.getByLabel('书名',{exact:true})).toHaveCount(0);
   await expect(page.getByLabel('简介',{exact:true})).toHaveCount(0);
   await expect(page.getByLabel('上传封面（非必要）')).toHaveCount(0);
-  await page.getByRole('button',{name:'调整正文',exact:true}).click();
-  await expect(page.locator('.manuscript-work-title')).toHaveText('山海来信续篇');
+  await page.locator('.writing-chapter').filter({hasText:'第一章 来信'}).click();
+  await expect(page.getByLabel('正文',{exact:true})).toHaveValue('应当完整保留的正文。');
   await expect(page.getByLabel('书名',{exact:true})).toHaveCount(0);
 });

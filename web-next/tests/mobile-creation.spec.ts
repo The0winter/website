@@ -13,6 +13,7 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/api/auth/session', route => route.fulfill({ json: { user: account, profile: account } }));
   await page.route('**/api/writer/works?**', route => route.fulfill({ json: [book] }));
   await page.route(`**/api/books/${book.id}/chapters**`, route => route.fulfill({ json: [] }));
+  await page.route('**/api/writer/workspace/**',route=>route.fulfill({json:{work:{reference:'b_'+book.id,title:book.title,bookId:book.id,visibility:'public'},cloudDrafts:[{id:'legacy-test',title:'第一章 风起',content:'留给自己的未发布草稿。',number:1}],published:[],total:0,maxNumber:1,publishedDraftIds:[]}}));
   await page.route(`**/api/books/${book.id}/draft`, route => route.fulfill({ json: { id: 'private-draft', title: '第一章 风起', content: '留给自己的未发布草稿。' } }));
   await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
     const style = document.createElement('style'); style.textContent = 'nextjs-portal{display:none!important}'; document.head.append(style);
@@ -92,16 +93,17 @@ for (const width of [320, 390]) test(`creator actions open the matching creation
   await expect(modal(page)).toBeVisible();
   await modal(page).getByRole('link', { name: '创作', exact: true }).click();
   await page.getByRole('button',{name:'新建章节',exact:true}).click();
-  await expect(page.getByPlaceholder('请输入章节标题')).toBeVisible();
-  await expect(page.getByRole('button', { name: '存草稿', exact: true })).toBeVisible();
+  await expect(page.getByLabel('章节名',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button', { name: '保存', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath(`editor-${width}.png`) });
+  await page.goBack(); await expect(page.locator('.writing-editor')).toHaveCount(0);
   await page.goBack(); await expect(page.locator('.mw-view')).toHaveCount(0); await expect(modal(page)).toBeVisible();
   await modal(page).getByRole('link', { name: '创作', exact: true }).click();
-  await expect(page.getByText('章节创作', { exact: true })).toBeVisible();
+  await expect(page.getByRole('tab',{name:/草稿箱/})).toBeVisible();
   await page.screenshot({ path: info.outputPath(`manager-${width}.png`) });
-  await page.getByRole('button', { name: '继续草稿', exact: true }).click();
-  await expect(page.getByPlaceholder('在这里开始你的创作...')).toHaveValue('留给自己的未发布草稿。');
+  await page.locator('.writing-chapter').filter({hasText:'第一章 风起'}).click();
+  await expect(page.getByLabel('正文',{exact:true})).toHaveValue('留给自己的未发布草稿。');
 });
 
 for (const width of [320, 390]) for (const action of ['新建作品', '作品数据']) {
@@ -291,19 +293,19 @@ test('slow management data keeps its loading panel visible and Back cancels an u
   } finally { release(); }
 });
 
-test('new work opened from management returns to the same management layer before the center', async ({ page }) => {
+test('new chapter returns to the same draft library before the center', async ({ page }) => {
   await page.goto(base); await launch(page).click();
   await modal(page).getByRole('link', { name: '创作', exact:true }).click();
   await expect(page.locator('.mw-view-panel')).toHaveAttribute('data-ready', 'true');
-  await page.getByRole('button',{name:'关闭作品管理',exact:true}).click();
   const id = await page.evaluate(() => history.state.mobileWriterViews[0].id);
-  await page.getByRole('button', { name: '新建', exact: true }).click();
-  await expect(page.getByLabel('书名', {exact:true})).toBeVisible();
-  await expect(page.locator('.mw-view')).toHaveCount(2);
-  await page.getByRole('button', { name: '关闭新建作品', exact: true }).click();
+  await page.getByRole('button', { name: '新建章节', exact: true }).click();
+  await expect(page.getByLabel('章节名', {exact:true})).toBeVisible();
+  await expect(page.getByLabel('书名', {exact:true})).toHaveCount(0);
+  await page.getByRole('button', { name: '返回草稿箱', exact: true }).click();
+  await expect(page.locator('.writing-editor')).toHaveCount(0);
   await expect(page.locator('.mw-view')).toHaveCount(1);
   expect(await page.evaluate(() => history.state.mobileWriterViews[0].id)).toBe(id);
-  await expect(page.locator('.writer-work').getByRole('heading', { name: book.title })).toBeVisible();
+  await expect(page.locator('.writing-heading').getByRole('heading', { name: book.title })).toBeVisible();
   await page.goBack(); await expect(page.locator('.mw-view')).toHaveCount(0);
   await expect(modal(page)).toBeVisible();
 });

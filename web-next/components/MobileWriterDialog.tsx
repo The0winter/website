@@ -158,7 +158,7 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
     worksChanged();
   }, [worksChanged]);
 
-  const writerHref = (book: Book) => book.manuscriptKey ? `/writer?action=new&draft=${encodeURIComponent(book.manuscriptKey)}&from=creation` : `/writer?book=${encodeURIComponent(book.id)}&action=manage&page=${page}&from=creation`;
+  const writerHref = (book: Book) => `/writer?action=chapters&work=${encodeURIComponent(book.manuscriptKey ? `m_${book.manuscriptKey}` : `b_${book.id}`)}&from=creation`;
 
   return createPortal(<dialog ref={dialog} className="mw-dialog" aria-labelledby="mw-title" onCancel={event => { event.preventDefault(); dismiss.current(); }}>
     <div className="mw-reveal" aria-hidden="true"/>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, BookOpen, X } from 'lucide-react';
 import {LoadingLogo, LoadingText} from './BrandLoading';
 import WriterStatistics from './WriterStatistics';
+import WritingWorkspace from './WritingWorkspace';
 import type WriterDashboard from './WriterDashboard';
 import '@/app/writer/writer-mobile.css';
 import './mobile-writer-view.css';
@@ -21,6 +22,7 @@ export default function MobileWriterView({ view, covered, refreshVersion, onBack
   const statistics = new URLSearchParams(view.entry).get('action') === 'statistics';
   const title = statistics ? '作品数据' : '创作';
   const params = new URLSearchParams(view.entry);
+  const chapters = params.get('action') === 'chapters';
   const create = params.get('action') === 'new' && !params.has('draft');
   const [Dashboard, setDashboard] = useState<typeof WriterDashboard>();
   const [elapsed, setElapsed] = useState(false);
@@ -60,7 +62,7 @@ export default function MobileWriterView({ view, covered, refreshVersion, onBack
     if (form) form.dataset.dirty = 'false';
     onBack();
   };
-  return <div className="mw-view" data-view-id={view.id} data-kind={create ? 'new' : 'works'} data-closing={view.closing || undefined} inert={covered} aria-hidden={covered || undefined}>
+  return <div className="mw-view" data-view-id={view.id} data-kind={create ? 'new' : 'works'} data-direction={chapters ? 'left' : undefined} data-closing={view.closing || undefined} inert={covered} aria-hidden={covered || undefined}>
     <div className="mw-view-scrim" aria-hidden="true"/>
     <div ref={panel} className="mw-view-panel" role="dialog" aria-modal="true" aria-label={create ? '新建作品' : title} tabIndex={-1} data-ready={loaded}>
       <header className="mw-view-header">
@@ -74,7 +76,8 @@ export default function MobileWriterView({ view, covered, refreshVersion, onBack
         </div>}
         <div className="mw-view-body" inert={!loaded} aria-hidden={!loaded || undefined}>
           {statistics && elapsed && <WriterStatistics onReady={markReady}/>}
-          {!statistics && Dashboard && elapsed && <Dashboard entry={view.entry} embedded onExit={onBack} onOpenNew={onOpenNew} onReady={markReady} refreshVersion={refreshVersion} onWorksChanged={onChanged}/>}
+          {chapters && elapsed && <WritingWorkspace reference={params.get('work') || ''} embedded onExit={onBack} onReady={markReady} onChanged={onChanged}/>}
+          {!statistics && !chapters && Dashboard && elapsed && <Dashboard entry={view.entry} embedded onExit={onBack} onOpenNew={onOpenNew} onReady={markReady} refreshVersion={refreshVersion} onWorksChanged={onChanged}/>}
         </div>
       </div>
     </div>

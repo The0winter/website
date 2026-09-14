@@ -30,6 +30,10 @@
 .writer-embedded-new .writer-create-modal>div { padding-top:16px; max-height:none; border-radius:0; background:transparent; box-shadow:none; animation:none; }
 .writer-embedded-new .writer-create-title { display:none; }
 @keyframes mw-view-slide-in { from { transform:translate3d(100%,0,0); } to { transform:translate3d(0,0,0); } }
+.mw-view[data-direction=left] .mw-view-panel { animation-name:mw-writing-slide-in; }
+.mw-view[data-direction=left] .mw-view-panel[data-closing=true] { animation-name:mw-writing-slide-out; }
+@keyframes mw-writing-slide-in { from { transform:translate3d(-100%,0,0); } to { transform:translate3d(0,0,0); } }
+@keyframes mw-writing-slide-out { from { transform:var(--mw-view-close-transform); } to { transform:translate3d(-100%,0,0); } }
 @keyframes mw-view-sheet-in { from { transform:translate3d(0,100%,0); } to { transform:translate3d(0,0,0); } }
 @keyframes mw-view-slide-out { from { transform:var(--mw-view-close-transform); } to { transform:translate3d(100%,0,0); } }
 @keyframes mw-view-sheet-out { from { transform:var(--mw-view-close-transform); } to { transform:translate3d(0,100%,0); } }

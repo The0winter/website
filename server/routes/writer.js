@@ -5,6 +5,7 @@ import ChapterRead from '../models/ChapterRead.js';
 import {asyncRoute} from '../security.js';
 import {pagination} from '../services/pagination.js';
 import {dayKey, fail} from '../services/content.js';
+import {writingWorkspaceRoutes} from './writing-workspace.js';
 
 export function periodStart(day, period) {
   const date = new Date(day + 'T00:00:00Z');
@@ -20,6 +21,7 @@ export function movePeriod(day, period, amount) {
 }
 
 export function writerRoutes(app, auth) {
+  writingWorkspaceRoutes(app, auth);
   app.get('/api/writer/works', auth.authenticate, asyncRoute(async (req, res) => {
     const {skip, limit} = pagination(req.query);
     const owner = new mongoose.Types.ObjectId(req.user.id);
