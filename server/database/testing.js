@@ -8,6 +8,7 @@ import {installSqlDriver} from './driver.js';
 
 export class TestDatabase {
   static async create() {
+    if(process.env.TEST_DATABASE_BACKEND==='mongodb')return nativeTestDatabase();
     installSqlDriver();
     const directory=fs.mkdtempSync(path.join(os.tmpdir(),'test1-sqlite-'));
     return new TestDatabase(directory);
@@ -21,4 +22,15 @@ export class TestDatabase {
     for(const suffix of ['', '-wal', '-shm', '-journal'])fs.rmSync(this.filename+suffix,{force:true});
     if(fs.existsSync(this.directory))fs.rmdirSync(this.directory);
   }
+}
+
+export async function nativeTestDatabase() {
+  const {MongoMemoryReplSet}=await import('mongodb-memory-server');
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'test1-mongo-'));
+  const repl=await MongoMemoryReplSet.create({
+    binary:{downloadDir:path.join(os.tmpdir(),'mongodb-binaries')},
+    instanceOpts:[{dbPath:directory}],
+    replSet:{count:1,storageEngine:'wiredTiger'},
+  });
+  return {getUri:(name='test1_test')=>repl.getUri(name),stop:()=>repl.stop()};
 }

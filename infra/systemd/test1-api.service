@@ -12,7 +12,6 @@ Group=test1-api
 WorkingDirectory=/srv/test1/current/server
 Environment=NODE_ENV=production
 EnvironmentFile=/etc/test1/api.env
-EnvironmentFile=-/etc/test1/d1.env
 ExecStart=/opt/node-v22.23.2-linux-x64/bin/node --max-old-space-size=384 index.js
 Restart=on-failure
 RestartSec=5

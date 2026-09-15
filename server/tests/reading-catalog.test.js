@@ -22,18 +22,24 @@ test('catalog pages and full-book statistics stay complete, bounded and metadata
     const url=`http://127.0.0.1:${server.address().port}/api/books/${book._id}/chapters`;
     const commands=[];
     const transport=mongoose.connection.transport;
-    const originalQuery=transport.query.bind(transport);
-    transport.query=async sql=>{const rows=await originalQuery(sql);commands.push({sql,rows});return rows;};
+    const originalQuery=transport?.query.bind(transport);
+    if(transport)transport.query=async sql=>{const rows=await originalQuery(sql);commands.push({sql,rows});return rows;};
     const first=await fetch(url+'?limit=200&page=1');
     const firstRows=await first.json();
     assert.equal(first.status,200);assert.equal(first.headers.get('X-Total-Count'),'404');
     assert.equal(firstRows.length,200);assert.equal(firstRows[0].title,firstRows[1].title);
     for(const row of firstRows){assert.ok(row.id);assert.equal(row.content,undefined);assert.equal(row.contentKey,undefined);}
+    if(transport) {
     const pageQuery=commands.find(event=>event.sql.includes('FROM "chapters"')&&event.sql.includes('LIMIT 200'));
     assert.ok(pageQuery);assert.equal(pageQuery.rows.length,200);
     assert.ok(pageQuery.rows.every(row=>!Object.hasOwn(JSON.parse(row.document),'content')));
     const plan=await originalQuery('EXPLAIN QUERY PLAN '+pageQuery.sql);
     assert.ok(plan.some(row=>/USING INDEX|USING COVERING INDEX/.test(row.detail)),JSON.stringify(plan));
+    } else {
+      const plan=await Chapter.find({bookId:book._id,deletedAt:null}).sort({chapter_number:1}).limit(200).explain('executionStats');
+      assert.equal(plan.executionStats.nReturned,200);
+      assert.ok(plan.executionStats.totalDocsExamined<=201);
+    }
     const second=await (await fetch(url+'?limit=200&page=2')).json();
     const last=await (await fetch(url+'?limit=200&page=3')).json();
     const all=[...firstRows,...second,...last];

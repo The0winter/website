@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily verified Atlas data backup
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+RandomizedDelaySec=10min
+Persistent=true
+Unit=test1-atlas-backup.service
+
+[Install]
+WantedBy=timers.target

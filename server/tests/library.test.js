@@ -57,9 +57,10 @@ test('library: durable progress, global sorting, pagination and private manageme
     assert.equal(String((await ReadingHistory.findOne({userId: user._id})).chapterId), body.chapterId);
     const outsider = new mongoose.Types.ObjectId();
     await ReadingHistory.insertMany(books.map(book => ({userId: outsider, bookId: book._id, lastVisitedAt: new Date()})));
-    const queries = [], transport = mongoose.connection.transport, query = transport.query.bind(transport);
-    transport.query = async sql => {const rows = await query(sql); queries.push({sql, rows}); return rows;};
+    const queries = [], transport = mongoose.connection.transport, query = transport?.query.bind(transport);
+    if(transport)transport.query = async sql => {const rows = await query(sql); queries.push({sql, rows}); return rows;};
     const shelf = await request(root + '/library');
+    if(transport) {
     const historyQueries = queries.filter(({sql}) => sql.includes('FROM "readinghistories"'));
     assert.equal(historyQueries.length, 1); assert.equal(historyQueries[0].rows.length, 1);
     assert.ok(historyQueries[0].sql.includes(String(user._id)), 'scope joins to this reader');
@@ -71,6 +72,7 @@ test('library: durable progress, global sorting, pagination and private manageme
       assert.ok(sql.includes('LIMIT 1') || sql.includes(String(chapter._id)), 'indexed endpoints or explicit progress IDs, no full chapter aggregation');
     }
     transport.query = query;
+    }
     assert.equal(shelf.status, 200); assert.equal(shelf.headers.get('x-total-count'), '25');
     assert.equal(shelf.data.length, 20); assert.equal(shelf.data[0].bookId, body.bookId);
     assert.equal(shelf.data[0].chapterTitle, 'Read chapter'); assert.equal(shelf.data[0].latestChapterTitle, 'Latest chapter');

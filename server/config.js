@@ -8,7 +8,7 @@ export function readConfig(env = process.env) {
   const uri = env.DATABASE_URL || env.MONGO_URI;
   if (!uri) throw new Error('DATABASE_URL is required');
   const sqlite = uri.startsWith('sqlite:');
-  if(mode==='production' && !/^(d1:\/\/[a-f0-9]{32}\/[a-f0-9-]{36}|mongodb(?:\+srv)?:\/\/.+)$/.test(uri)) throw new Error('Production DATABASE_URL must select D1 or the legacy MongoDB source');
+  if(mode==='production' && !/^(d1:\/\/[a-f0-9]{32}\/[a-f0-9-]{36}|mongodb(?:\+srv)?:\/\/.+)$/.test(uri)) throw new Error('Production DATABASE_URL must select D1 or MongoDB');
   if(sqlite) {
     const filename=fileURLToPath(uri.replace(/^sqlite:/,'file:'));
     const root=fs.realpathSync(fileURLToPath(new URL('../.runtime/test-tmp/',import.meta.url)));
