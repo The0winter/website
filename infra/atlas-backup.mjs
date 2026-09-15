@@ -33,7 +33,9 @@ export async function writeMongoArchive(client, file) {
           const name = names[i], contentHash = createHash('sha256');
           let count = 0;
           yield (i ? ',' : '') + JSON.stringify({name,indexes:indexes.get(name)}).slice(0,-1) + ',"documents":[';
-          const cursor = db.collection(name).find({}, {session,sort:{_id:1},batchSize:200});
+          // Keep batches bounded while avoiding hundreds of inter-region
+          // getMore round trips inside Atlas's snapshot transaction deadline.
+          const cursor = db.collection(name).find({}, {session,sort:{_id:1},batchSize:2000});
           try {
             for await (const doc of cursor) {
               const row = {id:String(doc._id), document:encode(doc), bson:mongoose.mongo.BSON.EJSON.stringify(doc,{relaxed:false})};
