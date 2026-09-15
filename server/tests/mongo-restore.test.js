@@ -9,6 +9,11 @@ import {migrationSchemas} from '../database/migration-schemas.js';
 import {mongoDocuments,restoreMongoSnapshot,verifyMongoSnapshot,activateMongoTtl} from '../database/mongo-restore.js';
 import {configureChapterStorage,createChapterStorage,readChapterBody} from '../services/chapter-storage.js';
 import Chapter from '../models/Chapter.js';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {writeMongoArchive} from '../../infra/atlas-backup.mjs';
+import {unpackSnapshot} from '../database/snapshot.js';
 
 test('native Mongo restore preserves typed relationships and R2, refuses divergent targets and defers TTL',async t=>{
   const repl=await nativeTestDatabase();
@@ -43,6 +48,13 @@ test('native Mongo restore preserves typed relationships and R2, refuses diverge
   const backup=await snapshotMongo(repl.getUri());
   assert.ok(backup.collections.find(c=>c.name==='chapters').documents[0].bson.includes('$oid'));
   assert.equal((await verifyMongoSnapshot(db,backup,schemas)).verified,true);
+  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'mongo-stream-'));
+  try {
+    const file=path.join(directory,'snapshot.json.gz');
+    await writeMongoArchive(mongoose.connection.getClient(),file);
+    const streamed=unpackSnapshot(await fs.readFile(file));
+    assert.equal((await verifyMongoSnapshot(db,streamed,schemas)).verified,true);
+  } finally {assert.equal(path.dirname(directory),path.resolve(os.tmpdir()));await fs.rm(directory,{recursive:true,force:true});}
   await activateMongoTtl(db,source);
   assert.equal((await db.collection('sessions').indexes()).find(i=>i.name==='expiresAt_1').expireAfterSeconds,0);
 

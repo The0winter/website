@@ -2,10 +2,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import mongoose from '../server/node_modules/mongoose/index.js';
-import {unpackSnapshot,snapshotMongo} from '../server/database/snapshot.js';
+import {unpackSnapshot} from '../server/database/snapshot.js';
 import {migrationSchemas} from '../server/database/migration-schemas.js';
 import {restoreMongoSnapshot,verifyMongoSnapshot,activateMongoTtl} from '../server/database/mongo-restore.js';
-import {saveCloudBackup} from './cloudflare-data.mjs';
+import {backupAtlas} from './atlas-backup.mjs';
 
 async function main() {
   const [action,...args]=process.argv.slice(2),option=name=>args.find(arg=>arg.startsWith('--'+name+'='))?.slice(name.length+3);
@@ -13,7 +13,7 @@ async function main() {
   if(!/^mongodb(?:\+srv)?:\/\//.test(uri||''))throw new Error('Explicit MongoDB connection required');
   const directory=option('directory')||'/var/lib/test1-atlas-backup';
   if(action==='backup') {
-    console.log(JSON.stringify(await saveCloudBackup(await snapshotMongo(uri),{directory,kind:'atlas',keepLocal:args.includes('--keep-local')})));
+    console.log(JSON.stringify(await backupAtlas(uri,{directory,keepLocal:args.includes('--keep-local')})));
     return;
   }
   if(!['import','verify','activate-ttl'].includes(action))throw new Error('Usage: atlas-data.mjs import|verify|activate-ttl|backup');
