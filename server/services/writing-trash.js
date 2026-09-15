@@ -50,11 +50,14 @@ export async function trashChapter(actor, id, {restore = false, now = new Date()
 }
 
 export async function purgeExpiredWritingTrash(now = new Date(), limit = 100) {
-  const drafts = await WriterDraft.find({deleted: true, trashUntil: {$lte: now}}).select('_id').sort({trashUntil: 1}).limit(limit).lean();
+  // D1's sparse expiry indexes require the existence predicate explicitly;
+  // otherwise this minute-by-minute task scans all live chapters and drafts.
+  const expired = {$exists: true, $lte: now};
+  const drafts = await WriterDraft.find({deleted: true, trashUntil: expired}).select('_id').sort({trashUntil: 1}).limit(limit).lean();
   let purgedDrafts = 0, purgedChapters = 0;
   for (const row of drafts) {
     const removed = await mongoose.connection.transaction(async session => {
-      const draft = await WriterDraft.findOne({_id: row._id, deleted: true, trashUntil: {$lte: now}}).session(session);
+      const draft = await WriterDraft.findOne({_id: row._id, deleted: true, trashUntil: expired}).session(session);
       if (!draft) return false;
       await User.updateOne({_id: draft.owner}, {$inc: {contentVersion: 1}}, {session});
       await WriterDiscard.updateOne({_id: draft._id}, {$setOnInsert: {owner: draft.owner, work: draft.work, draftId: draft.draftId, removedAt: now}}, {session, upsert: true});
@@ -66,10 +69,10 @@ export async function purgeExpiredWritingTrash(now = new Date(), limit = 100) {
     });
     if (removed) purgedDrafts++;
   }
-  const chapters = await Chapter.find({deletedAt: {$ne: null}, trashUntil: {$lte: now}}).select('_id').sort({trashUntil: 1}).limit(limit).lean();
+  const chapters = await Chapter.find({deletedAt: {$ne: null}, trashUntil: expired}).select('_id').sort({trashUntil: 1}).limit(limit).lean();
   for (const row of chapters) {
     const removed = await mongoose.connection.transaction(async session => {
-      const chapter = await Chapter.findOne({_id: row._id, deletedAt: {$ne: null}, trashUntil: {$lte: now}}).session(session);
+      const chapter = await Chapter.findOne({_id: row._id, deletedAt: {$ne: null}, trashUntil: expired}).session(session);
       if (!chapter) return false;
       await ParagraphComment.deleteMany({chapter: chapter._id}, {session});
       await ChapterRead.deleteOne({_id: chapter._id}, {session});
