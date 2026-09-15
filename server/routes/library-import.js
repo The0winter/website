@@ -7,6 +7,7 @@ import {fail, validateChapter, lockBook} from '../services/content.js';
 import {importMetadata} from '../services/import-metadata.js';
 import {validImportCredential} from '../services/import-auth.js';
 import {chapterBodyMatches, storeChapterBodies} from '../services/chapter-storage.js';
+import {libraryRevision} from '../../shared/library-revision.mjs';
 
 const normalize = value => String(value || '').normalize('NFKC').trim();
 
@@ -65,8 +66,9 @@ export function libraryImportRoutes(app) {
     await mongoose.connection.transaction(async session => {
       const current = await inspect(session);
       let book = current.book;
+      const previousToken = libraryRevision(book);
       if (!book) [book] = await Book.create([{title: data.title, author: author.name, sourceUrl: data.sourceUrl, importManaged: true, category: data.category || '未分类'}], {session});
-      else await lockBook(book._id, {role: 'import'}, session);
+      else book = await lockBook(book._id, {role: 'import'}, session);
       const profile = await Author.findOneAndUpdate({sourceKey: author.sourceKey}, {$setOnInsert: author}, {upsert: true, new: true, session});
       Object.assign(book, metadata, {author: profile.name, author_profile_id: profile._id});
       await book.save({session});
@@ -78,7 +80,8 @@ export function libraryImportRoutes(app) {
       // insertMany bypasses save hooks: R2 references are already written and
       // verified above. Schema validation and the unique chapter index remain.
       if (inserts.length) await Chapter.insertMany(inserts, {session, ordered: true});
-      result = {bookId: String(book._id), inserted: inserts.length, unchanged: chapters.length - inserts.length, enriched: 0};
+      result = {bookId: String(book._id), inserted: inserts.length, unchanged: chapters.length - inserts.length, enriched: 0,
+        previousToken, token: libraryRevision(book)};
     });
     res.json(result);
   }));

@@ -27,8 +27,10 @@ process.on('message', async message => {
   started = true;
   try {
     if (message.upload) {
+      let lastBatch = 0, lastPhase = 0;
       const batch = await uploadLibrary({stateDir: message.stateDir, outputDir: message.outputDir, signal: controller.signal, shouldStop: () => paused,
-        onLibrary: batch => send({type: 'upload', batch}), onPhase: book => send({type: 'upload-phase', title: book.title, author: book.author})});
+        onLibrary: batch => { if (batch.finishedAt || Date.now() - lastBatch >= 200) { lastBatch = Date.now(); send({type: 'upload', batch}); } },
+        onPhase: book => { if (Date.now() - lastPhase >= 200) { lastPhase = Date.now(); send({type: 'upload-phase', title: book.title, author: book.author}); } }});
       send({type: 'upload-done', batch});
       return;
     }

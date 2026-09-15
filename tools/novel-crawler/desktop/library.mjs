@@ -8,6 +8,7 @@ import {makeClient} from '../http.mjs';
 import {browserProfile} from '../browser-session.mjs';
 import {applyVerifiedBookStatus, loadSites, specForBook} from './sources.mjs';
 import {createLibraryControl} from './library-control.mjs';
+import {localUploadIndex} from './upload-cache.mjs';
 
 const entries = dir => fs.existsSync(dir) ? fs.readdirSync(dir, {withFileTypes: true}) : [];
 function sealed(file) {
@@ -18,22 +19,28 @@ function sealed(file) {
 
 // Inspect exports once, in the worker. Reports and mapping sidecars are not books.
 // An explicit continuation or reading-edition binding takes precedence over old exports.
-export function planLibrary({stateDir, outputDir, sites = loadSites().sites, forUpload = false}) {
+export function planLibrary({stateDir, outputDir, sites = loadSites().sites, forUpload = false, forceFull = false}) {
   stateDir = path.resolve(stateDir); outputDir = path.resolve(outputDir);
   const groups = new Map(), invalid = [], jobs = [];
+  const index = forUpload ? localUploadIndex({stateDir, outputDir, forceFull}) : null;
   for (const entry of entries(outputDir)) {
     if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
     const file = path.join(outputDir, entry.name);
     try {
-      const raw = fs.readFileSync(file), book = JSON.parse(raw.toString('utf8').replace(/^\uFEFF/, ''));
-      if (!book.title || !book.author || !Array.isArray(book.chapters) || !book.chapters.length) continue;
-      const key = continuationKey(book);
-      const item = {file: entry.name, title: book.title, author: book.author, url: book.sourceUrl,
-        count: book.chapters.length, hash: hash(raw), description: book.description, status: book.status};
+      const inspect = () => {
+        const raw = fs.readFileSync(file), book = JSON.parse(raw.toString('utf8').replace(/^\uFEFF/, ''));
+        if (!book.title || !book.author || !Array.isArray(book.chapters) || !book.chapters.length) return null;
+        return {file: entry.name, title: book.title, author: book.author, url: book.sourceUrl, sourceUrl: book.sourceUrl,
+          count: book.chapters.length, hash: hash(raw), description: book.description, status: book.status};
+      };
+      const item = index ? index.get(entry.name, inspect) : inspect();
+      if (!item) continue;
+      const key = continuationKey(item);
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(item);
     } catch (error) { invalid.push({file: entry.name, title: entry.name, state: 'blocked', message: `无法读取下载文件：${error.message}`}); }
   }
+  index?.flush();
   for (const entry of entries(path.join(stateDir, 'jobs'))) {
     if (!entry.isDirectory() || !/^[a-f0-9]{20}$/.test(entry.name)) continue;
     const dir = path.join(stateDir, 'jobs', entry.name);

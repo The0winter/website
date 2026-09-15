@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Chapter from '../models/Chapter.js';
+import Book from '../models/Book.js';
 import ChapterDraft from '../models/ChapterDraft.js';
 import ChapterRead from '../models/ChapterRead.js';
 import ParagraphComment from '../models/ParagraphComment.js';
@@ -74,6 +75,7 @@ export async function purgeExpiredWritingTrash(now = new Date(), limit = 100) {
     const removed = await mongoose.connection.transaction(async session => {
       const chapter = await Chapter.findOne({_id: row._id, deletedAt: {$ne: null}, trashUntil: expired}).session(session);
       if (!chapter) return false;
+      await Book.updateOne({_id: chapter.bookId}, {$inc: {writeVersion: 1}}, {session});
       await ParagraphComment.deleteMany({chapter: chapter._id}, {session});
       await ChapterRead.deleteOne({_id: chapter._id}, {session});
       await ReadingHistory.updateMany({chapterId: chapter._id}, {$unset: {chapterId: 1}}, {session});

@@ -35,13 +35,14 @@ export async function applyLibraryBatches(job, {send, emit}) {
   }));
   if (failure) throw failure;
   if (job.mode === 'preflight') return {validated: true};
-  let added = 0, bookId;
+  let added = 0, bookId, verifiedToken = job.expectedToken;
   for (const [index, batch] of job.batches.entries()) {
     const result = await send({...batch, missingOnly: true}, false);
+    verifiedToken = verifiedToken !== undefined && result.previousToken === verifiedToken ? result.token : undefined;
     added += result.inserted || 0; bookId = result.bookId;
     emit({type: 'progress', stage: 'apply', batch: index + 1, batches: job.batches.length, added});
   }
-  return {added, bookId};
+  return {added, bookId, ...(verifiedToken ? {verifiedToken} : {})};
 }
 
 // Executed through the existing SSH identity against the active release, like

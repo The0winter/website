@@ -108,7 +108,9 @@ test('recycle bin preserves and restores content, then purges after seven days',
       assert.deepEqual(await purgeExpiredWritingTrash(new Date(deadline.getTime()-1)),{purgedDrafts:0,purgedChapters:0});
       await Chapter.updateOne({_id:chapterId},{$set:{trashUntil:new Date(Date.now()-1000)}});
       assert.equal((await owner('/api/chapters/'+chapterId+'/restore','POST')).status,410);
+      const versionBeforePurge = (await Book.findById(bookId)).writeVersion;
       assert.deepEqual(await purgeExpiredWritingTrash(),{purgedDrafts:0,purgedChapters:1});
+      assert.equal((await Book.findById(bookId)).writeVersion,versionBeforePurge+1);
       assert.equal(await Chapter.findById(chapterId),null);
       assert.equal(await WriterDraft.findOne({draftId:data.id}),null);
       assert.equal((await Manuscript.findById(`${user.id}:${key}`)).chapters[0].content,undefined);

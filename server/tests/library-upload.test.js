@@ -9,11 +9,13 @@ import Book from '../models/Book.js';
 import Chapter from '../models/Chapter.js';
 import {inspectLibraryBook, applyLibraryBatches} from '../../infra/library-sync-vps.mjs';
 import {planUpload} from '../../tools/novel-crawler/desktop/upload.mjs';
+import {inspectLibraryHeaders, inspectVersionedLibraryBook} from '../../infra/library-sync-inspect.mjs';
+import {libraryRevision} from '../../shared/library-revision.mjs';
 
 const bodyHash = content => crypto.createHash('sha256').update(content).digest('hex');
 const chapter = number => ({chapter_number: number, title: `第${number}章 故事${number}`, content: Array.from({length: 400}, (_, i) => String.fromCodePoint(0x5000 + number * 500 + i)).join(''), link: `https://example.test/${number}`});
 
-test('library sync uses the real import API and SQL models: R2 bodies, append, repeat, metadata, conflicts and complete preflight', async () => {
+test('library sync uses the real import API and SQL models: R2 bodies, append, repeat, metadata, conflicts and complete preflight', async t => {
   const database = await TestDatabase.create(), oldSecret = process.env.IMPORT_SECRET, oldStorage = process.env.CHAPTER_STORAGE;
   process.env.IMPORT_SECRET = crypto.randomBytes(32).toString('hex'); delete process.env.CHAPTER_STORAGE;
   let server;
@@ -29,7 +31,7 @@ test('library sync uses the real import API and SQL models: R2 bodies, append, r
       const result = await response.json(); if (!response.ok) throw Error(result.error); return result;
     };
     const source = {title: '合成上传测试书', author: '测试作者', sourceUrl: 'https://example.test/book/sync', description: '原始简介', chapters: Array.from({length: 23}, (_, i) => chapter(i + 1))};
-    const inspect = input => inspectLibraryBook(input, {Book, Chapter, bodyHash});
+    const inspect = input => inspectVersionedLibraryBook(input, {Book, Chapter, bodyHash});
     const plan = planUpload(source, await inspect(source));
     assert.equal(plan.newBook, true); assert.equal(plan.batches.length, 1);
     assert.deepEqual(await applyLibraryBatches({mode: 'preflight', batches: plan.batches}, {send, emit}), {validated: true});
@@ -44,17 +46,29 @@ test('library sync uses the real import API and SQL models: R2 bodies, append, r
     const digest = bodyHash(source.chapters[0].content);
     await Chapter.updateOne({_id: first._id}, {$set: {contentSha256: digest, contentKey: `chapters/sha256/${digest}.txt`}, $unset: {content: 1}});
     const online = await inspect(source);
+    assert.equal(online.token, libraryRevision(await Book.findById(online.bookId).lean()));
+    assert.deepEqual(online.chapters, (await inspectLibraryBook(source, {Book, Chapter, bodyHash})).chapters);
+    const findBook = t.mock.method(Book, 'find'), findChapter = t.mock.method(Chapter, 'find');
+    const headers = await inspectLibraryHeaders(Array.from({length: 200}, () => source), {Book});
+    assert.equal(headers.length, 200); assert.ok(headers.every(row => row.token === online.token));
+    assert.equal(findBook.mock.callCount(), 1); assert.equal(findChapter.mock.callCount(), 0);
+    findBook.mock.restore(); findChapter.mock.restore();
     assert.equal(online.chapters.length, 23); assert.equal(online.chapters[0].hash, bodyHash(source.chapters[0].content));
     assert.ok(!(await Chapter.findById(first._id).lean()).content);
     assert.equal(planUpload(source, online).batches.length, 0);
     const extended = {...source, chapters: [...source.chapters, chapter(24)]};
     const delta = planUpload(extended, online);
     assert.equal(delta.batches[0].chapters.length, 1);
-    await applyLibraryBatches({mode: 'apply', batches: delta.batches}, {send, emit});
+    const appended = await applyLibraryBatches({mode: 'apply', batches: delta.batches, expectedToken: online.token}, {send, emit});
+    assert.ok(appended.verifiedToken); assert.notEqual(appended.verifiedToken, online.token);
+    const tail = await inspect({...source, knownToken: appended.verifiedToken, numbers: [24]});
+    assert.equal(tail.partial, true); assert.deepEqual(tail.chapters.map(c => c.number), [24]);
+    assert.equal((await inspect({...source, knownToken: online.token, numbers: [24]})).chapters.length, 24);
     assert.equal(await Chapter.countDocuments(), 24); assert.equal(await Book.countDocuments(), 1);
     const metadata = planUpload({...extended, description: '新的简介', status: '完结', cover_image: 'https://example.test/old.jpg'}, await inspect(source));
     assert.deepEqual(metadata.batches[0].chapters, []);
     await applyLibraryBatches({mode: 'apply', batches: metadata.batches}, {send, emit});
+    assert.notEqual((await inspect(source)).token, appended.verifiedToken);
     assert.equal((await Book.findOne()).description, '新的简介'); assert.equal((await Book.findOne()).status, '完结'); assert.equal((await Book.findOne()).cover_image, '');
     calls.length = 0;
     const conflicting = {...source, chapters: [chapter(25), {...chapter(1), content: '网站已有的不同内容'}]};
@@ -62,6 +76,24 @@ test('library sync uses the real import API and SQL models: R2 bodies, append, r
     await assert.rejects(applyLibraryBatches({mode: 'apply', batches}, {send, emit}), /冲突/);
     assert.ok(calls.every(c => c.dryRun)); assert.equal(await Chapter.countDocuments(), 24);
     await assert.rejects(inspect({...source, sourceUrl: 'https://example.test/another-version'}), /其他来源版本/);
+    // A write between reading the directory and its closing version check must
+    // retry; otherwise a mixed snapshot could become a durable fast-skip record.
+    let reads = 0;
+    const find = Chapter.find.bind(Chapter);
+    const racing = t.mock.method(Chapter, 'find', (...args) => {
+      const query = find(...args), lean = query.lean.bind(query);
+      query.lean = async (...opts) => {
+        const rows = await lean(...opts);
+        if (++reads === 1) {
+          await Chapter.updateOne({_id: first._id}, {$set: {title: '并发更新的标题'}});
+          await Book.updateOne({_id: online.bookId}, {$inc: {writeVersion: 1}});
+        }
+        return rows;
+      };
+      return query;
+    });
+    assert.equal((await inspect(source)).chapters[0].title, '并发更新的标题'); assert.equal(reads, 2);
+    racing.mock.restore();
     await Book.updateOne({_id: online.bookId}, {$set: {deletedAt: new Date()}});
     await assert.rejects(inspect(source), /已下架/);
   } finally {
