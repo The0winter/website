@@ -103,7 +103,7 @@ export function createVpsLibraryTransport({host = 'ubuntu@51.79.242.0', identity
   if (!/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(host)) throw Error('SSH 主机无效');
   return (job, {signal, onProgress = () => {}} = {}) => new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(Error('上传已停止，已完成批次保留'));
-    const command = 'sudo -n /opt/node-v22.23.2-linux-x64/bin/node --env-file=/etc/test1/api.env --env-file-if-exists=/etc/test1/d1.env --input-type=module';
+    const command = 'sudo -n /opt/node-v22.23.2-linux-x64/bin/node --env-file=/etc/test1/api.env --input-type=module';
     const child = spawnProcess('ssh', ['-i', identity, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=2', host, command], {stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true});
     let buffer = '', result, failure, timer, fatal = true;
     const abort = () => { failure = '上传已停止，已完成批次保留；再次上传会重新核对网站'; child.kill(); };

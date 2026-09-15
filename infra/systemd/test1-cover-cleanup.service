@@ -11,7 +11,6 @@ Group=test1-api
 WorkingDirectory=/srv/test1/current
 Environment=NODE_ENV=production
 EnvironmentFile=/etc/test1/api.env
-EnvironmentFile=-/etc/test1/d1.env
 ExecStart=/usr/bin/flock -n /var/lib/test1-cover-cleanup/run.lock /opt/node-v22.23.2-linux-x64/bin/node infra/clean-unused-covers.mjs --apply
 StateDirectory=test1-cover-cleanup
 StateDirectoryMode=0700
