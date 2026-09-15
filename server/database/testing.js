@@ -26,10 +26,10 @@ export class TestDatabase {
 
 export async function nativeTestDatabase() {
   const {MongoMemoryReplSet}=await import('mongodb-memory-server');
-  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'test1-mongo-'));
   const repl=await MongoMemoryReplSet.create({
     binary:{downloadDir:path.join(os.tmpdir(),'mongodb-binaries')},
-    instanceOpts:[{dbPath:directory}],
+    // Its automatically created directory uses the preloaded project TEMP and
+    // is removed by stop(); a caller-supplied dbPath would be retained.
     replSet:{count:1,storageEngine:'wiredTiger'},
   });
   return {getUri:(name='test1_test')=>repl.getUri(name),stop:()=>repl.stop()};
