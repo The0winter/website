@@ -4,6 +4,8 @@ import {pagination} from './services/pagination.js';
 import {createRequestMetrics,allowMetrics} from './services/observability.js';
 import { readingRoutes } from './routes/reading.js';
 import { importRoutes } from './routes/import.js';
+import {libraryImportRoutes} from './routes/library-import.js';
+import {trustedLocalImport} from './services/import-auth.js';
 import { contentRoutes } from './routes/content.js';
 import { manuscriptRoutes } from './routes/manuscripts.js';
 import { forumViewRoutes } from './routes/forum-views.js';
@@ -130,6 +132,7 @@ const globalLimiter = rateLimit({
 const publicReadLimiter = rateLimit({windowMs:60000,limit:3000,message:{error:'读取过于频繁'}});
 const internalReadLimiter = rateLimit({windowMs:60000,limit:6000,message:{error:'内部读取容量已满'}});
 app.use('/api/', (req,res,next) => {
+  if (trustedLocalImport(req)) return next();
   if (req.method !== 'GET') return globalLimiter(req,res,next);
   const expected=process.env.INTERNAL_API_SECRET;
   const supplied=req.headers['x-internal-api-secret'];
@@ -158,6 +161,7 @@ mediaRoutes(app,auth);
 contentRoutes(app,auth);
 manuscriptRoutes(app,auth);
 forumViewRoutes(app,auth);
+libraryImportRoutes(app);
 importRoutes(app);
 readingRoutes(app,auth);
 forumWrites(app,auth);

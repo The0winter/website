@@ -1,5 +1,10 @@
 import {PutObjectCommand, GetObjectCommand} from '@aws-sdk/client-s3';
 import {bodyHash, r2Client} from './r2.js';
+import {createLimiter, mapConcurrent} from '../../shared/async-pool.mjs';
+
+// Shared across requests, so concurrent books cannot multiply R2 concurrency.
+export const chapterUploadConcurrency = 32;
+const bodyTransfers = createLimiter(chapterUploadConcurrency);
 
 export function createChapterStorage({client, bucket, maxCacheBytes = 16 * 1024 * 1024}) {
   const cache = new Map();
@@ -45,6 +50,9 @@ export const configureChapterStorage = adapter => {storage = adapter;};
 const getStorage = () => storage ||= createChapterStorage({client:r2Client(),bucket:process.env.R2_BUCKET});
 export const readChapterBody = chapter => typeof chapter.content === 'string' ? Promise.resolve(chapter.content) : getStorage().read(chapter);
 export const storeChapterBody = content => getStorage().write(content);
+export const storeChapterBodies = chapters => mapConcurrent(chapters, chapterUploadConcurrency, chapter => bodyTransfers(async () => ({
+  ...chapter, ...await storeChapterBody(chapter.content), content: undefined,
+})));
 export const chapterBodyMatches = (chapter, content) => typeof chapter.content === 'string' ? chapter.content === content : chapter.contentSha256 === bodyHash(content);
 export async function chapterResponse(chapter) {
   const doc = chapter.toObject ? chapter.toObject() : {...chapter};

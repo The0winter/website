@@ -21,14 +21,23 @@ export async function inspectLibraryBook(job, {Book, Chapter, bodyHash}) {
 }
 
 export async function applyLibraryBatches(job, {send, emit}) {
-  for (const [index, batch] of job.batches.entries()) {
-    await send(batch, true);
-    emit({type: 'progress', stage: 'preflight', batch: index + 1, batches: job.batches.length, added: 0});
-  }
+  let cursor = 0, checked = 0, failure;
+  // Read-only checks may overlap. Drain them all before writing or reporting a
+  // failure. Commits for one book remain ordered to avoid transaction conflicts.
+  await Promise.all(Array.from({length: Math.min(4, job.batches.length)}, async () => {
+    while (!failure && cursor < job.batches.length) {
+      const batch = job.batches[cursor++];
+      try {
+        await send({...batch, missingOnly: true}, true);
+        emit({type: 'progress', stage: 'preflight', batch: ++checked, batches: job.batches.length, added: 0});
+      } catch (error) { failure ||= error; }
+    }
+  }));
+  if (failure) throw failure;
   if (job.mode === 'preflight') return {validated: true};
   let added = 0, bookId;
   for (const [index, batch] of job.batches.entries()) {
-    const result = await send(batch, false);
+    const result = await send({...batch, missingOnly: true}, false);
     added += result.inserted || 0; bookId = result.bookId;
     emit({type: 'progress', stage: 'apply', batch: index + 1, batches: job.batches.length, added});
   }

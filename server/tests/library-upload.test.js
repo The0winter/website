@@ -31,12 +31,12 @@ test('library sync uses the real import API and SQL models: R2 bodies, append, r
     const source = {title: '合成上传测试书', author: '测试作者', sourceUrl: 'https://example.test/book/sync', description: '原始简介', chapters: Array.from({length: 23}, (_, i) => chapter(i + 1))};
     const inspect = input => inspectLibraryBook(input, {Book, Chapter, bodyHash});
     const plan = planUpload(source, await inspect(source));
-    assert.equal(plan.newBook, true); assert.equal(plan.batches.length, 2);
+    assert.equal(plan.newBook, true); assert.equal(plan.batches.length, 1);
     assert.deepEqual(await applyLibraryBatches({mode: 'preflight', batches: plan.batches}, {send, emit}), {validated: true});
     assert.equal(await Book.countDocuments(), 0); assert.equal(await Chapter.countDocuments(), 0);
     calls.length = 0;
     assert.equal((await applyLibraryBatches({mode: 'apply', batches: plan.batches}, {send, emit})).added, 23);
-    assert.deepEqual(calls.map(c => c.dryRun), [true, true, false, false]);
+    assert.deepEqual(calls.map(c => c.dryRun), [true, false]);
     assert.equal(await Chapter.countDocuments(), 23);
     // Production books may mix legacy inline content and migrated R2 references.
     // Inspection uses the stored digest, without downloading immutable bodies.

@@ -10,8 +10,10 @@ const bodyHash = content => crypto.createHash('sha256').update(content).digest('
 const normalize = value => String(value || '').normalize('NFKC').trim();
 const metadataKeys = ['sourceUrl', 'title', 'author', 'authorSourceUrl', 'category', 'description', 'status'];
 
-export function planUpload(book, remote) {
-  const batches = prepareImport(book), chapters = batches.flatMap(batch => batch.chapters);
+export const uploadBatchLimits = {chapters: 200, bytes: 4 * 1024 * 1024};
+
+export function planUpload(book, remote, prepared = prepareImport(book)) {
+  const chapters = prepared.flatMap(batch => batch.chapters);
   // Covers have their own verified upload workflow. Absent or stale crawler
   // cover fields must never replace a managed website cover.
   const metadata = Object.fromEntries(metadataKeys.filter(key => book[key] !== undefined).map(key => [key, book[key]]));
@@ -25,11 +27,19 @@ export function planUpload(book, remote) {
     if (previous.deleted || previous.title !== chapter.title || previous.hash !== bodyHash(chapter.content) || (previous.link && chapter.link && previous.link !== chapter.link)) {
       throw Error(`第 ${chapter.chapter_number} 章与网站已有内容冲突或已下架，已保留网站原章节`);
     }
-    if (chapter.link && !previous.link) pending.push(chapter);
   }
   const metadataChanged = !!remote.book && ['description', 'category', 'status'].some(key => metadata[key] !== undefined && metadata[key] !== remote.book[key]);
   const uploads = [];
-  for (let i = 0; i < pending.length; i += 20) uploads.push({...metadata, chapters: pending.slice(i, i + 20)});
+  const overhead = Buffer.byteLength(JSON.stringify({...metadata, chapters: [], missingOnly: true, dryRun: false}));
+  let current = [], bytes = overhead;
+  for (const chapter of pending) {
+    const size = Buffer.byteLength(JSON.stringify(chapter)) + 1;
+    if (current.length && (current.length >= uploadBatchLimits.chapters || bytes + size > uploadBatchLimits.bytes)) {
+      uploads.push({...metadata, chapters: current}); current = []; bytes = overhead;
+    }
+    current.push(chapter); bytes += size;
+  }
+  if (current.length) uploads.push({...metadata, chapters: current});
   if (!uploads.length && metadataChanged) uploads.push({...metadata, chapters: []});
   return {batches: uploads, newBook: !remote.book, expectedAdded: chapters.filter(c => !existing.has(c.chapter_number)).length};
 }
@@ -60,11 +70,11 @@ export async function uploadLibrary({stateDir, outputDir, signal, shouldStop = (
       const bytes = fs.readFileSync(file);
       if (hash(bytes) !== item.hash) throw Error('排队期间文件被修改，请再次上传重新检查');
       const book = JSON.parse(bytes.toString('utf8').replace(/^\uFEFF/, ''));
-      prepareImport(book);
+      const prepared = prepareImport(book);
       const identity = Object.fromEntries(['sourceUrl', 'title', 'author'].map(key => [key, book[key]]));
       const remote = await transport({mode: 'inspect', ...identity}, {signal});
       if (stopped()) break;
-      const plan = planUpload(book, remote);
+      const plan = planUpload(book, remote, prepared);
       item.newBook = plan.newBook; item.bookId = remote.bookId;
       if (!plan.batches.length) { item.state = 'unchanged'; item.message = '网站已同步'; publish(); continue; }
       item.message = `正在上传${plan.newBook ? '新书' : '新增内容'}，共 ${plan.expectedAdded} 章…`; publish();
@@ -75,7 +85,7 @@ export async function uploadLibrary({stateDir, outputDir, signal, shouldStop = (
       if (stopped()) break;
       item.message = '正在回读网站核验上传结果…'; publish();
       const verified = await transport({mode: 'inspect', ...identity}, {signal});
-      if (planUpload(book, verified).batches.length) throw Error('网站回读尚未确认完整同步，请再次上传核对；已完成批次保留');
+      if (planUpload(book, verified, prepared).batches.length) throw Error('网站回读尚未确认完整同步，请再次上传核对；已完成批次保留');
       item.state = 'uploaded'; item.message = plan.newBook ? `新书已上传，新增 ${item.added} 章` : item.added ? `已同步新增 ${item.added} 章` : '书籍信息已同步';
     } catch (error) {
       if (stopped()) break;

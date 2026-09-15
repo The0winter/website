@@ -7,12 +7,12 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
-import {planUpload, uploadLibrary} from '../desktop/upload.mjs';
+import {planUpload, uploadLibrary, uploadBatchLimits} from '../desktop/upload.mjs';
 import {planLibrary} from '../desktop/library.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 import {atomicWrite, hash} from '../storage.mjs';
 import {continuationKey} from '../continuation.mjs';
-import {createVpsLibraryTransport} from '../../../infra/library-sync-vps.mjs';
+import {createVpsLibraryTransport, applyLibraryBatches} from '../../../infra/library-sync-vps.mjs';
 
 const sha = content => crypto.createHash('sha256').update(content).digest('hex');
 const chapter = number => ({chapter_number: number, title: `第${number}章 ${String.fromCodePoint(0x5000 + number)}`, content: Array.from({length: 300}, (_, i) => String.fromCodePoint(0x4e00 + number * 350 + i)).join(''), link: `https://example.test/chapter/${number}`});
@@ -47,10 +47,10 @@ function memoryTransport(initial = []) {
 const request = (app, action, body = {}) => fetch(`${app.baseUrl}/api/${action}`, {method: 'POST', headers: {'x-desktop-token': app.token, 'Content-Type': 'application/json'}, body: JSON.stringify(body)});
 async function until(check) { const deadline = Date.now() + 10000; while (Date.now() < deadline) { if (await check()) return; await new Promise(r => setTimeout(r, 30)); } assert.fail('timeout'); }
 
-test('new books batch every 20 chapters; unchanged bodies and absent metadata do not upload; covers stay managed', () => {
-  const source = {...book('长篇', 24), cover_image: 'https://example.test/old-cover.jpg'};
+test('new books batch up to 200 chapters; unchanged bodies and absent metadata do not upload; covers stay managed', () => {
+  const source = {...book('长篇', 204), cover_image: 'https://example.test/old-cover.jpg'};
   const plan = planUpload(source, snapshot(null));
-  assert.equal(plan.newBook, true); assert.equal(plan.expectedAdded, 24); assert.deepEqual(plan.batches.map(b => b.chapters.length), [20, 4]);
+  assert.equal(plan.newBook, true); assert.equal(plan.expectedAdded, 204); assert.deepEqual(plan.batches.map(b => b.chapters.length), [200, 4]);
   assert.ok(plan.batches.every(batch => !Object.hasOwn(batch, 'cover_image')));
   const online = snapshot({...source, description: '网站简介'});
   assert.equal(planUpload(source, online).batches.length, 0);
@@ -68,7 +68,43 @@ test('all overlapping chapters are checked before any upload, including gaps, ol
   }
   assert.throws(() => planUpload(source, {...online, book: {...source, author: '同名其他作者'}}), /身份/);
   const noLink = snapshot(source); delete noLink.chapters[0].link;
-  assert.deepEqual(planUpload(source, noLink).batches[0].chapters.map(c => c.chapter_number), [1]);
+  assert.equal(planUpload(source, noLink).batches.length, 0, 'missing provenance must not re-upload an existing body');
+});
+
+test('large Unicode bodies split by actual JSON bytes before the HTTP body limit', () => {
+  const source = book('大章节', 50);
+  source.chapters = source.chapters.map((c, i) => ({...c, content: String.fromCodePoint(0x6000 + i).repeat(60000)}));
+  const plan = planUpload(source, snapshot(null));
+  assert.ok(plan.batches.length > 1);
+  assert.equal(plan.batches.flatMap(batch => batch.chapters).length, 50);
+  assert.ok(plan.batches.every(batch => Buffer.byteLength(JSON.stringify({...batch, missingOnly: true, dryRun: false})) <= uploadBatchLimits.bytes));
+});
+
+test('preflight overlaps up to four batches, drains failures, and keeps writes ordered after all checks', async () => {
+  const batches = Array.from({length: 9}, (_, index) => ({index, chapters: []}));
+  let active = 0, peak = 0, checked = 0;
+  const writes = [], progress = [];
+  const send = async (batch, dryRun) => {
+    assert.equal(batch.missingOnly, true);
+    if (dryRun) {
+      active++; peak = Math.max(peak, active);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      active--; checked++;
+      return {};
+    }
+    assert.equal(checked, batches.length); assert.equal(active, 0);
+    writes.push(batch.index); return {inserted: 1, bookId: 'book'};
+  };
+  assert.equal((await applyLibraryBatches({batches}, {send, emit: event => progress.push(event)})).added, 9);
+  assert.equal(peak, 4); assert.deepEqual(writes, batches.map(batch => batch.index));
+  assert.deepEqual(progress.filter(p => p.stage === 'preflight').map(p => p.batch), [1,2,3,4,5,6,7,8,9]);
+  let started = 0;
+  await assert.rejects(applyLibraryBatches({batches}, {emit() {}, async send(batch, dryRun) {
+    assert.equal(dryRun, true); started++; active++;
+    try { await new Promise(resolve => setTimeout(resolve, batch.index ? 10 : 1)); if (!batch.index) throw Error('conflict'); }
+    finally { active--; }
+  }}), /conflict/);
+  assert.equal(active, 0); assert.equal(started, 4);
 });
 
 test('upload selection follows bound editions without requiring a source adapter and refuses uncommitted or modified bindings', t => {
@@ -100,13 +136,13 @@ test('library uploads new books and only new chapters, isolates conflicts, persi
 });
 
 test('stopped and partially uploaded books resume using fresh website data, and failed readback is not success', async t => {
-  const f = fixture(t), source = book('断点', 24); f.save('book.json', source);
+  const f = fixture(t), source = book('断点', 204); f.save('book.json', source);
   const remote = memoryTransport(), controller = new AbortController();
   const interrupted = await uploadLibrary({...f, signal: controller.signal, transport: async (job, options) => {
     if (job.mode === 'apply') { await remote.send({...job, batches: job.batches.slice(0, 1)}, options); controller.abort(); throw Error('connection lost'); }
     return remote.send(job, options);
   }});
-  assert.equal(interrupted.stopped, true); assert.equal(interrupted.uploaded, 0); assert.equal(interrupted.added, 20);
+  assert.equal(interrupted.stopped, true); assert.equal(interrupted.uploaded, 0); assert.equal(interrupted.added, 200);
   remote.calls.length = 0;
   assert.equal((await uploadLibrary({...f, transport: remote.send})).added, 4);
   assert.equal(remote.calls.find(c => c.mode === 'apply').batches[0].chapters.length, 4);
