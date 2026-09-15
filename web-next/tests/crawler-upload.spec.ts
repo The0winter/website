@@ -30,14 +30,22 @@ test('desktop upload button syncs the library, survives refresh, retries safely 
       if ([1180, 390].includes(width)) await page.screenshot({path: path.join(screenshotDir, `idle-${width}.png`), fullPage: true});
     }
     fs.writeFileSync(path.join(stateDir, 'hold-upload'), '');
+    fs.writeFileSync(path.join(stateDir, 'hold-summary-save'), '');
     await page.locator('#upload-library').click();
     await expect(page.locator('#upload-library-label')).toHaveText('正在上传');
     await expect(page.locator('#update-library')).toBeDisabled();
     await expect(page.locator('#search')).toBeDisabled();
+    await expect(page.locator('#task-save-warning')).toContainText('本地进度暂未保存');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+    await page.screenshot({path: path.join(screenshotDir, 'save-warning-320.png'), fullPage: true});
     await page.reload();
     await expect(page.locator('#upload-library-label')).toHaveText('正在上传');
+    await expect(page.locator('#task-save-warning')).toBeVisible();
     await page.locator('#stop').click();
     await expect(page.locator('#phase')).toHaveText('已停止');
+    fs.unlinkSync(path.join(stateDir, 'hold-summary-save'));
+    await expect(page.locator('#task-save-warning')).toBeHidden();
+    expect(JSON.parse(fs.readFileSync(path.join(stateDir, 'desktop-last-task.json'), 'utf8')).phase).toBe('stopped');
     fs.unlinkSync(path.join(stateDir, 'hold-upload'));
     await expect(page.locator('#upload-library')).toBeEnabled();
     await page.locator('#upload-library').click();

@@ -38,8 +38,24 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
   // An interrupted process can be resumed from crawler checkpoints, never shown as running.
   if (busy(task)) task = {...task, phase: 'paused', message: task.kind === 'upload' ? '上次上传已停止。再次点击“上传书库”会核对网站并续传，已上传内容保留。' : task.kind === 'library' ? '上次书库更新已停止。再次点击“更新书库”即可重新检查，已保存章节会复用。' : '上次任务已停止。重新查找这本书即可继续。',
     ...(task.batch ? {batch: {...task.batch, stopped: true, items: task.batch.items.map(item => ['pending', 'blocked', 'running', 'retrying', 'waiting'].includes(item.state) ? {...item, state: 'stopped', message: '上次任务中断，等待重新检查'} : item)}} : {})};
-  function save() { atomicWrite(path.join(stateDir, 'desktop-last-task.json'), task); }
-  function update(values) { task = {...task, ...(Object.hasOwn(values, 'phase') ? {action: null, actionUrl: null, actionDeadline: null, failure: null} : {}), ...values}; save(); }
+  let saveRetry, persistenceWarning = null, saveErrorCode = null;
+  function save({progress = false} = {}) {
+    if (saveRetry || (progress && Date.now() - lastProgress < 1000)) return;
+    try {
+      atomicWrite(path.join(stateDir, 'desktop-last-task.json'), task);
+      lastProgress = Date.now();
+      persistenceWarning = saveErrorCode = null;
+    } catch (error) {
+      // This is a UI summary, not the upload checkpoint. Worker messages must
+      // keep flowing even if it cannot be saved; retry the latest state later.
+      if (saveErrorCode !== (error.code || 'UNKNOWN')) console.error('Could not save desktop task summary:', error.message);
+      saveErrorCode = error.code || 'UNKNOWN';
+      persistenceWarning = '本地进度暂未保存，正在自动重试。任务仍在继续；关闭窗口后，最近的进度显示可能不完整，已上传内容保留。';
+      if (!closing) saveRetry = setTimeout(() => { saveRetry = null; save(); }, 1000).unref();
+    }
+  }
+  const currentTask = () => ({...task, persistenceWarning});
+  function update(values, options) { task = {...task, ...(Object.hasOwn(values, 'phase') ? {action: null, actionUrl: null, actionDeadline: null, failure: null} : {}), ...values}; save(options); }
   function sites() { return loadSources(sitesDirectory); }
   function withLocalState(book) {
     try { return {...book, local: localBookState(resolvedSpecs.get(book.url) || specForBook(book, sites().sites), {stateDir, outputDir})}; }
@@ -70,7 +86,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
       if (req.headers['x-desktop-token'] !== token || (req.headers.origin && req.headers.origin !== `http://${expectedHost}`)) return respond(403, {error: '窗口已过期，请重新打开程序'});
       if (pathname === '/api/state' && req.method === 'GET') {
         const loaded = sites();
-        return respond(200, {settings: readSettings(stateDir), sites: loaded.sites.map(({id, name, home, hosts, spec, search, book}) => ({id, name, home, hosts, remembersLogin: [spec.transport, search?.transport, book?.transport].includes('browser')})), adapterErrors: loaded.errors, task: {...task, busy: busy(task) || !!worker || !!operation, canShowBrowser: !!(worker?.connected || operationClient) && busy(task) && ['login', 'verification'].includes(task.action)}, candidates, outputDir});
+        return respond(200, {settings: readSettings(stateDir), sites: loaded.sites.map(({id, name, home, hosts, spec, search, book}) => ({id, name, home, hosts, remembersLogin: [spec.transport, search?.transport, book?.transport].includes('browser')})), adapterErrors: loaded.errors, task: {...currentTask(), busy: busy(task) || !!worker || !!operation, canShowBrowser: !!(worker?.connected || operationClient) && busy(task) && ['login', 'verification'].includes(task.action)}, candidates, outputDir});
       }
       if (req.method !== 'POST') return respond(405, {error: '请求方式无效'});
       let raw = '';
@@ -130,7 +146,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         let completed = false;
         current.stderr.resume();
         current.on('message', message => {
-          if (message.type === 'upload') update({batch: message.batch});
+          if (message.type === 'upload') update({batch: message.batch}, {progress: true});
           if (message.type === 'upload-phase' && !['pausing', 'stopping'].includes(task.phase)) update({phase: 'upload', title: message.title, author: message.author, message: '正在核对网站书库并上传新增内容…'});
           if (message.type === 'upload-done') {
             completed = true;
@@ -275,7 +291,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
   server.requestTimeout = 300000;
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  return {server, token, baseUrl, url: `${baseUrl}/#${token}`, state: () => task, async close() {
+  return {server, token, baseUrl, url: `${baseUrl}/#${token}`, state: currentTask, async close() {
     closing = true;
     stopRequested = true;
     operation?.abort();
@@ -285,5 +301,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
       await new Promise(resolve => current.once('exit', resolve));
     }
     await new Promise(resolve => server.close(resolve));
+    clearTimeout(saveRetry); saveRetry = null;
+    if (persistenceWarning) save();
   }};
 }

@@ -10,7 +10,7 @@ import {PassThrough} from 'node:stream';
 import {planUpload, uploadLibrary, uploadBatchLimits} from '../desktop/upload.mjs';
 import {planLibrary} from '../desktop/library.mjs';
 import {createDesktop} from '../desktop/server.mjs';
-import {atomicWrite, hash} from '../storage.mjs';
+import {atomicWrite, hash, readJson} from '../storage.mjs';
 import {continuationKey} from '../continuation.mjs';
 import {createVpsLibraryTransport, applyLibraryBatches} from '../../../infra/library-sync-vps.mjs';
 
@@ -200,4 +200,58 @@ test('desktop upload endpoint rejects foreign requests, blocks simultaneous work
   app = await createDesktop(f);
   try { assert.equal(app.state().phase, 'paused'); assert.match(app.state().message, /上传书库/); assert.deepEqual(app.state().batch.items.map(i => i.state), ['stopped', 'uploaded']); }
   finally { await app.close(); }
+});
+
+test('upload survives progress-file locks, retries the final summary without new events and repeats without duplicate writes', async t => {
+  const f = fixture(t), source = book(); f.save('book.json', source);
+  const file = path.join(f.stateDir, 'desktop-last-task.json'), rename = fs.renameSync;
+  let locked = false, denied = 0;
+  t.mock.method(fs, 'renameSync', (from, to) => {
+    if (to === file && locked) { denied++; throw Object.assign(Error('summary is locked'), {code: 'EPERM'}); }
+    return rename(from, to);
+  });
+  const app = await createDesktop({...f, uploadWorker: path.resolve('tools/novel-crawler/tests/upload-fixture-worker.mjs')});
+  try {
+    assert.equal((await request(app, 'upload-library')).status, 202);
+    locked = true;
+    await until(() => app.state().phase === 'complete');
+    assert.ok(denied >= 6);
+    const state = await (await fetch(app.baseUrl + '/api/state', {headers: {'x-desktop-token': app.token}})).json();
+    assert.match(state.task.persistenceWarning, /进度暂未保存/);
+    assert.equal(state.task.batch.added, source.chapters.length);
+    assert.equal(readJson(file).phase, 'upload', 'the old summary remains valid while locked');
+    const website = path.join(f.stateDir, 'synthetic-website.json'), uploaded = fs.readFileSync(website, 'utf8');
+    assert.equal(readJson(website)[source.sourceUrl].chapters.length, source.chapters.length);
+    locked = false;
+    await until(() => !app.state().persistenceWarning && readJson(file).phase === 'complete');
+    assert.equal(readJson(file).batch.added, source.chapters.length);
+    assert.ok(!Object.hasOwn(readJson(file), 'persistenceWarning'), 'warnings are not persisted as task results');
+    assert.equal((await request(app, 'upload-library')).status, 202);
+    await until(() => app.state().phase === 'complete');
+    assert.equal(app.state().batch.unchanged, 1);
+    assert.equal(app.state().batch.added, 0);
+    assert.equal(fs.readFileSync(website, 'utf8'), uploaded);
+    assert.ok(!fs.readdirSync(f.stateDir).some(name => name.endsWith('.tmp')));
+  } finally { locked = false; await app.close(); }
+});
+
+test('an unwritable initial summary does not prevent stopping the worker or closing the desktop', async t => {
+  const f = fixture(t), workerPath = path.join(f.stateDir, 'worker.mjs');
+  fs.writeFileSync(workerPath, `process.on('message', m => { if (m.type === 'start') process.send({type:'upload-phase',title:'等待停止'}); if (m.type === 'stop') { process.send({type:'upload-done',batch:{kind:'upload',stopped:true,total:0,newBooks:0,added:0,unchanged:0,items:[]}}); process.disconnect(); } });`);
+  const write = fs.writeFileSync, prefix = path.join(f.stateDir, 'desktop-last-task.json.');
+  const injected = t.mock.method(fs, 'writeFileSync', (file, ...args) => {
+    if (String(file).startsWith(prefix)) throw Object.assign(Error('disk is full'), {code: 'ENOSPC'});
+    return write(file, ...args);
+  });
+  const app = await createDesktop({...f, uploadWorker: workerPath});
+  try {
+    assert.equal((await request(app, 'upload-library')).status, 202);
+    await until(() => app.state().title === '等待停止');
+    assert.match(app.state().persistenceWarning, /自动重试/);
+    assert.equal((await request(app, 'stop')).status, 200);
+    await until(() => app.state().phase === 'stopped');
+  } finally { await app.close(); }
+  const writesAfterClose = injected.mock.callCount();
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  assert.equal(injected.mock.callCount(), writesAfterClose, 'closing cancels pending save retries');
 });

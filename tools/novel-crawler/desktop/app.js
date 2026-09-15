@@ -12,6 +12,9 @@ attention.id = 'manual-attention'; attention.className = 'attention-box'; attent
 const attentionText = document.createElement('p'), showBrowser = document.createElement('button');
 showBrowser.id = 'show-browser'; showBrowser.type = 'button'; showBrowser.className = 'secondary'; showBrowser.textContent = '显示采集窗口 ↗';
 attention.append(attentionText, showBrowser); diagnostics.before(attention);
+const saveWarning = document.createElement('div');
+saveWarning.id = 'task-save-warning'; saveWarning.className = 'attention-box'; saveWarning.hidden = true; saveWarning.setAttribute('role', 'status');
+attention.after(saveWarning);
 const libraryHelp = document.createElement('div'); libraryHelp.id = 'library-help'; libraryHelp.className = 'attention-box'; libraryHelp.hidden = true; libraryHelp.setAttribute('role', 'alert');
 attention.after(libraryHelp);
 const retryBook = document.createElement('button'), skipBook = document.createElement('button');
@@ -49,6 +52,8 @@ function failureNode(failure) {
   return item;
 }
 function renderDiagnostics(task) {
+  saveWarning.hidden = !task.persistenceWarning;
+  saveWarning.textContent = task.persistenceWarning || '';
   const waiting = active && ['login', 'verification'].includes(task.action);
   attention.hidden = !waiting;
   const seconds = task.actionDeadline ? Math.max(0, Math.ceil((task.actionDeadline - Date.now()) / 1000)) : null;

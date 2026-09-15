@@ -17,7 +17,7 @@ try {
     $taskErrorLog = $taskLog + '.error.log'
     $taskEntry = Join-Path $PSScriptRoot 'main.mjs'
     $taskProcess = Start-Process -FilePath $taskNode -ArgumentList @('"' + $taskEntry + '"') -WorkingDirectory $taskRoot -WindowStyle Hidden -RedirectStandardOutput $taskLog -RedirectStandardError $taskErrorLog -PassThru -Wait
-    if ($taskProcess.ExitCode -ne 0) { throw ('Could not start the downloader. Details: ' + $taskErrorLog) }
+    if ($taskProcess.ExitCode -ne 0) { throw ('The downloader exited unexpectedly. Details: ' + $taskErrorLog) }
 } catch {
     Add-Type -AssemblyName System.Windows.Forms
     [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Novel Downloader', 'OK', 'Error') | Out-Null

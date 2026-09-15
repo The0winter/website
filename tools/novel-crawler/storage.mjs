@@ -4,15 +4,30 @@ import {createHash, randomUUID} from 'node:crypto';
 
 export const hash = value => createHash('sha256').update(typeof value === 'string' || Buffer.isBuffer(value) ? value : JSON.stringify(value)).digest('hex');
 export const readJson = (file, fallback = undefined) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : fallback;
+const renameRetryDelays = [10, 20, 40, 80, 160];
+const renameWait = new Int32Array(new SharedArrayBuffer(4));
 export function atomicWrite(file, data, {mode} = {}) {
   fs.mkdirSync(path.dirname(file), {recursive: true});
   const temporary = `${file}.${randomUUID()}.tmp`;
   const bytes = typeof data === 'string' || Buffer.isBuffer(data) ? data : JSON.stringify(data, null, 2) + '\n';
+  let failure;
   try {
     fs.writeFileSync(temporary, bytes, {flag: 'wx', ...(mode === undefined ? {} : {mode})});
-    fs.renameSync(temporary, file);
+    // Windows readers and scanners can briefly deny replacement. Keep the old
+    // file intact while retrying; deleting it first would lose atomicity.
+    for (let attempt = 0; ; attempt++) {
+      try { fs.renameSync(temporary, file); break; }
+      catch (error) {
+        if (!['EPERM', 'EACCES', 'EBUSY'].includes(error.code) || attempt >= renameRetryDelays.length) throw error;
+        Atomics.wait(renameWait, 0, 0, renameRetryDelays[attempt]);
+      }
+    }
+  } catch (error) {
+    failure = error;
+    throw error;
   } finally {
-    if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+    try { fs.unlinkSync(temporary); }
+    catch (error) { if (error.code !== 'ENOENT' && !failure) throw error; }
   }
 }
 
