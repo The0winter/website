@@ -34,6 +34,8 @@ async function resolve(reference, actor, session = null) {
 export function writingWorkspaceRoutes(app, auth) {
   let storage, cleaning = false;
   const getStorage = () => app.locals.writingStorage || (storage ||= createWritingStorage());
+  // Seven-day trash and retired draft objects tolerate an hourly sweep.
+  // This processes retired objects; it does not autosave drafts.
   const cleanup = setInterval(async () => {
     if (cleaning || !app.locals.writingCleanupEnabled || mongoose.connection.readyState !== 1) return;
     cleaning = true;
@@ -43,7 +45,7 @@ export function writingWorkspaceRoutes(app, auth) {
     }
     catch {console.warn('Draft object cleanup deferred');}
     finally {cleaning = false;}
-  }, 60000);
+  }, 60 * 60 * 1000);
   cleanup.unref();
   app.locals.stopWritingCleanup = () => clearInterval(cleanup);
 

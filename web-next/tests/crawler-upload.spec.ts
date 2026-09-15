@@ -3,14 +3,15 @@ import {test, expect} from '@playwright/test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {fork} from 'node:child_process';
+import {fork, type ForkOptions} from 'node:child_process';
 
 test('desktop upload button syncs the library, survives refresh, retries safely and fits narrow windows', async ({page}) => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'crawler-upload-browser-')), outputDir = path.join(stateDir, 'downloads');
   fs.mkdirSync(outputDir);
   const book = {title: '合成测试故事', author: '合成作者', sourceUrl: 'https://example.test/book/one', chapters: [{chapter_number: 1, title: '第1章 春日', content: '山路转过一片树林，河水向东流去。'.repeat(30)}]};
   fs.writeFileSync(path.join(outputDir, 'book.json'), JSON.stringify(book));
-  const server = fork(path.resolve('tools/novel-crawler/tests/upload-fixture-server.mjs'), [], {windowsHide: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc']});
+  const forkOptions: ForkOptions & {windowsHide: boolean} = {windowsHide: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc']};
+  const server = fork(path.resolve('tools/novel-crawler/tests/upload-fixture-server.mjs'), [], forkOptions);
   const ready = new Promise<string>((resolve, reject) => { server.once('message', (message: {url: string}) => resolve(message.url)); server.once('error', reject); });
   server.send({type: 'start', stateDir, outputDir});
   const screenshotDir = path.resolve('.runtime/test-tmp/upload-library-visual'); fs.mkdirSync(screenshotDir, {recursive: true});

@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import {TestDatabase} from '../database/testing.js';
 import {purgeExpiredWritingTrash} from '../services/writing-trash.js';
 import {encode} from '../database/codec.js';
+import {writingWorkspaceRoutes} from '../routes/writing-workspace.js';
 
 test('idle writing trash cleanup searches expiry indexes without scanning live content', async () => {
   const fixture = await TestDatabase.create();
@@ -37,5 +38,29 @@ test('idle writing trash cleanup searches expiry indexes without scanning live c
       assert.match(plan, new RegExp(`SEARCH ${table} USING INDEX`), plan);
       assert.doesNotMatch(plan, new RegExp(`SCAN ${table}|USE TEMP B-TREE FOR ORDER BY`), plan);
     }
+  } finally {await mongoose.disconnect(); await fixture.stop();}
+});
+
+test('writing trash waits an hour between sweeps and stopping removes the timer', async t => {
+  const fixture = await TestDatabase.create();
+  try {
+    await mongoose.connect(fixture.getUri());
+    const queries = [], transport = mongoose.connection.transport, query = transport.query.bind(transport);
+    transport.query = async sql => {queries.push(sql); return query(sql);};
+    t.mock.timers.enable({apis: ['setInterval']});
+    const app = {locals: {writingCleanupEnabled: true}, use() {}, get() {}, post() {}, put() {}, delete() {}, patch() {}};
+    writingWorkspaceRoutes(app, {authenticate() {}});
+    t.mock.timers.tick(3599999);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(queries.length, 0, 'no minute-by-minute database checks');
+    t.mock.timers.tick(1);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(queries.filter(sql => sql.includes('FROM "chapters"')).length, 1);
+    t.mock.timers.tick(3600000);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(queries.filter(sql => sql.includes('FROM "chapters"')).length, 2);
+    app.locals.stopWritingCleanup(); t.mock.timers.tick(3600000);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(queries.filter(sql => sql.includes('FROM "chapters"')).length, 2);
   } finally {await mongoose.disconnect(); await fixture.stop();}
 });

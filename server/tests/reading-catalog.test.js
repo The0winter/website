@@ -86,6 +86,8 @@ test('catalog pages and full-book statistics stay complete, bounded and metadata
     // A later visit must see edits and removals; the value is stable within a page, not stale forever.
     await Chapter.updateOne({bookId:book._id,chapter_number:2},{$set:{word_count:102}});
     await Chapter.updateOne({bookId:book._id,chapter_number:3},{$set:{deletedAt:new Date()}});
+    // Production chapter writers advance this revision transactionally.
+    await Book.updateOne({_id:book._id},{$inc:{writeVersion:1}});
     assert.deepEqual(await (await fetch(statisticsUrl)).json(),{totalWords:expectedWords+100-3});
     assert.equal((await fetch(statisticsUrl.replace(String(book._id),'invalid'))).status,400);
     assert.equal((await fetch(statisticsUrl.replace(String(book._id),String(new mongoose.Types.ObjectId())))).status,404);

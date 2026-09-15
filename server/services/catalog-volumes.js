@@ -1,18 +1,12 @@
 import Chapter from '../models/Chapter.js';
 import {buildCatalogVolumes} from '../../shared/catalog-volumes.mjs';
+import {versionedBookCache} from './versioned-book-cache.js';
 
-// Cache only the compact volume boundaries, never chapter bodies or the full
-// title list. A publication revision invalidates both windows and boundaries.
-const cache = new Map();
-export function catalogVolumes(bookId, version, total) {
-  const key = `${bookId}:${version}:${total}`;
-  const found = cache.get(key);
-  if (found && found.expires > Date.now()) return found.promise;
-  const promise = Chapter.find({bookId, deletedAt: null}).select('_id title volume_title volume_number')
-    .sort({chapter_number: 1}).maxTimeMS(3000).lean().then(buildCatalogVolumes);
-  const entry = {promise, expires: Date.now() + 60000};
-  cache.delete(key); cache.set(key, entry);
-  while (cache.size > 64) cache.delete(cache.keys().next().value);
-  promise.catch(() => {if (cache.get(key) === entry) cache.delete(key);});
-  return promise;
-}
+// Load titles only when the catalog is opened. Reuse both windows and volume
+// boundaries across readers; a book edit, not elapsed time, invalidates them.
+export const bookCatalog = versionedBookCache(async bookId => {
+  const chapters = await Chapter.find({bookId, deletedAt: null}).select('_id title chapter_number volume_title volume_number')
+    .sort({chapter_number: 1}).maxTimeMS(3000).lean();
+  return {rows: chapters.map(chapter => ({id: String(chapter._id), title: chapter.title, chapter_number: chapter.chapter_number})),
+    indices: new Map(chapters.map((chapter, index) => [String(chapter._id), index])), volumes: buildCatalogVolumes(chapters)};
+}, value => value.rows.reduce((bytes, row) => bytes + 256 + 2 * row.title.length, 256) + 512 * value.volumes.length);

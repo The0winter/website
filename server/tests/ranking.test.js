@@ -8,7 +8,7 @@ import {createApp} from '../app.js';
 import {readConfig} from '../config.js';
 import Book from '../models/Book.js';
 import {dayKey} from '../services/content.js';
-import {rankingPipeline} from '../services/ranking.js';
+import {rankedBooks} from '../services/ranking.js';
 
 test('rankings combine real period views and ratings before pagination; browsing ignores ratings', async () => {
   const repl = await TestDatabase.create();
@@ -34,6 +34,9 @@ test('rankings combine real period views and ratings before pagination; browsing
     const other = await Book.create({title: 'Other category', category: '都市', rating: 0, ...counts(1000000)});
     const daily = mongoose.connection.collection('readdailies'), today = dayKey(new Date());
     await daily.insertMany([popular, quality, quiet, unrated, other].map(book => ({_id: `${book._id}:${today}`, bookId: book._id, day: today, views: book.views})));
+    await daily.insertOne({_id: 'old-period', bookId: popular._id, day: '2000-01-01', views: 999999});
+    const queries = [], transport = mongoose.connection.transport, query = transport.query.bind(transport);
+    transport.query = async sql => {queries.push(sql); return query(sql);};
     const ordered = [quality, popular, unrated, quiet].map(b => String(b._id));
     for (const orderBy of ['rank_day', 'rank_week', 'rank_month', 'rank_total']) {
       const result = await get({orderBy, category: '玄幻', limit: '100'});
@@ -48,6 +51,10 @@ test('rankings combine real period views and ratings before pagination; browsing
       assert.deepEqual(ascending.books.map(b => b.id), ordered.toReversed());
     }
     const browsing = await get({orderBy: 'views', category: '玄幻'});
+    const periodQueries = queries.filter(sql => sql.includes('FROM "readdailies"'));
+    assert.ok(periodQueries.length > 0);
+    assert.ok(periodQueries.every(sql => sql.includes('SUM(') && sql.includes('GROUP BY') && sql.includes(today) && sql.includes(String(popular._id))), 'aggregate only selected books and dates in the database');
+    transport.query = query;
     assert.deepEqual(browsing.books.map(b => b.id), [popular, unrated, quality, quiet].map(b => String(b._id)));
     assert.ok(browsing.books.every(b => !('rankingScore' in b)));
     assert.equal((await get({orderBy: 'rank_total'})).books[0].id, String(other._id));
@@ -80,7 +87,7 @@ test('rankings combine real period views and ratings before pagination; browsing
       ['2026-09-13T16:00:00Z', [10, 10, 100]],
     ]) {
       for (const [index, sort] of ['rank_day', 'rank_week', 'rank_month'].entries()) {
-        const [row] = await Book.aggregate(rankingPipeline({_id: popular._id}, sort, 'desc', 0, 1, new Date(now)));
+        const {rows: [row]} = await rankedBooks({_id: popular._id}, sort, 'desc', 0, 1, new Date(now));
         assert.equal(row.rankingViews, expected[index]);
       }
     }

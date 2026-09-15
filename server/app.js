@@ -26,6 +26,7 @@ import mongoSanitize from 'express-mongo-sanitize';
 // 引入模型
 import User from './models/User.js'; 
 import Book from './models/Book.js';
+import {readBookIndex} from './services/book-reading-index.js';
 import Chapter from './models/Chapter.js';
 import ForumPost from './models/ForumPost.js';  
 import ForumReply from './models/ForumReply.js';
@@ -515,17 +516,15 @@ app.get('/api/chapters/:id', async (req, res) => {
 
     // 2. 先查章节，确保章节存在
     const chapter = await Chapter.findOne({_id:req.params.id,deletedAt:null}).lean();
-    if (!chapter || !await Book.exists({_id:chapter.bookId,deletedAt:null})) return res.status(404).json({ error: 'Chapter not found' });
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
 
     let navigation={};
     if(req.query.navigation==='1'){
-      const filter={bookId:chapter.bookId,deletedAt:null};
-      const [previous,next]=await Promise.all([
-        Chapter.findOne({...filter,chapter_number:{$lt:chapter.chapter_number}}).sort({chapter_number:-1}).select('_id').maxTimeMS(3000).lean(),
-        Chapter.findOne({...filter,chapter_number:{$gt:chapter.chapter_number}}).sort({chapter_number:1}).select('_id').maxTimeMS(3000).lean(),
-      ]);
-      navigation={previousId:previous?String(previous._id):null,nextId:next?String(next._id):null};
-    }
+      const index = await readBookIndex(chapter.bookId), position = index.indices.get(String(chapter._id));
+      if (position === undefined) return res.status(404).json({error: 'Chapter not found'});
+      navigation = {previousId: index.ids[position - 1] ?? null, nextId: index.ids[position + 1] ?? null,
+        chapterIndex: position, chapterTotal: index.ids.length, catalogVersion: index.version};
+    } else if (!await Book.exists({_id:chapter.bookId,deletedAt:null})) return res.status(404).json({error: 'Chapter not found'});
     res.json({ ...await chapterResponse(chapter), ...navigation, bookId: chapter.bookId.toString() });
 
   } catch (error) {

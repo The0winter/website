@@ -87,3 +87,66 @@ test('very large catalogs keep a bounded cache and reload discarded ranges on de
   await expect.poll(() => catalog.getSnapshot().rows.has(0)).toBe(true);
   expect(catalog.getSnapshot().rows.size).toBe(20000); close(); catalog.dispose();
 });
+
+test('time does not expire catalogs; reopening validates only the version and edits rebuild', async () => {
+  const calls: string[] = []; let version = '0';
+  globalThis.fetch = async input => {
+    const url = String(input); calls.push(url);
+    return url.endsWith('/version') ? new Response(JSON.stringify({version})) : response(0, 12, 12, version);
+  };
+  const catalog = new BookCatalog('book', '0', {rows: rows(0, 12), total: 12});
+  const now = Date.now;
+  try {
+    Date.now = () => now() + 24 * 3600_000;
+    let close = catalog.watch('chapter-5', false, {}, 0, true);
+    await expect.poll(() => calls.length).toBe(1);
+    expect(calls[0]).toMatch(/\/catalog\/version$/);
+    await expect.poll(() => catalog.getSnapshot().indices.get('chapter-5')).toBe(5);
+    const snapshot = catalog.getSnapshot(); close();
+    close = catalog.watch('chapter-6', false, {}, 0, true);
+    await expect.poll(() => calls.length).toBe(2);
+    expect(catalog.getSnapshot()).toBe(snapshot); close();
+    version = '1'; close = catalog.watch('chapter-6', false, {}, 0, true);
+    await expect.poll(() => catalog.getSnapshot().version).toBe('1');
+    await expect.poll(() => catalog.getSnapshot().rows.size).toBe(12);
+    expect(calls.filter(url => !url.endsWith('/version'))).toHaveLength(1);
+    expect(catalog.getSnapshot().generation).toBe(1); close();
+  } finally {Date.now = now; catalog.dispose();}
+});
+
+test('failed version checks can retry and closing cancels late refresh work', async () => {
+  let fail = true, release!: () => void;
+  globalThis.fetch = async () => fail ? new Response('', {status: 503}) : new Response(JSON.stringify({version: '0'}));
+  const catalog = new BookCatalog('book', '0', {rows: rows(0, 12), total: 12});
+  const close = catalog.watch('chapter-5', false, {}, 0, true);
+  await expect.poll(() => catalog.getSnapshot().error).toContain('重试');
+  fail = false; catalog.retry(); await expect.poll(() => catalog.getSnapshot().error).toBe('');
+  expect(catalog.getSnapshot().rows.size).toBe(12); close();
+  const gate = new Promise<void>(resolve => {release = resolve;});
+  globalThis.fetch = async () => {await gate; return new Response(JSON.stringify({version: '1'}));};
+  const cancel = catalog.watch('chapter-5', false, {}, 0, true);
+  cancel(); release(); await new Promise(resolve => setTimeout(resolve, 0));
+  expect(catalog.getSnapshot().version).toBe('0'); catalog.dispose();
+});
+
+test('an empty cached book discovers its first chapter on reopen', async () => {
+  globalThis.fetch = async input => String(input).endsWith('/version') ? new Response(JSON.stringify({version: '1'})) : response(0, 1, 1, '1');
+  const catalog = new BookCatalog('book', '0', {rows: [], total: 0});
+  const close = catalog.watch(undefined, false, {}, 0, true);
+  await expect.poll(() => catalog.getSnapshot().total).toBe(1);
+  expect(catalog.getSnapshot().rows.get(0)?.id).toBe('chapter-0'); close(); catalog.dispose();
+});
+
+test('a newer chapter version supersedes an in-flight version check without stalling', async () => {
+  let release!: () => void; const gate = new Promise<void>(resolve => {release = resolve;});
+  globalThis.fetch = async input => {
+    if (String(input).endsWith('/version')) {await gate; return new Response(JSON.stringify({version: '0'}));}
+    return response(0, 12, 12, '1');
+  };
+  const catalog = new BookCatalog('book', '0', {rows: rows(0, 12), total: 12});
+  const first = catalog.watch('chapter-5', false, {}, 0, true);
+  const second = catalog.watch('chapter-6', false, {}, 1, true);
+  await expect.poll(() => catalog.getSnapshot().rows.size).toBe(12);
+  release(); await new Promise(resolve => setTimeout(resolve, 0));
+  expect(catalog.getSnapshot().version).toBe('1'); first(); second(); catalog.dispose();
+});

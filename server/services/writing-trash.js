@@ -51,7 +51,7 @@ export async function trashChapter(actor, id, {restore = false, now = new Date()
 
 export async function purgeExpiredWritingTrash(now = new Date(), limit = 100) {
   // D1's sparse expiry indexes require the existence predicate explicitly;
-  // otherwise this minute-by-minute task scans all live chapters and drafts.
+  // otherwise this hourly task scans all live chapters and drafts.
   const expired = {$exists: true, $lte: now};
   const drafts = await WriterDraft.find({deleted: true, trashUntil: expired}).select('_id').sort({trashUntil: 1}).limit(limit).lean();
   let purgedDrafts = 0, purgedChapters = 0;

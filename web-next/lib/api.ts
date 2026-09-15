@@ -103,6 +103,9 @@ export interface Book {
 }
 
 export interface Chapter {
+  catalogVersion?: number;
+  chapterIndex?: number;
+  chapterTotal?: number;
   previousId?: string | null;
   nextId?: string | null;
   id: string;

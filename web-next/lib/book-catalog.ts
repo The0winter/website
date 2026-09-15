@@ -21,7 +21,6 @@ export function catalogStrategy(total: number | null, network: CatalogNetwork = 
     batch: constrained ? 512 : 2048, background: !network.saveData && !/2g/.test(network.effectiveType ?? '') && (total === null || total <= 20000)};
 }
 const empty = (): CatalogSnapshot => ({rows: new Map(), indices: new Map(), total: null, generation: 0, resolved: new Set(), error: ''});
-const maxAge = 60000;
 
 export class BookCatalog {
   private snapshot = empty();
@@ -29,7 +28,9 @@ export class BookCatalog {
   private queue: Job[] = [];
   private active = new Map<Job, AbortController>();
   private epoch = 0;
-  private validatedAt = 0;
+  private validation?: AbortController;
+  private validationFailed = false;
+  private owners = new Set<symbol>();
   private anchor?: string;
   private backgroundOwners = new Set<symbol>();
   private network: CatalogNetwork = {};
@@ -41,31 +42,65 @@ export class BookCatalog {
       const rows = new Map(seed.rows.map((row, index) => [index, row]));
       this.snapshot = {...this.snapshot, rows, indices: new Map(seed.rows.map((row, index) => [row.id, index])), total: seed.total,
         volumes: seed.rows.length === seed.total ? buildCatalogVolumes(seed.rows) : undefined};
-      this.validatedAt = Date.now();
     }
   }
   getSnapshot = () => this.snapshot;
   subscribe = (listener: () => void) => {this.listeners.add(listener); return () => {this.listeners.delete(listener);};};
   get retained() {return this.listeners.size > 0;}
   private publish(snapshot: CatalogSnapshot) {this.snapshot = snapshot; this.listeners.forEach(listener => listener());}
-  private reset(version?: string) {
+  private reset(version?: string, cancelValidation = true) {
+    if (cancelValidation) {this.validation?.abort(); this.validation = undefined;}
+    this.failed = undefined; this.validationFailed = false;
     this.epoch++; for (const controller of this.active.values()) controller.abort(); this.active.clear(); this.queue = [];
-    this.validatedAt = 0; this.publish({...empty(), version, generation: this.epoch});
+    this.publish({...empty(), version, generation: this.epoch});
   }
-  dispose() {this.epoch++; for (const controller of this.active.values()) controller.abort(); this.queue = [];}
-  watch(anchor: string | undefined, background: boolean, network: CatalogNetwork = {}, version?: number) {
+  dispose() {this.epoch++; this.validation?.abort(); for (const controller of this.active.values()) controller.abort(); this.queue = [];}
+  watch(anchor: string | undefined, background: boolean, network: CatalogNetwork = {}, version?: number, revalidate = false) {
     this.anchor = anchor; this.network = network;
-    const owner = Symbol(); if (background) this.backgroundOwners.add(owner);
+    const owner = Symbol(); this.owners.add(owner); if (background) this.backgroundOwners.add(owner);
     if (version !== undefined && version > Number(this.snapshot.version ?? -1)) this.reset(String(version));
-    else if (this.validatedAt && Date.now() - this.validatedAt > maxAge && this.active.size === 0) this.reset(this.snapshot.version);
-    this.locate(anchor); this.pump();
+    // A cached window survives time and chapter turns. On opening the sheet,
+    // validate the book version without re-downloading/counting the catalog.
+    if (revalidate && this.snapshot.total !== null && !this.active.size) void this.checkVersion();
+    else if (!this.validation) {this.locate(anchor); this.pump();}
     return () => {
       this.backgroundOwners.delete(owner);
+      this.owners.delete(owner);
+      if (!this.owners.size) {this.validation?.abort(); this.validation = undefined;}
       if (!this.backgroundOwners.size) {
         this.queue = this.queue.filter(job => !job.background);
         for (const [job, controller] of this.active) if (job.background) {controller.abort(); this.active.delete(job);}
       }
     };
+  }
+  private async checkVersion() {
+    if (this.validation) return;
+    const controller = new AbortController(), epoch = this.epoch;
+    this.validation = controller; this.validationFailed = false;
+    let valid = false;
+    try {
+      const response = await safeFetch(`/api/books/${this.bookId}/catalog/version`, {cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)])});
+      if (controller.signal.aborted || epoch !== this.epoch) return;
+      if (!response.ok) {
+        if (response.status === 404) this.reset(undefined, false);
+        throw Error(response.status === 404 ? '作品或目录已不可用' : '目录暂不可用，请重试');
+      }
+      const {version} = await response.json();
+      if (controller.signal.aborted || epoch !== this.epoch) return;
+      if (typeof version !== 'string' || !/^\d{1,16}$/.test(version)) throw Error('目录版本无效，请重试');
+      if (version !== this.snapshot.version) this.reset(version, false);
+      else if (this.snapshot.error) this.publish({...this.snapshot, error: ''});
+      valid = true;
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      this.validationFailed = true;
+      this.publish({...this.snapshot, error: error instanceof Error ? error.message : '目录暂不可用，请重试'});
+    } finally {
+      if (this.validation === controller) {
+        this.validation = undefined;
+        if (valid && this.owners.size) {this.locate(this.anchor); this.pump();}
+      }
+    }
   }
   private locate(anchor?: string) {
     const {indices, resolved, total, rows} = this.snapshot;
@@ -87,6 +122,7 @@ export class BookCatalog {
   retry = () => {
     const failed = this.failed; this.failed = undefined; this.revisions = 0;
     this.publish({...this.snapshot, error: ''});
+    if (this.validationFailed) {void this.checkVersion(); return;}
     if (failed) this.enqueue({...failed, background: false}); else this.locate(this.anchor);
     this.pump();
   };
@@ -96,7 +132,7 @@ export class BookCatalog {
     this.pump();
   }
   private pump() {
-    if (this.snapshot.error) return;
+    if (this.snapshot.error || this.validation) return;
     while (this.active.size < 2 && this.queue.length) {
       const job = this.queue.shift()!;
       const controller = new AbortController(); this.active.set(job, controller);
@@ -145,7 +181,7 @@ export class BookCatalog {
         const farthest = [...rows.keys()].sort((a, b) => Math.abs(b - focus) - Math.abs(a - focus));
         for (const index of farthest.slice(0, rows.size - 20000)) {indices.delete(rows.get(index)!.id); rows.delete(index);}
       }
-      this.validatedAt = Date.now(); this.revisions = 0;
+      this.revisions = 0;
       const previousVolumes = this.snapshot.volumes;
       const sameVolumes = previousVolumes?.length === volumes.length && previousVolumes.every((volume, i) => volume.id === volumes[i].id && volume.title === volumes[i].title && volume.start === volumes[i].start && volume.count === volumes[i].count);
       this.publish({rows, indices, resolved, total: data.total, version: data.version, generation: this.epoch, error: '', volumes: sameVolumes ? previousVolumes : volumes});

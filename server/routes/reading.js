@@ -13,7 +13,8 @@ import Chapter from '../models/Chapter.js';
 import UserDaily from '../models/UserDaily.js';
 import {asyncRoute} from '../security.js';
 import {dayKey,fail} from '../services/content.js';
-import {rankingPipeline,rankingViewFields} from '../services/ranking.js';
+import {rankedBooks,rankingViewFields} from '../services/ranking.js';
+import {readBookIndex} from '../services/book-reading-index.js';
 
 const receiptSchema=new mongoose.Schema({_id:String,bookId:mongoose.Schema.Types.ObjectId,chapterId:mongoose.Schema.Types.ObjectId,day:String,expiresAt:{type:Date,expires:0}});
 const Receipt=mongoose.models.ReadReceipt||mongoose.model('ReadReceipt',receiptSchema);
@@ -46,11 +47,11 @@ export function readingRoutes(app,auth) {
     if(author_id){if(typeof author_id!=='string'||!/^[a-f0-9]{24}$/i.test(author_id))fail(400,'作者ID无效');filter.$and=[{$or:[{author_id:new mongoose.Types.ObjectId(author_id)},{author_profile_id:new mongoose.Types.ObjectId(author_id)}]}];}
     if(category)filter.category=String(category).slice(0,80);
     if(q){if(typeof q!=='string'||q.length>100)fail(400,'搜索关键词过长');const escaped=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');filter.$or=[{title:{$regex:escaped,$options:'i'}},{author:{$regex:escaped,$options:'i'}}];}
-    let books;
-    if(Object.hasOwn(rankingViewFields,orderBy))books=await Book.aggregate(rankingPipeline(filter,orderBy,order,(page-1)*limit,limit)).option({maxTimeMS:3000});
+    let books, total;
+    if(Object.hasOwn(rankingViewFields,orderBy))({rows: books, total} = await rankedBooks(filter,orderBy,order,(page-1)*limit,limit));
     else if(orderBy==='composite')books=await Book.aggregate([{$match:filter},{$addFields:{score:{$add:[{$multiply:[{$ifNull:['$rating',0]},60]},{$multiply:[{$ifNull:['$weekly_views',0]},0.4]}]}}},{$sort:{score:order==='asc'?1:-1,_id:1}},{$skip:(page-1)*limit},{$limit:limit},{$unset:'score'}]).option({maxTimeMS:3000});
     else books=await Book.find(filter).sort({[orderBy]:order==='asc'?1:-1,_id:1}).skip((page-1)*limit).limit(limit).populate('author_id','username').maxTimeMS(3000).lean();
-    res.set('X-Total-Count',String(await Book.countDocuments(filter).maxTimeMS(3000)));
+    res.set('X-Total-Count',String(total ?? await Book.countDocuments(filter).maxTimeMS(3000)));
     res.json(books.map(formatted));
   }));
   app.get('/api/books/sitemap-pool',asyncRoute(async(req,res)=>{
@@ -58,28 +59,17 @@ export function readingRoutes(app,auth) {
     const books=await Book.find({deletedAt:null,...publicWork}).select('_id updatedAt').sort({_id:1}).skip((page-1)*100).limit(100).lean();res.json(books);
   }));
   app.get('/api/books/:bookId/statistics',asyncRoute(async(req,res)=>{
-    const [book,statistics]=await Promise.all([
-      Book.exists({_id:req.params.bookId,deletedAt:null}).maxTimeMS(3000),
-      // Sum metadata in MongoDB once for the initial page, independent of catalog pagination.
-      Chapter.aggregate([
-        {$match:{bookId:new mongoose.Types.ObjectId(req.params.bookId),deletedAt:null}},
-        {$group:{_id:null,totalWords:{$sum:'$word_count'}}},
-      ]).option({maxTimeMS:3000}),
-    ]);
-    if(!book)fail(404,'作品不可用');
-    res.set('Cache-Control','no-store').json({totalWords:statistics[0]?.totalWords??0});
+    const index = await readBookIndex(req.params.bookId);
+    res.set('Cache-Control','no-store').json({totalWords:index.totalWords});
   }));
   app.get('/api/books/:bookId/chapters',asyncRoute(async(req,res)=>{
     const limit=integer(req.query.limit,100,200),page=integer(req.query.page,1,100000);
     const filter={bookId:req.params.bookId,deletedAt:null};
-    // Fetch bounded metadata in one batch; independent reads share one network wait.
+    // Keep preview pages bounded; their total comes from the shared book index.
     // (bookId, chapter_number) is unique, so no extra in-memory _id sort is needed.
-    const [book,chapters,total]=await Promise.all([
-      Book.exists({_id:req.params.bookId,deletedAt:null}).maxTimeMS(3000),
-      Chapter.find(filter).select('title chapter_number volume_title volume_number published_at bookId word_count').sort({chapter_number:req.query.order==='desc'?-1:1}).skip((page-1)*limit).limit(limit).setOptions({batchSize:limit,singleBatch:true}).maxTimeMS(3000).lean(),
-      Chapter.countDocuments(filter).maxTimeMS(3000),
-    ]);
-    if(!book)fail(404,'作品不可用');
+    const index = await readBookIndex(req.params.bookId);
+    const chapters = await Chapter.find(filter).select('title chapter_number volume_title volume_number published_at bookId word_count').sort({chapter_number:req.query.order==='desc'?-1:1}).skip((page-1)*limit).limit(limit).setOptions({batchSize:limit,singleBatch:true}).maxTimeMS(3000).lean();
+    const total = index.ids.length;
     res.set('X-Total-Count',String(total));res.json(chapters.map(formatted));
   }));
   app.post('/api/books/:id/views',rateLimit({windowMs:60000,limit:30,message:{error:'阅读上报过于频繁'}}),asyncRoute(async(req,res)=>{

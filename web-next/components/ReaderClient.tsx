@@ -92,8 +92,9 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const nearEnd = useCallback(() => setNextButtonVisible(true), []);
   
   const showCatalog = useSyncExternalStore(subscribeBookNavigation, () => bookCatalogOpen(bookId), serverCatalogClosed);
-  const catalog = useBookCatalog(bookId, book?.writeVersion, chapter?.id ?? chapterIdParam, showCatalog);
-  const catalogTotal = catalog.snapshot.total;
+  const catalog = useBookCatalog(bookId, Math.max(book?.writeVersion ?? 0, chapter?.catalogVersion ?? 0), chapter?.id ?? chapterIdParam, showCatalog);
+  const useCatalogPosition = Number(catalog.snapshot.version ?? -1) >= (chapter?.catalogVersion ?? 0) && catalog.snapshot.indices.has(chapter?.id ?? '');
+  const catalogTotal = useCatalogPosition ? catalog.snapshot.total : chapter?.chapterTotal ?? catalog.snapshot.total;
   const showSettings = useSyncExternalStore(subscribeBookNavigation, () => readerSettingsOpen(bookId), serverCatalogClosed);
   const chapterEntry = useSyncExternalStore(subscribeChapterEntry, currentChapterEntry, serverChapterEntry);
   const entryLocked = Boolean(chapterEntry && !chapterEntry.releasing);
@@ -268,7 +269,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const prefetchChapter=useCallback((id:string|null)=>{
     if(id && id!==chapter?.id && currentPrefetchPolicy()!=='paused')void loadReaderChapter(bookId,id).catch(()=>{});
   },[bookId,chapter?.id]);
-  const currentChapterIndex = catalog.snapshot.indices.get(chapter?.id ?? '') ?? -1;
+  const currentChapterIndex = (useCatalogPosition ? catalog.snapshot.indices.get(chapter?.id ?? '') : chapter?.chapterIndex) ?? -1;
   const prevChapterId = chapter?.previousId ?? null;
   const nextChapterId = chapter?.nextId ?? null;
 

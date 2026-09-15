@@ -42,34 +42,39 @@ export function libraryRoutes(app, auth) {
     const history = tab === 'history';
     const model = history ? ReadingHistory : Bookmark;
     const filter = history ? {userId} : {user_id: userId};
-    const pipeline = [{$match: filter}];
-    if (history) pipeline.push({$set: {history: {lastVisitedAt: '$lastVisitedAt', lastReadAt: '$lastReadAt', chapterId: '$chapterId'}}});
-    else pipeline.push(
-      {$lookup: {from: ReadingHistory.collection.name, let: {book: '$bookId'}, pipeline: [{$match: {$expr: {$and: [{$eq: ['$bookId', '$$book']}, {$eq: ['$userId', userId]}]}}}], as: 'history'}},
-      {$set: {history: {$first: '$history'}}},
-    );
-    pipeline.push(
-      {$lookup: {from: Book.collection.name, localField: 'bookId', foreignField: '_id', as: 'book'}},
-      {$set: {book: {$first: '$book'}}},
-      {$set: {
-        // lastUpdated tracks content; updatedAt also changes when views change.
-        updated: {$ifNull: ['$book.lastUpdated', '$book.updatedAt', new Date(0)]},
-        read: {$ifNull: history ? ['$history.lastReadAt', '$history.lastVisitedAt', new Date(0)] : ['$history.lastReadAt', new Date(0)]},
-      }},
-      {$set: {score: sort === 'read' ? '$read' : sort === 'updated' ? '$updated' : {$max: ['$read', '$updated']}}},
-      {$sort: {score: -1, read: -1, updated: -1, _id: -1}}, {$skip: skip}, {$limit: limit},
-    );
-    const [rows, total] = await Promise.all([
-      model.aggregate(pipeline).option({maxTimeMS: 5000}), model.countDocuments(filter).maxTimeMS(3000),
-    ]);
+    // D1's generic $lookup fallback reads entire joined collections. Restrict
+    // both sides explicitly, retaining global sorting before pagination.
+    const entries = await model.find(filter).select('_id bookId lastVisitedAt lastReadAt chapterId').maxTimeMS(3000).lean();
+    const ids = entries.map(row => row.bookId);
+    const [books, visits] = ids.length ? await Promise.all([
+      Book.find({_id: {$in: ids}}).select('_id title author cover_image status category lastUpdated updatedAt deletedAt visibility').maxTimeMS(3000).lean(),
+      history ? entries : ReadingHistory.find({userId, bookId: {$in: ids}}).select('bookId lastVisitedAt lastReadAt chapterId').maxTimeMS(3000).lean(),
+    ]) : [[], []];
+    const booksById = new Map(books.map(book => [String(book._id), book]));
+    const visitsByBook = new Map(visits.map(visit => [String(visit.bookId), visit]));
+    const total = entries.length;
+    const rows = entries.map(entry => {
+      const book = booksById.get(String(entry.bookId)), visit = visitsByBook.get(String(entry.bookId));
+      // Views change updatedAt; prefer the content publication date.
+      const updated = +new Date(book?.lastUpdated ?? book?.updatedAt ?? 0);
+      const read = +new Date(visit?.lastReadAt ?? (history ? visit?.lastVisitedAt : undefined) ?? 0);
+      return {...entry, book, history: visit, updated, read, score: sort === 'read' ? read : sort === 'updated' ? updated : Math.max(read, updated)};
+    }).sort((a, b) => b.score - a.score || b.read - a.read || b.updated - a.updated || String(b._id).localeCompare(String(a._id))).slice(skip, skip + limit);
     const bookIds = rows.filter(row => row.book && !row.book.deletedAt && row.book.visibility !== 'private').map(row => row.book._id);
     const chapterIds = rows.map(row => row.history?.chapterId).filter(Boolean);
     const [latest, progress] = await Promise.all([
-      Chapter.aggregate([{$match: {bookId: {$in: bookIds}, deletedAt: null}}, {$sort: {bookId: 1, chapter_number: -1}}, {$group: {_id: '$bookId', title: {$first: '$title'}, firstChapterId: {$last: '$_id'}}}]).option({maxTimeMS: 5000}),
+      Promise.all(bookIds.map(async bookId => {
+        const filter = {bookId, deletedAt: null};
+        const [first, last] = await Promise.all([
+          Chapter.findOne(filter).sort({chapter_number: 1}).select('_id').maxTimeMS(3000).lean(),
+          Chapter.findOne(filter).sort({chapter_number: -1}).select('title').maxTimeMS(3000).lean(),
+        ]);
+        return {_id: bookId, title: last?.title, firstChapterId: first?._id};
+      })),
       Chapter.find({_id: {$in: chapterIds}, bookId: {$in: bookIds}, deletedAt: null}).select('_id title').maxTimeMS(3000).lean(),
     ]);
     const latestByBook = new Map(latest.map(row => [String(row._id), row.title]));
-    const firstByBook = new Map(latest.map(row => [String(row._id), String(row.firstChapterId)]));
+    const firstByBook = new Map(latest.filter(row => row.firstChapterId).map(row => [String(row._id), String(row.firstChapterId)]));
     const progressById = new Map(progress.map(row => [String(row._id), row.title]));
     res.set('Cache-Control', 'no-store').set('X-Total-Count', String(total)).json(rows.map(row => ({
       bookId: String(row.bookId),

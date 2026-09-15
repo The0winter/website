@@ -10,9 +10,9 @@ export function useBookCatalog(bookId: string, version: number | undefined, anch
   const snapshot = useSyncExternalStore(catalog.subscribe, catalog.getSnapshot, () => server);
   const policy = useSyncExternalStore(subscribePrefetchPolicy, currentPrefetchPolicy, serverPrefetchPolicy);
   useEffect(() => {
-    if (policy === 'paused') return;
+    if (!open || policy === 'paused') return;
     const network = (navigator as Navigator & {connection?: CatalogNetwork}).connection;
-    return catalog.watch(anchor, open && policy === 'visible', network, version);
+    return catalog.watch(anchor, policy === 'visible', network, version, true);
   }, [catalog, anchor, open, policy, version]);
   return {snapshot, ensureRange: catalog.ensureRange, retry: catalog.retry};
 }
