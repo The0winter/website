@@ -5,6 +5,7 @@ import {failureDetails} from '../diagnostics.mjs';
 import {browserProfile} from '../browser-session.mjs';
 import {updateLibrary} from './library.mjs';
 import {createLibraryControl} from './library-control.mjs';
+import {uploadLibrary} from './upload.mjs';
 
 let paused = false, started = false, stopped = false, client, libraryControl;
 const controller = new AbortController();
@@ -25,6 +26,12 @@ process.on('message', async message => {
   if (message.type !== 'start' || started) return;
   started = true;
   try {
+    if (message.upload) {
+      const batch = await uploadLibrary({stateDir: message.stateDir, outputDir: message.outputDir, signal: controller.signal, shouldStop: () => paused,
+        onLibrary: batch => send({type: 'upload', batch}), onPhase: book => send({type: 'upload-phase', title: book.title, author: book.author})});
+      send({type: 'upload-done', batch});
+      return;
+    }
     if (message.library) {
       libraryControl = createLibraryControl({signal: controller.signal, shouldStop: () => paused});
       const result = await updateLibrary({stateDir: message.stateDir, outputDir: message.outputDir, sites: message.sites,

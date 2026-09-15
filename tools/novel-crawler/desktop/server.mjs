@@ -13,12 +13,12 @@ import {openLocal} from './open-local.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const publicFiles = {'/': ['index.html', 'text/html'], '/app.css': ['app.css', 'text/css'], '/app.js': ['app.js', 'text/javascript'], '/icon.svg': ['icon.svg', 'image/svg+xml']};
-const busy = task => ['library', 'library-wait', 'search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(task.phase);
+const busy = task => ['upload', 'library', 'library-wait', 'search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(task.phase);
 function visibleReport(report) {
   if (!report) return null;
   return {...Object.fromEntries(['title', 'author', 'description', 'descriptionStatus', 'status', 'statusDetection', 'jobId', 'mode', 'checkedAt', 'downloaded', 'expected', 'errors', 'warnings', 'structuralPass', 'completeAgainstSource', 'exportFile', 'summaryFile', 'reportFile', 'limitation', 'reusedExport', 'readingEdition', 'readingAdded', 'sourceExpected', 'sourceDownloaded', 'rawReportFile', 'continuation', 'switching', 'continuationAdded', 'originalCount', 'originalSourceUrl', 'automaticResolutions'].map(key => [key, report[key]])), failures: (report.failures || []).map(item => failureDetails(item, item))};
 }
-export async function createDesktop({stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads'), port = 0, sitesDirectory, loadSources = loadSites, open = openLocal, onFocus = () => {}, findBooks = searchBooks, prepareBook = resolveBook} = {}) {
+export async function createDesktop({stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads'), port = 0, sitesDirectory, loadSources = loadSites, open = openLocal, onFocus = () => {}, findBooks = searchBooks, prepareBook = resolveBook, uploadWorker = path.join(here, 'worker.mjs')} = {}) {
   const token = randomBytes(32).toString('hex');
   let worker, operation, operationClient, stopRequested = false, closing = false, selectedBook = null, candidates = [], lastProgress = 0;
   const resolvedSpecs = new Map();
@@ -36,7 +36,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
     if (readingReport?.checkedAt === task.report.checkedAt) task.report = visibleReport(readingReport);
   }
   // An interrupted process can be resumed from crawler checkpoints, never shown as running.
-  if (busy(task)) task = {...task, phase: 'paused', message: task.kind === 'library' ? '上次书库更新已停止。再次点击“更新书库”即可重新检查，已保存章节会复用。' : '上次任务已停止。重新查找这本书即可继续。',
+  if (busy(task)) task = {...task, phase: 'paused', message: task.kind === 'upload' ? '上次上传已停止。再次点击“上传书库”会核对网站并续传，已上传内容保留。' : task.kind === 'library' ? '上次书库更新已停止。再次点击“更新书库”即可重新检查，已保存章节会复用。' : '上次任务已停止。重新查找这本书即可继续。',
     ...(task.batch ? {batch: {...task.batch, stopped: true, items: task.batch.items.map(item => ['pending', 'blocked', 'running', 'retrying', 'waiting'].includes(item.state) ? {...item, state: 'stopped', message: '上次任务中断，等待重新检查'} : item)}} : {})};
   function save() { atomicWrite(path.join(stateDir, 'desktop-last-task.json'), task); }
   function update(values) { task = {...task, ...(Object.hasOwn(values, 'phase') ? {action: null, actionUrl: null, actionDeadline: null, failure: null} : {}), ...values}; save(); }
@@ -119,6 +119,33 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
           if (!completed && busy(task)) { if (stopRequested) stoppedTask(); else update({phase: 'error', message: `书库更新进程停止，已保存章节保留。${workerError.slice(-300)}`}); }
         });
         current.send({type: 'start', library: true, stateDir, outputDir, sites: librarySites});
+        return respond(202, {ok: true});
+      }
+      if (pathname === '/api/upload-library') {
+        if (busy(task) || worker || operation) return respond(409, {error: '请先停止当前任务，等待进度保存完成后再上传书库'});
+        stopRequested = false; candidates = []; selectedBook = null;
+        task = {kind: 'upload', phase: 'upload', message: '正在整理本地书库，准备同步到 jiutianxiaoshuo.com…', batch: null}; save();
+        worker = fork(uploadWorker, [], {windowsHide: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc']});
+        const current = worker;
+        let completed = false;
+        current.stderr.resume();
+        current.on('message', message => {
+          if (message.type === 'upload') update({batch: message.batch});
+          if (message.type === 'upload-phase' && !['pausing', 'stopping'].includes(task.phase)) update({phase: 'upload', title: message.title, author: message.author, message: '正在核对网站书库并上传新增内容…'});
+          if (message.type === 'upload-done') {
+            completed = true;
+            const batch = message.batch;
+            update({batch, phase: stopRequested || batch.stopped ? 'stopped' : batch.failed ? 'partial' : 'complete',
+              message: batch.blockedReason || (batch.total === 0 ? '书库里还没有可上传的书籍。' : `${stopRequested || batch.stopped ? '上传已停止' : batch.failed ? '本轮上传结束' : '书库同步完成'}：新书 ${batch.newBooks} 本，新增 ${batch.added} 章，${batch.unchanged} 本已同步。${batch.failed ? ` ${batch.failed} 本未完成，原因见下方列表；再次点击可重试。` : ''}`)});
+          }
+          if (message.type === 'error') { completed = true; update({phase: stopRequested ? 'stopped' : 'partial', message: message.error}); }
+        });
+        current.on('error', () => update({phase: 'partial', message: '无法启动上传进程，请重新打开拾页后重试'}));
+        current.on('exit', () => {
+          if (worker === current) worker = null;
+          if (!completed && busy(task)) update({phase: stopRequested ? 'stopped' : 'partial', message: '上传进程已停止。再次点击“上传书库”会核对网站并续传，已上传内容保留。'});
+        });
+        current.send({type: 'start', upload: true, stateDir, outputDir});
         return respond(202, {ok: true});
       }
       if (pathname === '/api/library-action') {
@@ -219,7 +246,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
       if (pathname === '/api/stop') {
         if (!busy(task)) return respond(200, {ok: true});
         stopRequested = true;
-        update({phase: 'stopping', message: '正在停止请求并关闭采集页面…'});
+        update({phase: 'stopping', message: task.kind === 'upload' ? '正在停止上传，已成功上传的批次保留…' : '正在停止请求并关闭采集页面…'});
         operation?.abort();
         if (worker?.connected) worker.send({type: 'stop'});
         if (!operation && !worker) stoppedTask();

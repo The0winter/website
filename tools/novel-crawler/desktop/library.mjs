@@ -18,14 +18,14 @@ function sealed(file) {
 
 // Inspect exports once, in the worker. Reports and mapping sidecars are not books.
 // An explicit continuation or reading-edition binding takes precedence over old exports.
-export function planLibrary({stateDir, outputDir, sites = loadSites().sites}) {
+export function planLibrary({stateDir, outputDir, sites = loadSites().sites, forUpload = false}) {
   stateDir = path.resolve(stateDir); outputDir = path.resolve(outputDir);
   const groups = new Map(), invalid = [], jobs = [];
   for (const entry of entries(outputDir)) {
     if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
     const file = path.join(outputDir, entry.name);
     try {
-      const raw = fs.readFileSync(file), book = JSON.parse(raw);
+      const raw = fs.readFileSync(file), book = JSON.parse(raw.toString('utf8').replace(/^\uFEFF/, ''));
       if (!book.title || !book.author || !Array.isArray(book.chapters) || !book.chapters.length) continue;
       const key = continuationKey(book);
       const item = {file: entry.name, title: book.title, author: book.author, url: book.sourceUrl,
@@ -69,6 +69,20 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites}) {
             rawJob = job;
           }
         }
+      }
+      // Upload uses the accepted local edition, independent of today's website
+      // selectors or availability. Never publish a half-committed edition.
+      if (forUpload) {
+        if (binding) {
+          if (fs.existsSync(path.join(stateDir, 'continuations', key, 'pending.json'))) throw Error('上次换源更新尚未完成，请先继续更新以恢复');
+          if (binding.exportHash !== book.hash) throw Error('已绑定的续更文件被修改，请先核对');
+        }
+        if (reading) {
+          if (fs.existsSync(path.join(reading.dir, 'reading-edition-pending.json'))) throw Error('上次阅读版更新尚未完成，请先继续更新以恢复');
+          if (sealed(path.join(reading.dir, 'reading-edition.json')).exportHash !== book.hash) throw Error('已绑定的阅读版被修改，请先核对');
+        }
+        plans.push({...book, state: 'pending', message: '等待核对网站书库'});
+        continue;
       }
       const siteSpec = specForBook(book, sites);
       // A verified TXT job owns its file boundaries and cleanup rules. Replacing
