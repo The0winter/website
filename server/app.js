@@ -29,6 +29,7 @@ import mongoSanitize from 'express-mongo-sanitize';
 import User from './models/User.js'; 
 import Book from './models/Book.js';
 import {readBookIndex} from './services/book-reading-index.js';
+import {readLiveBook} from './services/book-version.js';
 import Chapter from './models/Chapter.js';
 import ForumPost from './models/ForumPost.js';  
 import ForumReply from './models/ForumReply.js';
@@ -519,16 +520,17 @@ app.get('/api/chapters/:id', async (req, res) => {
     }
 
     // 2. 先查章节，确保章节存在
-    const chapter = await Chapter.findOne({_id:req.params.id,deletedAt:null}).lean();
-    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+    const chapter = Object.hasOwn(res.locals, 'readChapter') ? res.locals.readChapter
+      : await Chapter.findOne({_id:req.params.id,deletedAt:null}).lean();
+    if (!chapter || chapter.deletedAt) return res.status(404).json({ error: 'Chapter not found' });
 
     let navigation={};
     if(req.query.navigation==='1'){
-      const index = await readBookIndex(chapter.bookId), position = index.indices.get(String(chapter._id));
+      const index = await readBookIndex(chapter.bookId, res.locals.workAccess), position = index.indices.get(String(chapter._id));
       if (position === undefined) return res.status(404).json({error: 'Chapter not found'});
       navigation = {previousId: index.ids[position - 1] ?? null, nextId: index.ids[position + 1] ?? null,
         chapterIndex: position, chapterTotal: index.ids.length, catalogVersion: index.version};
-    } else if (!await Book.exists({_id:chapter.bookId,deletedAt:null})) return res.status(404).json({error: 'Chapter not found'});
+    } else await readLiveBook(chapter.bookId, res.locals.workAccess);
     res.json({ ...await chapterResponse(chapter), ...navigation, bookId: chapter.bookId.toString() });
 
   } catch (error) {

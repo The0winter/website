@@ -10,10 +10,18 @@ export function workAccess(app, auth) {
   app.use(['/api/books/:workId', '/api/chapters/:chapterId'], asyncRoute(async (req, res, next) => {
     let bookId = req.params.workId;
     if (req.params.chapterId && /^[a-f\d]{24}$/i.test(req.params.chapterId)) {
-      bookId = (await Chapter.findById(req.params.chapterId).select('bookId').maxTimeMS(3000).lean())?.bookId;
+      // The body endpoint needs this same document next. Keep it only for this
+      // request; comments and mutations still load just the ownership key.
+      const bodyRead = ['GET', 'HEAD'].includes(req.method) && req.path === '/';
+      const query = Chapter.findById(req.params.chapterId);
+      if (!bodyRead) query.select('bookId');
+      const chapter = await query.maxTimeMS(3000).lean();
+      if (bodyRead) res.locals.readChapter = chapter;
+      bookId = chapter?.bookId;
     }
     if (!bookId || !/^[a-f\d]{24}$/i.test(String(bookId))) return next();
-    const book = await Book.findById(bookId).select('visibility author_id').maxTimeMS(3000).lean();
+    const book = await Book.findById(bookId).select('visibility author_id deletedAt writeVersion').maxTimeMS(3000).lean();
+    res.locals.workAccess = {bookId, book};
     if (book?.visibility !== 'private') return next();
     res.set('Cache-Control', 'private, no-store');
     const userId = await auth.optionalUserId(req);

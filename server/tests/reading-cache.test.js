@@ -14,7 +14,7 @@ import {bookCatalog} from '../services/catalog-volumes.js';
 import {bookReadingIndex} from '../services/book-reading-index.js';
 import {versionedBookCache} from '../services/versioned-book-cache.js';
 
-test('200 chapter reads share one order index; catalogs rebuild only after publication changes', async t => {
+test('200 chapter reads share one order index; catalogs rebuild only after publication changes', {skip: process.env.TEST_DATABASE_BACKEND === 'mongodb'}, async t => {
   const fixture = await TestDatabase.create();
   let server;
   try {
@@ -45,7 +45,9 @@ test('200 chapter reads share one order index; catalogs rebuild only after publi
     assert.equal(scans.length, 1, 'one shared order scan, never one scan per chapter/minute');
     assert.equal(scans[0].rows.length, 500);
     assert.ok(scans[0].rows.every(row => !Object.hasOwn(JSON.parse(row.document), 'title')));
-    assert.equal(chapterQueries.length, 401, 'one order scan and two primary-key reads per chapter');
+    assert.equal(chapterQueries.length, 201, 'one order scan and one primary-key read per chapter');
+    assert.equal(commands.filter(({sql}) => sql.includes('FROM "books"')).length, 201,
+      'one fresh access/version read per request and one validation for the shared build');
     for (const {sql} of chapterQueries) {
       const plan = await original('EXPLAIN QUERY PLAN ' + sql);
       assert.ok(plan.some(row => /SEARCH chapters USING/.test(row.detail)), JSON.stringify(plan));
@@ -53,6 +55,7 @@ test('200 chapter reads share one order index; catalogs rebuild only after publi
     commands.length = 0;
     assert.deepEqual(await get(path + '/statistics'), {totalWords: 2000});
     assert.equal(commands.filter(({sql}) => sql.includes('FROM "chapters"')).length, 0);
+    assert.equal(commands.filter(({sql}) => sql.includes('FROM "books"')).length, 1);
     const anchor = String(chapters[200]._id);
     const first = await get(path + `/catalog?anchor=${anchor}`);
     assert.equal(first.activeIndex, 199); assert.equal(first.total, 500);
@@ -62,6 +65,7 @@ test('200 chapter reads share one order index; catalogs rebuild only after publi
     await Promise.all(Array.from({length: 10}, () => get(path + `/catalog?anchor=${anchor}&version=0`)));
     await get(path + '/catalog/version');
     assert.equal(commands.filter(({sql}) => sql.includes('FROM "chapters"')).length, 0);
+    assert.equal(commands.filter(({sql}) => sql.includes('FROM "books"')).length, 11);
 
     // Exercise real transactional writers, not just manual cache invalidation.
     const added = await createChapter({role: 'import'}, book._id, {title: 'New chapter', content: 'new', chapter_number: 1003});

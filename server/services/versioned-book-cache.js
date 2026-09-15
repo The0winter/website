@@ -15,7 +15,7 @@ export function versionedBookCache(load, sizeOf, {maxEntries = 128, maxBytes = 1
       cache.delete(key); cache.set(key, found); return found.promise;
     }
     const entry = {version: revision, bytes: 0, promise: null};
-    entry.promise = Promise.resolve().then(() => load(bookId)).then(value => {
+    entry.promise = Promise.resolve().then(() => load(bookId, revision)).then(value => {
       entry.bytes = sizeOf(value);
       if (entry.bytes > maxBytes) {
         if (cache.get(key) === entry) cache.delete(key);

@@ -59,7 +59,7 @@ export function readingRoutes(app,auth) {
     const books=await Book.find({deletedAt:null,...publicWork}).select('_id updatedAt').sort({_id:1}).skip((page-1)*100).limit(100).lean();res.json(books);
   }));
   app.get('/api/books/:bookId/statistics',asyncRoute(async(req,res)=>{
-    const index = await readBookIndex(req.params.bookId);
+    const index = await readBookIndex(req.params.bookId, res.locals.workAccess);
     res.set('Cache-Control','no-store').json({totalWords:index.totalWords});
   }));
   app.get('/api/books/:bookId/chapters',asyncRoute(async(req,res)=>{
@@ -67,7 +67,7 @@ export function readingRoutes(app,auth) {
     const filter={bookId:req.params.bookId,deletedAt:null};
     // Keep preview pages bounded; their total comes from the shared book index.
     // (bookId, chapter_number) is unique, so no extra in-memory _id sort is needed.
-    const index = await readBookIndex(req.params.bookId);
+    const index = await readBookIndex(req.params.bookId, res.locals.workAccess);
     const chapters = await Chapter.find(filter).select('title chapter_number volume_title volume_number published_at bookId word_count').sort({chapter_number:req.query.order==='desc'?-1:1}).skip((page-1)*limit).limit(limit).setOptions({batchSize:limit,singleBatch:true}).maxTimeMS(3000).lean();
     const total = index.ids.length;
     res.set('X-Total-Count',String(total));res.json(chapters.map(formatted));
