@@ -218,8 +218,8 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
   try {
     checkState(state, spec, extraction, outputDir);
     assertOutput(state, outputPath(state, outputDir));
-    verifyReadingSources(dir, state, catalog);
     if (rawReport.failures.length) throw Error(rawReport.failures[0].error);
+    verifyReadingSources(dir, state, catalog);
     // Only historical, fingerprint-pinned problems may be excluded. Newly
     // collected problems must stop even if their duplicate is in a discarded block.
     const unreviewed = rawReport.issues.filter(issue => !issue.chapter || issue.chapter > state.sources.length);

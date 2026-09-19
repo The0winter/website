@@ -249,6 +249,30 @@ test('an incomplete TXT checkpoint set falls back to guarded resource recovery',
   assert.deepEqual(fs.readFileSync(initial.exportFile), original);
 });
 
+test('interrupted TXT updates resume missing new pages without reopening a changed book package', async t => {
+  for (const reviewed of [false, true]) {
+    const f = await fixture(t);
+    const spec = {...f.spec('alpha'), kind: 'txt', variant: 'verified-txt-v1', resource: {url: f.base + '/text/alpha'}};
+    const initial = await acquire(spec, {...f.options, mode: 'download'});
+    let file = initial.exportFile;
+    if (reviewed) {
+      const book = readJson(file); book.chapters = book.chapters.map(c => ({...c, sourceChapterNumber: c.chapter_number, sourceChapterUrl: c.link}));
+      file = path.join(f.options.outputDir, 'reading.json'); atomicWrite(file, book); await bindReadingEdition(spec, file, f.options);
+    }
+    const before = readJson(file);
+    f.state.counts.alpha = 5;
+    const partial = await acquire(spec, {...f.options, mode: 'download', maxNew: 1});
+    assert.equal(partial.exportFile, null); assert.deepEqual(readJson(file), before);
+    f.state.textSuffix = '\n整本资源已经变化';
+    fs.unlinkSync(path.join(f.options.stateDir, 'cache', hash({url: spec.resource.url, render: false}) + '.json'));
+    f.state.requests = [];
+    const result = await updateLibrary(f.options);
+    assert.equal(result.added, 2, JSON.stringify(result.items));
+    assert.deepEqual(f.state.requests, ['/book/alpha', '/chapter/alpha/5']);
+    assert.deepEqual(readJson(file).chapters.slice(0, 3), before.chapters);
+  }
+});
+
 test('modified exports, duplicate versions and damaged bindings are protected before source requests', async t => {
   const f = await fixture(t), raw = await f.seed('alpha');
   fs.appendFileSync(raw, '\n'); const modified = fs.readFileSync(raw);

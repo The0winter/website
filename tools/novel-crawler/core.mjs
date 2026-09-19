@@ -264,9 +264,28 @@ async function acquireRaw(input, options = {}) {
       // A completed TXT seed with a verified online catalog can continue through
       // the same site's chapter reader. Re-downloading a mutable book package
       // neither validates nor improves the already accepted local edition.
-      const catalogUpdate = spec.kind === 'txt' && !options.refresh && !spec.catalog?.walk &&
+      let catalogUpdate = spec.kind === 'txt' && !options.refresh && !spec.catalog?.walk &&
         spec.catalog && spec.chapter?.title && spec.chapter?.content && oldCatalog?.length > 0 &&
-        readJson(path.join(dir, 'accepted-resource.json')) && oldCatalog.every(entry => checkpoint(entry));
+        !!readJson(path.join(dir, 'accepted-resource.json'));
+      if (catalogUpdate && !oldCatalog.every(entry => checkpoint(entry))) {
+        // A paused update already saved today's longer catalog. Its uncollected
+        // tail is not missing historical data: require every accepted chapter,
+        // then resume missing new pages through the same site's chapter reader.
+        let acceptedCount = reading?.sources.length;
+        if (!reading) {
+          const exported = readJson(path.join(dir, 'export.json'));
+          const file = exportPath(spec, id, options.outputDir);
+          if (exported?.path === file && fs.existsSync(file)) {
+            const raw = fs.readFileSync(file);
+            if (hash(raw) === exported.hash) {
+              const book = JSON.parse(raw);
+              if (book.title === spec.title && book.author === spec.author && book.chapters?.length &&
+                  book.chapters.every((chapter, i) => chapter.link === oldCatalog[i]?.link && chapter.chapter_number === i + 1)) acceptedCount = book.chapters.length;
+            }
+          }
+        }
+        catalogUpdate = Number.isSafeInteger(acceptedCount) && acceptedCount > 0 && acceptedCount <= oldCatalog.length && oldCatalog.slice(0, acceptedCount).every(entry => checkpoint(entry));
+      }
       source = spec.kind === 'html' || catalogUpdate ? await getCatalog(spec, client) : await getResource(spec, client, dir);
       catalog = preserveCatalogLabels(source.catalog, oldCatalog);
       evidence = source.evidence;
