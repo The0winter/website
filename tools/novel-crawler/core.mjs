@@ -359,7 +359,11 @@ async function acquireRaw(input, options = {}) {
           const chapter = saved?.chapter || source.chapters?.[entry.chapter_number - 1] || (spec.chapter ? await getChapter(spec, entry, links, client) : null);
           if (!chapter) throw Error('文件缺少该目录项，且未配置同一来源的补采规则');
           const invalid = chapterQuality(chapter).filter(i => i.level === 'error');
-          if (invalid.length) {
+          // A file may contain a real, empty directory entry. Preserve its
+          // provenance for an explicit gap review; qualityReport still blocks
+          // export. Other extraction/access errors remain failed requests.
+          const emptyFileEntry = spec.kind !== 'html' && invalid.length === 1 && invalid[0].code === 'empty';
+          if (invalid.length && !emptyFileEntry) {
             atomicWrite(path.join(dir, 'rejected', hash(entry.link) + '.json'), {chapter, issues: invalid});
             throw Error(invalid.map(i => i.code).join(', '));
           }

@@ -234,6 +234,11 @@ function verifySourceOrderReview(review, catalog, raw, book, seen) {
     if (!gap.evidence || !/^https?:\/\//u.test(gap.evidence.url || '') || !Number.isFinite(Date.parse(gap.evidence.checkedAt)) || typeof gap.evidence.detail !== 'string' || !gap.evidence.detail.trim()) throw Error('缺文核对必须保存独立证据地址、时间和说明');
     if (gap.kind === 'placeholder') {
       if (!placeholderEvidence(chapter.content)) throw Error('缺文提示验收不能排除普通正文');
+    } else if (gap.kind === 'empty') {
+      if (chapter.content.trim()) throw Error('空章验收不能排除非空正文');
+    } else if (gap.kind === 'garbled') {
+      const privateUse = chapter.content.match(/[\uE000-\uF8FF]/gu) || [];
+      if (privateUse.length < 10 || new Set(privateUse).size < 3) throw Error('乱码验收需要已核实的密集异常字形，不能排除普通正文');
     } else if (gap.kind === 'truncated') {
       const actual = chapter.content.replace(/\s/gu, '').length;
       if (gap.actualCharacters !== actual || !Number.isInteger(gap.expectedCharacters) || gap.expectedCharacters < 1000 || gap.expectedCharacters > 60000 || actual >= gap.expectedCharacters * 0.8) throw Error('残缺章节验收需要显著缺文的实际字数和独立预期字数');

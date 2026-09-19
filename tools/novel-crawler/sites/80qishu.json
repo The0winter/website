@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "id": "80qishu",
+  "name": "八零奇书网",
+  "home": "https://www.80qishu.cc/",
+  "hosts": [
+    "www.80qishu.cc",
+    "www.80qishu.com",
+    "d.80qishu.com",
+    "t.80qishu.com"
+  ],
+  "book": {
+    "urlPattern": "^/down/txt[0-9]+c(?<bookId>[0-9]+)qishu\\.html$",
+    "metadata": {
+      "title": ".bookcover h1.title",
+      "author": {
+        "selector": ".bookcover p.mt10.gray",
+        "pattern": "^作者：[\\s]*(.+)$"
+      },
+      "status": ".bookcover span.type"
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "txt",
+    "variant": "desktop-80qishu-delimited-txt-v1",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": [
+      "www.80qishu.cc",
+      "www.80qishu.com",
+      "d.80qishu.com",
+      "t.80qishu.com"
+    ],
+    "browser": {
+      "headless": true
+    },
+    "delayMs": 1800,
+    "timeoutMs": 60000,
+    "retries": 1,
+    "metadata": {
+      "title": ".bookcover h1.title",
+      "author": {
+        "selector": ".bookcover p.mt10.gray",
+        "pattern": "^作者：[\\s]*(.+)$"
+      },
+      "status": ".bookcover span.type"
+    },
+    "resource": {
+      "link": "a.downbtn[href^='https://d.80qishu.com/']",
+      "encoding": "gb18030",
+      "startAfter": "---------------------------用户上传之内容开始--------------------------------",
+      "endBefore": "---------------------------用户上传之内容结束--------------------------------",
+      "headingPattern": "^------------[\\t ]*\\r?\\n(?:[\\t ]*\\r?\\n)*([^\\r\\n]+)\\r?$",
+      "preamble": "metadata"
+    }
+  }
+}
