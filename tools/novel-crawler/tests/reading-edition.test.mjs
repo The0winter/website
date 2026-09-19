@@ -147,6 +147,36 @@ test('zero-padded bracket chapter headings retain originals and reject missing c
   assert.throws(() => recordReadingNoticeReview(f.dir,f.spec,extractionHash(f.spec),f.options.outputDir,{link:chapter.link,contentHash:hash(chapter.content),reason:'不能将方头括号正文章节认作公告'}),/正文章号/);
 });
 
+test('half-numbered interludes append without consuming the next required integer chapter', async t => {
+  const f=await fixture(t); await f.bind(); const old=readJson(f.file);
+  f.state.count=6; f.state.titles[6]='第３．５章 聊天番外';
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).readingAdded,1);
+  assert.deepEqual(readJson(f.file).chapters.slice(0,old.chapters.length),old.chapters);
+  assert.equal(readJson(f.file).chapters.at(-1).title,f.state.titles[6]);
+  f.state.count=7; f.state.titles[7]='第4章 新的正篇';
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).readingAdded,1);
+  const accepted=fs.readFileSync(f.file);
+  f.state.count=8; f.state.titles[8]='第6章 缺第五章';
+  const blocked=await acquire(f.spec,{...f.options,mode:'download'});
+  assert.equal(blocked.exportFile,null); assert.match(blocked.failures[0].error,/章号不连续/);
+  assert.deepEqual(fs.readFileSync(f.file),accepted);
+});
+
+test('decimal headings cannot waive missing or repeated half chapters through notice review', async t => {
+  for(const title of ['第4.5章 缺少第四章','第3.5章 重复的半章','第3.25章 非标准小数']) await t.test(title,async t=>{
+    const f=await fixture(t); await f.bind();
+    f.state.count=6; f.state.titles[6]='第3.5章 聊天番外';
+    assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).readingAdded,1);
+    const accepted=fs.readFileSync(f.file);
+    f.state.count=7; f.state.titles[7]=title;
+    const blocked=await acquire(f.spec,{...f.options,mode:'download'});
+    assert.equal(blocked.exportFile,null); assert.match(blocked.failures[0].error,/章号不连续/);
+    assert.deepEqual(fs.readFileSync(f.file),accepted);
+    const c=f.raw(7);
+    assert.throws(()=>recordReadingNoticeReview(f.dir,f.spec,extractionHash(f.spec),f.options.outputDir,{link:c.link,contentHash:hash(c.content),reason:'不得当作无章号公告'}),/正文章号/);
+  });
+});
+
 test('title mismatch review pins exact retained text and blocks unreviewed or changed source titles', async t => {
   const f = await fixture(t, {sourceOrder: true});
   f.state.bodyTitles[4] = '第2章 正文页的原名';

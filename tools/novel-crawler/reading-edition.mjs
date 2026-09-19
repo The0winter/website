@@ -93,7 +93,8 @@ export function verifyReadingSources(dir, state, catalog) {
 function readingChapterNumber(title) {
   const normalized = String(title).normalize('NFKC').trim();
   const match = /^([0-9]+)(?:[、.]|\s+\S|【[^【】\n]+】$)/u.exec(normalized);
-  return chapterIdentity(normalized)?.number ?? (match ? Number(match[1]) : null);
+  const fractional = /^第([0-9]+\.[0-9]+)[章节回]/u.exec(normalized);
+  return chapterIdentity(normalized)?.number ?? (fractional ? Number(fractional[1]) : match ? Number(match[1]) : null);
 }
 
 // Explicitly reviewed unnumbered notices are pinned to the complete source
@@ -113,15 +114,20 @@ export function recordReadingNoticeReview(dir, spec, extraction, outputDir, {lin
 }
 
 function orderedChapters(chapters, reviewedPrefix = 0, noticeReviews = []) {
-  let number = 0;
+  let number = 0, halfChapter = false;
   for (const [index, chapter] of chapters.entries()) {
     if (chapter.chapter_number !== index + 1) throw Error('阅读版顺序号不连续');
     const title = chapter.title.normalize('NFKC').trim();
     const current = readingChapterNumber(title);
-    if (index < reviewedPrefix) { if (current !== null) number = current; continue; }
+    if (index < reviewedPrefix) { if (current !== null) { number = Math.floor(current); halfChapter = !Number.isInteger(current); } continue; }
     if (current !== null) {
-      if (!Number.isSafeInteger(current) || current !== number + 1) throw Error(`阅读版章号不连续：应为第 ${number + 1} 章，实际为“${chapter.title}”`);
-      number = current;
+      // A single N.5 interlude follows N without replacing the required N+1.
+      // Decimal headings also count as numbered text in the notice-review guard.
+      if (Number.isSafeInteger(number) && current % 1 === 0.5 && current === number + 0.5 && !halfChapter) halfChapter = true;
+      else {
+        if (!Number.isSafeInteger(current) || current !== number + 1) throw Error(`阅读版章号不连续：应为第 ${number + 1} 章，实际为“${chapter.title}”`);
+        number = current; halfChapter = false;
+      }
     } else if (!/^(?:番外|IF番外|(?:[一二三四五六七八九十0-9]+月)?总结|请假|公告|通知|活动|感言|后记|月票)/iu.test(title) &&
       !noticeReviews.some(review => review.link === chapter.link && review.title === chapter.title && review.contentHash === hash(chapter.content))) {
       throw Error(`未识别的番外或公告标题，需要核对：“${chapter.title}”`);
