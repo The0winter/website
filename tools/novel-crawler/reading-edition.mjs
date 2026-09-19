@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {load} from 'cheerio';
 import {atomicWrite, readJson, hash} from './storage.mjs';
-import {checkIdentity, qualityReport, normalizedTitle, placeholderEvidence} from './quality.mjs';
+import {checkIdentity, qualityReport, normalizedTitle, normalizedText, placeholderEvidence} from './quality.mjs';
 import {formatChapterForExport} from './titles.mjs';
 import {chapterIdentity} from './continuation.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
@@ -190,6 +190,23 @@ function checkNewIssues(report, after = 0) {
   if (blocking.length) throw Error(`阅读版需要核对：${blocking.slice(0, 5).map(i => `第 ${i.chapter} 项 ${i.code}`).join('；')}`);
 }
 
+// A human review can pin a handful of glyph differences in an already detected
+// near duplicate. It never rewrites either checkpoint or accepts a new warning.
+function reviewedGlyphDuplicate(pair, omit, keep) {
+  const review = pair.glyphReview;
+  if (!review || !Array.isArray(review.differences) || !review.differences.length || review.differences.length > 32) return false;
+  const evidence = review.evidence;
+  if (!evidence || !/^https?:\/\//u.test(evidence.url || '') || !Number.isFinite(Date.parse(evidence.checkedAt)) || typeof evidence.detail !== 'string' || !evidence.detail.trim()) return false;
+  const a = Array.from(normalizedText(omit.content)), b = Array.from(normalizedText(keep.content));
+  if (a.length < 1000 || a.length !== b.length || review.differences.length > a.length * 0.01) return false;
+  const actual = [];
+  for (let offset = 0; offset < a.length; offset++) if (a[offset] !== b[offset]) actual.push({offset, omit: a[offset], keep: b[offset]});
+  return actual.length === review.differences.length && actual.every((item, i) => {
+    const pinned = review.differences[i];
+    return pinned && Number.isInteger(pinned.offset) && item.offset === pinned.offset && item.omit === pinned.omit && item.keep === pinned.keep;
+  });
+}
+
 function verifySourceOrderReview(review, catalog, raw, book, seen) {
   if (!review || review.catalogHash !== hash(catalog) || !Array.isArray(review.pairs) || (review.gaps !== undefined && !Array.isArray(review.gaps)) || !(review.pairs.length || review.gaps?.length) || typeof review.reason !== 'string' || !review.reason.trim()) throw Error('来源顺序验收需要目录哈希、逐项重复或缺文核对和具体理由');
   let previous = 0;
@@ -203,7 +220,12 @@ function verifySourceOrderReview(review, catalog, raw, book, seen) {
   for (const pair of review.pairs) {
     const omit = raw[pair.omit - 1], keep = raw[pair.keep - 1];
     if (!Number.isInteger(pair.omit) || !Number.isInteger(pair.keep) || !omit || !keep || seen.has(omit.link) || !seen.has(keep.link) || omissions.has(omit.link) || pair.omitHash !== hash(omit.content) || pair.keepHash !== hash(keep.content) || typeof pair.reason !== 'string' || !pair.reason.trim()) throw Error('重复项核对与保留章节、正文哈希不匹配');
-    if (!issues.some(i => ['duplicate-body', 'duplicate-title-body'].includes(i.code) && ((i.chapter === pair.omit && i.otherChapter === pair.keep) || (i.chapter === pair.keep && i.otherChapter === pair.omit)))) throw Error('不能将未检测为重复的正文从阅读版排除');
+    const pairIssues = issues.filter(i => ((i.chapter === pair.omit && i.otherChapter === pair.keep) || (i.chapter === pair.keep && i.otherChapter === pair.omit)));
+    // Whole-book similarity scanning caps candidate buckets. Recheck the named
+    // pair with the same detector before validating an explicit glyph review.
+    const detectedNear = pair.glyphReview && qualityReport([omit, keep], [omit, keep], [], 'probe').issues.some(i => i.code === 'similar-body');
+    if (!pairIssues.some(i => ['duplicate-body', 'duplicate-title-body'].includes(i.code)) &&
+      !(detectedNear && reviewedGlyphDuplicate(pair, omit, keep))) throw Error('不能将未检测为重复或未逐字核实的正文从阅读版排除');
     omissions.add(omit.link);
   }
   for (const gap of review.gaps || []) {

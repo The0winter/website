@@ -67,6 +67,50 @@ test('source-order review pins duplicate omissions while preserving historical n
   assert.equal(blocked.exportFile, null); assert.deepEqual(readJson(f.file), book);
 });
 
+test('reviewed glyph differences admit only pinned detected near duplicates and preserve original checkpoints', async t => {
+  const f = await fixture(t, {sourceOrder: true, titles: {3: '第1章 错贴的另一标题'}});
+  const original = Array.from({length: 1400}, (_, i) => String.fromCodePoint(0x6000 + i)).join('');
+  f.state.bodies[1] = original;
+  f.state.bodies[3] = original.slice(0, 61) + '差' + original.slice(62);
+  const report = await acquire(f.spec, {...f.options, mode: 'download', refresh: true});
+  assert.ok(report.issues.some(i => i.code === 'similar-body' && i.chapter === 3 && i.otherChapter === 1));
+  const select = () => ({...f.book, chapters: [1,2,4,5].map((n,i) => ({...formatChapterForExport(f.raw(n)), chapter_number:i+1, sourceChapterNumber:n, sourceChapterUrl:f.raw(n).link}))});
+  let book = select();
+  atomicWrite(f.file, book);
+  const glyphReview = {differences:[{offset:61,omit:'差',keep:original[61]}], evidence:{url:f.raw(3).link,checkedAt:new Date().toISOString(),detail:'逐字核实正文只有一处字形差异，另一标题错贴相同正文。'}};
+  const pair = {omit:3,keep:1,omitHash:hash(f.raw(3).content),keepHash:hash(f.raw(1).content),reason:'核实错贴重复项，保留原文与哈希。',glyphReview};
+  const review = {catalogHash:hash(readJson(path.join(f.dir,'catalog.json'))),reason:'保留来源次序，只移出逐字核实的错贴项。',pairs:[pair]};
+  const bind = p => bindReadingEdition(f.spec,f.file,{...f.options,sourceOrderReview:{...review,pairs:[p]}});
+  for (const bad of [
+    {...pair,glyphReview:undefined}, {...pair,omitHash:'stale'},
+    {...pair,glyphReview:{...glyphReview,evidence:{...glyphReview.evidence,checkedAt:'invalid'}}},
+    {...pair,glyphReview:{...glyphReview,differences:[]}},
+    {...pair,glyphReview:{...glyphReview,differences:[{offset:62,omit:'差',keep:original[61]}]}},
+    {...pair,glyphReview:{...glyphReview,differences:[{offset:61,omit:'错',keep:original[61]}]}},
+    {...pair,glyphReview:{...glyphReview,differences:Array.from({length:33},()=>glyphReview.differences[0])}},
+    {...pair,keep:2,keepHash:hash(f.raw(2).content)},
+  ]) await assert.rejects(bind(bad));
+  // Even a complete, correct difference list cannot approve a large revision.
+  f.state.bodies[3] = '改'.repeat(20) + original.slice(20);
+  const larger = await acquire(f.spec,{...f.options,mode:'download',refresh:true});
+  assert.ok(larger.issues.some(i=>i.code==='similar-body' && i.chapter===3 && i.otherChapter===1));
+  book=select();atomicWrite(f.file,book);
+  await assert.rejects(bind({...pair,omitHash:hash(f.raw(3).content),glyphReview:{...glyphReview,differences:Array.from({length:20},(_,offset)=>({offset,omit:'改',keep:original[offset]}))}}),/未逐字核实/);
+  f.state.bodies[3] = original.slice(0,61)+'差'+original.slice(62);
+  await acquire(f.spec,{...f.options,mode:'download',refresh:true});
+  book=select();atomicWrite(f.file,book);
+  const checkpoint = path.join(f.dir,'chapters',hash(f.raw(3).link)+'.json'), originalBytes=fs.readFileSync(checkpoint);
+  await bind(pair);
+  assert.deepEqual(fs.readFileSync(checkpoint),originalBytes);
+  assert.deepEqual(readJson(f.file),book);
+  const resumed=await acquire(f.spec,{...f.options,mode:'download'});
+  assert.equal(resumed.reusedExport,true);
+  assert.deepEqual(resumed.acceptedSourceOrder.pairs[0].glyphReview,glyphReview);
+  f.state.count=6;f.state.titles[6]='第3章 新的相似错贴';f.state.bodies[6]=original.slice(0,-1)+'新';
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).exportFile,null);
+  assert.deepEqual(readJson(f.file),book);
+});
+
 test('reviewed nonstandard notices preserve the full text and cannot excuse stale content or missing numbered chapters', async t => {
   const f = await fixture(t); await f.bind();
   f.state.count = 6; f.state.titles[6] = '定时操作失误，提前更了'; f.state.bodies[6] = '晚上的章节提前发布了，今晚没有更新。';

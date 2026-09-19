@@ -458,7 +458,8 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
       if (temporaryProfile) {
         const target = path.resolve(temporaryProfile);
         if (path.dirname(target) !== path.resolve(os.tmpdir()) || !path.basename(target).startsWith('novel-browser-')) throw Error('临时采集目录无效');
-        fs.rmSync(target, {recursive: true, force: true}); temporaryProfile = null;
+        // Chromium's crash reporter may briefly hold the profile after exit on Windows.
+        fs.rmSync(target, {recursive: true, force: true, maxRetries: 5, retryDelay: 100}); temporaryProfile = null;
       }
     } finally { releaseCache(); }
   }};
