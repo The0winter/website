@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "id": "shubenshu",
+  "name": "书本书",
+  "home": "https://www.shubenshu.com/",
+  "hosts": ["www.shubenshu.com"],
+  "book": {
+    "urlPattern": "^/(?<bookId>[A-Za-z0-9]+)/$",
+    "metadata": {
+      "title": {"selector": "meta[property='og:novel:book_name']", "attribute": "content"},
+      "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"},
+      "description": "#intro"
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-shubenshu-v1",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": ["www.shubenshu.com"],
+    "delayMs": 1500,
+    "timeoutMs": 25000,
+    "retries": 1,
+    "browser": {"headless": true},
+    "metadata": {
+      "title": {"selector": "meta[property='og:novel:book_name']", "attribute": "content"},
+      "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"},
+      "description": "#intro"
+    },
+    "catalog": {
+      "url": "https://www.shubenshu.com/${bookId}_list/",
+      "links": "#list a[href^='/${bookId}/'][href$='.html']"
+    },
+    "chapter": {
+      "title": {"selector": "h1.bookname", "pattern": "^(.+?)(?:（[0-9]+/[0-9]+）)?$"},
+      "content": "#booktxt",
+      "remove": ["script", "style", "iframe"],
+      "removeText": ["(?:^|\\n)本章未完，点击下一页继续阅读。(?=\\n|$)"],
+      "next": ".bottem1 a[rel='next']:contains('下一页')",
+      "maxPages": 10
+    }
+  }
+}

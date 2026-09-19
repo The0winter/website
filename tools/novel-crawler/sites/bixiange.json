@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "bixiange",
+  "name": "笔仙阁",
+  "home": "https://www.bixiange.top/",
+  "hosts": ["www.bixiange.top"],
+  "book": {
+    "urlPattern": "^/(?<category>[a-z]+)/(?<bookId>[0-9]+)/?$",
+    "metadata": {
+      "title": {"selector": ".desc > h1", "pattern": "^(.+?)(?:\\([0-9]+-[0-9]+\\))?$"},
+      "author": {"selector": ".descTip > p:nth-child(2)", "pattern": "^作者：(.+)$"},
+      "description": ".descInfo"
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-bixiange-sections-v1",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": ["www.bixiange.top"],
+    "delayMs": 1500,
+    "timeoutMs": 25000,
+    "retries": 1,
+    "browser": {"headless": true},
+    "metadata": {
+      "title": {"selector": ".desc > h1", "pattern": "^(.+?)(?:\\([0-9]+-[0-9]+\\))?$"},
+      "author": {"selector": ".descTip > p:nth-child(2)", "pattern": "^作者：(.+)$"},
+      "description": ".descInfo"
+    },
+    "catalog": {"links": "ul.clearfix > li > a[href^='/${category}/${bookId}/index/'][href$='.html']"},
+    "chapter": {
+      "title": {"selector": "h1", "pattern": "(第[0-9]+节)$"},
+      "content": "#mycontent",
+      "remove": ["script", "style", "iframe"]
+    }
+  }
+}
