@@ -293,10 +293,11 @@ export function recordContinuationNumberReset(spec, options, {links, hashes, ref
 
 const numberingFingerprint = (chapter, catalogTitle) => ({...reviewFingerprint(chapter),
   catalogTitle: normalize(catalogTitle), sourcePosition: chapter.sourceChapterNumber || chapter.chapter_number});
+const sourceDefectKey = ({previousNumber, window, boundary}) => hash({previousNumber, window, ...(boundary ? {boundary} : {})});
 
 // Explicitly accept a known source numbering defect, without correcting, filling,
 // dropping or reordering prose. Three adjacent complete entries bind its scope.
-export function recordContinuationSourceDefect(spec, options, {links, hashes, evidenceFile, evidenceHash, reason}) {
+export function recordContinuationSourceDefect(spec, options, {links, hashes, evidenceFile, evidenceHash, reason, boundary}) {
   if (!Array.isArray(links) || links.length !== 3 || new Set(links).size !== 3 || !Array.isArray(hashes) || hashes.length !== 3 || !evidenceFile || !evidenceHash || typeof reason !== 'string' || !reason.trim()) throw Error('接受来源编号缺陷需要相邻三项、完整正文哈希、证据文件及具体理由');
   const sourceDir = sourceDirectory(options.stateDir, spec, options.extraction), catalog = readJson(path.join(sourceDir, 'catalog.json'));
   const positions = links.map(link => catalog?.findIndex(c => c.link === link));
@@ -313,7 +314,18 @@ export function recordContinuationSourceDefect(spec, options, {links, hashes, ev
   const evidence = fs.readFileSync(evidenceFile);
   if (!evidence.length || evidence.length > 2_000_000 || hash(evidence) !== evidenceHash) throw Error('来源缺陷证据缺失、过大或哈希不符');
   const window = chapters.map((c, i) => numberingFingerprint(c, catalog[positions[i]].title));
-  const key = hash({previousNumber, window}), decision = {key, kind: 'numbering', previousNumber, window, evidenceHash, reason: reason.trim(), reviewedAt: new Date().toISOString()};
+  let reviewedBoundary;
+  if (boundary) {
+    if (!options.outputDir || !boundary.exportHash || !boundary.chapterHash) throw Error('边界编号核对需要原文件和末章的完整哈希');
+    const raw = fs.readFileSync(targetPath(options.outputDir, boundary.file)), book = JSON.parse(raw), previous = book.chapters?.at(-1);
+    if (hash(raw) !== boundary.exportHash || !sameBook(spec, book) || !previous || hash(previous) !== boundary.chapterHash) throw Error('边界编号核对的原书或末章已变化');
+    const previousId = chapterIdentity(previous.title), sourceId = chapterIdentity(chapters[0].title);
+    if (!previousId || !sourceId || previousId.number !== sourceId.number || !compatibleNames(previousId.name, sourceId.name) ||
+      bodyKey(previous.content, previous.title).length < 100 || bodyKey(previous.content, previous.title) !== bodyKey(chapters[0].content, chapters[0].title)) throw Error('边界编号核对必须与原书末章完整正文一致');
+    reviewedBoundary = {file: boundary.file, exportHash: boundary.exportHash, bookHash: hash(book), chapterHash: boundary.chapterHash};
+  }
+  const scope = {previousNumber, window, ...(reviewedBoundary ? {boundary: reviewedBoundary} : {})};
+  const key = sourceDefectKey(scope), decision = {key, kind: 'numbering', ...scope, evidenceHash, reason: reason.trim(), reviewedAt: new Date().toISOString()};
   const state = loadReviews(spec, options);
   state.sourceDefects = [...(state.sourceDefects || []).filter(d => d.window[1].link !== links[1]), decision];
   atomicWrite(path.join(sourceDir, 'references', evidenceHash + '.bin'), evidence);
@@ -421,6 +433,7 @@ export async function bindReviewedCompletedSource(spec, options, {file, exportHa
 // heading. A repeated number with different prose is still an unresolved version.
 export function createContinuationReviewer(book, reviews = [], noticeReviews = [], partPolicy, numberResets = [], numberCorrections = [], sourceDefects = []) {
   const accepted = [...book.chapters], originals = new Set(book.chapters), skipped = [], resolutions = [];
+  const boundaryBookHash = sourceDefects.some(d => d.boundary) ? hash(book) : null;
   let number = numbered(accepted).at(-1)?.number;
   let requiredAfterReset = null;
   let correctionWindow = null;
@@ -494,9 +507,10 @@ export function createContinuationReviewer(book, reviews = [], noticeReviews = [
         if (openPart ? !secondPart : part?.part === 2 || actual.number !== number + 1) {
           const previous = accepted.at(-1), reset = !openPart && !part && !peers.length && !originals.has(previous) && numberResets.find(d =>
             d.key === hash(d.window) && d.window.length === 3 && hash(d.window[0]) === hash(resetFingerprint(previous)) && hash(d.window[1]) === hash(resetFingerprint(value)));
-          const defect = !openPart && !part && !peers.length && !originals.has(previous) && sourceDefects.find(d =>
-            d.kind === 'numbering' && d.key === hash({previousNumber: d.previousNumber, window: d.window}) && d.previousNumber === number && d.window.length === 3 &&
-            hash(d.window[0]) === hash(numberingFingerprint(previous, previous.catalogTitle || previous.title)) && hash(d.window[1]) === hash(numberingFingerprint(value, entry.title)));
+          const defect = !openPart && !part && !peers.length && sourceDefects.find(d =>
+            d.kind === 'numbering' && d.key === sourceDefectKey(d) && d.previousNumber === number && d.window.length === 3 &&
+            (originals.has(previous) ? d.boundary?.bookHash === boundaryBookHash && d.boundary?.chapterHash === hash(previous) :
+              hash(d.window[0]) === hash(numberingFingerprint(previous, previous.catalogTitle || previous.title))) && hash(d.window[1]) === hash(numberingFingerprint(value, entry.title)));
           if (!reset && !defect) {
             const reason = peers.length ? '同章号正文不同，不能自动选择版本' : '缺章或章号顺序无法确定';
             throw Error(`新来源衔接后章号冲突：应为第 ${openPart ? number + ' 章下篇' : number + 1 + ' 章'}，实际为「${value.title}」；${reason}`);

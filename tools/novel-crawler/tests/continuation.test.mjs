@@ -102,6 +102,38 @@ test('source defect acceptance is limited to complete unchanged adjacent entries
   await assert.rejects(f.run(), /证据缺失或变化/); assert.deepEqual(fs.readFileSync(f.file), original);
 });
 
+test('a source numbering defect at the old-book boundary requires a pinned complete matching tail', async t => {
+  const f = await fixture(t);
+  f.state.titles[5] = '第7章 山间故事5'; f.state.titles[6] = '第8章 山间故事6';
+  const initial = await f.run({stopOnFailure: false}), sourceDir = path.dirname(initial.reportFile);
+  const original = fs.readFileSync(f.file), evidenceFile = path.join(f.options.stateDir, 'boundary-reference.json');
+  atomicWrite(evidenceFile, {finding: 'Independent catalog places the same named chapters directly after chapter 4.'});
+  const options = {...f.options, extraction: extractionHash(f.spec)};
+  const review = {links: [4, 5, 6].map(n => f.base + '/new/c/' + n), hashes: [4, 5, 6].map(n => hash(body(n))), evidenceFile,
+    evidenceHash: hash(fs.readFileSync(evidenceFile)), reason: 'Explicitly reviewed source numbering defect; preserve all original prose.'};
+  recordContinuationSourceDefect(f.spec, options, review);
+  assert.equal((await f.run()).completeAgainstSource, false, 'an ordinary source review cannot waive the old-book boundary');
+  const boundary = {file: path.basename(f.file), exportHash: hash(original), chapterHash: hash(f.book.chapters.at(-1))};
+  assert.throws(() => recordContinuationSourceDefect(f.spec, options, {...review, boundary: {...boundary, exportHash: hash('changed')}}), /原书或末章已变化/);
+  assert.throws(() => recordContinuationSourceDefect(f.spec, options, {...review, boundary: {...boundary, chapterHash: hash('changed')}}), /原书或末章已变化/);
+  const changed = {...f.book, chapters: f.book.chapters.map(c => ({...c}))}; changed.chapters.at(-1).content += '不同正文'; atomicWrite(f.file, changed);
+  assert.throws(() => recordContinuationSourceDefect(f.spec, options, {...review, boundary: {...boundary, exportHash: hash(fs.readFileSync(f.file)), chapterHash: hash(changed.chapters.at(-1))}}), /完整正文一致/);
+  fs.writeFileSync(f.file, original);
+  const decision = recordContinuationSourceDefect(f.spec, options, {...review, boundary});
+  assert.deepEqual(fs.readFileSync(f.file), original);
+  const read = n => readJson(path.join(sourceDir, 'chapters', hash(f.base + '/new/c/' + n) + '.json')).chapter;
+  const alteredBook = {...f.book, description: 'changed after review'};
+  assert.throws(() => createContinuationReviewer(alteredBook, [], [], undefined, [], [], [decision]).accept(read(5), read(5)), /章号冲突/);
+  const reviewer = createContinuationReviewer(f.book, [], [], undefined, [], [], [decision]); reviewer.accept(read(5), read(5));
+  assert.throws(() => reviewer.finish(), /后续核对章缺失/);
+  assert.throws(() => reviewer.accept(read(6), {...read(6), content: body(6) + 'changed'}), /后续完整核对章已变化/);
+  const report = await f.run(); assert.equal(report.continuationAdded, 2, JSON.stringify(report.failures));
+  assert.equal(report.acceptedSourceDefects[0].reviewKey, decision.key);
+  assert.deepEqual(readJson(f.file).chapters.slice(0, 4), f.book.chapters);
+  assert.deepEqual(readJson(f.file).chapters.slice(4).map(c => c.content), [body(5), body(6)]);
+  assert.equal((await f.run()).continuationAdded, 0);
+});
+
 test('selected split families do not turn an ordinary numeric title suffix into a missing lower part', async t => {
   const f = await fixture(t); f.state.count = 8;
   Object.assign(f.state.titles, {5: '第5章 双篇(上)', 6: '第5章 双篇(下)', 7: '第6章 完整章(2)', 8: '第7章 继续'});

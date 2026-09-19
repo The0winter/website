@@ -17,7 +17,7 @@ try {
   if (values['part-link'] && values['new-link'] || values['part-hash'] && values['new-hash']) throw Error('单章与拆章参数不能混用');
   const result = values['migrate-from'] ? await migrateContinuationRules(JSON.parse(fs.readFileSync(values['migrate-from'], 'utf8')), spec,
     {stateDir, outputDir: path.resolve(values['output-dir'] || 'downloads'), reason: values.reason}) : await withLock(path.join(stateDir, 'book-locks', continuationKey(spec) + '.lock'), () => values['source-defect']
-    ? recordContinuationSourceDefect(spec, {stateDir, extraction: extractionHash(spec)}, JSON.parse(fs.readFileSync(values['source-defect'], 'utf8')))
+    ? recordContinuationSourceDefect(spec, {stateDir, extraction: extractionHash(spec), outputDir: path.resolve(values['output-dir'] || 'downloads')}, JSON.parse(fs.readFileSync(values['source-defect'], 'utf8')))
     : values['number-correction']
     ? recordContinuationNumberCorrection(spec, {stateDir, extraction: extractionHash(spec)}, JSON.parse(fs.readFileSync(values['number-correction'], 'utf8')))
     : values['number-reset']
