@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import {acquire, bindReadingEdition, localBookState, jobId, validateSpec, extractionHash} from '../core.mjs';
+import {acquire, bindReadingEdition, localBookState, jobId, validateSpec, extractionHash, reviewReadingNumbering} from '../core.mjs';
 import {atomicWrite, readJson, hash} from '../storage.mjs';
 import {formatChapterForExport} from '../titles.mjs';
 import {loadReadingEdition, recordReadingNoticeReview} from '../reading-edition.mjs';
@@ -175,6 +175,33 @@ test('decimal headings cannot waive missing or repeated half chapters through no
     const c=f.raw(7);
     assert.throws(()=>recordReadingNoticeReview(f.dir,f.spec,extractionHash(f.spec),f.options.outputDir,{link:c.link,contentHash:hash(c.content),reason:'不得当作无章号公告'}),/正文章号/);
   });
+});
+
+test('reviewed new numbering defects require independent consecutive titles and all three unchanged bodies',async t=>{
+  const f=await fixture(t);await f.bind();const original=fs.readFileSync(f.file),old=readJson(f.file);
+  Object.assign(f.state.titles,{6:'第4章 前奏',7:'第4章 重号正篇',8:'第5章 收束'});f.state.count=8;
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).exportFile,null);
+  const titles=['第4章 前奏','第5章 重号正篇','第6章 收束'],bodyFile=path.join(f.options.stateDir,'publisher.html');
+  const evidence='<h1>测试书</h1><b>甲作者</b>'+titles.map(x=>`<p>${x}</p>`).join('');fs.writeFileSync(bodyFile,evidence);
+  const review={exportHash:hash(original),links:[6,7,8].map(n=>f.raw(n).link),hashes:[6,7,8].map(n=>hash(f.raw(n).content)),reason:'核对独立目录，三个同名完整章节连续；保留来源重号与原文',reference:{url:'https://publisher.example/book',bodyFile,hash:hash(evidence),chapters:titles}};
+  const record=r=>reviewReadingNumbering(f.spec,r,f.options);
+  for(const bad of [{...review,exportHash:'stale'},{...review,links:[review.links[0],review.links[2],review.links[1]]},{...review,hashes:['stale',...review.hashes.slice(1)]},{...review,reference:{...review.reference,chapters:['第4章 前奏','第6章 重号正篇','第7章 收束']}},{...review,reference:{...review.reference,url:f.spec.sourceUrl}}]){
+    await assert.rejects(record(bad));assert.deepEqual(fs.readFileSync(f.file),original);
+  }
+  const decision=await record(review);assert.deepEqual(fs.readFileSync(f.file),original);
+  for(const n of [6,7,8]){
+    const file=path.join(f.dir,'chapters',hash(f.raw(n).link)+'.json'),saved=readJson(file),changed={...saved.chapter,content:saved.chapter.content+'变化'};
+    atomicWrite(file,{...saved,chapter:changed,hash:hash(changed)});
+    assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).exportFile,null);assert.deepEqual(fs.readFileSync(f.file),original);
+    atomicWrite(file,saved);
+  }
+  const savedEvidence=path.join(f.dir,'reading-numbering-evidence',decision.reference.hash+'.bin');fs.writeFileSync(savedEvidence,'changed');
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).exportFile,null);assert.deepEqual(fs.readFileSync(f.file),original);fs.writeFileSync(savedEvidence,evidence);
+  const result=await acquire(f.spec,{...f.options,mode:'download'});
+  assert.equal(result.readingAdded,3,JSON.stringify(result.failures));assert.equal(result.acceptedSourceNumbering.length,1);
+  assert.deepEqual(readJson(f.file).chapters.slice(0,old.chapters.length),old.chapters);
+  assert.deepEqual(readJson(f.file).chapters.slice(-3).map(c=>c.title),[6,7,8].map(n=>f.state.titles[n]));
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).reusedExport,true);
 });
 
 test('title mismatch review pins exact retained text and blocks unreviewed or changed source titles', async t => {

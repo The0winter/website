@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {load} from 'cheerio';
 import {atomicWrite, readJson, hash} from './storage.mjs';
 import {checkIdentity, qualityReport, normalizedTitle, placeholderEvidence} from './quality.mjs';
 import {formatChapterForExport} from './titles.mjs';
 import {chapterIdentity} from './continuation.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
+import {httpUrl} from './http.mjs';
 
 // A local, explicitly reviewed edition is bound to one extraction job. Source
 // checkpoints remain intact; their positions must never become reading ordinals.
@@ -113,7 +115,32 @@ export function recordReadingNoticeReview(dir, spec, extraction, outputDir, {lin
   return review;
 }
 
-function orderedChapters(chapters, reviewedPrefix = 0, noticeReviews = []) {
+const numberingFingerprint = chapter => ({link:chapter.link, title:normalizedTitle(chapter.title), contentHash:hash(chapter.content), sourcePosition:chapter.sourceChapterNumber || chapter.chapter_number});
+
+// Only a complete, explicitly reviewed new three-chapter window can retain a
+// source numbering defect. Independent consecutive titles prove the order.
+export function recordReadingNumberingReview(dir, spec, extraction, outputDir, {exportHash,links,hashes,reference,reason}) {
+  const state=loadReadingEdition(dir,spec,extraction,outputDir);
+  if (!state || state.exportHash!==exportHash || !Array.isArray(links) || links.length!==3 || new Set(links).size!==3 || !Array.isArray(hashes) || hashes.length!==3 || !reference || typeof reason!=='string' || !reason.trim()) throw Error('编号核对需要原书哈希、相邻三项完整正文、独立目录及理由');
+  const catalog=readJson(path.join(dir,'catalog.json')),positions=links.map(link=>catalog.findIndex(c=>c.link===link));
+  if (!positions.every((p,i)=>p>=state.sources.length&&p===positions[0]+i)) throw Error('只能核对尚未收录的相邻三项，不能跳过缺章或修改旧映射');
+  const chapters=positions.map((p,i)=>{const c=rawChapter(dir,catalog[p]);if(hash(c.content)!==hashes[i]||normalizedTitle(c.title)!==normalizedTitle(catalog[p].title)||c.content.trim().length<100)throw Error('完整正文哈希或目录标题不匹配');return c;});
+  checkNewIssues(qualityReport(positions.map(p=>catalog[p]),chapters,[],'probe'));
+  const numbers=chapters.map(c=>readingChapterNumber(c.title));
+  if (!numbers.every(Number.isSafeInteger)||numbers[1]===numbers[0]+1||numbers[2]!==numbers[1]+1) throw Error('仅核对三项中间的一个来源编号错误');
+  const url=httpUrl(reference.url),raw=fs.readFileSync(reference.bodyFile),text=normalizedTitle(load(raw.toString('utf8')).text());
+  const titles=reference.chapters,identities=Array.isArray(titles)&&titles.map(title=>chapterIdentity(title));
+  if (new URL(url).hostname===new URL(spec.sourceUrl).hostname||!raw.length||raw.length>2_000_000||hash(raw)!==reference.hash||
+      !text.includes(normalizedTitle(spec.title))||!text.includes(normalizedTitle(spec.author))||!identities||identities.length!==3||
+      !identities.every((id,i)=>id&&Number.isSafeInteger(id.number)&&(!i||id.number===identities[i-1].number+1)&&id.name===chapterIdentity(chapters[i].title)?.name&&text.includes(normalizedTitle(titles[i])))) throw Error('独立目录未证明同书同作者的三个标题连续');
+  const window=chapters.map(numberingFingerprint),evidenceFile=path.join(dir,'reading-numbering-evidence',reference.hash+'.bin');
+  atomicWrite(evidenceFile,raw);
+  const decision={key:hash(window),window,reason:reason.trim(),reference:{url,hash:reference.hash,chapters:titles},reviewedAt:new Date().toISOString()};
+  atomicWrite(stateFile(dir),seal({...state,numberingReviews:[...(state.numberingReviews||[]).filter(r=>r.window[1].link!==links[1]),decision]}));
+  return decision;
+}
+
+function orderedChapters(chapters, reviewedPrefix = 0, noticeReviews = [], numberingReviews = []) {
   let number = 0, halfChapter = false;
   for (const [index, chapter] of chapters.entries()) {
     if (chapter.chapter_number !== index + 1) throw Error('阅读版顺序号不连续');
@@ -125,7 +152,10 @@ function orderedChapters(chapters, reviewedPrefix = 0, noticeReviews = []) {
       // Decimal headings also count as numbered text in the notice-review guard.
       if (Number.isSafeInteger(number) && current % 1 === 0.5 && current === number + 0.5 && !halfChapter) halfChapter = true;
       else {
-        if (!Number.isSafeInteger(current) || current !== number + 1) throw Error(`阅读版章号不连续：应为第 ${number + 1} 章，实际为“${chapter.title}”`);
+        const reviewed=numberingReviews.some(r=>r.key===hash(r.window)&&r.window.length===3&&r.window.every((expected,i)=>{
+          const actual=chapters[index-1+i];return actual&&hash(numberingFingerprint(actual))===hash(expected);
+        }));
+        if (!Number.isSafeInteger(current) || current !== number + 1 && !reviewed) throw Error(`阅读版章号不连续：应为第 ${number + 1} 章，实际为“${chapter.title}”`);
         number = current; halfChapter = false;
       }
     } else if (!/^(?:番外|IF番外|(?:[一二三四五六七八九十0-9]+月)?总结|请假|公告|通知|活动|感言|后记|月票)/iu.test(title) &&
@@ -238,7 +268,11 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
     if (!rawReport.paused && rawReport.mode === 'download' && rawReport.completeAgainstSource) {
       const tail = catalog.slice(state.sources.length).map(entry => rawChapter(dir, entry));
       const chapters = [...book.chapters, ...tail.map((chapter, index) => ({...formatChapterForExport(chapter), chapter_number: originalCount + index + 1, sourceChapterNumber: chapter.chapter_number, sourceChapterUrl: chapter.link}))];
-      orderedChapters(chapters, state.sourceOrderReview ? originalCount : 0, state.noticeReviews);
+      for (const review of state.numberingReviews || []) {
+        const file=path.join(dir,'reading-numbering-evidence',review.reference.hash+'.bin');
+        if(!fs.existsSync(file)||hash(fs.readFileSync(file))!==review.reference.hash)throw Error('编号核对的独立证据缺失或变化');
+      }
+      orderedChapters(chapters, state.sourceOrderReview ? originalCount : 0, state.noticeReviews, state.numberingReviews);
       const nextBook = {...book, ...Object.fromEntries(['description', 'status', 'category', 'cover_image', 'authorSourceUrl'].filter(key => spec[key] !== undefined).map(key => [key, spec[key]])), chapters};
       const nextQuality = editionQuality(nextBook);
       checkNewIssues(nextQuality, originalCount);
@@ -257,6 +291,7 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
   if (failure) { quality.failures.push(failure); quality.errors++; quality.structuralPass = false; }
   return {...rawReport, ...quality, readingEdition: true, sourceExpected: rawReport.expected, sourceDownloaded: rawReport.downloaded, sourceErrors: rawReport.errors, sourceWarnings: rawReport.warnings,
     ...(state.sourceOrderReview ? {acceptedSourceOrder: state.sourceOrderReview} : {}),
+    ...(state.numberingReviews?.length ? {acceptedSourceNumbering: state.numberingReviews} : {}),
     completeAgainstSource: !!exportFile && !state.sourceOrderReview?.gaps?.length, completeSelectedScope: !!exportFile, sourceGaps: state.sourceOrderReview?.gaps || [], exportFile, reusedExport, readingAdded: added,
     mappingFile: stateFile(dir), mapping: book.chapters.map(c => ({chapter_number: c.chapter_number, title: c.title, sourcePosition: c.sourceChapterNumber, sourceUrl: c.link, sourceHash: hash(c.content)})),
     limitation: '沿用这本书已核对的来源映射，阅读版章序保持稳定。新发现的重复、乱码、章号跳转会暂停更新，旧阅读版和原始采集记录保留。只检查可检测异常，不能保证源站无删文或错配。',
