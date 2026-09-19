@@ -286,6 +286,40 @@ test('reviewed truncated tail cannot silently skip a hole on the next update', a
   assert.equal(report.exportFile,null); assert.match(report.failures[0].error,/章号不连续/); assert.deepEqual(readJson(f.file),book);
 });
 
+test('a consecutive explicitly reviewed old tail gap stays missing while new complete chapters append safely', async t => {
+  const f = await fixture(t, {sourceOrder:true, titles:{2:'第2章 场景2',4:'第3章 场景4',5:'第4章 已核实缺文'}});
+  const book = {...f.book,chapters:[1,2,4].map((n,i)=>({...formatChapterForExport(f.raw(n)),chapter_number:i+1,sourceChapterNumber:n,sourceChapterUrl:f.raw(n).link}))};
+  atomicWrite(f.file,book);
+  const gap={position:5,link:f.raw(5).link,contentHash:hash(f.raw(5).content),kind:'truncated',actualCharacters:f.raw(5).content.replace(/\s/gu,'').length,expectedCharacters:3000,reason:'全部分页仍显著缺文',evidence:{url:f.base+'/original-catalog',checkedAt:new Date().toISOString(),detail:'独立目录3000字'}};
+  const review={catalogHash:hash(readJson(path.join(f.dir,'catalog.json'))),reason:'保留已核实缺口',pairs:[{omit:3,keep:1,omitHash:hash(f.raw(3).content),keepHash:hash(f.raw(1).content),reason:'完整正文相同'}],gaps:[gap]};
+  await bindReadingEdition(f.spec,f.file,{...f.options,sourceOrderReview:review});
+  f.state.count=6; f.state.titles[6]='第5章 新章节';
+  const checkpoint=path.join(f.dir,'chapters',hash(gap.link)+'.json'),saved=readJson(checkpoint),changed={...saved.chapter,content:saved.chapter.content+'变化'};
+  atomicWrite(checkpoint,{...saved,chapter:changed,hash:hash(changed)});
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).exportFile,null); assert.deepEqual(readJson(f.file),book);
+  atomicWrite(checkpoint,saved);
+  const report=await acquire(f.spec,{...f.options,mode:'download'});
+  assert.equal(report.readingAdded,1,JSON.stringify(report.failures)); assert.equal(report.structuralPass,true); assert.equal(report.completeSelectedScope,true);
+  assert.equal(report.completeAgainstSource,false); assert.equal(report.sourceGaps.length,1);
+  const next=readJson(f.file); assert.deepEqual(next.chapters.slice(0,book.chapters.length),book.chapters); assert.equal(next.chapters.at(-1).title,'第5章 新章节');
+  f.state.count=7;f.state.titles[7]='第7章 未核实缺章';
+  const blocked=await acquire(f.spec,{...f.options,mode:'download'}); assert.equal(blocked.exportFile,null); assert.deepEqual(readJson(f.file),next);
+});
+
+test('reviewed tail gaps may surround a preserved old notice without discarding or duplicating it', async t => {
+  const f = await fixture(t, {sourceOrder:true,titles:{2:'第2章 场景2',4:'第3章 场景4',5:'第4章 缺文'}});
+  f.state.count=7;f.state.titles[6]='公告';f.state.titles[7]='第5章 缺文';
+  await acquire(f.spec,{...f.options,mode:'download'});
+  const book={...f.book,chapters:[1,2,4,6].map((n,i)=>({...formatChapterForExport(f.raw(n)),chapter_number:i+1,sourceChapterNumber:n,sourceChapterUrl:f.raw(n).link}))};atomicWrite(f.file,book);
+  const gaps=[5,7].map(n=>({position:n,link:f.raw(n).link,contentHash:hash(f.raw(n).content),kind:'truncated',actualCharacters:f.raw(n).content.replace(/\s/gu,'').length,expectedCharacters:3000,reason:'分页完整仍缺文',evidence:{url:f.base+'/independent',checkedAt:new Date().toISOString(),detail:'独立目录字数3000'}}));
+  const review={catalogHash:hash(readJson(path.join(f.dir,'catalog.json'))),reason:'缺文与公告均已逐项核实',pairs:[{omit:3,keep:1,omitHash:hash(f.raw(3).content),keepHash:hash(f.raw(1).content),reason:'完全重复'}],gaps};
+  await bindReadingEdition(f.spec,f.file,{...f.options,sourceOrderReview:review});
+  f.state.count=8;f.state.titles[8]='第6章 完整新章';
+  const report=await acquire(f.spec,{...f.options,mode:'download'});
+  assert.equal(report.readingAdded,1,JSON.stringify(report.failures));assert.equal(report.sourceGaps.length,2);assert.equal(report.completeAgainstSource,false);
+  assert.deepEqual(readJson(f.file).chapters.slice(0,4),book.chapters);
+});
+
 test('bound updates preserve reviewed order, bypass only pinned source errors, and append after restart', async t => {
   const f = await fixture(t);
   const original = fs.readFileSync(f.file), mtime = fs.statSync(f.file).mtimeMs;

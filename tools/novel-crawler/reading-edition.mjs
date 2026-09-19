@@ -157,13 +157,14 @@ export function recordReadingNumberingReview(dir, spec, extraction, outputDir, {
   return decision;
 }
 
-function orderedChapters(chapters, reviewedPrefix = 0, noticeReviews = [], numberingReviews = []) {
+function orderedChapters(chapters, reviewedPrefix = 0, noticeReviews = [], numberingReviews = [], reviewedTailNumber) {
   let number = 0, halfChapter = false;
   for (const [index, chapter] of chapters.entries()) {
     if (chapter.chapter_number !== index + 1) throw Error('阅读版顺序号不连续');
     const title = chapter.title.normalize('NFKC').trim();
     const current = readingChapterNumber(title);
     if (index < reviewedPrefix) { if (current !== null) { number = Math.floor(current); halfChapter = !Number.isInteger(current); } continue; }
+    if (index === reviewedPrefix && reviewedTailNumber !== undefined) number = reviewedTailNumber;
     if (current !== null) {
       // A single N.5 interlude follows N without replacing the required N+1.
       // Decimal headings also count as numbered text in the notice-review guard.
@@ -289,7 +290,24 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
         const file=path.join(dir,'reading-numbering-evidence',review.reference.hash+'.bin');
         if(!fs.existsSync(file)||hash(fs.readFileSync(file))!==review.reference.hash)throw Error('编号核对的独立证据缺失或变化');
       }
-      orderedChapters(chapters, state.sourceOrderReview ? originalCount : 0, state.noticeReviews, state.numberingReviews);
+      // The existing edition may deliberately end before up to three already
+      // reviewed truncated source entries. Their fingerprints were checked above;
+      // carry their known gap forward instead of demanding that missing prose be
+      // inserted into the old book. This never excuses a newly discovered gap.
+      const previous = book.chapters.findLast(c => readingChapterNumber(c.title) !== null);
+      const start = previous?.sourceChapterNumber, oldTail = Number.isInteger(start) ? state.sources.slice(start) : [];
+      const missingTail = oldTail.filter(source => readingChapterNumber(source.title) !== null);
+      let reviewedTailNumber;
+      if (missingTail.length > 0 && missingTail.length <= 3 && oldTail.length <= 8 && oldTail.every((source, i) => {
+        if (source.position !== start + i + 1) return false;
+        const number = readingChapterNumber(source.title);
+        if (number === null) return book.chapters.some(c => c.sourceChapterNumber === source.position && c.link === source.link && hash(c.content) === source.contentHash);
+        const gap = state.sourceOrderReview?.gaps?.find(g => g.position === source.position);
+        return number === readingChapterNumber(previous.title) + missingTail.indexOf(source) + 1 &&
+          !book.chapters.some(c => c.sourceChapterNumber === source.position) && gap?.link === source.link && gap.contentHash === source.contentHash &&
+          ['placeholder', 'truncated'].includes(gap.kind) && gap.reason?.trim() && gap.evidence?.url && gap.evidence?.detail && Number.isFinite(Date.parse(gap.evidence.checkedAt));
+      })) reviewedTailNumber = readingChapterNumber(previous.title) + missingTail.length;
+      orderedChapters(chapters, state.sourceOrderReview ? originalCount : 0, state.noticeReviews, state.numberingReviews, reviewedTailNumber);
       const nextBook = {...book, ...Object.fromEntries(['description', 'status', 'category', 'cover_image', 'authorSourceUrl'].filter(key => spec[key] !== undefined).map(key => [key, spec[key]])), chapters};
       const nextQuality = editionQuality(nextBook);
       checkNewIssues(nextQuality, originalCount);

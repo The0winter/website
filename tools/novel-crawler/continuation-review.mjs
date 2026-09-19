@@ -3,13 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {parseArgs} from 'node:util';
 import {validateSpec, extractionHash, defaultStateDir} from './core.mjs';
-import {continuationKey, recordContinuationReview, recordContinuationAnchorReview, recordContinuationNoticeReview, recordContinuationPartPolicy, bindReviewedCompletedSource, recordContinuationNumberReset, recordContinuationNumberCorrection, recordContinuationSourceDefect} from './continuation.mjs';
+import {continuationKey, recordContinuationReview, recordContinuationAnchorReview, recordContinuationNoticeReview, recordContinuationPartPolicy, bindReviewedCompletedSource, recordContinuationNumberReset, recordContinuationNumberCorrection, recordContinuationSourceDefect, recordContinuationSourceGap} from './continuation.mjs';
 import {withLock} from './storage.mjs';
 import {migrateContinuationRules} from './continuation-migration.mjs';
 import {repairContinuationDuplicates} from './continuation-repair.mjs';
 
 try {
-  const {values} = parseArgs({options: {...Object.fromEntries(['spec', 'state-dir', 'output-dir', 'first', 'second', 'keep', 'reason', 'anchor-file', 'old-number', 'new-link', 'old-hash', 'new-hash', 'notice-link', 'chapter-parts', 'completed-source', 'number-reset', 'number-correction', 'source-defect', 'migrate-from', 'repair-duplicates'].map(name => [name, {type: 'string'}])),
+  const {values} = parseArgs({options: {...Object.fromEntries(['spec', 'state-dir', 'output-dir', 'first', 'second', 'keep', 'reason', 'anchor-file', 'old-number', 'new-link', 'old-hash', 'new-hash', 'notice-link', 'chapter-parts', 'completed-source', 'number-reset', 'number-correction', 'source-defect', 'source-gap', 'migrate-from', 'repair-duplicates'].map(name => [name, {type: 'string'}])),
     'part-link': {type: 'string', multiple: true}, 'part-hash': {type: 'string', multiple: true}, 'part-family': {type: 'string', multiple: true}}});
   if (!values.spec) throw Error('需要 --spec 来源.json --first 链接 --second 链接 --keep 保留链接 --reason 核对理由');
   const spec = validateSpec(JSON.parse(fs.readFileSync(values.spec, 'utf8'))), stateDir = path.resolve(values['state-dir'] || defaultStateDir);
@@ -18,7 +18,9 @@ try {
   if (values['part-link'] && values['new-link'] || values['part-hash'] && values['new-hash']) throw Error('单章与拆章参数不能混用');
   const result = values['repair-duplicates'] ? await repairContinuationDuplicates(spec,
     {stateDir, outputDir:path.resolve(values['output-dir'] || 'downloads')}, JSON.parse(fs.readFileSync(values['repair-duplicates'],'utf8'))) : values['migrate-from'] ? await migrateContinuationRules(JSON.parse(fs.readFileSync(values['migrate-from'], 'utf8')), spec,
-    {stateDir, outputDir: path.resolve(values['output-dir'] || 'downloads'), reason: values.reason}) : await withLock(path.join(stateDir, 'book-locks', continuationKey(spec) + '.lock'), () => values['source-defect']
+    {stateDir, outputDir: path.resolve(values['output-dir'] || 'downloads'), reason: values.reason}) : await withLock(path.join(stateDir, 'book-locks', continuationKey(spec) + '.lock'), () => values['source-gap']
+    ? recordContinuationSourceGap(spec, {stateDir, extraction: extractionHash(spec), outputDir: path.resolve(values['output-dir'] || 'downloads')}, JSON.parse(fs.readFileSync(values['source-gap'], 'utf8')))
+    : values['source-defect']
     ? recordContinuationSourceDefect(spec, {stateDir, extraction: extractionHash(spec), outputDir: path.resolve(values['output-dir'] || 'downloads')}, JSON.parse(fs.readFileSync(values['source-defect'], 'utf8')))
     : values['number-correction']
     ? recordContinuationNumberCorrection(spec, {stateDir, extraction: extractionHash(spec)}, JSON.parse(fs.readFileSync(values['number-correction'], 'utf8')))

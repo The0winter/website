@@ -13,6 +13,7 @@ import {createDesktop} from '../desktop/server.mjs';
 import {loadSites, parseSearch} from '../desktop/sources.mjs';
 import {migrateContinuationRules} from '../continuation-migration.mjs';
 import {repairContinuationDuplicates} from '../continuation-repair.mjs';
+import {recordContinuationSourceGap} from '../continuation.mjs';
 
 const body = n => Array.from({length: 180}, (_, i) => String.fromCodePoint(0x4e00 + n * 200 + i)).join('').repeat(4);
 const title = n => `第${n}章 山间故事${n}`;
@@ -110,6 +111,66 @@ async function sourceDefectFixture(t) {
   fs.writeFileSync(evidenceFile, evidence);
   return {...f, sourceDir, reviewOptions: {...f.options, extraction: extractionHash(f.spec)}, review: {links: [5, 6, 7].map(n => f.base + '/new/c/' + n), hashes: [5, 6, 7].map(n => hash(body(n))), evidenceFile, evidenceHash: hash(evidence), reason: '比选后接受本来源的5到8编号跳跃，未确认缺失的6/7正文，不生成补文，报告保留缺陷。'}};
 }
+
+async function sourceGapFixture(t) {
+  const f = await fixture(t); f.state.order = [1, 2, 3, 4, 6, 7];
+  // An old trailing notice is not the numbered boundary and must stay intact.
+  f.book.chapters.push({chapter_number: 5, title: '月票公告', content: '保留原有公告', link: 'https://old.example/notice'});
+  atomicWrite(f.file, f.book);
+  const report = await f.run({stopOnFailure: false}), sourceDir = path.dirname(report.reportFile);
+  assert.equal(report.exportFile, null);
+  const chapters = [4, 5, 6, 7].map(n => ({title: title(n), link: 'https://reference.example/c/' + n}));
+  const html = `<title>${f.spec.title}</title><p>${f.spec.author}</p>${chapters.map(c => `<a href="${c.link}">${c.title}</a>`).join('')}`;
+  const bodyFile = path.join(f.options.stateDir, 'gap-reference.html'); fs.writeFileSync(bodyFile, html);
+  return {...f, sourceDir, html, reviewOptions: {...f.options, extraction: extractionHash(f.spec)}, review: {file: path.basename(f.file), exportHash: hash(fs.readFileSync(f.file)), links: [6, 7].map(n => f.base + '/new/c/' + n), hashes: [6, 7].map(n => hash(body(n))), reference: {url: 'https://reference.example/book', bodyFile, hash: hash(Buffer.from(html)), chapters}, reason: '独立目录核实缺第5章；后续两章正文可读，保留明确缺章记录。'}};
+}
+
+test('explicit missing chapter review preserves the old book, never fills a gap and reports it on later updates', async t => {
+  const f = await sourceGapFixture(t), original = fs.readFileSync(f.file);
+  recordContinuationSourceGap(f.spec, f.reviewOptions, f.review);
+  assert.deepEqual(fs.readFileSync(f.file), original);
+  const report = await f.run(); assert.equal(report.continuationAdded, 2, JSON.stringify(report.failures));
+  assert.equal(report.completeSelectedScope, true); assert.equal(report.structuralPass, true); assert.equal(report.completeAgainstSource, false);
+  assert.deepEqual(report.sourceGaps.map(c => c.title), [title(5)]); assert.equal(report.automaticResolutions, 0);
+  const book = readJson(f.file); assert.deepEqual(book.chapters.slice(0, 5), f.book.chapters);
+  assert.deepEqual(book.chapters.slice(5).map(c => c.content), [body(6), body(7)]);
+  f.state.order.push(8);
+  const next = await f.run(); assert.equal(next.continuationAdded, 1, JSON.stringify(next.failures));
+  assert.equal(next.completeAgainstSource, false); assert.equal(next.sourceGaps.length, 1); assert.equal(next.warnings, 1);
+  assert.match(fs.readFileSync(next.summaryFile, 'utf8'), /缺口未补齐：第5章/);
+});
+
+test('missing chapter review rejects stale books, body changes, wrong evidence, omitted reference entries and missing following proof', async t => {
+  const f = await sourceGapFixture(t), original = fs.readFileSync(f.file);
+  const attempt = change => recordContinuationSourceGap(f.spec, f.reviewOptions, {...f.review, ...change});
+  assert.throws(() => attempt({exportHash: hash('changed')}), /原书/);
+  assert.throws(() => attempt({hashes: [hash('changed'), f.review.hashes[1]]}), /检查点/);
+  assert.throws(() => attempt({links: [...f.review.links].reverse()}), /相邻/);
+  assert.throws(() => attempt({reference: {...f.review.reference, hash: hash('changed')}}), /证据/);
+  assert.throws(() => attempt({reference: {...f.review.reference, chapters: f.review.reference.chapters.slice(1)}}), /证据/);
+  const catalogFile = path.join(f.sourceDir, 'catalog.json'), catalog = readJson(catalogFile);
+  atomicWrite(catalogFile, [...catalog, {title: title(5), link: f.base + '/new/c/5', chapter_number: 7}]);
+  assert.throws(() => attempt({}), /不能跳过已有正文/); atomicWrite(catalogFile, catalog);
+  for (const html of [f.html.replace('甲作者', '乙作者'), f.html.replace(title(5), title(15)), f.html.replace('</a>', `</a><a href="https://reference.example/extra">${title(5)}</a>`)]) {
+    fs.writeFileSync(f.review.reference.bodyFile, html);
+    assert.throws(() => attempt({reference: {...f.review.reference, hash: hash(Buffer.from(html))}}), /独立目录/);
+  }
+  fs.writeFileSync(f.review.reference.bodyFile, f.html);
+  const decision = attempt({});
+  for (const link of f.review.links) {
+    const file = path.join(f.sourceDir, 'chapters', hash(link) + '.json'), saved = readJson(file), chapter = {...saved.chapter, content: saved.chapter.content + '变化'};
+    atomicWrite(file, {...saved, chapter, hash: hash(chapter)});
+    assert.equal((await f.run()).exportFile, null); assert.deepEqual(fs.readFileSync(f.file), original); atomicWrite(file, saved);
+  }
+  const reviewer = createContinuationReviewer(f.book, [], [], undefined, [], [], [], [decision]);
+  const first = readJson(path.join(f.sourceDir, 'chapters', hash(f.review.links[0]) + '.json')).chapter;
+  reviewer.accept(first, {...first, sourceChapterNumber: first.chapter_number});
+  assert.throws(() => reviewer.finish(), /后续核对章缺失/);
+  atomicWrite(f.file, {...f.book, description: 'another edit'});
+  assert.equal((await f.run()).exportFile, null); atomicWrite(f.file, original);
+  fs.writeFileSync(path.join(f.sourceDir, 'references', f.review.reference.hash + '.bin'), 'changed');
+  await assert.rejects(f.run(), /证据缺失或已变化/); assert.deepEqual(fs.readFileSync(f.file), original);
+});
 
 test('accepted source numbering defects retain prose and remain reported on later updates', async t => {
   const f = await sourceDefectFixture(t), original = fs.readFileSync(f.file);
