@@ -255,6 +255,7 @@ return (
             <div className="book-search-field"><Search size={19} aria-hidden="true"/><input type="search" aria-label="搜索你想看的问题或文章" placeholder="搜索问题或文章" value={searchQuery} onChange={event => setSearchQuery(event.target.value)}/></div>
           </form>
         </HomeSearchHeader>
+        <h1 className="forum-title">书友社区</h1>
       </div>
       <ForumTabs activeTab={activeTab} onSelect={setActiveTab}/>
 

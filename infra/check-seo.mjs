@@ -35,7 +35,10 @@ const home = await page('/');
 assert.equal([...home.matchAll(/<h1\b/gi)].length, 1, 'homepage has one shared primary heading across screen sizes');
 assert.match(home, /<title>[^<]*笔趣阁[^<]*<\/title>/);
 assert.ok(home.includes('G-DWMPP2NRQ1'), 'GA4 is included in the production HTML');
-for (const path of ['/ranking', '/forum']) await page(path);
+await page('/ranking');
+const forum = await page('/forum');
+assert.equal([...forum.matchAll(/<h1\b/gi)].length, 1, 'forum has one server-rendered primary heading');
+assert.match(forum, /<h1\b[^>]*>书友社区<\/h1>/);
 for (const path of ['/login', '/register', '/profile', '/writer', '/library', '/search', '/authorsList', '/forum/create']) await page(path, {index: false, canonical: false});
 
 const {body: booksBody} = await read('/api/books?limit=100');
@@ -87,15 +90,31 @@ for (const url of process.argv.includes('--sitemaps') ? maps : maps.slice(0, 3))
 report.urls = all.size;
 if (process.argv.includes('--baidu')) {
   assert.ok(process.argv.includes('--sitemaps'), '--baidu requires a complete sitemap comparison');
-  const {body} = await read('/sitemap-baidu.xml');
-  assert.match(body, /<urlset\b/);
-  assert.doesNotMatch(body, /<sitemapindex\b/);
-  const urls = locs(body);
-  assert.equal(urls.length, all.size, 'Baidu feed contains all public sitemap URLs');
-  assert.equal(new Set(urls).size, urls.length, 'No duplicate Baidu URLs');
-  assert.ok(urls.every(url => all.has(url)), 'Baidu feed contains only canonical public URLs');
-  assert.ok(urls.length <= 50000 && Buffer.byteLength(body, 'utf8') < 10_000_000);
-  report.baidu = {urls: urls.length, bytes: Buffer.byteLength(body, 'utf8')};
+  const {body: manifestBody} = await read('/sitemap-baidu.json');
+  const manifest = JSON.parse(manifestBody), seen = new Set(), files = [];
+  assert.ok(manifest.files.length > 0);
+  for (const [index, file] of manifest.files.entries()) {
+    const path = index === 0 ? '/sitemap-baidu.xml' : `/sitemaps/baidu/${index + 1}.xml`;
+    assert.equal(file.url, site + path);
+    const {body} = await read(path);
+    assert.match(body, /<urlset\b/);
+    assert.doesNotMatch(body, /<sitemapindex\b/);
+    const urls = locs(body), bytes = Buffer.byteLength(body, 'utf8');
+    assert.equal(urls.length, file.urls);
+    assert.equal(bytes, file.bytes);
+    assert.ok(urls.length > 0 && urls.length <= 50000 && bytes < 10_000_000);
+    for (const url of urls) {
+      assert.ok(all.has(url), 'Baidu contains only canonical public URLs: ' + url);
+      assert.ok(!seen.has(url), 'Duplicate across Baidu files: ' + url);
+      seen.add(url);
+    }
+    files.push({url: file.url, urls: urls.length, bytes});
+  }
+  assert.equal(seen.size, all.size, 'Baidu files cover every public sitemap URL');
+  assert.equal(manifest.urls, seen.size);
+  await read(`/sitemaps/baidu/${manifest.files.length + 1}.xml`, 404);
+  await read('/sitemaps/baidu/invalid.xml', 404);
+  report.baidu = {urls: seen.size, files};
 }
 report.sampleChapter = chapterPath;
 console.log(JSON.stringify(report, null, 2));

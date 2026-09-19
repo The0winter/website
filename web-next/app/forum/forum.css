@@ -1,5 +1,6 @@
 .forum-page { background:var(--home-background); color:var(--home-text); }
 .forum-masthead { max-width:1040px; margin:auto; padding:28px 16px 0; }
+.forum-title { margin:0 0 16px; font-size:20px; line-height:1.4; font-weight:700; color:var(--home-text); }
 @media (min-width:768px) {
   .forum-masthead .mh-topbar { max-width:680px; margin-bottom:24px; }
   .forum-search { --suggest-bg:var(--home-surface); --suggest-text:var(--home-text); --suggest-muted:var(--home-muted); --suggest-accent:var(--home-accent); }

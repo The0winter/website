@@ -6,7 +6,11 @@
 
 主地址使用 `web-next/public/baidu_verify_codeva-0Z2GGo0lew.html`；原 www 站点的验证文件继续保留。文件验证通过后不要删除对应文件。
 
-百度的 sitemap 提交通道要求文件直接列出网页链接。提交 `https://jiutianxiaoshuo.com/sitemap-baidu.xml`，而非包含分区地址的 `/sitemap.xml` 索引。此百度专用文件复用现有公开书籍、章节和作者来源，动态更新，最多 50,000 个网址且小于 10 MB。源数据失败或超过容量时返回可重试的 503，不输出不完整的成功文件；规模增长后应拆分提交。
+百度的 sitemap 提交通道要求文件直接列出网页链接。百度专用地图复用现有公开书籍、章节和作者来源，按每文件最多 50,000 个网址、最多 9,500,000 UTF-8 字节（含 XML 声明，预留 10 MB 上限余量）自动拆分。第一份保留 `https://jiutianxiaoshuo.com/sitemap-baidu.xml`，后续为 `/sitemaps/baidu/2.xml`、`/sitemaps/baidu/3.xml` 等；每份都是直接列出网页链接的 `urlset`。
+
+完整文件清单与每份数量、字节数见 `https://jiutianxiaoshuo.com/sitemap-baidu.json`。有配额时逐份提交清单中的 XML 地址；不要提交此 JSON 清单、Google/Bing 的 `/sitemap.xml` 索引，也不要把第一份误当成全站地图。百度后台配额为 0 时保留提交待办，不绕过限制。
+
+生成时最多并行读取 6 个公开分区，共享完整结果 5 分钟；新增发布页面随来源及缓存刷新进入地图。源数据失败返回可重试的 503，不输出不完整的成功文件。巡检会展开全部百度文件，与一般地图逐条比对唯一性、完整性、公开地址和容量。此机制不等于发布后即时推送。
 
 核验命令：
 
