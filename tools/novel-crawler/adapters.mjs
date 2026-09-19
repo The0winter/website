@@ -225,7 +225,9 @@ export async function getChapter(spec, chapter, catalogLinks, client) {
     while (/^(?:[（(]本章完[）)]|上一章|下一章|返回目录|加入书签)$/u.test(lines.at(-1) || '')) lines.pop();
     text = lines.join('\n').trim();
     if (!text) throw Error('章节正文为空');
-    if (parts.includes(text)) throw Error('同章分页正文重复');
+    // Some notices put an ellipsis on its own page before and after a list.
+    // Retain both literal separators; repeated prose and navigation loops still fail.
+    if (parts.includes(text) && !/^[.…]{2,32}$/u.test(text)) throw Error('同章分页正文重复');
     if (parts.length && parts.at(-1).slice(-100) === text.slice(0, 100) && text.length >= 100) warnings.push('分页之间存在重复段落，未自动删文');
     parts.push(text);
     pageHashes.push({url, hash: response.hash, fetchedAt: response.fetchedAt});

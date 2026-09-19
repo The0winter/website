@@ -143,15 +143,16 @@ export function recordReadingNumberingReview(dir, spec, extraction, outputDir, {
   const chapters=positions.map((p,i)=>{const c=rawChapter(dir,catalog[p]);if(hash(c.content)!==hashes[i]||normalizedTitle(c.title)!==normalizedTitle(catalog[p].title)||c.content.trim().length<100)throw Error('完整正文哈希或目录标题不匹配');return c;});
   checkNewIssues(qualityReport(positions.map(p=>catalog[p]),chapters,[],'probe'));
   const numbers=chapters.map(c=>readingChapterNumber(c.title));
-  if (!numbers.every(Number.isSafeInteger)||numbers[1]===numbers[0]+1||numbers[2]!==numbers[1]+1) throw Error('仅核对三项中间的一个来源编号错误');
+  const anomalies=[1,2].filter(i=>numbers[i]!==numbers[i-1]+1);
+  if (!numbers.every(Number.isSafeInteger)||anomalies.length!==1) throw Error('仅核对相邻三项中的一个来源编号错误');
   const url=httpUrl(reference.url),raw=fs.readFileSync(reference.bodyFile),text=normalizedTitle(load(raw.toString('utf8')).text());
-  const titles=reference.chapters,identities=Array.isArray(titles)&&titles.map(title=>chapterIdentity(title));
+  const titles=reference.chapters,identities=Array.isArray(titles)&&titles.map(title=>chapterIdentity(String(title).replace(/^([0-9]+)[、.]\s*/u,'第$1章 ')));
   if (new URL(url).hostname===new URL(spec.sourceUrl).hostname||!raw.length||raw.length>2_000_000||hash(raw)!==reference.hash||
       !text.includes(normalizedTitle(spec.title))||!text.includes(normalizedTitle(spec.author))||!identities||identities.length!==3||
       !identities.every((id,i)=>id&&Number.isSafeInteger(id.number)&&(!i||id.number===identities[i-1].number+1)&&id.name===chapterIdentity(chapters[i].title)?.name&&text.includes(normalizedTitle(titles[i])))) throw Error('独立目录未证明同书同作者的三个标题连续');
   const window=chapters.map(numberingFingerprint),evidenceFile=path.join(dir,'reading-numbering-evidence',reference.hash+'.bin');
   atomicWrite(evidenceFile,raw);
-  const decision={key:hash(window),window,reason:reason.trim(),reference:{url,hash:reference.hash,chapters:titles},reviewedAt:new Date().toISOString()};
+  const decision={key:hash(window),window,anomalyIndex:anomalies[0],reason:reason.trim(),reference:{url,hash:reference.hash,chapters:titles},reviewedAt:new Date().toISOString()};
   atomicWrite(stateFile(dir),seal({...state,numberingReviews:[...(state.numberingReviews||[]).filter(r=>r.window[1].link!==links[1]),decision]}));
   return decision;
 }
@@ -168,8 +169,8 @@ function orderedChapters(chapters, reviewedPrefix = 0, noticeReviews = [], numbe
       // Decimal headings also count as numbered text in the notice-review guard.
       if (Number.isSafeInteger(number) && current % 1 === 0.5 && current === number + 0.5 && !halfChapter) halfChapter = true;
       else {
-        const reviewed=numberingReviews.some(r=>r.key===hash(r.window)&&r.window.length===3&&r.window.every((expected,i)=>{
-          const actual=chapters[index-1+i];return actual&&hash(numberingFingerprint(actual))===hash(expected);
+        const reviewed=numberingReviews.some(r=>[1,2].includes(r.anomalyIndex??1)&&r.key===hash(r.window)&&r.window.length===3&&r.window.every((expected,i)=>{
+          const actual=chapters[index-(r.anomalyIndex??1)+i];return actual&&hash(numberingFingerprint(actual))===hash(expected);
         }));
         if (!Number.isSafeInteger(current) || current !== number + 1 && !reviewed) throw Error(`阅读版章号不连续：应为第 ${number + 1} 章，实际为“${chapter.title}”`);
         number = current; halfChapter = false;

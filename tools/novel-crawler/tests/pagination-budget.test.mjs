@@ -23,3 +23,14 @@ test('a bounded pagination budget preserves extraction identity and every cross-
   pages.set(base+'p3',page(3,base+'p4'));pages.set(base+'p4',page(4,null));
   await assert.rejects(getChapter(larger,entry,links,client),/分页超过上限/);
 });
+
+test('standalone ellipsis pages are preserved without permitting repeated prose or loops',async()=>{
+  const base='https://novel.example/',spec=validateSpec({version:1,kind:'html',title:'测试书',author:'甲作者',sourceUrl:base+'book',metadata:{title:'h1',author:'b'},catalog:{links:'nav a'},chapter:{title:'h1',content:'article',next:'a.next',maxPages:5}});
+  const entry={title:'九月活动公告',link:base+'1',chapter_number:1},links=new Set([entry.link,base+'next-chapter']);
+  const bodies=['这次活动的完整说明。','.....','147，196，199，206','.....'];let tail=null;
+  const client={assertUrl:url=>url,get:async url=>{const n=Number(new URL(url).pathname.slice(1)),next=n<4?base+(n+1):tail;return {url,body:Buffer.from(`<h1>九月活动公告</h1><article>${bodies[n-1]}</article>${next?`<a class="next" href="${next}">下一页</a>`:''}`),contentType:'text/html; charset=utf-8'};}};
+  const result=await getChapter(spec,entry,links,client);assert.equal(result.content,bodies.join('\n'));assert.equal(result.provenance.length,4);
+  for(const repeat of ['相同的正文','123456','.'.repeat(33)]){bodies[1]=bodies[3]=repeat;await assert.rejects(getChapter(spec,entry,links,client),/正文重复/);}
+  bodies[1]=bodies[3]='.....';tail=base+'2';await assert.rejects(getChapter(spec,entry,links,client),/循环/);
+  tail=base+'next-chapter';await assert.rejects(getChapter(spec,entry,links,client),/另一章/);
+});

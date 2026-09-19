@@ -204,6 +204,18 @@ test('reviewed new numbering defects require independent consecutive titles and 
   assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).reusedExport,true);
 });
 
+test('the latest chapter may retain a proven numbering defect only with its complete preceding window',async t=>{
+  const f=await fixture(t);await f.bind();const original=fs.readFileSync(f.file);
+  Object.assign(f.state.titles,{6:'第4章 前奏',7:'第5章 经过',8:'第5章 末章'});f.state.count=8;
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).exportFile,null);
+  const titles=['4、前奏','5、经过','6、末章'],bodyFile=path.join(f.options.stateDir,'publisher.html'),evidence='测试书 甲作者 '+titles.join(' ');fs.writeFileSync(bodyFile,evidence);
+  const review={exportHash:hash(original),links:[6,7,8].map(n=>f.raw(n).link),hashes:[6,7,8].map(n=>hash(f.raw(n).content)),reason:'独立目录证明最新三章同名顺序连续，原始标题保留',reference:{url:'https://publisher.example/book',bodyFile,hash:hash(evidence),chapters:titles}};
+  assert.equal((await reviewReadingNumbering(f.spec,review,f.options)).anomalyIndex,2);
+  const result=await acquire(f.spec,{...f.options,mode:'download'});assert.equal(result.readingAdded,3,JSON.stringify(result.failures));
+  assert.deepEqual(readJson(f.file).chapters.slice(0,3),JSON.parse(original).chapters);
+  assert.equal(readJson(f.file).chapters.at(-1).title,'第5章 末章');
+});
+
 test('title mismatch review pins exact retained text and blocks unreviewed or changed source titles', async t => {
   const f = await fixture(t, {sourceOrder: true});
   f.state.bodyTitles[4] = '第2章 正文页的原名';
