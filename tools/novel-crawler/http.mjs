@@ -7,6 +7,7 @@ import {load} from 'cheerio';
 import {hash, atomicWrite, readJson} from './storage.mjs';
 import {rejectedPage} from './diagnostics.mjs';
 import {lockBrowserProfile, sessionCookies} from './browser-session.mjs';
+import retention from '../storage-maintenance.cjs';
 
 export function httpUrl(value, base) {
   const url = new URL(value, base);
@@ -448,14 +449,17 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
     try { return await getPage(input, options); }
     catch (error) { visibleWaiter?.reject(error); visibleWaiter = null; error.url ||= String(input); throw error; }
   }
+  const releaseCache = retention.cacheActivity(cacheDir);
   return {get, assertUrl, stats, showBrowser, close: async () => {
-    signal?.removeEventListener('abort', abort);
-    visibleWaiter?.reject(windowClosed()); visibleWaiter = null;
-    await closeBrowser();
-    if (temporaryProfile) {
-      const target = path.resolve(temporaryProfile);
-      if (path.dirname(target) !== path.resolve(os.tmpdir()) || !path.basename(target).startsWith('novel-browser-')) throw Error('临时采集目录无效');
-      fs.rmSync(target, {recursive: true, force: true}); temporaryProfile = null;
-    }
+    try {
+      signal?.removeEventListener('abort', abort);
+      visibleWaiter?.reject(windowClosed()); visibleWaiter = null;
+      await closeBrowser();
+      if (temporaryProfile) {
+        const target = path.resolve(temporaryProfile);
+        if (path.dirname(target) !== path.resolve(os.tmpdir()) || !path.basename(target).startsWith('novel-browser-')) throw Error('临时采集目录无效');
+        fs.rmSync(target, {recursive: true, force: true}); temporaryProfile = null;
+      }
+    } finally { releaseCache(); }
   }};
 }

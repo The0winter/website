@@ -18,6 +18,13 @@
 - 测试、隔离开发和基准验证的临时文件统一放在项目内的 `.runtime/test-tmp/`。新增测试入口先加载 `tools/test-env.cjs`；临时验证命令使用 `node --require ./tools/test-env.cjs ...`，让数据库、浏览器及子进程继承项目内的 TEMP/TMP/TMPDIR。
 - 浏览器测试使用 `npm run test:browser`，在 Playwright 加载前设置编译缓存目录。临时数据继续按各自测试的生命周期清理，不写入 Git，也不修改 Windows 全局临时目录。
 
+## 本地容量与清理
+
+- 新任务使用固定的日常构建目录；额外 `NEXT_DIST_DIR` 仅用于隔离验证。构建、测试优先使用根目录 npm 入口，它们会运行本地清理并登记活动保护；直接测试仍须加载 `tools/test-env.cjs`。
+- 清理统一使用 `npm run storage:plan` 预览、`npm run storage:clean` 执行，规则见 [本地容量与清理](docs/本地容量与清理.md)。不得直接清空 `.runtime`、`.novel-crawler`、`artifacts` 或测试临时根目录。
+- 调试截图、日志统一放入 `.runtime/task-artifacts/<任务>/`，使用 `debug`、`initial`、`before` 等明确文件名；最终验收材料使用 `final`、`verified` 等标记。需要临时保留某个目录时放置 `.storage-keep` 文件，任务结束后检查是否仍需保留。
+- 清理只淘汰可再生成的输出。小说、封面、续更映射、原始取证页面、登录数据、恢复备份和不明用途的任务快照不得按时间或总容量直接删除。以后新增一次性工具应给临时产物明确生命周期，不再创建无上限的构建/安装副本。
+
 ## Git 工作流
 
 - 用户已明确要求只保留并使用 `main`。后续任务直接在本项目的 `main` 工作，不创建功能分支、`codex/*` 分支或额外 worktree，不使用 Pull Request 作为默认交付流程。

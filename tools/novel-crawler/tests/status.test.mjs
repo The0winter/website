@@ -25,8 +25,20 @@ test('all sources read status only from the selected book; conflicting, missing 
     ixdzs8: '<h1>书名</h1><p><span class="end">已完结</span></p>',
     shudugu: '<div class="itemtxt"><h1>书名</h1><p><span>完结</span><span>玄幻</span></p></div>',
     banshanren: '<div class="novel_title_box"><div class="novel_summary_box pc"><p class="serializing"><img alt="完结状态">已完结</p></div></div><div class="novel_summary_box h5"><p class="serializing">已完结</p></div>',
+    decha: '<meta property="og:novel:status" content="已完结">',
+    deqixs: '<div class="itemtxt"><h1>书名</h1><p><span>完结</span><span>玄幻</span></p></div>',
+    qiufengshuwu: '<div class="cataloginfo"><div class="infotype"><p>作品状态：已完结</p></div></div>',
+    xszj: '<div class="detail-status">已完结</div>',
+    youyouxs: '<meta property="og:novel:status" content="已完结">',
   };
   for (const site of loadSites().sites) for (const metadata of [site.book.metadata, site.spec.metadata]) {
+    if (!metadata.status) {
+      const result = extractBookStatus(load('<aside>完结小说推荐</aside>'), metadata.status);
+      assert.equal(result.status, undefined, site.id);
+      assert.equal(result.statusDetection, 'unconfigured', site.id);
+      continue;
+    }
+    assert.ok(pages[site.id], `Missing status fixture for ${site.id}`);
     const result = extractBookStatus(load(pages[site.id] + '<aside>连载小说推荐</aside>'), metadata.status, {url: 'https://example.test/book', hash: 'snapshot', fetchedAt: 'now'});
     assert.equal(result.status, '完结', site.id);
     assert.equal(result.statusDetection, 'collected');

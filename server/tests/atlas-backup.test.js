@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {Readable} from 'node:stream';
 import {spawn} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {backupAtlas} from '../../infra/atlas-backup.mjs';
 import {unpackSnapshot,snapshotSummary} from '../database/snapshot.js';
 
@@ -58,7 +59,7 @@ test('100,000 metadata records stream successfully with a 96 MiB JavaScript heap
     console.log(JSON.stringify({count:result.collections[0].count,bytes:result.bytes,heap:process.memoryUsage().heapUsed}));
   `;
   const result=await new Promise((resolve,reject)=>{
-    const child=spawn(process.execPath,['--require',path.resolve('tools/test-env.cjs'),'--max-old-space-size=96','--input-type=module'],{windowsHide:true,stdio:['pipe','pipe','pipe']});
+    const child=spawn(process.execPath,['--require',fileURLToPath(new URL('../../tools/test-env.cjs',import.meta.url)),'--max-old-space-size=96','--input-type=module'],{windowsHide:true,stdio:['pipe','pipe','pipe']});
     let stdout='',stderr='';child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stderr+=b);
     child.on('error',reject);child.on('close',code=>resolve({code,stdout,stderr}));child.stdin.end(script);
   });

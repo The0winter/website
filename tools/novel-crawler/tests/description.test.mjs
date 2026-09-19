@@ -11,7 +11,7 @@ import {loadSites} from '../desktop/sources.mjs';
 import {acquire, localBookState} from '../core.mjs';
 import {prepareImport} from '../../../infra/import-plan.mjs';
 
-test('all desktop sources extract full paragraphs, excluding controls, SEO and duplicate mobile copies', () => {
+test('all configured desktop sources extract full paragraphs, excluding controls, SEO and duplicate mobile copies', () => {
   const pages = {
     '4jiwx': '<meta property="og:description" content="第一段。&#10;第二段。">',
     '69shuba': '<div class="navtxt"><p>第一段。<br>第二段。</p><p>小说关键词：网站推广</p></div>',
@@ -19,9 +19,18 @@ test('all desktop sources extract full paragraphs, excluding controls, SEO and d
     ixdzs8: '<p id="intro">第一段。<br>第二段。<span class="c-more">展开</span><script>bad()</script></p>',
     shudugu: '<div class="container"><div class="des bb"><p>第一段。</p><p>第二段。</p></div><div class="des bb">推广说明</div></div>',
     twkan: '<div id="tab_info"><div class="navtxt"><p>第一段。</p><p>第二段。</p>小說關鍵詞：網站推廣</div></div>',
+    decha: '<meta property="og:description" content="第一段。&#10;第二段。">',
+    deqixs: '<div class="container"><div class="des"><p>第一段。</p><p>第二段。</p></div><div class="des">推广说明</div></div>',
+    qiufengshuwu: '<div id="intro"><p>第一段。<br>第二段。</p></div>',
+    sjks88: '<meta name="description" content="第一段。&#10;第二段。">',
   };
   for (const site of loadSites().sites) {
     for (const metadata of [site.book.metadata, site.spec.metadata]) {
+      if (!metadata.description) {
+        assert.equal(extractDescription(load('<p>推荐内容</p>'), metadata.description).descriptionStatus, 'unconfigured', site.id);
+        continue;
+      }
+      assert.ok(pages[site.id], `Missing description fixture for ${site.id}`);
       assert.deepEqual(extractDescription(load(pages[site.id]), metadata.description), {description: '第一段。\n第二段。', descriptionStatus: 'collected'}, site.id);
       assert.equal(extractDescription(load('<p>无简介页面</p>'), metadata.description).description, undefined);
     }

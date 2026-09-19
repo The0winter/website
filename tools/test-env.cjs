@@ -14,4 +14,7 @@ if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute
 for (const name of ['TEMP', 'TMP', 'TMPDIR']) process.env[name] = testTempDir;
 process.env.PWTEST_CACHE_DIR = path.join(testTempDir, 'playwright-transform-cache');
 
+// The lease also protects tests invoked directly, outside the npm wrapper.
+require('./storage-maintenance.cjs').activity(['temp', 'build', 'clean-room', 'artifacts', 'crawler-cache']);
+
 module.exports = {testTempDir};

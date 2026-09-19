@@ -2,7 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {spawn} from 'node:child_process';
+import retention from '../tools/storage-maintenance.cjs';
 
+const releaseStorage = retention.activity(['clean-room', 'npm-cache', 'build', 'artifacts'], {sweep: true});
 const root=process.cwd(),destination=path.join(root,'.runtime','clean-room-'+Date.now());
 await fs.mkdir(destination,{recursive:true});
 const manifest=[];
@@ -13,7 +15,7 @@ async function copy(relative){
   if(stat.isDirectory()){await fs.mkdir(target,{recursive:true});for(const child of await fs.readdir(source))await copy(path.join(relative,child));}
   else{const data=await fs.readFile(source);await fs.writeFile(target,data);manifest.push({path:relative,sha256:crypto.createHash('sha256').update(data).digest('hex')});}
 }
-for(const entry of ['server','web-next','infra'])await copy(entry);
+for(const entry of ['server','web-next','infra','tools','shared'])await copy(entry);
 await fs.mkdir(path.join(destination,'artifacts'));
 const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>['path','systemroot','windir','temp','tmp','userprofile','localappdata','appdata','comspec','processor_architecture'].includes(key.toLowerCase())));
 Object.assign(env,{npm_config_cache:path.join(root,'.runtime','npm-cache'),EXTERNAL_SERVICES:'disabled',NEXT_PUBLIC_EXTERNAL_SERVICES:'disabled',NEXT_TELEMETRY_DISABLED:'1',INTERNAL_API_URL:'http://127.0.0.1:59999/api',NEXT_PUBLIC_SITE_URL:'http://127.0.0.1:3000'});
@@ -31,4 +33,10 @@ try {
   await run('typecheck',['--prefix','web-next','run','typecheck']);
   await run('lint',['--prefix','web-next','run','lint']);
   await run('build',['--prefix','web-next','run','build']);
-} finally {await fs.writeFile(path.join(root,'artifacts','clean-room-report.json'),JSON.stringify({destination,node:process.version,apiUnavailableDuringBuild:true,manifest,steps},null,2));}
+} finally {
+  try {
+    await fs.writeFile(path.join(destination,'.storage-result.json'),JSON.stringify({completedAt:new Date().toISOString(),success:steps.some(step=>step.name==='build'&&step.code===0)&&steps.every(step=>step.code===0)}));
+    await fs.writeFile(path.join(root,'artifacts','clean-room-report.json'),JSON.stringify({destination,node:process.version,apiUnavailableDuringBuild:true,manifest,steps},null,2));
+  }
+  finally {releaseStorage();retention.queueAutomatic();}
+}

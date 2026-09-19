@@ -5,6 +5,7 @@ import {parseArgs} from 'node:util';
 import {acquire, sourcePlan, defaultStateDir} from './core.mjs';
 import {readJson} from './storage.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
+import retention from '../storage-maintenance.cjs';
 
 const help = `小说采集（Node 22；EPUB 另需 Python 3）
   node tools/novel-crawler/cli.mjs sources --title "书名" --author "作者"
@@ -16,6 +17,7 @@ const help = `小说采集（Node 22；EPUB 另需 Python 3）
 新站需先编写声明式 JSON 提取规则，参阅 docs/智能找书与采集.md。
 正文和原始页面只写本地；终端输出统计，不输出章节正文。`;
 
+let maintainDefaultCache = false;
 try {
   const {positionals, values} = parseArgs({allowPositionals: true, options: {
     help: {type: 'boolean'}, spec: {type: 'string'}, title: {type: 'string'}, author: {type: 'string'},
@@ -38,6 +40,8 @@ try {
       console.log(JSON.stringify(sourcePlan(values.title, values.author, stateDir), null, 2));
     } else if (command === 'probe' || command === 'download') {
       if (!values.spec) throw Error('需要 --spec 来源配置.json');
+      maintainDefaultCache = stateDir === defaultStateDir;
+      if (maintainDefaultCache) retention.queueAutomatic();
       if (command === 'probe' && values['max-new'] !== undefined) throw Error('--max-new 仅用于分批下载，试采必须完成选中的样本');
       const result = await acquire(JSON.parse(fs.readFileSync(values.spec, 'utf8')), {mode: command, stateDir, outputDir: values['output-dir'], samples: integer('samples', 4, 30), maxNew: integer('max-new', 1, 20000), refresh: values.refresh, onProgress: data => {
         if (data.downloaded <= 1 || data.downloaded % 20 === 0 || data.downloaded === data.total) console.error(JSON.stringify(data));
@@ -61,4 +65,6 @@ try {
 } catch (error) {
   console.error(JSON.stringify({error: error.message}));
   process.exitCode = 1;
+} finally {
+  if (maintainDefaultCache) retention.queueAutomatic();
 }

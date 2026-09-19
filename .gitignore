@@ -61,3 +61,10 @@ web-next/.next-*/
 # Novel acquisition registry, checkpoints, raw pages and quality reports
 .novel-crawler/
 
+# Generated local screenshots/reports; tracked acceptance files stay tracked.
+artifacts/**/*.png
+artifacts/playwright-current.json
+web-next/artifacts/playwright-current.json
+**/__pycache__/
+*.pyc
+

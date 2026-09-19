@@ -6,6 +6,7 @@ import {browserProfile} from '../browser-session.mjs';
 import {updateLibrary} from './library.mjs';
 import {createLibraryControl} from './library-control.mjs';
 import {uploadLibrary} from './upload.mjs';
+import retention from '../../storage-maintenance.cjs';
 
 let paused = false, started = false, stopped = false, client, libraryControl;
 const controller = new AbortController();
@@ -65,6 +66,8 @@ process.on('message', async message => {
     libraryControl?.close(); libraryControl = null;
     try { await client?.close(); }
     catch (error) { send({type: 'error', error: error.message, failure: failureDetails(error)}); }
+    // All clients have flushed their sessions and released cache leases.
+    if (message.stateDir === path.resolve('.novel-crawler')) retention.queueAutomatic();
     process.disconnect();
   }
 });

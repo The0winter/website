@@ -300,7 +300,12 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
       if (current.connected) current.send({type: 'stop'});
       await new Promise(resolve => current.once('exit', resolve));
     }
-    await new Promise(resolve => server.close(resolve));
+    await new Promise(resolve => {
+      server.close(resolve);
+      // Work has stopped above. Polling pages and unfinished HTTP requests must
+      // not keep the desktop (and its browser/test directories) alive forever.
+      server.closeAllConnections();
+    });
     clearTimeout(saveRetry); saveRetry = null;
     if (persistenceWarning) save();
   }};

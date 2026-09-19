@@ -5,6 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
+import net from 'node:net';
+import {once} from 'node:events';
 import puppeteer from 'puppeteer';
 import iconv from 'iconv-lite';
 import {createDesktop} from '../desktop/server.mjs';
@@ -47,6 +49,18 @@ async function until(check, timeout = 10000) {
   }
   assert.fail('timed out waiting for task state');
 }
+
+test('desktop shutdown releases unfinished HTTP connections instead of retaining test resources', async t => {
+  const dir = temp(t), app = await createDesktop({stateDir: dir, outputDir: path.join(dir, 'out')});
+  const accepted = once(app.server, 'connection');
+  const socket = net.connect(app.server.address().port, '127.0.0.1');
+  let timer;
+  try {
+    await Promise.all([once(socket, 'connect'), accepted]);
+    socket.write('GET / HTTP/1.1\r\nHost: localhost\r\n');
+    await Promise.race([app.close(), new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Desktop shutdown retained an unfinished connection')), 2000); })]);
+  } finally { clearTimeout(timer); socket.destroy(); await app.close(); }
+});
 
 test('site history retains every site, moves reused sites to front, and keeps the last site on disk', t => {
   const dir = temp(t);

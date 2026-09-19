@@ -4,6 +4,7 @@ import puppeteer from 'puppeteer';
 import {defaultStateDir} from '../core.mjs';
 import {atomicWrite, readJson, withLock} from '../storage.mjs';
 import {createDesktop} from './server.mjs';
+import retention from '../../storage-maintenance.cjs';
 
 const stateDir = defaultStateDir, instanceFile = path.join(stateDir, 'desktop-instance.json');
 await withLock(path.join(stateDir, 'desktop-launch.lock'), async () => {
@@ -16,6 +17,7 @@ await withLock(path.join(stateDir, 'desktop-launch.lock'), async () => {
   }
   const executablePath = [process.env.NOVEL_CRAWLER_BROWSER, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe', puppeteer.executablePath()].filter(Boolean).find(file => fs.existsSync(file));
   if (!executablePath) throw Error('Chrome or Edge was not found. Install a browser or set NOVEL_CRAWLER_BROWSER.');
+  retention.queueAutomatic();
   let browser, page, shuttingDown = false;
   const app = await createDesktop({onFocus: async () => {
     if (page && !page.isClosed()) {

@@ -1,5 +1,7 @@
 # 本地整修运行
 
+本地容量自动维护已接入根目录构建、开发和测试入口及采集器。`npm run storage:plan` 预览，`npm run storage:clean` 清理；只处理允许淘汰的构建、测试和缓存产物，保护正文、封面、续更状态和恢复资料。保留期限、容量预算及 `.storage-keep` 用法见 [本地容量与清理](docs/本地容量与清理.md)。
+
 使用 `.node-version` 固定的 Node 22.23.2；npm 使用随该 Node 分发的版本。根目录仅转发网站命令，采集脚本依赖暂保留。
 
 安装：`npm ci`、`npm --prefix server ci`、`npm --prefix web-next ci`。
