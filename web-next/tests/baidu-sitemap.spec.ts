@@ -41,12 +41,12 @@ test('overlapping requests share complete generations; refresh errors retry inst
 test('real routes agree on coverage, reject invalid pages and fail closed on unavailable sources', async () => {
   const previousFetch = globalThis.fetch;
   const previousSite = process.env.NEXT_PUBLIC_SITE_URL, previousApi = process.env.INTERNAL_API_URL;
-  const state = globalThis as typeof globalThis & {baiduSitemapFiles?: unknown};
+  const state = globalThis as typeof globalThis & {baiduSitemapPlan?: unknown};
   const id = '111111111111111111111111', author = '222222222222222222222222';
   let fail = false;
   try {
     process.env.NEXT_PUBLIC_SITE_URL = base; process.env.INTERNAL_API_URL = 'http://127.0.0.1:5000/api';
-    delete state.baiduSitemapFiles;
+    delete state.baiduSitemapPlan;
     globalThis.fetch = async input => {
       const url = new URL(String(input));
       if (fail) return new Response('', {status: 503});
@@ -58,14 +58,14 @@ test('real routes agree on coverage, reject invalid pages and fail closed on una
     const manifest = await (await getManifest()).json();
     const response = await getRoot(), xml = await response.text();
     expect(response.status).toBe(200);
-    expect(manifest.urls).toBe(6);
-    expect(manifest.files).toEqual([{url: base + '/sitemap-baidu.xml', urls: 6, bytes: Buffer.byteLength(xml)}]);
+    expect(xml.match(/<url>/g)).toHaveLength(6);
+    expect(manifest.files).toEqual([{url: base + '/sitemap-baidu.xml'}]);
     expect(xml).toContain(`${base}/book/${id}/${author}`);
     expect(xml).toContain(`${base}/author/${author}`);
     for (const page of ['0.xml', '1.xml', '2.xml', '01.xml', 'invalid.xml', '9007199254740993.xml']) {
       expect((await getPart(new Request(base), {params: Promise.resolve({page})})).status).toBe(404);
     }
-    fail = true; delete state.baiduSitemapFiles;
+    fail = true; delete state.baiduSitemapPlan;
     const unavailable = await getRoot();
     expect(unavailable.status).toBe(503);
     expect(unavailable.headers.get('retry-after')).toBe('60');
@@ -73,7 +73,7 @@ test('real routes agree on coverage, reject invalid pages and fail closed on una
     expect((await getRoot()).status).toBe(200);
     // Exercise the numbered route with a real multi-part source, not just the
     // pure splitter: preserve chapter boundaries and reject truncated sources.
-    delete state.baiduSitemapFiles;
+    delete state.baiduSitemapPlan;
     globalThis.fetch = async input => {
       const url = new URL(String(input));
       if (url.pathname.endsWith('/sitemap-books')) return Response.json([{_id: id, chapters: 50001}]);
@@ -84,15 +84,16 @@ test('real routes agree on coverage, reject invalid pages and fail closed on una
       return Response.json(Array.from({length: Math.max(0, Math.min(200, 50001 - first))}, (_, n) => ({id: (first + n + 1).toString(16).padStart(24, '0')})));
     };
     const expanded = await (await getManifest()).json();
-    expect(expanded.files.map((file: {urls: number}) => file.urls)).toEqual([50000, 5]);
+    expect(expanded.files).toHaveLength(6);
     const second = await getPart(new Request(base), {params: Promise.resolve({page: '2.xml'})});
     expect(second.status).toBe(200);
-    expect((await second.text()).match(/<url>/g)).toHaveLength(5);
-    delete state.baiduSitemapFiles; fail = true;
-    expect((await getManifest()).status).toBe(503);
+    expect((await second.text()).match(/<url>/g)).toHaveLength(10000);
+    delete state.baiduSitemapPlan; fail = true;
+    expect((await getPart(new Request(base), {params: Promise.resolve({page: '2.xml'})})).status).toBe(503);
   } finally {
-    globalThis.fetch = previousFetch; delete state.baiduSitemapFiles;
+    globalThis.fetch = previousFetch; delete state.baiduSitemapPlan;
     if (previousSite === undefined) delete process.env.NEXT_PUBLIC_SITE_URL; else process.env.NEXT_PUBLIC_SITE_URL = previousSite;
     if (previousApi === undefined) delete process.env.INTERNAL_API_URL; else process.env.INTERNAL_API_URL = previousApi;
   }
 });
+

@@ -4,52 +4,84 @@ import {GET as getAuthors} from '@/app/sitemaps/authors.xml/route';
 import {GET as getChapters} from '@/app/sitemaps/[bookId]/[page]/route';
 import {getApiBaseUrl} from '@/utils/api';
 import {siteUrl} from '@/lib/sitemap';
-import {cacheBaiduFiles, splitBaiduEntries} from '@/lib/baidu-sitemap';
+import {baiduFilePath, cacheBaiduFiles, splitBaiduEntries, type BaiduFile} from '@/lib/baidu-sitemap';
 
-async function loadFiles() {
+type FilePlan = {entries: string[]; partitions: string[]; read?: () => Promise<BaiduFile[]>};
+const chapterPartition = /^\/sitemaps\/([a-f0-9]{24})\/([1-9][0-9]*\.xml)$/;
+
+function entriesFrom(body: string, base: string) {
+  if (!body.includes('<urlset')) throw new Error('Expected URL set');
+  return [...body.matchAll(/<url>\s*<loc>([^<]+)<\/loc>[\s\S]*?<\/url>/g)].map(match => {
+    const url = new URL(match[1]);
+    if (url.origin !== base || url.search || url.hash || !/^\/(?:$|ranking$|forum$|author\/[a-f0-9]{24}$|book\/[a-f0-9]{24}(?:\/[a-f0-9]{24})?$)/i.test(url.pathname)) throw new Error('Non-public sitemap URL');
+    return match[0];
+  });
+}
+
+async function createPlan(): Promise<FilePlan[]> {
   const base = siteUrl();
   const index = await getIndex();
   if (!index.ok) throw new Error('Sitemap index unavailable');
-  const partitions = [...(await index.text()).matchAll(/<loc>([^<]+)<\/loc>/g)].map(match => match[1]);
-  if (!partitions.length) throw new Error('Empty sitemap index');
-  const bodies: string[] = new Array(partitions.length);
-  let next = 0, failed = false;
-  // Bound upstream load while avoiding the former serial cold-generation timeout.
-  await Promise.all(Array.from({length: Math.min(6, partitions.length)}, async () => {
-    while (!failed && next < partitions.length) {
-      const position = next++;
-      try {
-        const partition = partitions[position], url = new URL(partition);
-        if (url.origin !== base || url.search || url.hash) throw new Error('Unexpected partition');
-        let response: Response;
-        if (url.pathname === '/sitemaps/static.xml') response = getStatic();
-        else if (url.pathname === '/sitemaps/authors.xml') response = await getAuthors();
-        else {
-          const match = url.pathname.match(/^\/sitemaps\/([a-f0-9]{24})\/([1-9][0-9]*\.xml)$/);
-          if (!match) throw new Error('Unexpected partition');
-          response = await getChapters(new Request(partition), {params: Promise.resolve({bookId: match[1], page: match[2]})});
-        }
-        if (!response.ok) throw new Error('Sitemap partition unavailable');
-        bodies[position] = await response.text();
-        if (!bodies[position].includes('<urlset')) throw new Error('Expected URL set');
-      } catch (error) { failed = true; throw error; }
-    }
-  }));
-  const entries = new Map<string, string>();
-  for (const body of bodies) {
-    for (const match of body.matchAll(/<url>\s*<loc>([^<]+)<\/loc>[\s\S]*?<\/url>/g)) {
-      const url = new URL(match[1]);
-      if (url.origin !== base || url.search || url.hash || !/^\/(?:$|ranking$|forum$|author\/[a-f0-9]{24}$|book\/[a-f0-9]{24}(?:\/[a-f0-9]{24})?$)/i.test(url.pathname)) throw new Error('Non-public sitemap URL');
-      entries.set(match[1], match[0]);
-    }
+  const paths = [...(await index.text()).matchAll(/<loc>([^<]+)<\/loc>/g)].map(match => {
+    const url = new URL(match[1]);
+    if (url.origin !== base || url.search || url.hash) throw new Error('Unexpected partition');
+    return url.pathname;
+  });
+  if (!paths.includes('/sitemaps/static.xml') || !paths.includes('/sitemaps/authors.xml')) throw new Error('Missing static partitions');
+  const partitions = paths.filter(path => !['/sitemaps/static.xml', '/sitemaps/authors.xml'].includes(path));
+  if (partitions.some(path => !chapterPartition.test(path))) throw new Error('Unexpected chapter partition');
+  const authors = await getAuthors();
+  if (!authors.ok) throw new Error('Authors unavailable');
+  const headers = entriesFrom(await getStatic().text(), base).concat(entriesFrom(await authors.text(), base));
+  const plans: FilePlan[] = [];
+  // Each book partition has at most 1,001 URLs. Limit work as well as file size:
+  // cold requests must not aggregate the whole library behind a 15-second proxy.
+  for (let n = 0; n < Math.max(Math.ceil(partitions.length / 10), Math.ceil(headers.length / 10000)); n++) {
+    plans.push({entries: headers.slice(n * 10000, (n + 1) * 10000), partitions: partitions.slice(n * 10, (n + 1) * 10)});
   }
-  return splitBaiduEntries(entries.values());
+  return plans;
 }
 
-// Route bundles share one process-local generation; only public XML is cached.
-const state = globalThis as typeof globalThis & {baiduSitemapFiles?: {key: string; read: ReturnType<typeof cacheBaiduFiles>}};
-export function getBaiduFiles() {
+async function loadFile(plan: FilePlan): Promise<BaiduFile[]> {
+  const base = siteUrl(), bodies: string[][] = new Array(plan.partitions.length);
+  let next = 0, failed = false;
+  await Promise.all(Array.from({length: Math.min(6, plan.partitions.length)}, async () => {
+    while (!failed && next < plan.partitions.length) {
+      const position = next++;
+      try {
+        const path = plan.partitions[position], match = path.match(chapterPartition)!;
+        const response = await getChapters(new Request(base + path), {params: Promise.resolve({bookId: match[1], page: match[2]})});
+        if (!response.ok) throw new Error('Sitemap partition unavailable');
+        bodies[position] = entriesFrom(await response.text(), base);
+      } catch (error) {failed = true; throw error;}
+    }
+  }));
+  const files = splitBaiduEntries(new Set([...plan.entries, ...bodies.flat()]));
+  if (files.length !== 1) throw new Error('Unexpected partition capacity');
+  return files;
+}
+
+// Share the plan and each completed file across route bundles for five minutes.
+// Only requested groups are generated. Failures never publish partial groups.
+type State = {key: string; expires: number; plans?: FilePlan[]; pending?: Promise<FilePlan[]>};
+const globalState = globalThis as typeof globalThis & {baiduSitemapPlan?: State};
+async function getPlan() {
   const key = siteUrl() + '|' + getApiBaseUrl();
-  if (state.baiduSitemapFiles?.key !== key) state.baiduSitemapFiles = {key, read: cacheBaiduFiles(loadFiles)};
-  return state.baiduSitemapFiles.read();
+  if (globalState.baiduSitemapPlan?.key !== key) globalState.baiduSitemapPlan = {key, expires: 0};
+  const state = globalState.baiduSitemapPlan;
+  if (state.plans && Date.now() < state.expires) return state.plans;
+  if (!state.pending) state.pending = createPlan().then(plans => {
+    state.plans = plans; state.expires = Date.now() + 300000; return plans;
+  }).finally(() => {state.pending = undefined;});
+  return state.pending;
+}
+
+export async function getBaiduFileList() {
+  return (await getPlan()).map((_, index) => ({url: siteUrl() + baiduFilePath(index + 1)}));
+}
+export async function getBaiduFile(page: number) {
+  const plan = (await getPlan())[page - 1];
+  if (!plan) return undefined;
+  plan.read ??= cacheBaiduFiles(() => loadFile(plan));
+  return (await plan.read())[0];
 }

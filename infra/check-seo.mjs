@@ -100,8 +100,6 @@ if (process.argv.includes('--baidu')) {
     assert.match(body, /<urlset\b/);
     assert.doesNotMatch(body, /<sitemapindex\b/);
     const urls = locs(body), bytes = Buffer.byteLength(body, 'utf8');
-    assert.equal(urls.length, file.urls);
-    assert.equal(bytes, file.bytes);
     assert.ok(urls.length > 0 && urls.length <= 50000 && bytes < 10_000_000);
     for (const url of urls) {
       assert.ok(all.has(url), 'Baidu contains only canonical public URLs: ' + url);
@@ -111,7 +109,6 @@ if (process.argv.includes('--baidu')) {
     files.push({url: file.url, urls: urls.length, bytes});
   }
   assert.equal(seen.size, all.size, 'Baidu files cover every public sitemap URL');
-  assert.equal(manifest.urls, seen.size);
   await read(`/sitemaps/baidu/${manifest.files.length + 1}.xml`, 404);
   await read('/sitemaps/baidu/invalid.xml', 404);
   report.baidu = {urls: seen.size, files};
