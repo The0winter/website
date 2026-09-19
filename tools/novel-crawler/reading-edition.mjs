@@ -90,7 +90,23 @@ export function verifyReadingSources(dir, state, catalog) {
   }
 }
 
-function orderedChapters(chapters, reviewedPrefix = 0) {
+// Explicitly reviewed unnumbered notices are pinned to the complete source
+// text, not just a permissive title pattern. Recording does not change the book.
+export function recordReadingNoticeReview(dir, spec, extraction, outputDir, {link, contentHash, reason}) {
+  const state = loadReadingEdition(dir, spec, extraction, outputDir);
+  if (!state || typeof reason !== 'string' || !reason.trim()) throw Error('公告核对需要已有阅读版及具体理由');
+  const catalog = readJson(path.join(dir, 'catalog.json'), []), entry = catalog.find(item => item.link === link);
+  if (!entry || entry.chapter_number <= state.sources.length) throw Error('只能核对尚未纳入阅读版的新公告');
+  const chapter = rawChapter(dir, entry);
+  if (chapterIdentity(chapter.title) || /^\s*[0-9]+[、.]/u.test(chapter.title) || hash(chapter.content) !== contentHash) throw Error('公告正文哈希已变化或标题含正文章号');
+  const quality = qualityReport([entry], [chapter], [], 'probe');
+  if (quality.issues.some(issue => issue.level !== 'info' && issue.code !== 'short-outlier')) throw Error('公告正文未通过质量检查');
+  const review = {link, title: chapter.title, contentHash, reason: reason.trim(), evidence: chapter.provenance, reviewedAt: new Date().toISOString()};
+  atomicWrite(stateFile(dir), seal({...state, noticeReviews: [...(state.noticeReviews || []).filter(item => item.link !== link), review]}));
+  return review;
+}
+
+function orderedChapters(chapters, reviewedPrefix = 0, noticeReviews = []) {
   let number = 0;
   for (const [index, chapter] of chapters.entries()) {
     if (chapter.chapter_number !== index + 1) throw Error('阅读版顺序号不连续');
@@ -101,7 +117,8 @@ function orderedChapters(chapters, reviewedPrefix = 0) {
     if (current !== null) {
       if (!Number.isSafeInteger(current) || current !== number + 1) throw Error(`阅读版章号不连续：应为第 ${number + 1} 章，实际为“${chapter.title}”`);
       number = current;
-    } else if (!/^(?:番外|IF番外|(?:[一二三四五六七八九十0-9]+月)?总结|请假|公告|通知|活动|感言|后记|月票)/iu.test(title)) {
+    } else if (!/^(?:番外|IF番外|(?:[一二三四五六七八九十0-9]+月)?总结|请假|公告|通知|活动|感言|后记|月票)/iu.test(title) &&
+      !noticeReviews.some(review => review.link === chapter.link && review.title === chapter.title && review.contentHash === hash(chapter.content))) {
       throw Error(`未识别的番外或公告标题，需要核对：“${chapter.title}”`);
     }
   }
@@ -210,7 +227,7 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
     if (!rawReport.paused && rawReport.mode === 'download' && rawReport.completeAgainstSource) {
       const tail = catalog.slice(state.sources.length).map(entry => rawChapter(dir, entry));
       const chapters = [...book.chapters, ...tail.map((chapter, index) => ({...formatChapterForExport(chapter), chapter_number: originalCount + index + 1, sourceChapterNumber: chapter.chapter_number, sourceChapterUrl: chapter.link}))];
-      orderedChapters(chapters, state.sourceOrderReview ? originalCount : 0);
+      orderedChapters(chapters, state.sourceOrderReview ? originalCount : 0, state.noticeReviews);
       const nextBook = {...book, ...Object.fromEntries(['description', 'status', 'category', 'cover_image', 'authorSourceUrl'].filter(key => spec[key] !== undefined).map(key => [key, spec[key]])), chapters};
       const nextQuality = editionQuality(nextBook);
       checkNewIssues(nextQuality, originalCount);

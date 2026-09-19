@@ -11,7 +11,7 @@ import {formatChapterForExport, preserveCatalogLabels} from './titles.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
 import {failureDetails} from './diagnostics.mjs';
 import {browserProfile} from './browser-session.mjs';
-import {loadReadingEdition, adoptReadingEdition, updateReadingEdition} from './reading-edition.mjs';
+import {loadReadingEdition, adoptReadingEdition, updateReadingEdition, recordReadingNoticeReview} from './reading-edition.mjs';
 import {continuationKey, continuationState, hasContinuation, acquireContinuation} from './continuation.mjs';
 
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -146,6 +146,12 @@ export async function bindReadingEdition(input, file, {stateDir = defaultStateDi
     if (!previous || extractionHash(previous) !== extractionHash(spec)) throw Error('没有与当前规则匹配的原始采集记录');
     return adoptReadingEdition(dir, spec, extractionHash(spec), path.resolve(file), path.resolve(outputDir), sourceOrderReview);
   });
+}
+
+export async function reviewReadingNotice(input, review, {stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads')} = {}) {
+  const spec = validateSpec(input), dir = path.join(path.resolve(stateDir), 'jobs', jobId(spec));
+  return withLock(path.join(path.resolve(stateDir), 'book-locks', continuationKey(spec) + '.lock'), () =>
+    withLock(path.join(dir, 'job.lock'), () => recordReadingNoticeReview(dir, spec, extractionHash(spec), path.resolve(outputDir), review)));
 }
 
 function bookData(spec, chapters) {

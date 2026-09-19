@@ -8,7 +8,7 @@ import http from 'node:http';
 import {acquire, bindReadingEdition, localBookState, jobId, validateSpec, extractionHash} from '../core.mjs';
 import {atomicWrite, readJson, hash} from '../storage.mjs';
 import {formatChapterForExport} from '../titles.mjs';
-import {loadReadingEdition} from '../reading-edition.mjs';
+import {loadReadingEdition, recordReadingNoticeReview} from '../reading-edition.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 
 async function fixture(t, {sourceOrder = false, titles = {}} = {}) {
@@ -65,6 +65,27 @@ test('source-order review pins duplicate omissions while preserving historical n
   f.state.count = 6; f.state.titles[6] = '第99章 未核对跳号';
   const blocked = await acquire(f.spec, {...f.options, mode: 'download'});
   assert.equal(blocked.exportFile, null); assert.deepEqual(readJson(f.file), book);
+});
+
+test('reviewed nonstandard notices preserve the full text and cannot excuse stale content or missing numbered chapters', async t => {
+  const f = await fixture(t); await f.bind();
+  f.state.count = 6; f.state.titles[6] = '定时操作失误，提前更了'; f.state.bodies[6] = '晚上的章节提前发布了，今晚没有更新。';
+  const before = fs.readFileSync(f.file);
+  assert.equal((await acquire(f.spec, {...f.options, mode: 'download'})).exportFile, null);
+  const notice = f.raw(6), review = {link: notice.link, contentHash: hash(notice.content), reason: '完整正文仅说明定时发布失误，属于作者公告，原文保留。'};
+  const record = value => recordReadingNoticeReview(f.dir, f.spec, extractionHash(f.spec), f.options.outputDir, value);
+  assert.throws(() => record({...review, contentHash: 'stale'}), /哈希/);
+  record(review); assert.deepEqual(fs.readFileSync(f.file), before);
+  const checkpoint = path.join(f.dir, 'chapters', hash(notice.link) + '.json'), saved = readJson(checkpoint);
+  const changed = {...notice, content: notice.content + '改动'}; atomicWrite(checkpoint, {chapter: changed, hash: hash(changed)});
+  assert.equal((await acquire(f.spec, {...f.options, mode: 'download'})).exportFile, null);
+  atomicWrite(checkpoint, saved);
+  const result = await acquire(f.spec, {...f.options, mode: 'download'});
+  assert.equal(result.readingAdded, 1, JSON.stringify(result.failures));
+  assert.equal(readJson(f.file).chapters.at(-1).content, notice.content);
+  f.state.count = 7; f.state.titles[7] = '第5章 缺少第四章';
+  assert.equal((await acquire(f.spec, {...f.options, mode: 'download'})).exportFile, null);
+  assert.throws(() => record({link: f.raw(7).link, contentHash: hash(f.raw(7).content), reason: '不能把正文当公告'}), /正文章号/);
 });
 
 test('Chinese chapter numbers preserve reviewed exports, append in sequence and still reject new gaps', async t => {
