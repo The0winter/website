@@ -105,6 +105,11 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
         for (const field of ['headless', 'minimized']) if (typeof savedSpec.browser?.[field] === 'boolean') {
           currentSpec.browser = {...currentSpec.browser, [field]: savedSpec.browser[field]};
         }
+        // A book may have a verified former title or pen name. Preserve only
+        // its explicit identity aliases; current site extraction still applies.
+        for (const field of ['titleAliases', 'authorAliases']) if (Array.isArray(savedSpec[field])) {
+          currentSpec[field] = [...savedSpec[field]];
+        }
       }
       const spec = applyVerifiedBookStatus(currentSpec, stateDir, currentSpec.identityNormalization);
       if (binding && (binding.source.variant !== (spec.variant || '') || binding.source.extraction !== extractionHash(spec))) throw Error('当前续更来源规则已变化，请先核对适配；原文件保留');

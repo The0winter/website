@@ -93,6 +93,33 @@ test('HTML reading bindings retain background-window preferences but still rejec
   assert.deepEqual(readJson(file),book);
 });
 
+test('HTML raw and reading editions retain reviewed identity aliases without hiding extraction changes', async t => {
+  for (const reading of [false, true]) {
+    const f = await fixture(t), spec = {...f.spec('alpha'), title:'改名后的故事', author:'新笔名', titleAliases:['alpha故事'], authorAliases:['测试作者']};
+    const report = await acquire(spec, {...f.options, mode:'download'});
+    assert.ok(report.exportFile, JSON.stringify(report.failures));
+    let file = report.exportFile;
+    if (reading) {
+      const original = readJson(file), book = {...original, chapters:original.chapters.map(c=>({...c,sourceChapterNumber:c.chapter_number,sourceChapterUrl:c.link}))};
+      file = path.join(f.options.outputDir, 'reviewed-alias.json'); atomicWrite(file, book);
+      await bindReadingEdition(spec, file, f.options);
+    }
+    const before = fs.readFileSync(file), plan = planLibrary(f.options)[0];
+    assert.equal(plan.state, 'pending');
+    assert.deepEqual(plan.spec.titleAliases, ['alpha故事']);
+    assert.deepEqual(plan.spec.authorAliases, ['测试作者']);
+    assert.equal((await updateLibrary(f.options)).unchanged, 1);
+    assert.deepEqual(fs.readFileSync(file), before);
+    f.state.counts.alpha = 4;
+    assert.equal((await updateLibrary(f.options)).added, 1);
+    assert.equal(readJson(file).chapters.length, 4);
+    const verified = fs.readFileSync(file);
+    f.site.spec.chapter.content = 'section';
+    assert.equal(planLibrary(f.options)[0].state, 'blocked');
+    assert.deepEqual(fs.readFileSync(file), verified);
+  }
+});
+
 test('batch appends only new raw chapters, continues after manual skip, and reuses unchanged exports', async t => {
   const f = await fixture(t), alpha = await f.seed('alpha'), beta = await f.seed('beta');
   const original = readJson(alpha), betaBytes = fs.readFileSync(beta), betaTime = fs.statSync(beta).mtimeMs;
