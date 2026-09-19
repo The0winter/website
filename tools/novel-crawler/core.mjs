@@ -11,7 +11,7 @@ import {formatChapterForExport, preserveCatalogLabels} from './titles.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
 import {failureDetails} from './diagnostics.mjs';
 import {browserProfile} from './browser-session.mjs';
-import {loadReadingEdition, adoptReadingEdition, updateReadingEdition, recordReadingNoticeReview, recordReadingNumberingReview} from './reading-edition.mjs';
+import {loadReadingEdition, adoptReadingEdition, updateReadingEdition, recordReadingNoticeReview, recordReadingNumberingReview, preserveReviewedCatalogLabels} from './reading-edition.mjs';
 import {continuationKey, continuationState, hasContinuation, acquireContinuation} from './continuation.mjs';
 
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -297,6 +297,7 @@ async function acquireRaw(input, options = {}) {
       }
       source = spec.kind === 'html' || catalogUpdate ? await getCatalog(spec, client) : await getResource(spec, client, dir);
       catalog = preserveCatalogLabels(source.catalog, oldCatalog);
+      catalog = preserveReviewedCatalogLabels(catalog, oldCatalog, dir, reading);
       evidence = source.evidence;
       const description = source.actual?.description || spec.description || previousSpec?.description;
       if (description) spec.description = description;

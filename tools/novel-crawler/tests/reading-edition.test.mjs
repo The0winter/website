@@ -8,7 +8,7 @@ import http from 'node:http';
 import {acquire, bindReadingEdition, localBookState, jobId, validateSpec, extractionHash, reviewReadingNumbering} from '../core.mjs';
 import {atomicWrite, readJson, hash} from '../storage.mjs';
 import {formatChapterForExport} from '../titles.mjs';
-import {loadReadingEdition, recordReadingNoticeReview} from '../reading-edition.mjs';
+import {loadReadingEdition, recordReadingNoticeReview, preserveReviewedCatalogLabels} from '../reading-edition.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 
 async function fixture(t, {sourceOrder = false, titles = {}} = {}) {
@@ -217,12 +217,22 @@ test('title mismatch review pins exact retained text and blocks unreviewed or ch
   for (const bad of [{...item,contentHash:'stale'}, {...item,title:'其他标题'}, {...item,evidence:{}}, {...item,position:3}]) await assert.rejects(bind({...review,titleMappings:[bad]}));
   await bind(review);
   assert.deepEqual(readJson(f.file),book);
+  const previous = readJson(path.join(f.dir,'catalog.json')), state = readJson(f.binding).value;
+  const corrected = previous.map((entry,i)=>i===3?{...entry,title:item.title}:entry);
+  assert.deepEqual(preserveReviewedCatalogLabels(corrected,previous,f.dir,state),previous);
+  for (const change of [{title:'另一章'}, {link:f.base+'/reused.html'}, {chapter_number:99}]) {
+    const unsafe=corrected.map((entry,i)=>i===3?{...entry,...change}:entry);
+    assert.deepEqual(preserveReviewedCatalogLabels(unsafe,previous,f.dir,state)[3],unsafe[3]);
+  }
+  assert.deepEqual(preserveReviewedCatalogLabels(corrected,previous,f.dir,{...state,sourceOrderReview:{pairs:[]}}),corrected);
+  assert.deepEqual(fs.readFileSync(f.file),Buffer.from(JSON.stringify(book,null,2)+'\n'));
   assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).structuralPass,true);
   f.state.count=6; f.state.titles[6]='第3章 新章目录'; f.state.bodyTitles[6]='第3章 新章异名';
   const blocked=await acquire(f.spec,{...f.options,mode:'download'});
   assert.equal(blocked.exportFile,null); assert.deepEqual(readJson(f.file),book);
   const changedChapter = {...f.raw(4), title:'第2章 又一次变化'};
   atomicWrite(path.join(f.dir,'chapters',hash(changedChapter.link)+'.json'), {chapter:changedChapter,hash:hash(changedChapter)});
+  assert.throws(()=>preserveReviewedCatalogLabels(corrected,previous,f.dir,state),/正文或映射/);
   const changed=await acquire(f.spec,{...f.options,mode:'download'});
   assert.equal(changed.exportFile,null); assert.deepEqual(readJson(f.file),book);
 });

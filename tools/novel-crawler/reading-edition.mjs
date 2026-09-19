@@ -92,6 +92,22 @@ export function verifyReadingSources(dir, state, catalog) {
   }
 }
 
+// A mirror may finally fix a directory label that was already reviewed against
+// the saved body. Keep the historical label and mapping; never accept a new URL,
+// position, arbitrary rename, or altered checkpoint through this compatibility.
+export function preserveReviewedCatalogLabels(catalog, previous, dir, state) {
+  if (!state?.sourceOrderReview || !previous) return catalog;
+  return catalog.map((entry, index) => {
+    const old = previous[index], accepted = state.sources[index];
+    if (!old || !accepted || old.link !== entry.link || old.chapter_number !== entry.chapter_number || old.title === entry.title || entry.title !== accepted.title) return entry;
+    const mapping = state.sourceOrderReview.titleMappings?.find(item => item.position === index + 1 && item.link === old.link && item.catalogTitle === old.title && item.title === entry.title && item.contentHash === accepted.contentHash);
+    const duplicate = state.sourceOrderReview.pairs?.find(item => item.omit === index + 1 && item.omitHash === accepted.contentHash);
+    if (!mapping && !duplicate) return entry;
+    if (hash(fingerprint(old, rawChapter(dir, old))) !== hash(accepted)) throw Error('已核对目录标题的原始正文或映射发生变化');
+    return {...entry, title: old.title};
+  });
+}
+
 function readingChapterNumber(title) {
   const normalized = String(title).normalize('NFKC').trim();
   const match = /^([0-9]+)(?:[、.]|\s+\S|【[^【】\n]+】$)/u.exec(normalized);
