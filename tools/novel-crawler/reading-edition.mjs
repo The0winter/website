@@ -90,6 +90,12 @@ export function verifyReadingSources(dir, state, catalog) {
   }
 }
 
+function readingChapterNumber(title) {
+  const normalized = String(title).normalize('NFKC').trim();
+  const match = /^([0-9]+)(?:[、.]|\s+\S)/u.exec(normalized);
+  return chapterIdentity(normalized)?.number ?? (match ? Number(match[1]) : null);
+}
+
 // Explicitly reviewed unnumbered notices are pinned to the complete source
 // text, not just a permissive title pattern. Recording does not change the book.
 export function recordReadingNoticeReview(dir, spec, extraction, outputDir, {link, contentHash, reason}) {
@@ -98,7 +104,7 @@ export function recordReadingNoticeReview(dir, spec, extraction, outputDir, {lin
   const catalog = readJson(path.join(dir, 'catalog.json'), []), entry = catalog.find(item => item.link === link);
   if (!entry || entry.chapter_number <= state.sources.length) throw Error('只能核对尚未纳入阅读版的新公告');
   const chapter = rawChapter(dir, entry);
-  if (chapterIdentity(chapter.title) || /^\s*[0-9]+[、.]/u.test(chapter.title) || hash(chapter.content) !== contentHash) throw Error('公告正文哈希已变化或标题含正文章号');
+  if (readingChapterNumber(chapter.title) !== null || hash(chapter.content) !== contentHash) throw Error('公告正文哈希已变化或标题含正文章号');
   const quality = qualityReport([entry], [chapter], [], 'probe');
   if (quality.issues.some(issue => issue.level !== 'info' && issue.code !== 'short-outlier')) throw Error('公告正文未通过质量检查');
   const review = {link, title: chapter.title, contentHash, reason: reason.trim(), evidence: chapter.provenance, reviewedAt: new Date().toISOString()};
@@ -111,8 +117,7 @@ function orderedChapters(chapters, reviewedPrefix = 0, noticeReviews = []) {
   for (const [index, chapter] of chapters.entries()) {
     if (chapter.chapter_number !== index + 1) throw Error('阅读版顺序号不连续');
     const title = chapter.title.normalize('NFKC').trim();
-    const match = /^([0-9]+)[、.]/u.exec(title);
-    const current = chapterIdentity(title)?.number ?? (match ? Number(match[1]) : null);
+    const current = readingChapterNumber(title);
     if (index < reviewedPrefix) { if (current !== null) number = current; continue; }
     if (current !== null) {
       if (!Number.isSafeInteger(current) || current !== number + 1) throw Error(`阅读版章号不连续：应为第 ${number + 1} 章，实际为“${chapter.title}”`);
