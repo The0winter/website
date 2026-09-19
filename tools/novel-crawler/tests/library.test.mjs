@@ -17,7 +17,7 @@ const title = n => `第${n}章 山间故事${n}`;
 const body = n => Array.from({length: 180}, (_, i) => String.fromCodePoint(0x4e00 + n * 200 + i)).join('').repeat(4);
 async function fixture(t) {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'novel-library-')), outputDir = path.join(stateDir, 'downloads');
-  const state = {counts: {alpha: 3, beta: 3}, requests: [], fail: null, hold: null, failures: {}, retryAfter: null};
+  const state = {counts: {alpha: 3, beta: 3}, requests: [], fail: null, hold: null, failures: {}, retryAfter: null, textSuffix: '', chapterBody: null, catalogTitle: null};
   const server = http.createServer((req, res) => {
     state.requests.push(req.url);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -29,9 +29,9 @@ async function fixture(t) {
     }
     const [, kind, id, number] = req.url.split('/');
     if (id === state.fail) { res.statusCode = 503; return res.end('source unavailable'); }
-    if (kind === 'book') return res.end(`<h1>${id}故事</h1><b>测试作者</b><nav>${Array.from({length: state.counts[id] || 3}, (_, i) => `<a href="/chapter/${id}/${i+1}">${title(i+1)}</a>`).join('')}</nav>`);
-    if (kind === 'text') return res.end(Array.from({length: 3}, (_, i) => `${title(i+1)}\n${body(i+1)}`).join('\n'));
-    res.end(`<h1>${title(Number(number))}</h1><article>${body(Number(number))}</article>`);
+    if (kind === 'book') return res.end(`<h1>${id}故事</h1><b>测试作者</b><nav>${Array.from({length: state.counts[id] || 3}, (_, i) => `<a href="/chapter/${id}/${i+1}">${state.catalogTitle?.(i+1) ?? title(i+1)}</a>`).join('')}</nav>`);
+    if (kind === 'text') return res.end(Array.from({length: 3}, (_, i) => `${title(i+1)}\n${body(i+1)}`).join('\n') + state.textSuffix);
+    res.end(`<h1>${title(Number(number))}</h1><article>${state.chapterBody?.(Number(number)) ?? body(Number(number))}</article>`);
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
@@ -105,6 +105,8 @@ test('batch appends only new raw chapters, continues after manual skip, and reus
   assert.deepEqual(readJson(alpha).chapters.slice(0, 3), original.chapters);
   assert.deepEqual(fs.readFileSync(beta), betaBytes); assert.equal(fs.statSync(beta).mtimeMs, betaTime);
   assert.deepEqual(f.state.requests.filter(url => url.startsWith('/chapter/')), ['/chapter/alpha/4', '/chapter/alpha/5']);
+  assert.equal(f.state.requests.filter(url => url === '/book/alpha').length, 1, 'one catalog read per update');
+  assert.equal(f.state.requests.filter(url => url === '/book/beta').length, 1, 'unchanged books also read once');
   const mtime = fs.statSync(alpha).mtimeMs; f.state.requests = [];
   const next = await updateLibrary(f.options);
   assert.equal(next.unchanged, 2); assert.equal(next.added, 0); assert.equal(fs.statSync(alpha).mtimeMs, mtime);
@@ -170,17 +172,61 @@ test('TXT exports and reading editions keep their verified spec and append throu
     assert.equal(plan.state, 'pending'); assert.equal(plan.spec.kind, 'txt');
     assert.equal(plan.spec.variant, spec.variant); assert.equal(plan.continuation, undefined);
     assert.deepEqual(plan.spec.resource, spec.resource);
+    // Mutable TXT packages may contain new ads or rewritten old prose. The
+    // accepted local edition owns its old chapters; only fetch new HTML pages.
+    f.state.textSuffix = '\n新的来源广告或改写正文';
+    fs.unlinkSync(path.join(f.options.stateDir, 'cache', hash({url: spec.resource.url, render: false}) + '.json'));
     f.state.counts.alpha = 4; f.state.requests = [];
     const result = await updateLibrary(f.options);
     assert.equal(result.added, 1, JSON.stringify(result.items));
     assert.deepEqual(readJson(file).chapters.slice(0, 3), original.chapters);
     assert.deepEqual(f.state.requests.filter(url => url.startsWith('/chapter/')), ['/chapter/alpha/4']);
+    assert.deepEqual(f.state.requests, ['/book/alpha', '/chapter/alpha/4']);
     const bytes = fs.readFileSync(file);
     assert.equal((await updateLibrary(f.options)).unchanged, 1);
     assert.deepEqual(fs.readFileSync(file), bytes);
     fs.appendFileSync(file, '\n');
     assert.equal(planLibrary(f.options)[0].state, 'blocked');
   }
+});
+
+test('incremental TXT update rejects corrupt checkpoints, catalog rewrites and invalid new prose', async t => {
+  const f = await fixture(t);
+  const spec = {...f.spec('alpha'), kind: 'txt', variant: 'verified-txt-v1', resource: {url: f.base + '/text/alpha'}};
+  const initial = await acquire(spec, {...f.options, mode: 'download'});
+  const file = initial.exportFile, original = fs.readFileSync(file);
+  const dir = path.join(f.options.stateDir, 'jobs', initial.jobId);
+  const chapterFile = path.join(dir, 'chapters', hash(f.base + '/chapter/alpha/2') + '.json');
+  const savedBytes = fs.readFileSync(chapterFile), saved = readJson(chapterFile);
+  saved.chapter.content += '外部修改'; atomicWrite(chapterFile, saved);
+  f.state.requests = [];
+  let result = await updateLibrary(f.options);
+  assert.equal(result.skipped, 1); assert.match(result.items[0].message, /检查点损坏/);
+  assert.deepEqual(f.state.requests, []); assert.deepEqual(fs.readFileSync(file), original);
+  fs.writeFileSync(chapterFile, savedBytes);
+  f.state.catalogTitle = n => n === 2 ? '第2章 被改名' : title(n);
+  result = await updateLibrary(f.options);
+  assert.equal(result.skipped, 1); assert.match(result.items[0].message, /目录有删除、插入或改名/);
+  assert.deepEqual(fs.readFileSync(file), original);
+  f.state.catalogTitle = null; f.state.counts.alpha = 4;
+  f.state.chapterBody = n => n === 4 ? '内容还在处理中,请稍后重试！' : body(n);
+  result = await updateLibrary(f.options);
+  assert.equal(result.skipped, 1); assert.deepEqual(fs.readFileSync(file), original);
+  assert.deepEqual(fs.readFileSync(chapterFile), savedBytes);
+});
+
+test('an incomplete TXT checkpoint set falls back to guarded resource recovery', async t => {
+  const f = await fixture(t);
+  const spec = {...f.spec('alpha'), kind: 'txt', variant: 'verified-txt-v1', resource: {url: f.base + '/text/alpha'}};
+  const initial = await acquire(spec, {...f.options, mode: 'download'});
+  const dir = path.join(f.options.stateDir, 'jobs', initial.jobId);
+  const chapterFile = path.join(dir, 'chapters', hash(f.base + '/chapter/alpha/2') + '.json');
+  const original = fs.readFileSync(initial.exportFile), savedBytes = fs.readFileSync(chapterFile);
+  fs.unlinkSync(chapterFile);
+  const result = await updateLibrary(f.options);
+  assert.equal(result.unchanged, 1, JSON.stringify(result.items));
+  assert.deepEqual(fs.readFileSync(chapterFile), savedBytes);
+  assert.deepEqual(fs.readFileSync(initial.exportFile), original);
 });
 
 test('modified exports, duplicate versions and damaged bindings are protected before source requests', async t => {

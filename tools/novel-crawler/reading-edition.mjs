@@ -197,7 +197,7 @@ export function adoptReadingEdition(dir, spec, extraction, file, outputDir, sour
 
 export function updateReadingEdition({dir, state, spec, extraction, outputDir, catalog, rawReport}) {
   const originalCount = state.book.chapters.length;
-  let book = state.book, reusedExport = false, exportFile = null, added = 0, failure;
+  let book = state.book, reusedExport = false, exportFile = null, added = 0, failure, checkedQuality;
   try {
     checkState(state, spec, extraction, outputDir);
     assertOutput(state, outputPath(state, outputDir));
@@ -212,7 +212,8 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
       const chapters = [...book.chapters, ...tail.map((chapter, index) => ({...formatChapterForExport(chapter), chapter_number: originalCount + index + 1, sourceChapterNumber: chapter.chapter_number, sourceChapterUrl: chapter.link}))];
       orderedChapters(chapters, state.sourceOrderReview ? originalCount : 0);
       const nextBook = {...book, ...Object.fromEntries(['description', 'status', 'category', 'cover_image', 'authorSourceUrl'].filter(key => spec[key] !== undefined).map(key => [key, spec[key]])), chapters};
-      checkNewIssues(editionQuality(nextBook), originalCount);
+      const nextQuality = editionQuality(nextBook);
+      checkNewIssues(nextQuality, originalCount);
       prepareImport(nextBook);
       const file = outputPath(state, outputDir), nextHash = hash(bytes(nextBook));
       reusedExport = fileHash(file) === nextHash;
@@ -221,10 +222,10 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
         atomicWrite(pendingFile(dir), seal({previousStateHash: hash(state), next}));
         recover(dir, state, spec, extraction, outputDir);
       }
-      book = nextBook; added = tail.length; exportFile = file;
+      book = nextBook; checkedQuality = nextQuality; added = tail.length; exportFile = file;
     }
   } catch (error) { failure = {error: error.message, nextStep: '保留当前阅读版，核对报告中的新增条目或来源映射后再继续。'}; }
-  const quality = editionQuality(book, rawReport.mode);
+  const quality = checkedQuality || editionQuality(book, rawReport.mode);
   if (failure) { quality.failures.push(failure); quality.errors++; quality.structuralPass = false; }
   return {...rawReport, ...quality, readingEdition: true, sourceExpected: rawReport.expected, sourceDownloaded: rawReport.downloaded, sourceErrors: rawReport.errors, sourceWarnings: rawReport.warnings,
     ...(state.sourceOrderReview ? {acceptedSourceOrder: state.sourceOrderReview} : {}),

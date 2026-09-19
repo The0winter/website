@@ -243,7 +243,25 @@ async function acquireRaw(input, options = {}) {
     const started = Date.now(), chapters = [], failures = [];
     let catalog = [], source, evidence, report, exportFile, descriptionStatus, paused = false, reusedExport = false;
     try {
-      source = spec.kind === 'html' ? await getCatalog(spec, client) : await getResource(spec, client, dir);
+      const oldCatalog = readJson(path.join(dir, 'catalog.json'));
+      const savedChapters = new Map();
+      const checkpoint = entry => {
+        if (!savedChapters.has(entry.link)) {
+          const saved = readJson(path.join(chaptersDir, hash(entry.link) + '.json'));
+          if (saved && (!saved.chapter || saved.chapter.link !== entry.link || saved.chapter.chapter_number !== entry.chapter_number || saved.hash !== hash(saved.chapter))) {
+            throw Error(`第 ${entry.chapter_number} 项章节检查点损坏或与目录不匹配`);
+          }
+          savedChapters.set(entry.link, saved);
+        }
+        return savedChapters.get(entry.link);
+      };
+      // A completed TXT seed with a verified online catalog can continue through
+      // the same site's chapter reader. Re-downloading a mutable book package
+      // neither validates nor improves the already accepted local edition.
+      const catalogUpdate = spec.kind === 'txt' && !options.refresh && !spec.catalog?.walk &&
+        spec.catalog && spec.chapter?.title && spec.chapter?.content && oldCatalog?.length > 0 &&
+        readJson(path.join(dir, 'accepted-resource.json')) && oldCatalog.every(entry => checkpoint(entry));
+      source = spec.kind === 'html' || catalogUpdate ? await getCatalog(spec, client) : await getResource(spec, client, dir);
       catalog = source.catalog;
       evidence = source.evidence;
       const description = source.actual?.description || spec.description || previousSpec?.description;
@@ -260,10 +278,9 @@ async function acquireRaw(input, options = {}) {
         if (!spec.status) spec.statusEvidence = source.actual?.statusEvidence;
       }
       atomicWrite(specFile, spec);
-      const oldCatalog = readJson(path.join(dir, 'catalog.json'));
       if (spec.catalog?.walk) catalog = navigationCatalog(source, oldCatalog);
       if (oldCatalog && oldCatalog.some((c, i) => !catalog[i] || catalog[i].link !== c.link || catalog[i].title !== c.title)) throw Error('完整目录有删除、插入或改名，暂停续传以保护旧章节位置；需在新状态目录重新采集核对');
-      if (spec.kind !== 'html') {
+      if (spec.kind !== 'html' && !catalogUpdate) {
         const previousResource = readJson(path.join(dir, 'accepted-resource.json'));
         const currentResource = readJson(path.join(dir, 'resource-metadata.json'));
         if (previousResource && previousResource.hash !== currentResource.hash) throw Error('整本资源文件发生变化，暂停续传避免混用版本');
@@ -301,8 +318,7 @@ async function acquireRaw(input, options = {}) {
             entry = {link: next, chapter_number: index + 1, sourceOrder: index + 1};
           }
           const chapterFile = path.join(chaptersDir, hash(entry.link) + '.json');
-          const saved = options.refresh ? null : readJson(chapterFile);
-          if (saved && (saved.chapter.link !== entry.link || saved.chapter.chapter_number !== entry.chapter_number || saved.hash !== hash(saved.chapter))) throw Error('章节检查点损坏或与目录不匹配');
+          const saved = options.refresh ? null : checkpoint(entry);
           if (!saved && options.maxNew !== undefined && fetched >= options.maxNew) break;
           if (!saved) fetched++;
           const chapter = saved?.chapter || source.chapters?.[entry.chapter_number - 1] || (spec.chapter ? await getChapter(spec, entry, links, client) : null);
@@ -329,7 +345,11 @@ async function acquireRaw(input, options = {}) {
             if (!nextKnown && chapter.nextChapterUrl && links.has(chapter.nextChapterUrl)) throw Error('下一章形成循环，已停止');
             if (index + 1 === source.expectedCount && chapter.nextChapterUrl) throw Error('正文仍有下一章但已达到详情页总数，请重新检查来源更新');
           }
-          if (!saved) atomicWrite(chapterFile, {hash: hash(chapter), chapter});
+          if (!saved) {
+            const record = {hash: hash(chapter), chapter};
+            atomicWrite(chapterFile, record);
+            savedChapters.set(entry.link, record);
+          }
           if (walk) saveNavigation();
           chapters.push(chapter);
           consecutiveFailures = 0;
@@ -341,13 +361,13 @@ async function acquireRaw(input, options = {}) {
         }
         options.onProgress?.({jobId: id, mode, downloaded: chapters.length, total, failed: failures.length});
       }
-      report = navigationReport(qualityReport(catalog, chapters, failures, mode), source, catalog);
       if (mode === 'download') {
         // Load previously downloaded chapters outside a bounded continuation run too.
+        const loadedLinks = new Set(chapters.map(chapter => chapter.link));
         for (const entry of catalog) {
-          if (chapters.some(c => c.link === entry.link)) continue;
-          const saved = readJson(path.join(chaptersDir, hash(entry.link) + '.json'));
-          if (!options.refresh && saved && saved.hash === hash(saved.chapter) && saved.chapter.link === entry.link && saved.chapter.chapter_number === entry.chapter_number) chapters.push(saved.chapter);
+          if (options.refresh || loadedLinks.has(entry.link)) continue;
+          const saved = checkpoint(entry);
+          if (saved) { chapters.push(saved.chapter); loadedLinks.add(entry.link); }
         }
         report = navigationReport(qualityReport(catalog, chapters, failures, mode), source, catalog);
         atomicWrite(path.join(dir, 'partial.json'), bookData(spec, chapters));
@@ -364,7 +384,7 @@ async function acquireRaw(input, options = {}) {
           if (!reusedExport) atomicWrite(exportFile, book);
           atomicWrite(path.join(dir, 'export.json'), {path: exportFile, hash: hash(fs.readFileSync(exportFile))});
         }
-      }
+      } else report = navigationReport(qualityReport(catalog, chapters, failures, mode), source, catalog);
     } catch (error) {
       exportFile = null;
       if (shouldStop()) paused = true;

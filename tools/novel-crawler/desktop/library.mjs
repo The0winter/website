@@ -161,11 +161,11 @@ export async function updateLibrary({stateDir, outputDir, sites, shouldStop = ()
             }});
           onClient(client);
           const options = {stateDir, outputDir, continuation: item.continuation, client, signal: bookControl.controller.signal, shouldStop: bookStopped, stopOnFailure: true, onStatus, onProgress};
-          let report = await collect(spec, {...options, mode: 'probe'});
-          if (!bookStopped() && !report.paused && report.structuralPass) {
-            onPhase('download', item);
-            report = await collect(spec, {...options, mode: 'download'});
-          }
+          // Download already validates identity, catalog, checkpoints, every new
+          // chapter and the complete edition before replacing the output. A
+          // separate probe repeats the catalog and whole-book quality work.
+          onPhase('download', item);
+          const report = await collect(spec, {...options, mode: 'download'});
           if (report.exportFile && report.structuralPass && (report.completeAgainstSource || report.completeSelectedScope)) {
             if (path.resolve(report.exportFile) !== file) throw Error('更新输出与原文件不一致，请核对来源绑定');
             item.added = Math.max(0, report.expected - item.count);
