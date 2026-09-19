@@ -92,7 +92,7 @@ export function verifyReadingSources(dir, state, catalog) {
 
 function readingChapterNumber(title) {
   const normalized = String(title).normalize('NFKC').trim();
-  const match = /^([0-9]+)(?:[、.]|\s+\S)/u.exec(normalized);
+  const match = /^([0-9]+)(?:[、.]|\s+\S|【[^【】\n]+】$)/u.exec(normalized);
   return chapterIdentity(normalized)?.number ?? (match ? Number(match[1]) : null);
 }
 
