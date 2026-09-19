@@ -8,7 +8,7 @@ import {getCatalog, getChapter} from './adapters.mjs';
 import {makeClient, decode, httpUrl} from './http.mjs';
 import {browserProfile} from './browser-session.mjs';
 import {failureDetails} from './diagnostics.mjs';
-import {formatChapterForExport} from './titles.mjs';
+import {formatChapterForExport, preserveCatalogLabels} from './titles.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
 
 const normalize = value => normalizedIdentity(value, 'chinese-simplified');
@@ -584,7 +584,7 @@ export async function acquireContinuation(spec, options) {
   try {
     options.onStatus?.({kind: 'continuation', message: switching ? '正在对齐新旧目录并核对末尾正文…' : '正在检查当前续更来源的新增目录…'});
     const source = await getCatalog(spec, client);
-    catalog = source.catalog; evidence = source.evidence;
+    catalog = preserveCatalogLabels(source.catalog, switching ? null : binding.catalog); evidence = source.evidence;
     const links = new Set(catalog.map(entry => entry.link)), oldNumbers = numbered(book.chapters), newNumbers = numbered(catalog);
     const last = oldNumbers.at(-1);
     if (!last || oldNumbers.length < 3) throw Error('本地书籍不足三个可核对的正文章节，无法自动确定换源衔接点');
@@ -669,6 +669,7 @@ export async function acquireContinuation(spec, options) {
       const next = {version: 1, revision: (binding?.revision || 0) + 1, title: book.title, author: book.author, file: selected.file, outputPath: file, originalSourceUrl: book.sourceUrl,
         source: {url: spec.sourceUrl, title: spec.title, author: spec.author, variant: spec.variant || '', extraction}, count: nextBook.chapters.length, exportHash: nextHash, catalog: catalog.map(({title, link}) => ({title, link})),
         ...(!switching && binding?.completedSourceReview ? {completedSourceReview: binding.completedSourceReview} : {}),
+        ...(!switching && binding?.ruleMigrations ? {ruleMigrations: binding.ruleMigrations} : {}),
         anchors: switching ? anchors : binding.anchors, skipped, resolutions: [...(binding?.resolutions || []), ...resolutions], previousSourceUrl: switching ? binding?.source.url || book.sourceUrl : binding.previousSourceUrl, updatedAt: new Date().toISOString()};
       reusedExport = originalHash === nextHash;
       if (switching || !reusedExport || hash(next.catalog) !== hash(binding.catalog)) {

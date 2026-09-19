@@ -7,7 +7,7 @@ import {makeClient, httpUrl} from './http.mjs';
 import {getCatalog, getChapter, getResource, refreshNextChapter} from './adapters.mjs';
 import {navigationCatalog, mergeRecent, navigationReport} from './navigation.mjs';
 import {chapterQuality, qualityReport, sampleCatalog, normalizedTitle} from './quality.mjs';
-import {formatChapterForExport} from './titles.mjs';
+import {formatChapterForExport, preserveCatalogLabels} from './titles.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
 import {failureDetails} from './diagnostics.mjs';
 import {browserProfile} from './browser-session.mjs';
@@ -262,7 +262,7 @@ async function acquireRaw(input, options = {}) {
         spec.catalog && spec.chapter?.title && spec.chapter?.content && oldCatalog?.length > 0 &&
         readJson(path.join(dir, 'accepted-resource.json')) && oldCatalog.every(entry => checkpoint(entry));
       source = spec.kind === 'html' || catalogUpdate ? await getCatalog(spec, client) : await getResource(spec, client, dir);
-      catalog = source.catalog;
+      catalog = preserveCatalogLabels(source.catalog, oldCatalog);
       evidence = source.evidence;
       const description = source.actual?.description || spec.description || previousSpec?.description;
       if (description) spec.description = description;
@@ -278,7 +278,7 @@ async function acquireRaw(input, options = {}) {
         if (!spec.status) spec.statusEvidence = source.actual?.statusEvidence;
       }
       atomicWrite(specFile, spec);
-      if (spec.catalog?.walk) catalog = navigationCatalog(source, oldCatalog);
+      if (spec.catalog?.walk) catalog = navigationCatalog({...source, catalog}, oldCatalog);
       if (oldCatalog && oldCatalog.some((c, i) => !catalog[i] || catalog[i].link !== c.link || catalog[i].title !== c.title)) throw Error('完整目录有删除、插入或改名，暂停续传以保护旧章节位置；需在新状态目录重新采集核对');
       if (spec.kind !== 'html' && !catalogUpdate) {
         const previousResource = readJson(path.join(dir, 'accepted-resource.json'));

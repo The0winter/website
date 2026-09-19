@@ -215,6 +215,26 @@ test('incremental TXT update rejects corrupt checkpoints, catalog rewrites and i
   assert.deepEqual(fs.readFileSync(chapterFile), savedBytes);
 });
 
+test('raw and reading-edition updates retain source fingerprints when catalog labels change punctuation width', async t => {
+  for (const reviewed of [false, true]) {
+    const f = await fixture(t), rawFile = await f.seed('alpha');
+    let file = rawFile;
+    if (reviewed) {
+      const book = readJson(rawFile);
+      book.chapters = book.chapters.map(c => ({...c, sourceChapterNumber: c.chapter_number, sourceChapterUrl: c.link}));
+      file = path.join(f.options.outputDir, 'reading.json'); atomicWrite(file, book);
+      await bindReadingEdition(f.spec('alpha'), file, f.options);
+    }
+    const old = readJson(file);
+    f.state.catalogTitle = n => title(n).replace(/[0-9]/g, c => String.fromCharCode(c.charCodeAt(0) + 0xFEE0));
+    f.state.counts.alpha = 4;
+    const result = await updateLibrary(f.options);
+    assert.equal(result.added, 1, JSON.stringify(result.items));
+    assert.deepEqual(readJson(file).chapters.slice(0, 3), old.chapters);
+    assert.equal((await updateLibrary(f.options)).unchanged, 1);
+  }
+});
+
 test('an incomplete TXT checkpoint set falls back to guarded resource recovery', async t => {
   const f = await fixture(t);
   const spec = {...f.spec('alpha'), kind: 'txt', variant: 'verified-txt-v1', resource: {url: f.base + '/text/alpha'}};

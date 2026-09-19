@@ -11,6 +11,7 @@ import {continuationKey, continuationState, recoverContinuation, recordContinuat
 import {atomicWrite, readJson, hash, acquireLock} from '../storage.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 import {loadSites, parseSearch} from '../desktop/sources.mjs';
+import {migrateContinuationRules} from '../continuation-migration.mjs';
 
 const body = n => Array.from({length: 180}, (_, i) => String.fromCodePoint(0x4e00 + n * 200 + i)).join('').repeat(4);
 const title = n => `第${n}章 山间故事${n}`;
@@ -694,6 +695,49 @@ test('multiple exports require disambiguation and a different author is never se
   atomicWrite(path.join(f.options.outputDir, 'duplicate.json'), f.book);
   const local = localBookState(f.spec, f.options);
   assert.equal(local.blocked, true); assert.match(local.message, /多个同名同作者/);
+});
+
+test('catalog punctuation width changes preserve accepted labels and old bodies across continuation updates', async t => {
+  const f = await fixture(t);
+  f.state.titles[5] = '第5章 山间故事5（月票加更）';
+  assert.ok((await f.run()).exportFile);
+  const original = readJson(f.file), bindingFile = path.join(f.dir, 'binding.json');
+  const originalCatalog = readJson(bindingFile).value.catalog;
+  f.state.titles[5] = '第5章 山间故事5(月票加更)'; f.state.count = 7; f.state.requests = [];
+  const updated = await f.run();
+  assert.equal(updated.continuationAdded, 1, JSON.stringify(updated.failures));
+  assert.deepEqual(readJson(f.file).chapters.slice(0, original.chapters.length), original.chapters);
+  assert.deepEqual(readJson(bindingFile).value.catalog.slice(0, originalCatalog.length), originalCatalog);
+  assert.deepEqual(f.state.requests, ['/new/book', '/new/c/7']);
+  const bytes = fs.readFileSync(f.file);
+  assert.equal((await f.run()).reusedExport, true);
+  f.state.titles[5] = '第5章 山间故事5月票加更';
+  assert.equal((await f.run()).exportFile, null, 'removing punctuation still needs review');
+  assert.deepEqual(fs.readFileSync(f.file), bytes);
+});
+
+test('explicit additive rule migration checks fresh tail bodies and keeps old files and checkpoints', async t => {
+  const f = await fixture(t); await f.run();
+  const original = fs.readFileSync(f.file), previousBinding = readJson(path.join(f.dir, 'binding.json'));
+  const spec = {...f.spec, variant: 'new-v2', chapter: {...f.spec.chapter, removeText: ['(?:^|\\n)【站点广告】(?=\\n|$)']}};
+  const options = {...f.options, reason: '只增加已核实的独立广告清理；旧正文保持不变。'};
+  f.state.bodies[6] = body(6) + '源站修改了末尾正文';
+  await assert.rejects(migrateContinuationRules(f.spec, spec, options), /末尾全文不一致/);
+  assert.deepEqual(readJson(path.join(f.dir, 'binding.json')), previousBinding);
+  delete f.state.bodies[6]; f.state.requests = [];
+  const result = await migrateContinuationRules(f.spec, spec, options);
+  assert.equal(result.anchors.length, 3); assert.deepEqual(fs.readFileSync(f.file), original);
+  assert.deepEqual(f.state.requests, ['/new/book', '/new/c/4', '/new/c/5', '/new/c/6']);
+  const binding = readJson(path.join(f.dir, 'binding.json')).value;
+  assert.equal(binding.source.extraction, extractionHash(spec)); assert.equal(binding.ruleMigrations.length, 1);
+  assert.deepEqual(binding.catalog, previousBinding.value.catalog);
+  f.state.count = 7;
+  const updated = await acquire(spec, {...f.options, mode: 'download'});
+  assert.equal(updated.continuationAdded, 1, JSON.stringify(updated.failures));
+  assert.equal(readJson(path.join(f.dir, 'binding.json')).value.ruleMigrations.length, 1);
+  assert.deepEqual(readJson(f.file).chapters.slice(0, JSON.parse(original).chapters.length), JSON.parse(original).chapters);
+  await assert.rejects(migrateContinuationRules(spec, {...spec, variant: 'v3', chapter: {...spec.chapter, content: '.other'}}, options), /其他提取变化/);
+  await assert.rejects(migrateContinuationRules(spec, {...spec, variant: 'v3', chapter: {...spec.chapter, removeText: []}}, options), /其他提取变化/);
 });
 
 test('a reviewed edition takes priority over raw copies while its existing source keeps the original update flow', async t => {
