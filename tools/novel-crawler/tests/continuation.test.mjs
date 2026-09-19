@@ -648,6 +648,50 @@ test('legacy ordinal gaps and truncated source headings retain old ordinals and 
   assert.deepEqual(readJson(f.file).chapters.slice(0, 4), f.book.chapters);
 });
 
+async function reviewedGapFixture(t) {
+  const f = await fixture(t), job = path.join(f.options.stateDir, 'jobs', '12345678901234567890');
+  const sources = [1, 2, 3, 4].map(n => ({position: n, link: f.base + '/new/c/' + n, title: title(n), catalogTitle: title(n), contentHash: hash(body(n))}));
+  f.book.sourceUrl = f.spec.sourceUrl;
+  f.book.chapters = [1, 3, 4].map((n, i) => ({...f.book.chapters[n - 1], chapter_number: i + 1, sourceChapterNumber: n, link: sources[n - 1].link}));
+  atomicWrite(f.file, f.book);
+  const gap = {position: 2, link: sources[1].link, contentHash: sources[1].contentHash, kind: 'truncated', reason: 'Previously verified historical omission.', evidence: {url: 'https://reference.example/book', checkedAt: new Date().toISOString(), detail: 'Independent complete edition shows missing text.'}};
+  const state = {version: 1, file: path.basename(f.file), outputPath: f.file, identity: {sourceUrl: f.spec.sourceUrl}, exportHash: hash(fs.readFileSync(f.file)), book: f.book, sources, sourceOrderReview: {gaps: [gap]}};
+  const chapter = {chapter_number: 2, title: title(2), link: sources[1].link, content: body(2)};
+  const checkpoint = path.join(job, 'chapters', hash(chapter.link) + '.json');
+  atomicWrite(checkpoint, {hash: hash(chapter), chapter});
+  const seal = () => atomicWrite(path.join(job, 'reading-edition.json'), {hash: hash(state), value: state}); seal();
+  const run = () => acquire(f.spec, {...f.options, mode: 'download', continuation: {file: path.basename(f.file), hash: hash(fs.readFileSync(f.file))}});
+  return {...f, stateReading: state, seal, checkpoint, run};
+}
+
+test('same-source continuation preserves pinned reviewed old gaps without treating them as repaired', async t => {
+  const f = await reviewedGapFixture(t), old = readJson(f.file);
+  const result = await f.run();
+  assert.equal(result.continuationAdded, 2, JSON.stringify(result.failures));
+  assert.equal(result.completeAgainstSource, false); assert.equal(result.completeSelectedScope, true); assert.equal(result.structuralPass, true);
+  assert.equal(result.sourceGaps.length, 1); assert.equal(result.automaticResolutions, 0);
+  assert.deepEqual(readJson(f.file).chapters.slice(0, 3), old.chapters);
+  assert.deepEqual(readJson(f.file).chapters.slice(3).map(c => c.title), [title(5), title(6)]);
+  const next = await f.run(); assert.equal(next.continuationAdded, 0); assert.equal(next.sourceGaps.length, 1); assert.equal(next.completeAgainstSource, false);
+});
+
+test('old anchor gaps require unchanged reviewed export, source positions, evidence and omitted checkpoints', async t => {
+  for (const scenario of ['unreviewed', 'stale-export', 'changed-checkpoint', 'no-evidence', 'different-source', 'changed-catalog', 'new-gap']) {
+    await t.test(scenario, async t => {
+      const f = await reviewedGapFixture(t);
+      if (scenario === 'unreviewed') f.stateReading.sourceOrderReview.gaps = [];
+      if (scenario === 'stale-export') f.stateReading.exportHash = 'stale';
+      if (scenario === 'changed-checkpoint') { const saved = readJson(f.checkpoint); saved.chapter.content += 'changed'; atomicWrite(f.checkpoint, {...saved, hash: hash(saved.chapter)}); }
+      if (scenario === 'no-evidence') delete f.stateReading.sourceOrderReview.gaps[0].evidence;
+      if (scenario === 'different-source') f.spec.sourceUrl = f.base + '/other/book';
+      if (scenario === 'changed-catalog') f.state.titles[2] = '第2章 别的内容';
+      if (scenario === 'new-gap') f.state.order = [1, 2, 3, 4, 6];
+      f.seal(); const original = fs.readFileSync(f.file), result = await f.run();
+      assert.equal(result.exportFile, null); assert.ok(result.failures.length); assert.deepEqual(fs.readFileSync(f.file), original);
+    });
+  }
+});
+
 test('shudugu search pairs each book and author and preserves the next page', () => {
   const site = loadSites().sites.find(site => site.id === 'shudugu');
   const html = `<div class="container">${[[123, '故事甲', '作者甲'], [456, '故事乙', '作者乙']].map(([id, title, author]) => `<div class="item"><a href="/${id}/"><img></a><div class="itemtxt"><h3><a href="/${id}/">${title}</a></h3><p><a href="/zuozhe/?tag=${author}">作者：${author}</a></p><ul><li><a href="/${id}/123.html">最新章节</a></li></ul></div></div>`).join('')}<div class="page"><a href="/i/sor.aspx?key=test&page=2">下一页</a></div></div>`;

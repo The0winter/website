@@ -10,6 +10,7 @@ import {browserProfile} from './browser-session.mjs';
 import {failureDetails} from './diagnostics.mjs';
 import {formatChapterForExport, preserveCatalogLabels} from './titles.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
+import {preservedReadingGap} from './continuation-reading-gaps.mjs';
 
 const normalize = value => normalizedIdentity(value, 'chinese-simplified');
 const sameBook = (a, b) => ['title', 'author'].every(key => a[key] && b[key] && normalize(a[key]) === normalize(b[key]));
@@ -606,7 +607,11 @@ export async function acquireContinuation(spec, options) {
     if (switching) {
       const ending = oldNumbers.slice(-3);
       for (const [index, old] of ending.entries()) {
-        if (index && old.number !== ending[index - 1].number + 1) throw Error('原书末尾正文章号不连续，需先核对缺章');
+        if (index && old.number !== ending[index - 1].number + 1) {
+          const gap = preservedReadingGap({stateDir, outputDir, file: selected.file, spec, book, catalog, previous: book.chapters[ending[index - 1].index], current: book.chapters[old.index], identity: chapterIdentity});
+          if (!gap) throw Error('原书末尾正文章号不连续，需先核对缺章');
+          resolutions.push(gap);
+        }
         const matches = newNumbers.filter(item => {
           const part = policyPart(catalog[item.index].title, reviewState.partPolicy), previousPart = policyPart(book.chapters[old.index].title, reviewState.partPolicy);
           if (part && !previousPart) return reviewState.partPolicy?.kind === 'paired' && part.part === 1 && part.number === old.number && compatibleNames(part.name, old.name) && (boundary === undefined || item.index > boundary);
@@ -699,13 +704,14 @@ export async function acquireContinuation(spec, options) {
     if (!paused) failures.push(failureDetails(error, error.chapter ? {chapter: error.chapter, title: error.title, link: error.link} : {}));
   } finally { if (!options.client) await client.close(); }
   const acceptedSourceDefects = [...new Map([...(binding?.resolutions || []), ...resolutions].filter(d => d.kind === 'accepted-source-defect').map(d => [d.reviewKey, d])).values()];
-  const issues = [...quality.issues.filter(issue => issue.chapter > lastOrdinal), ...acceptedSourceDefects.map(d => ({level: 'warning', code: 'accepted-source-defect', chapter: d.acceptedPosition, link: d.link, reviewKey: d.reviewKey, detail: d.reason}))];
+  const preservedReadingGaps = [...new Map([...(binding?.resolutions || []), ...resolutions].filter(d => d.kind === 'preserved-reading-gap').flatMap(d => d.gaps).map(g => [g.link, g])).values()];
+  const issues = [...quality.issues.filter(issue => issue.chapter > lastOrdinal), ...acceptedSourceDefects.map(d => ({level: 'warning', code: 'accepted-source-defect', chapter: d.acceptedPosition, link: d.link, reviewKey: d.reviewKey, detail: d.reason})), ...preservedReadingGaps.map(g => ({level: 'warning', code: 'preserved-reading-gap', link: g.link, detail: `${g.title}：既有缺文仍保留记录，未补齐。`}))];
   const errors = failures.length + issues.filter(issue => issue.level === 'error').length;
   const result = {title: book.title, author: book.author, sourceUrl: spec.sourceUrl, originalSourceUrl: book.sourceUrl, mode, jobId: id, continuation: true, switching,
     expected: exportFile ? nextBook.chapters.length : book.chapters.length + tail.length, downloaded: exportFile ? nextBook.chapters.length : book.chapters.length,
-    originalCount: book.chapters.length, sourceExpected: catalog.length, continuationAdded: added, checkedNew: tail.length, anchors, skipped, resolutions, acceptedSourceDefects, automaticResolutions: resolutions.filter(r => r.kind !== 'accepted-source-defect').length, evidence, issues, failures,
+    originalCount: book.chapters.length, sourceExpected: catalog.length, continuationAdded: added, checkedNew: tail.length, anchors, skipped, resolutions, acceptedSourceDefects, sourceGaps: preservedReadingGaps, automaticResolutions: resolutions.filter(r => !['accepted-source-defect', 'preserved-reading-gap'].includes(r.kind)).length, evidence, issues, failures,
     errors, warnings: issues.filter(issue => issue.level === 'warning').length, information: issues.filter(issue => issue.level === 'info').length,
-    structuralPass: !errors && !paused, completeAgainstSource: !!exportFile, paused, exportFile, reusedExport, description: nextBook.description, status: nextBook.status,
+    structuralPass: !errors && !paused, completeAgainstSource: !!exportFile && !preservedReadingGaps.length, completeSelectedScope: !!exportFile, paused, exportFile, reusedExport, description: nextBook.description, status: nextBook.status,
     checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: Object.fromEntries(Object.entries(client.stats).map(([key, value]) => [key, value - initialStats[key]])),
     limitation: '保留原书全部条目及稳定导入来源。完整正文一致、同章号且标题对应的章节或同名公告可自动去重；目录编号有误而正文页编号连续时沿用正文页标题并记录证据。不同正文只沿用已核对且两边哈希完全匹配的版本选择，不按相似度自动择优。未解决的冲突保留全部已取得正文并阻止更新原书，其他章节继续采集。未重采或核对新站全部旧正文。'};
   result.reportFile = path.join(sourceDir, `${mode}-report.json`);
