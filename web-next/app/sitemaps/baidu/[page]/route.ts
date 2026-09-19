@@ -13,4 +13,3 @@ export async function GET(_request: Request, {params}: {params: Promise<{page: s
     return file ? baiduXmlResponse(file, siteUrl()) : new Response(null, {status: 404});
   } catch { return sitemapUnavailable(); }
 }
-

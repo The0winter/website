@@ -71,6 +71,7 @@ test('real routes agree on coverage, reject invalid pages and fail closed on una
     expect(unavailable.headers.get('retry-after')).toBe('60');
     fail = false;
     expect((await getRoot()).status).toBe(200);
+    let chapterRequests = 0;
     // Exercise the numbered route with a real multi-part source, not just the
     // pure splitter: preserve chapter boundaries and reject truncated sources.
     delete state.baiduSitemapPlan;
@@ -78,6 +79,7 @@ test('real routes agree on coverage, reject invalid pages and fail closed on una
       const url = new URL(String(input));
       if (url.pathname.endsWith('/sitemap-books')) return Response.json([{_id: id, chapters: 50001}]);
       if (url.pathname.endsWith('/books')) return Response.json([]);
+      chapterRequests++;
       const page = Number(url.searchParams.get('page'));
       const first = (page - 1) * 200;
       if (fail && page === 100) return new Response('', {status: 503});
@@ -87,6 +89,7 @@ test('real routes agree on coverage, reject invalid pages and fail closed on una
     expect(expanded.files).toHaveLength(6);
     const second = await getPart(new Request(base), {params: Promise.resolve({page: '2.xml'})});
     expect(second.status).toBe(200);
+    expect(chapterRequests).toBe(50);
     expect((await second.text()).match(/<url>/g)).toHaveLength(10000);
     delete state.baiduSitemapPlan; fail = true;
     expect((await getPart(new Request(base), {params: Promise.resolve({page: '2.xml'})})).status).toBe(503);
@@ -96,4 +99,3 @@ test('real routes agree on coverage, reject invalid pages and fail closed on una
     if (previousApi === undefined) delete process.env.INTERNAL_API_URL; else process.env.INTERNAL_API_URL = previousApi;
   }
 });
-

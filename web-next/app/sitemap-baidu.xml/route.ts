@@ -8,4 +8,3 @@ export async function GET() {
   try { return baiduXmlResponse((await getBaiduFile(1))!, siteUrl()); }
   catch { return sitemapUnavailable(); }
 }
-
