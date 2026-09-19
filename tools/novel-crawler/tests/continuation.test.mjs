@@ -12,6 +12,7 @@ import {atomicWrite, readJson, hash, acquireLock} from '../storage.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 import {loadSites, parseSearch} from '../desktop/sources.mjs';
 import {migrateContinuationRules} from '../continuation-migration.mjs';
+import {repairContinuationDuplicates} from '../continuation-repair.mjs';
 
 const body = n => Array.from({length: 180}, (_, i) => String.fromCodePoint(0x4e00 + n * 200 + i)).join('').repeat(4);
 const title = n => `第${n}章 山间故事${n}`;
@@ -46,6 +47,47 @@ async function fixture(t) {
   const dir = path.join(stateDir, 'continuations', continuationKey(spec));
   return {state, spec, book, file, options, choose, run, dir, base};
 }
+
+test('reviewed legacy duplicate repair preserves backups, stable ordinals and subsequent update protection', async t => {
+  const f = await fixture(t); await f.run();
+  const accepted = readJson(f.file), oldBinding = readJson(path.join(f.dir,'binding.json')).value;
+  const book = {...accepted, chapters:[accepted.chapters[0], {...accepted.chapters[0],link:f.base+'/legacy-copy',content:accepted.chapters[0].content+'站点提示。'}, ...accepted.chapters.slice(1)].map((c,i)=>({...c,chapter_number:i+1}))};
+  atomicWrite(f.file,book);
+  const original = fs.readFileSync(f.file), binding = {...oldBinding,count:book.chapters.length,exportHash:hash(original)};
+  atomicWrite(path.join(f.dir,'binding.json'),{hash:hash(binding),value:binding});
+  const pair = {omit:2,keep:1,omitHash:hash(book.chapters[1]),keepHash:hash(book.chapters[0]),reason:'全文核对，仅重复副本多了站点提示'};
+  const review = {exportHash:hash(original),reason:'显式修复历史重复正文，不改写保留项',pairs:[pair]};
+  const repair = r => repairContinuationDuplicates(f.spec,f.options,r);
+  for (const bad of [ {...review,exportHash:'stale'}, {...review,pairs:[{...pair,omitHash:'stale'}]},
+      {...review,pairs:[{...pair,keep:3,keepHash:hash(book.chapters[2])}]}, {...review,pairs:[pair,pair]},
+      {...review,pairs:[pair,{...pair,omit:1,keep:2,omitHash:pair.keepHash,keepHash:pair.omitHash}]},
+      {...review,pairs:[{...pair,omit:7,omitHash:hash(book.chapters[6])}]} ]) {
+    await assert.rejects(repair(bad)); assert.deepEqual(fs.readFileSync(f.file),original);
+    assert.deepEqual(readJson(path.join(f.dir,'binding.json')).value,binding);
+  }
+  const record = await repair(review), repaired = readJson(f.file);
+  assert.deepEqual(repaired.chapters,book.chapters.filter(c=>c.chapter_number!==2));
+  assert.deepEqual(fs.readFileSync(path.join(record.backup,'book.json')),original);
+  assert.deepEqual(readJson(path.join(record.backup,'binding.json')).value,binding);
+  const next=readJson(path.join(f.dir,'binding.json')).value;
+  const pending={previousBindingHash:hash(binding),previousExportHash:hash(original),next,book:repaired};
+  for(const contents of [original,fs.readFileSync(f.file)]) {
+    atomicWrite(f.file,contents); atomicWrite(path.join(f.dir,'binding.json'),{hash:hash(binding),value:binding});
+    atomicWrite(path.join(f.dir,'pending.json'),{hash:hash(pending),value:pending});
+    recoverContinuation(f.spec,f.options);
+    assert.deepEqual(readJson(f.file),repaired); assert.equal(fs.existsSync(path.join(f.dir,'pending.json')),false);
+  }
+  assert.equal(localBookState(f.spec,f.options).state,'complete');
+  f.state.count=7;
+  const result=await f.run(); assert.equal(result.continuationAdded,1,JSON.stringify(result.failures));
+  assert.deepEqual(readJson(f.file).chapters.slice(0,repaired.chapters.length),repaired.chapters);
+  assert.equal(readJson(f.file).chapters.at(-1).chapter_number,8);
+  assert.equal(readJson(path.join(f.dir,'binding.json')).value.resolutions.filter(x=>x.kind==='repaired-old-duplicate').length,1);
+  await assert.rejects(repair(review),/原书已变化/);
+  const fileBefore=fs.readFileSync(f.file); fs.appendFileSync(f.file,' ');
+  await assert.rejects(repair({...review,exportHash:hash(fs.readFileSync(f.file))}),/原书已变化/);
+  assert.deepEqual(fs.readFileSync(f.file),Buffer.concat([fileBefore,Buffer.from(' ')]));
+});
 
 async function completedFixture(t) {
   const f = await fixture(t);
