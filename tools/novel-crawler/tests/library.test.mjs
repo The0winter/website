@@ -85,6 +85,8 @@ test('HTML reading bindings retain background-window preferences but still rejec
   await bindReadingEdition(spec,file,f.options);
   const plan=planLibrary(f.options)[0];
   assert.equal(plan.state,'pending');assert.equal(plan.spec.browser.headless,true);
+  f.site.spec.maxChapterPages=40;
+  assert.equal(planLibrary(f.options)[0].spec.maxChapterPages,40);
   assert.equal((await updateLibrary(f.options)).unchanged,1);
   f.site.spec.chapter.content='section';
   assert.equal(planLibrary(f.options)[0].state,'blocked');
@@ -168,8 +170,10 @@ test('TXT exports and reading editions keep their verified spec and append throu
       await bindReadingEdition(spec, file, f.options);
     }
     const original = readJson(file);
+    f.site.spec.maxChapterPages=40;
     const [plan] = planLibrary(f.options);
     assert.equal(plan.state, 'pending'); assert.equal(plan.spec.kind, 'txt');
+    assert.equal(plan.spec.maxChapterPages,40);
     assert.equal(plan.spec.variant, spec.variant); assert.equal(plan.continuation, undefined);
     assert.deepEqual(plan.spec.resource, spec.resource);
     // Mutable TXT packages may contain new ads or rewritten old prose. The

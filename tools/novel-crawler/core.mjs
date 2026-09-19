@@ -84,6 +84,7 @@ export function validateSpec(input) {
   spec.allowedHosts = [...new Set([new URL(spec.sourceUrl).hostname, ...(spec.allowedHosts || [])])];
   for (const host of spec.allowedHosts) if (typeof host !== 'string' || !host || /[\s/@?#]/.test(host)) throw Error('allowedHosts 只能包含域名');
   for (const [field, lower, upper] of [['delayMs', 200, 60000], ['retries', 0, 5], ['timeoutMs', 1000, 60000]]) if (spec[field] !== undefined && (!Number.isInteger(spec[field]) || spec[field] < lower || spec[field] > upper)) throw Error(`${field} 超出范围`);
+  if (spec.maxChapterPages !== undefined && (!spec.chapter || !Number.isInteger(spec.maxChapterPages) || spec.maxChapterPages < (spec.chapter.maxPages || 20) || spec.maxChapterPages > 100)) throw Error('maxChapterPages 必须不小于原分页上限且不超过100');
   return spec;
 }
 
@@ -92,7 +93,9 @@ export function jobId(spec) {
 }
 
 export function extractionHash(spec) {
-  const {delayMs, retries, timeoutMs, searchUrl, description, status, statusDetection, statusEvidence, ...extraction} = spec;
+  const {delayMs, retries, timeoutMs, maxChapterPages, searchUrl, description, status, statusDetection, statusEvidence, ...extraction} = spec;
+  // A larger bounded request budget changes only where an incomplete fetch
+  // stops. All page identity, navigation and text extraction rules stay pinned.
   // Book metadata changes do not affect chapter identity, order or extraction.
   if (extraction.metadata) {
     const {description: descriptionRule, status: statusRule, ...metadata} = extraction.metadata;

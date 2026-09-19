@@ -96,6 +96,9 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
       // it with the site's HTML template abandons checkpoints/reading bindings.
       const savedSpec = reading?.spec || rawJob?.spec;
       const currentSpec = savedSpec?.kind === 'txt' && savedSpec.sourceUrl === siteSpec.sourceUrl ? savedSpec : siteSpec;
+      if (currentSpec === savedSpec && siteSpec.maxChapterPages !== undefined) {
+        currentSpec.maxChapterPages = Math.max(currentSpec.maxChapterPages || currentSpec.chapter?.maxPages || 20, siteSpec.maxChapterPages);
+      }
       // Preserve the book's background-window preference without concealing
       // changes to the site's selectors, transport or other extraction rules.
       if (currentSpec !== savedSpec && savedSpec?.sourceUrl === siteSpec.sourceUrl) {

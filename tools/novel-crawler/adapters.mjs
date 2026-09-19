@@ -207,7 +207,7 @@ export async function getChapter(spec, chapter, catalogLinks, client) {
   const walkId = spec.catalog?.walk ? walkChapterIdentity(spec, chapter.link) : null;
   while (url) {
     if (seen.has(url)) throw Error('章节分页形成循环');
-    if (seen.size >= (config.maxPages || 20)) throw Error('章节分页超过上限');
+    if (seen.size >= (spec.maxChapterPages ?? (config.maxPages || 20))) throw Error('章节分页超过上限');
     if (url !== chapter.link && catalogLinks.has(url)) throw Error('章节下一页指向另一章，拒绝拼接');
     if (walkId && walkChapterIdentity(spec, url, true) !== walkId) throw Error('章节下一页指向另一章，拒绝拼接');
     seen.add(url);
