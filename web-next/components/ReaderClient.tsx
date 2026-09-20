@@ -16,7 +16,7 @@ import {readerChapterCache as chapterCache,loadReaderChapter,loadReaderCounts} f
 import { 
   Settings, BookOpen, List, 
   Bookmark, BookmarkCheck, Moon, X, 
-  Check, Sun, Info, Library,
+  Check, Sun, Info, Library, Minus, Plus,
 } from 'lucide-react';
 import { booksApi, bookmarksApi, Book, Chapter } from '@/lib/api';
 import RecordBookVisit from './RecordBookVisit';
@@ -32,6 +32,7 @@ const turnModes=[
   {value:'scroll',label:'上下滚屏',hint:'上下滑动连续阅读，章节自动衔接'},
   {value:'vertical',label:'上下翻页',hint:'上下滑动或点击上下区域翻页，点击中央打开菜单'},
 ] as const;
+const paragraphSpacings=[{value:2,label:'紧凑'},{value:4,label:'标准'},{value:6,label:'中等'},{value:8,label:'宽疏'}] as const;
 function ReaderModeSetting({value,onChange,onClose}:{value:ReaderTurnMode;onChange:(value:ReaderTurnMode)=>void;onClose:()=>void}){
   return <div className="reader-mode-setting" role="group" aria-label="翻页方式"><div className="reader-settings-header"><span>翻页方式</span><button type="button" aria-label="关闭阅读设置" onClick={onClose}><X size={20}/></button></div><div className="reader-mode-options">{turnModes.map(mode=><button key={mode.value} type="button" aria-pressed={value===mode.value} onClick={()=>onChange(mode.value)}>{mode.label}</button>)}</div></div>;
 }
@@ -625,27 +626,22 @@ if (loading) return (
               </div>
 
               {/* 排版间距：行距与段距 (移动端) */}
-              <div className="flex flex-col gap-3">
-                {/* 行距 */}
-                <div className="reader-line-spacing flex items-center gap-2">
-                    <label htmlFor="reader-line-spacing" className="text-xs opacity-50 font-bold w-10 shrink-0">行距</label>
-                    <div className="reader-line-spacing-control">
-                      <span>1.2</span>
-                      <input id="reader-line-spacing" type="range" min="1.2" max="1.8" step="0.1" value={lineHeight} onChange={event=>setLineHeight(Number(event.target.value))}/>
-                      <span>1.8</span>
-                      <output htmlFor="reader-line-spacing">{lineHeight.toFixed(1)}</output>
-                    </div>
+              <div className="reader-spacing-row">
+                <div className="reader-spacing-setting" role="group" aria-label="行距">
+                  <span>行距</span>
+                  <div className="reader-spacing-stepper">
+                    <button type="button" aria-label="减小行距" disabled={lineHeight<=1.2} onClick={()=>setLineHeight(value=>Math.max(1.2,Math.round((value-0.1)*10)/10))}><Minus size={14}/></button>
+                    <output aria-label="当前行距" aria-live="polite">{lineHeight.toFixed(1)}</output>
+                    <button type="button" aria-label="增大行距" disabled={lineHeight>=1.8} onClick={()=>setLineHeight(value=>Math.min(1.8,Math.round((value+0.1)*10)/10))}><Plus size={14}/></button>
+                  </div>
                 </div>
-                
-                {/* 段距 */}
-                <div className="flex items-center gap-2">
-                    <span className="text-xs opacity-50 font-bold w-10">段距</span>
-                    <div className="flex flex-1 gap-2 bg-black/5 rounded-lg p-1">
-                      <button onClick={() => setParaSpacing(2)} className={`flex-1 py-1 text-xs rounded transition-all ${paraSpacing === 2 ? 'bg-white shadow-sm font-bold text-blue-600' : ''}`}>紧凑</button>
-                      <button onClick={() => setParaSpacing(4)} className={`flex-1 py-1 text-xs rounded transition-all ${paraSpacing === 4 ? 'bg-white shadow-sm font-bold text-blue-600' : ''}`}>标准</button>
-                      <button onClick={() => setParaSpacing(6)} className={`flex-1 py-1 text-xs rounded transition-all ${paraSpacing === 6 ? 'bg-white shadow-sm font-bold text-blue-600' : ''}`}>中等</button>
-                      <button onClick={() => setParaSpacing(8)} className={`flex-1 py-1 text-xs rounded transition-all ${paraSpacing === 8 ? 'bg-white shadow-sm font-bold text-blue-600' : ''}`}>宽疏</button>
-                    </div>
+                <div className="reader-spacing-setting" role="group" aria-label="段距">
+                  <span>段距</span>
+                  <div className="reader-spacing-stepper">
+                    <button type="button" aria-label="减小段距" disabled={paraSpacing<=2} onClick={()=>setParaSpacing(value=>[...paragraphSpacings].reverse().find(option=>option.value<value)?.value ?? 2)}><Minus size={14}/></button>
+                    <output aria-label="当前段距" aria-live="polite">{paragraphSpacings.find(option=>option.value===paraSpacing)?.label ?? '自定'}</output>
+                    <button type="button" aria-label="增大段距" disabled={paraSpacing>=8} onClick={()=>setParaSpacing(value=>paragraphSpacings.find(option=>option.value>value)?.value ?? 8)}><Plus size={14}/></button>
+                  </div>
                 </div>
               </div>
             </div>

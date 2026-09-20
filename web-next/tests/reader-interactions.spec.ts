@@ -111,7 +111,7 @@ for (const width of [390, 1440]) {
   }
 }
 
-for (const width of [320, 390]) test(`mobile line spacing repaginates and persists within 1.2–1.8 at ${width}px`, async ({page}, info) => {
+for (const width of [320, 390]) test(`mobile spacing steppers repaginate and persist side by side at ${width}px`, async ({page}, info) => {
   await page.setViewportSize({width, height: 844});
   await page.goto(reader); await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
   const open = async () => {
@@ -122,32 +122,50 @@ for (const width of [320, 390]) test(`mobile line spacing repaginates and persis
     await tools(page).getByRole('button', {name: '设置', exact: true}).click();
   };
   await open();
-  const slider = settings(page).getByRole('slider', {name: '行距'});
-  await expect(slider).toHaveValue('1.4');
+  const line = settings(page).getByRole('status', {name: '当前行距'});
+  const paragraph = settings(page).getByRole('status', {name: '当前段距'});
+  const adjust = (name: string) => settings(page).getByRole('button', {name, exact: true});
+  await expect(line).toHaveText('1.4');
+  await expect(paragraph).toHaveText('标准');
+  const lineBox = await line.boundingBox(), paragraphBox = await paragraph.boundingBox();
+  expect(lineBox!.y).toBeCloseTo(paragraphBox!.y, 1);
+  expect((await settings(page).boundingBox())!.height).toBeLessThan(335);
+  expect(await settings(page).evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
   await expect(settings(page)).not.toContainText('行高');
   const spacing = () => page.locator('.reader-columns').evaluate(element => Number.parseFloat(getComputedStyle(element).lineHeight) / Number.parseFloat(getComputedStyle(element).fontSize));
   await expect.poll(spacing).toBeCloseTo(1.4, 2);
-  await slider.focus(); await page.keyboard.press('Home'); await page.keyboard.press('ArrowLeft');
-  await expect(slider).toHaveValue('1.2');
+  await adjust('减小行距').click(); await expect(line).toHaveText('1.3');
+  await adjust('减小行距').click(); await expect(line).toHaveText('1.2');
+  await expect(adjust('减小行距')).toBeDisabled();
   await expect.poll(spacing).toBeCloseTo(1.2, 2);
-  await page.keyboard.press('End'); await page.keyboard.press('ArrowRight');
-  await expect(slider).toHaveValue('1.8');
+  for (let step=0; step<6; step++) await adjust('增大行距').click();
+  await expect(line).toHaveText('1.8'); await expect(adjust('增大行距')).toBeDisabled();
   await expect.poll(spacing).toBeCloseTo(1.8, 2);
   await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
+  const paragraphGap = () => page.locator('.reader-columns p').first().evaluate(element => parseFloat(getComputedStyle(element).marginBottom));
+  const standardGap = await paragraphGap();
+  await adjust('减小段距').click(); await expect(paragraph).toHaveText('紧凑');
+  await expect(adjust('减小段距')).toBeDisabled();
+  await expect.poll(paragraphGap).toBeLessThan(standardGap);
+  for (const label of ['标准', '中等', '宽疏']) {
+    await adjust('增大段距').click(); await expect(paragraph).toHaveText(label);
+  }
+  await expect(adjust('增大段距')).toBeDisabled();
+  await expect.poll(paragraphGap).toBeGreaterThan(standardGap);
   await page.screenshot({path: info.outputPath('verified-line-spacing.png')});
   await settings(page).getByRole('button', {name: '关闭阅读设置'}).click();
   await expect(settings(page)).toHaveCount(0);
   await page.reload(); await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
-  await open(); await expect(slider).toHaveValue('1.8');
+  await open(); await expect(line).toHaveText('1.8'); await expect(paragraph).toHaveText('宽疏');
   // Older in-range preferences remain available even between the former presets.
   await page.evaluate(() => localStorage.setItem('reader_lineHeight', '1.5'));
   await settings(page).getByRole('button', {name: '关闭阅读设置'}).click();
   await expect(settings(page)).toHaveCount(0);
   await page.reload(); await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
-  await open(); await expect(slider).toHaveValue('1.5');
+  await open(); await expect(line).toHaveText('1.5');
   await page.evaluate(() => localStorage.setItem('reader_lineHeight', '2.4'));
   await settings(page).getByRole('button', {name: '关闭阅读设置'}).click();
   await expect(settings(page)).toHaveCount(0);
   await page.reload(); await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
-  await open(); await expect(slider).toHaveValue('1.4');
+  await open(); await expect(line).toHaveText('1.4');
 });
