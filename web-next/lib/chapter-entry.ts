@@ -2,11 +2,12 @@ import {flushSync} from 'react-dom';
 import {mobileReaderCream, readerPaperPosition} from './reader-paper';
 import {freezeBookPage} from './book-transition';
 import {currentSiteTheme} from './site-theme';
+import {isReaderPath, releaseReaderFullscreen, requestReaderFullscreen, shouldEnterReaderFullscreen} from './reader-fullscreen';
 
 type ChapterEntry = {
   token: string; href: string; chapterId: string; title: string; error?: string; position: 'start' | 'resume'; minimumVisibleMs: number;
   paper: string; ink: string; desk: string; width: string; textured: boolean; paperPosition: string; releasing?: boolean; revealing?: boolean;
-  motion: 'none' | 'enter' | 'catalog'; motionComplete: boolean;
+  motion: 'none' | 'enter' | 'catalog'; motionComplete: boolean; fullscreen: boolean;
 };
 const listeners = new Set<() => void>();
 let entry: ChapterEntry | null = null;
@@ -61,12 +62,15 @@ export function beginChapterEntry(href: string, title: string, position: 'start'
   entry = {token: crypto.randomUUID(), href, chapterId, title, position, minimumVisibleMs, paper: style?.getPropertyValue('--reader-paper') || paper,
     ink: style?.getPropertyValue('--reader-ink') || ink, desk, width: style?.getPropertyValue('--reader-width') || `${width}px`,
     textured: reader ? reader.querySelector('.reader-frame')?.getAttribute('data-paper') === 'true' : theme === 'cream',
-    paperPosition: readerPaperPosition(paperPage), motion, motionComplete: motion === 'none'};
+    paperPosition: readerPaperPosition(paperPage), motion, motionComplete: motion === 'none', fullscreen: shouldEnterReaderFullscreen()};
   if (motion === 'catalog' || mobileEntry && motion === 'none') entry.minimumVisibleMs = 0;
   // Cancel older chapter requests before the catalog's asynchronous history pop.
   window.dispatchEvent(new Event('chapter-entry-start'));
   // Paint the opaque reading paper before Next can replace the source route.
   flushSync(notify);
+  // Start behind the existing entry paper, in the same user gesture as navigation.
+  // Rejection leaves the normal reader usable and never opens a prompt of our own.
+  if (entry.fullscreen) void requestReaderFullscreen().catch(() => {});
   if (snapshot) {
     const token = entry.token;
     const moving = motion === 'catalog' ? snapshot : document.querySelector<HTMLElement>('.chapter-loading-page')!;
@@ -89,6 +93,7 @@ export function failChapterEntry(href: string, error: string) {
 export function cancelChapterEntry() {
   clearMotion?.();
   if (!entry) return;
+  if (!isReaderPath(location.pathname)) void releaseReaderFullscreen();
   try { sessionStorage.removeItem(`reader-entry:${entry.chapterId}`); } catch {}
   entry = null; notify();
 }

@@ -15,4 +15,10 @@
 /* Switch between identical opaque paper surfaces in one paint. The reader
    keeps its final stacking and antialiasing while the hidden cover is removed. */
 .chapter-loading-page[data-text-revealed=true] { visibility:hidden; }
+.chapter-loading-page[data-fullscreen-entry=true] { transition:opacity 160ms ease-out; }
+.chapter-loading-page[data-fullscreen-entry=true][data-text-revealed=true] { visibility:visible; opacity:0; pointer-events:none; }
+.reader-fullscreen-cover { position:fixed; inset:0; z-index:10003; overflow:hidden; pointer-events:none; contain:paint; }
+@media(prefers-reduced-motion:reduce) {
+  .chapter-loading-page[data-fullscreen-entry=true] { transition:none; }
+}
 @media(min-width:1024px) { .chapter-loading-page { background:var(--entry-desk); } }
