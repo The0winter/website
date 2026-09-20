@@ -16,7 +16,7 @@ import {readerChapterCache as chapterCache,loadReaderChapter,loadReaderCounts} f
 import { 
   Settings, BookOpen, List, 
   Bookmark, BookmarkCheck, Moon, X, 
-  Check, Sun, Info, Library, Minus, Plus,
+  Check, Sun, Info, Library, Minus, Plus, Maximize, Minimize,
 } from 'lucide-react';
 import { booksApi, bookmarksApi, Book, Chapter } from '@/lib/api';
 import RecordBookVisit from './RecordBookVisit';
@@ -25,6 +25,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 import ReaderPages from './ReaderPages';
 import ReaderScroll from './ReaderScroll';
+import {useReaderFullscreen} from './useReaderFullscreen';
 import type {ReaderTurnMode} from './useReaderPageTurn';
 
 const turnModes=[
@@ -104,6 +105,10 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   // 导航栏显示状态 (移动端专用)
   const [mobileNav,setShowNav]=useState(false);
   const showNav=mobileNav;
+  const {supported: fullscreenSupported, active: fullscreenActive, pending: fullscreenPending, error: fullscreenError, toggle: toggleFullscreen, clearError: clearFullscreenError} = useReaderFullscreen(() => {
+    setShowNav(false);
+    if (showSettings) closeReaderSettings();
+  });
   const setShowCatalog = (open: boolean) => {
     if (open) { setShowNav(false); openBookCatalog(bookId); }
     else closeBookCatalog();
@@ -369,6 +374,14 @@ if (loading) return (
                 {isActuallyDark ? '夜间' : '日间'}
              </span>
           </button>
+          {fullscreenSupported && <button
+            type="button" onClick={toggleFullscreen} disabled={fullscreenPending}
+            aria-label={fullscreenActive ? '退出全屏' : '全屏阅读'} aria-pressed={fullscreenActive}
+            className="flex min-h-11 min-w-11 flex-col items-center justify-center gap-1 opacity-80 active:opacity-100 disabled:opacity-40"
+          >
+            {fullscreenActive ? <Minimize className="w-5 h-5"/> : <Maximize className="w-5 h-5"/>}
+            <span className="text-[10px]">{fullscreenActive ? '退出全屏' : '全屏'}</span>
+          </button>}
       </div>
 
 
@@ -420,6 +433,11 @@ if (loading) return (
           <button onClick={() => setShowSettings(true)} className="p-3 hover:bg-black/5 rounded-lg" title="设置">
             <Settings style={{ color: activeTheme.text }} className="w-5 h-5" />
           </button>
+          {fullscreenSupported && <button type="button" onClick={toggleFullscreen} disabled={fullscreenPending}
+            className="p-3 hover:bg-black/5 rounded-lg disabled:opacity-40"
+            title={fullscreenActive ? '退出全屏' : '全屏阅读'} aria-pressed={fullscreenActive}>
+            {fullscreenActive ? <Minimize style={{color: activeTheme.text}} className="w-5 h-5"/> : <Maximize style={{color: activeTheme.text}} className="w-5 h-5"/>}
+          </button>}
         </aside>
       </div>
       </div>
@@ -431,6 +449,7 @@ if (loading) return (
         onRetry={catalog.retry}/>
 
       {navigationError && <div role="alert" className="reader-navigation-error">{navigationError}<button onClick={()=>goToChapter(failedChapter.current || chapterIdParam)}>重试</button><button onClick={()=>setNavigationError('')}>关闭</button></div>}
+      {fullscreenError && <div role="alert" className="reader-navigation-error">{fullscreenError}<button type="button" onClick={clearFullscreenError}>关闭</button></div>}
       {/* 6. 设置弹窗 */}
       {showSettings && (
         <>
