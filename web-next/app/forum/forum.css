@@ -12,4 +12,7 @@
   .forum-page { touch-action:pan-y pinch-zoom; }
   .forum-masthead { padding:10px 12px 0; }
   .forum-feed-toolbar { margin:0; border:0; border-radius:0; }
+  .forum-feed-toolbar button { font-size:16px; color:var(--home-text); }
+  .forum-feed-toolbar [aria-current=page] { color:color-mix(in srgb,var(--home-accent) 82%,var(--home-text)); border-bottom-color:currentColor; }
+  .dark .forum-feed-toolbar [aria-current=page] { color:var(--home-accent); }
 }
