@@ -250,6 +250,7 @@ return (
         if (suppressSwipeClick.current && event.nativeEvent.isTrusted) {event.preventDefault(); event.stopPropagation(); suppressSwipeClick.current = false;}
       }}>
       <div className="forum-masthead">
+        <h1 className="sr-only">书友社区</h1>
         <HomeSearchHeader>
           <form className="forum-search book-search book-search--home" role="search" onSubmit={event => event.preventDefault()}>
             <div className="book-search-field"><Search size={19} aria-hidden="true"/><input type="search" aria-label="搜索你想看的问题或文章" placeholder="搜索问题或文章" value={searchQuery} onChange={event => setSearchQuery(event.target.value)}/></div>
