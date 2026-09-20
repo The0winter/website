@@ -2,6 +2,7 @@
 
 import {useCallback, useEffect, useLayoutEffect, useRef} from 'react';
 import type {LibraryTab} from './library-cache';
+import {SECTION_TURN_DURATION, SECTION_TURN_EASING} from './section-swipe';
 
 type Position = {shelf: number; history: number};
 type Motion = {animations: Animation[]; origin: Position; width: number; dragging: boolean};
@@ -58,16 +59,17 @@ export function useShelfPageTurn(tab: LibraryTab, enabled: boolean) {
     tabs.current?.removeAttribute('data-dragging');
     const destination: Position = nextTab === 'shelf' ? {shelf: 0, history: -motion.width} : {shelf: motion.width, history: 0};
     const remaining = Math.abs(destination.shelf - motion.origin.shelf);
-    // Continue from the finger's position; a reversal retargets the current
-    // frame immediately instead of waiting in a 400ms animation queue.
-    const duration = Math.max(120, Math.min(300, 300 * remaining / motion.width));
+    // Match the outer pages after both taps and swipes. Cancelled drags only
+    // spring back over the remaining distance; reversals retarget immediately.
+    const duration = nextTab === currentTab.current ? 180 * remaining / motion.width : SECTION_TURN_DURATION;
     tabs.current?.style.setProperty('--shelf-tab-duration', `${duration}ms`);
+    tabs.current?.style.setProperty('--shelf-tab-easing', SECTION_TURN_EASING);
     tabs.current?.setAttribute('data-turning', 'true');
     commit();
     align(nextTab === 'history' ? 1 : 0);
     motion.animations = panels().map(panel => {
       const key = panel.dataset.shelfTab as LibraryTab;
-      return panel.animate([{transform: `translateX(${motion.origin[key]}px)`}, {transform: `translateX(${destination[key]}px)`}], {duration, easing: 'cubic-bezier(.22,.7,.25,1)', fill: 'forwards'});
+      return panel.animate([{transform: `translateX(${motion.origin[key]}px)`}, {transform: `translateX(${destination[key]}px)`}], {duration, easing: SECTION_TURN_EASING, fill: 'forwards'});
     });
     void Promise.allSettled(motion.animations.map(animation => animation.finished)).then(() => {if (active.current === motion) cancel();});
   }, [capture, cancel, panels, align, tabs]);

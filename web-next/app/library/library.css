@@ -11,7 +11,7 @@
 .shelf-tabs button { position:relative; min-height:48px; font-size:18px; white-space:nowrap; color:var(--home-muted); }
 .shelf-tabs [aria-selected=true] { color:var(--home-text); font-weight:600; }
 .shelf-tabs::after { content:''; position:absolute; bottom:3px; left:0; width:24px; height:3px; border-radius:4px; background:#df3a47; transform:translateX(var(--shelf-tab-offset,0px)); pointer-events:none; }
-.shelf-tabs[data-turning]::after { transition:transform var(--shelf-tab-duration,.26s) cubic-bezier(.22,.7,.25,1); }
+.shelf-tabs[data-turning]::after { transition:transform var(--shelf-tab-duration,.4s) var(--shelf-tab-easing,ease-out); }
 .shelf-tabs[data-dragging]::after { transition:none; }
 .shelf-viewport { position:relative; isolation:isolate; }
 .shelf-viewport[data-switching] { overflow:clip; }

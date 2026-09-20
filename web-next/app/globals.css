@@ -60,6 +60,7 @@ body {
 
 .loading-logo { display:block; flex-shrink:0; object-fit:contain; }
 .loading-text { display:inline-flex; align-items:baseline; justify-content:center; max-width:100%; text-align:center; }
+.loading-text::before { content:''; flex:0 0 1.25em; }
 .loading-dots { display:inline-block; flex:0 0 1.25em; width:1.25em; text-align:left; white-space:nowrap; }
 .loading-dots::after { content:'...'; animation:loading-dots 1.6s step-end infinite; }
 @keyframes loading-dots {

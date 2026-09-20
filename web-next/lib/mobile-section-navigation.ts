@@ -1,6 +1,6 @@
 'use client';
 
-import {sectionSwipeThreshold} from './section-swipe';
+import {sectionSwipeThreshold, SECTION_TURN_DURATION, SECTION_TURN_EASING} from './section-swipe';
 import {captureMobileSection, captureMobileSectionShell} from './mobile-section-snapshot';
 
 type Section = 'library' | 'home' | 'forum';
@@ -141,7 +141,7 @@ function createTransition(href: string, dragging = false, sourceHref = location.
   const observer = new MutationObserver(check);
   const animate = (element: HTMLElement, x: number, destination: number, duration: number) => {
     animations.push(element.animate([{transform: `translate3d(${reduced ? 0 : x}px,0,0)`}, {transform: `translate3d(${reduced ? 0 : destination}px,0,0)`}],
-      {duration, easing: 'cubic-bezier(.25,.5,.35,1)', fill: 'forwards'}));
+      {duration, easing: SECTION_TURN_EASING, fill: 'forwards'}));
   };
   const commit = () => {
     if (cancelled || committed || returning) return;
@@ -157,7 +157,7 @@ function createTransition(href: string, dragging = false, sourceHref = location.
     }
     // Continue from the finger's position immediately, but keep the full 400ms
     // settling motion even when only a short distance remains.
-    const duration = reduced ? 0 : 400;
+    const duration = reduced ? 0 : SECTION_TURN_DURATION;
     observer.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['aria-busy']});
     animate(outgoing, offset, -direction * width, duration);
     animate(incoming, direction * width + offset, 0, duration);

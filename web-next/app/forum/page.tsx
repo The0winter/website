@@ -165,7 +165,7 @@ export default function ForumPage() {
     const isTabLoading = loadingState[tabId];
 
     return (
-      <div className={`overflow-hidden rounded-none md:rounded-2xl border-y border-x-0 md:border ${currentTheme.border} ${currentTheme.card} w-full min-h-[50vh]`}>
+      <div className={`overflow-hidden md:rounded-2xl md:border ${currentTheme.border} ${currentTheme.card} w-full min-h-[50vh]`}>
         {isTabLoading && (
           <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>加载中...</div>
         )}
@@ -255,11 +255,10 @@ return (
             <div className="book-search-field"><Search size={19} aria-hidden="true"/><input type="search" aria-label="搜索你想看的问题或文章" placeholder="搜索问题或文章" value={searchQuery} onChange={event => setSearchQuery(event.target.value)}/></div>
           </form>
         </HomeSearchHeader>
-        <h1 className="forum-title">书友社区</h1>
       </div>
       <ForumTabs activeTab={activeTab} onSelect={setActiveTab}/>
 
-      {/* 移动端: px-0 满屏, mt-1 缩短间隙; PC端(md): 恢复内边距和外边距 */}
+      {/* 移动端内容连续铺满页面；桌面端保留双栏卡片布局。 */}
       <div className="max-w-[1040px] mx-auto px-0 md:px-4 mt-0 md:mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px] gap-5 md:gap-6">
         
         {/* ================= 移动端独享：跟手轮播容器 ================= */}

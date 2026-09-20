@@ -1,6 +1,5 @@
 .forum-page { background:var(--home-background); color:var(--home-text); }
 .forum-masthead { max-width:1040px; margin:auto; padding:28px 16px 0; }
-.forum-title { margin:0 0 16px; font-size:20px; line-height:1.4; font-weight:700; color:var(--home-text); }
 @media (min-width:768px) {
   .forum-masthead .mh-topbar { max-width:680px; margin-bottom:24px; }
   .forum-search { --suggest-bg:var(--home-surface); --suggest-text:var(--home-text); --suggest-muted:var(--home-muted); --suggest-accent:var(--home-accent); }
@@ -10,7 +9,8 @@
 }
 .forum-feed-toolbar { display:flex; align-items:center; gap:8px; position:relative; z-index:40; max-width:1008px; margin:0 auto; padding:0 8px; border-bottom-width:1px; border-radius:14px 14px 0 0; }
 @media (max-width:767px) {
-  .forum-page { touch-action:pan-y pinch-zoom; }
+  .forum-page { background:var(--home-surface); touch-action:pan-y pinch-zoom; }
   .forum-masthead { padding:10px 12px 0; }
-  .forum-feed-toolbar { margin:0; }
+  .forum-search .book-search-field { background:var(--home-soft); }
+  .forum-feed-toolbar { margin:0; border:0; border-radius:0; }
 }

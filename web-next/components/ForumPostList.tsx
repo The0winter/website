@@ -21,8 +21,7 @@ function formatCount(value: number) {
 export default function ForumPostList({posts: tabPosts = [], loading: isTabLoading}: {posts?: ForumPost[]; loading: boolean}) {
 
     return (
-      // 移动端：去圆角(rounded-none)，只留上下边框(border-y, border-x-0)；PC端：恢复圆角和全边框
-      <div className={`overflow-hidden rounded-none md:rounded-2xl border-y border-x-0 md:border ${currentTheme.border} ${currentTheme.card} w-full min-h-[50vh]`}>
+      <div className={`overflow-hidden md:rounded-2xl md:border ${currentTheme.border} ${currentTheme.card} w-full min-h-[50vh]`}>
         {isTabLoading && (
           <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>加载中...</div>
         )}

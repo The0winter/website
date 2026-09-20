@@ -59,8 +59,7 @@ for (const width of [320,390,1440]) for (const method of ['click','swipe']) {
       else await swipe(page,context,direction);
       const frame=await pause(page);
       expect(frame.durations[0]).toBe(frame.durations[1]);
-      expect(frame.durations[0]).toBeLessThanOrEqual(300);
-      expect(frame.durations[0]).toBeGreaterThanOrEqual(120);
+      expect(frame.durations).toEqual([400, 400]);
       expect(frame.opacities).toEqual(['1','1']);
       expect(frame.inert).toBe(true);
       expect(Math.abs((frame.b-frame.a)*direction-frame.width)).toBeLessThan(1);
