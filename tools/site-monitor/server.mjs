@@ -8,7 +8,9 @@ import storage from './storage-policy.cjs';
 import {collectors,validateConfig,runRemote} from './collectors.mjs';
 import {MonitorSession} from './session.mjs';
 
-export const projectRoot=fileURLToPath(new URL('../../',import.meta.url));
+// Directory file URLs retain a trailing separator; retention requires a
+// normalized root so its descendant check does not compare a double separator.
+export const projectRoot=path.resolve(fileURLToPath(new URL('../../',import.meta.url)));
 const webRoot=fileURLToPath(new URL('./',import.meta.url));
 const safeFile=(root,rel)=>retention.inside(root,rel);
 function json(res,status,data){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));}
@@ -17,6 +19,7 @@ function atomic(root,relative,data){const dest=safeFile(root,relative);fs.mkdirS
 function csv(snapshot){const rows=['module,time,cpu_percent,memory_percent,disk_percent,download_bytes_per_second,upload_bytes_per_second,atlas_logical_bytes,latency_ms,gap'];for(const [key,value]of Object.entries(snapshot.modules))for(const p of value.history)rows.push([key,new Date(p.at).toISOString(),p.cpu,p.memory,p.disk,p.rx,p.tx,p.logical,p.ping??p.latency,p.gap?1:0].map(x=>x??'').join(','));return '\uFEFF'+rows.join('\r\n');}
 
 export async function createMonitor({root=projectRoot,collect,config:configInput,start=true,onClose=()=>{},remote=runRemote}={}) {
+  root=path.resolve(root);
   let config;try{config=validateConfig(configInput??JSON.parse(fs.readFileSync(safeFile(root,storage.BASE+'/config.json'),'utf8')));}catch{config=validateConfig(configInput);}
   const token=crypto.randomBytes(32).toString('hex');
   let session=new MonitorSession(collect||collectors(config)),inventory={running:false,buckets:[],error:null},scanController,scanPromise,closing=false;

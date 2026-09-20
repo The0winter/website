@@ -6,10 +6,25 @@ import path from 'node:path';
 import http from 'node:http';
 import {MonitorSession} from '../session.mjs';
 import {validateConfig,defaults} from '../collectors.mjs';
-import {createMonitor} from '../server.mjs';
+import {createMonitor,projectRoot} from '../server.mjs';
 import retention from '../../storage-maintenance.cjs';
 import storage from '../storage-policy.cjs';
 import {workspace,removeWorkspace,fixtureCollectors} from './fixture.mjs';
+
+test('正式入口的默认项目根目录可通过路径保护',()=>{
+  assert.equal(projectRoot,path.resolve(projectRoot));
+  assert.equal(retention.inside(projectRoot,storage.BASE),path.join(projectRoot,storage.BASE));
+});
+
+test('带尾部分隔符的目录仍能读取配置与保存报告，且保留越界保护',async t=>{
+  const root=setup(t),config={...defaults,site:'https://example.test',atlasLimitMiB:512};
+  file(root,storage.BASE+'/config.json',JSON.stringify(config));
+  const app=await createMonitor({root:root+path.sep,collect:fixtureCollectors(),start:false});t.after(()=>app.close());
+  assert.equal(app.config.site,config.site);
+  const res=await fetch(app.baseUrl+'/api/export',{method:'POST',headers:{'x-monitor-token':app.token},body:JSON.stringify({format:'json'})});
+  assert.equal(res.status,200);const result=await res.json();assert.ok(fs.existsSync(path.join(root,storage.BASE,'reports',result.name)));
+  assert.throws(()=>retention.inside(projectRoot,'../escape'));
+});
 
 test('同模块刷新合并；关闭中止采集并不记录迟到结果',async()=>{
   let resolve,calls=0,signal;const session=new MonitorSession({site:s=>{calls++;signal=s;return new Promise(r=>resolve=r);}});

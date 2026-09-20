@@ -8,6 +8,7 @@ import retention from '../storage-maintenance.cjs';
 import storage from './storage-policy.cjs';
 
 export async function launch({headless=process.env.SITE_MONITOR_HEADLESS==='1',onReady,root=projectRoot}={}) {
+  root=path.resolve(root);
   const stateDir=retention.inside(root,storage.BASE);fs.mkdirSync(stateDir,{recursive:true});
   const lock=retention.inside(root,storage.BASE+'/instance.json');
   const active=pid=>{try{process.kill(pid,0);return true;}catch(e){return e.code!=='ESRCH';}};
