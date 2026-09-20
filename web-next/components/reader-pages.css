@@ -53,9 +53,9 @@
 .reader-settings-header>button { display:grid; place-items:center; width:40px; height:40px; margin-right:-8px; border-radius:50%; opacity:.65; }
 .reader-settings-header>button:hover { background:#91806a12; opacity:1; }
 .reader-spacing-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-.reader-spacing-setting { display:flex; align-items:center; gap:4px; min-width:0; font-size:12px; }
+.reader-spacing-setting { display:flex; align-items:center; gap:12px; min-width:0; font-size:12px; }
 .reader-spacing-setting>span { flex-shrink:0; opacity:.5; font-weight:600; }
-.reader-spacing-stepper { display:grid; grid-template-columns:minmax(28px,1fr) 30px minmax(28px,1fr); align-items:center; flex:1; min-width:0; border-radius:8px; background:#0000000d; }
+.reader-spacing-stepper { display:grid; grid-template-columns:minmax(28px,1fr) 30px minmax(28px,1fr); align-items:center; flex:1; min-width:0; max-width:112px; border-radius:8px; background:#0000000d; }
 .reader-spacing-stepper button { display:grid; place-items:center; min-height:36px; border-radius:8px; cursor:pointer; touch-action:manipulation; }
 .reader-spacing-stepper button:enabled:active { background:#91806a20; }
 .reader-spacing-stepper button:disabled { opacity:.25; cursor:default; }
