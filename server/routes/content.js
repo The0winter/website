@@ -11,6 +11,7 @@ import {trashChapter} from '../services/writing-trash.js';
 import User from '../models/User.js';
 import Operation from '../models/Operation.js';
 import {workAccess} from '../services/work-access.js';
+import {readLiveBook} from '../services/book-version.js';
 import {writerRoutes} from './writer.js';
 import {reviewReactionRoutes} from './review-reactions.js';
 import {pagination} from '../services/pagination.js';
@@ -29,7 +30,7 @@ export function contentRoutes(app,auth) {
   reviewReactionRoutes(app,auth);
   writerRoutes(app,auth);
   app.get('/api/books/:id/reviews/mine',auth.authenticate,asyncRoute(async(req,res)=>{
-    if(!await Book.exists({_id:req.params.id,deletedAt:null}))fail(404,'作品不可用');
+    await readLiveBook(req.params.id,res.locals.workAccess);
     res.set('Cache-Control','private, no-store');
     res.json(await Review.findOne({book:req.params.id,user:req.user.id}).populate('user','username avatar'));
   }));

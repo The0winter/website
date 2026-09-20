@@ -86,7 +86,14 @@ test('review feedback persists exclusive, idempotent choices without exposing vo
       assert.equal((await guest.request(listing)).status, 404);
       assert.equal((await other.write(endpoint, {reaction:'like'})).status, 404);
       assert.equal((await owner.request(listing)).status, 200);
+      assert.equal((await guest.request(`/api/books/${book.id}/reviews`)).status,404);
+      const visibleReviews=await owner.request(`/api/books/${book.id}/reviews`);
+      assert.equal(visibleReviews.status,200);assert.equal(visibleReviews.data[0].content,'评论正文');
+      assert.equal(visibleReviews.headers.get('x-total-count'),'1');
+      assert.equal((await owner.request(`/api/books/${book.id}/reviews/mine`)).status,200);
       await Book.updateOne({_id:book._id}, {$set:{deletedAt:new Date()}});
+      assert.equal((await owner.request(`/api/books/${book.id}/reviews`)).status,404);
+      assert.equal((await owner.request(`/api/books/${book.id}/reviews/mine`)).status,404);
       assert.equal((await owner.request(listing)).status, 404);
       assert.equal((await owner.write(endpoint, {reaction:null})).status, 404);
     });

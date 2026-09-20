@@ -140,7 +140,7 @@ function BookDescription({description}: {description: string}) {
 }
 
 export default function BookDetailClient({ initialBookData, initialCatalog, initialFirstChapterId }: BookDetailClientProps) {
-  const { user } = useAuth(); 
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [bookData,setBookData] = useState(initialBookData);
   const book = bookData.book;
@@ -169,10 +169,18 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   // --- 评论相关状态 ---
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewPage,setReviewPage]=useState(1);
-  const [reviewTotal,setReviewTotal]=useState(0);
-  const [myReview,setMyReview]=useState<Review|null>(null);
+  const [reviewTotal,setReviewTotal]=useState(book.numReviews ?? 0);
   const [reviewRefresh,setReviewRefresh]=useState(0);
-  const [reviewError,setReviewError]=useState('');
+  const [reviewResult,setReviewResult]=useState<{key:string;error:string}|null>(null);
+  const [personalResult,setPersonalResult]=useState<{key:string;review:Review|null;error:string}|null>(null);
+  const userId = user?.id || user?._id || '';
+  const reviewKey = `${book.id}/${reviewPage}/${reviewRefresh}`;
+  const personalKey = `${book.id}/${userId}/${reviewRefresh}`;
+  const reviewsLoading = reviewResult?.key !== reviewKey;
+  const reviewError = reviewsLoading ? '' : reviewResult.error;
+  const personalLoading = Boolean(userId) && personalResult?.key !== personalKey;
+  const personalError = userId && personalResult?.key === personalKey ? personalResult.error : '';
+  const myReview = userId && personalResult?.key === personalKey ? personalResult.review : null;
   const [myRating, setMyRating] = useState(0);
   const [myContent, setMyContent] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
@@ -207,26 +215,37 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   }, [bookData.chapters, chapters]);
 
   useEffect(()=>{
-    let active=true;
+    const controller=new AbortController();
     async function load(){
       try{
-        const response=await fetch(`/api/books/${book.id}/reviews?page=${reviewPage}&limit=20`);
-        if(!response.ok)throw new Error('评价暂不可用，请重试');
+        const response=await fetch(`/api/books/${book.id}/reviews?page=${reviewPage}&limit=20`,{cache:'no-store',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(15000)])});
+        if(!response.ok)throw new Error('评论加载失败，请重试');
         const rows:Review[]=await response.json();
-        const mine=user ? await fetch(`/api/books/${book.id}/reviews/mine`) : null;
-        if(mine&&!mine.ok)throw new Error('个人评价读取失败，请重试');
-        const personal:Review|null=mine?await mine.json():null;
-        if(active){
+        if(!controller.signal.aborted){
           const distribution:Record<string,number>=JSON.parse(response.headers.get('X-Review-Distribution')||'{}');
           const total=Number(response.headers.get('X-Total-Count'));
           const rating=total?Object.entries(distribution).reduce((sum,[score,count])=>sum+Number(score)*count,0)/total:0;
-          setReviews(rows);setMyReview(personal);setReviewTotal(total);setReviewError('');
+          setReviews(rows);setReviewTotal(total);setReviewResult({key:reviewKey,error:''});
           setBookData(previous=>({...previous,book:{...previous.book,rating,numReviews:total}}));
         }
-      }catch(e){if(active)setReviewError(e instanceof Error?e.message:'评价读取失败');}
+      }catch{if(!controller.signal.aborted)setReviewResult({key:reviewKey,error:'评论加载失败，请重试'});}
     }
-    load();return()=>{active=false;};
-  },[book.id,user,reviewPage,reviewRefresh]);
+    void load();return()=>controller.abort();
+  },[book.id,reviewPage,reviewKey]);
+  // Public comments do not wait for sign-in or the reader's own review.
+  useEffect(()=>{
+    if(!userId)return;
+    const controller=new AbortController();
+    async function load(){
+      try{
+        const response=await fetch(`/api/books/${book.id}/reviews/mine`,{cache:'no-store',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(15000)])});
+        if(!response.ok)throw new Error('个人书评读取失败');
+        const review:Review|null=await response.json();
+        if(!controller.signal.aborted)setPersonalResult({key:personalKey,review,error:''});
+      }catch{if(!controller.signal.aborted)setPersonalResult({key:personalKey,review:null,error:'个人书评读取失败，请重试'});}
+    }
+    void load();return()=>controller.abort();
+  },[book.id,userId,personalKey]);
   // --- 逻辑：评论排序 ---
   const sortedReviews = useMemo(() => {
     if (!myReview) return reviews;
@@ -267,6 +286,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   // --- 操作：评论相关 ---
   const openReviewForm = () => {
     if (!user) return router.push('/login');
+    if (personalLoading || personalError) return;
     setMyRating(myReview?.rating || 0);
     setMyContent(myReview?.content || '');
     setShowReviewForm(true);
@@ -479,10 +499,10 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
               <button id="reviews-tab" role="tab" aria-selected={communityTab === 'reviews'} aria-controls="reviews-panel" onClick={() => setCommunityTab('reviews')}>评论 <small>{reviewTotal}</small></button>
               <button id="articles-tab" role="tab" aria-selected={communityTab === 'articles'} aria-controls="articles-panel" onClick={() => setCommunityTab('articles')}>文章</button>
             </div>
-            {communityTab === 'reviews' && !showReviewForm && <button className="book-review-compose" onClick={openReviewForm}>写书评</button>}
+            {communityTab === 'reviews' && !showReviewForm && <button className="book-review-compose" disabled={authLoading || personalLoading || Boolean(personalError)} onClick={openReviewForm}>写书评</button>}
             </div>
             {communityTab === 'articles' && <div id="articles-panel" role="tabpanel" aria-labelledby="articles-tab"><BookArticles bookId={book.id} title={book.title} /></div>}
-            <div id="reviews-panel" role="tabpanel" aria-labelledby="reviews-tab" hidden={communityTab !== 'reviews'}>
+            <div id="reviews-panel" role="tabpanel" aria-labelledby="reviews-tab" aria-busy={reviewsLoading} hidden={communityTab !== 'reviews'}>
             
             {/* 评论表单 */}
             {showReviewForm && (
@@ -515,12 +535,13 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                 </div>
             )}
 
-            {reviewError&&<p role="alert">{reviewError}<button onClick={()=>setReviewRefresh(value=>value+1)}>重试</button></p>}
+            {reviewError&&<p className="book-review-error" role="alert">{reviewError} <button onClick={()=>setReviewRefresh(value=>value+1)}>重试</button></p>}
+            {personalError&&<p className="book-review-error" role="alert">{personalError} <button onClick={()=>setReviewRefresh(value=>value+1)}>重试</button></p>}
             {feedback.error && <p className="book-review-error" role="alert">{feedback.error} <button onClick={feedback.retry}>重试</button></p>}
-            <nav hidden={reviewTotal <= 20} aria-label="评价分页" className="flex gap-4 justify-center my-4"><button disabled={reviewPage===1} onClick={()=>setReviewPage(reviewPage-1)}>上一页</button><span>第 {reviewPage} 页</span><button disabled={reviewPage*20>=reviewTotal} onClick={()=>setReviewPage(reviewPage+1)}>下一页</button></nav>
+            <nav hidden={reviewTotal <= 20} aria-label="评价分页" className="flex gap-4 justify-center my-4"><button disabled={reviewsLoading || reviewPage===1} onClick={()=>setReviewPage(reviewPage-1)}>上一页</button><span>第 {reviewPage} 页</span><button disabled={reviewsLoading || reviewPage*20>=reviewTotal} onClick={()=>setReviewPage(reviewPage+1)}>下一页</button></nav>
             {/* 评论列表 */}
             <div className="book-review-list">
-                {reviews.length === 0 ? (
+                {reviewsLoading ? <p className="book-review-loading" role="status"><LoadingText>正在加载评论</LoadingText></p> : reviewError ? null : sortedReviews.length === 0 ? (
                     <div className="text-gray-500 text-sm text-center py-4">还没有人评价，快来抢沙发！</div>
                 ) : (
                     sortedReviews.map((review) => {

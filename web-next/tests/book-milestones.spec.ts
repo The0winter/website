@@ -27,12 +27,20 @@ for (const width of [320,390,430,767,768,1440]) {
     await expect(entry).toBeVisible();
     await expect(entry.locator('[data-active=true]')).toContainText('五千收藏');
     if(width<768){
-      await expect(page.locator('.book-mobile-stats dd').first()).toHaveCSS('font-size','16px');
+      await expect(page.locator('.book-mobile-stats dd').first()).toHaveCSS('font-size','17px');
       await expect(page.locator('.book-mobile-stats dt').first()).toHaveCSS('font-size','12px');
       await expect(page.locator('.book-mobile-stats')).toHaveCSS('border-left-width','1px');
       for (const item of await page.locator('.book-mobile-stats>div').all()) await expect(item).toHaveCSS('border-left-width','0px');
       const boxes=await page.locator('.book-mobile-stats dd').evaluateAll(items=>items.map(el=>({width:el.clientWidth,scroll:el.scrollWidth})));
       expect(boxes.every(box=>box.scroll<=box.width+1),JSON.stringify(boxes)).toBe(true);
+      const alignment=await page.locator('.book-mobile-overview').evaluate(element=>{
+        const copy=element.querySelector('.milestone-roll-item[data-active=true] .milestone-entry-copy')!.getBoundingClientRect();
+        return [...element.querySelectorAll('.book-mobile-stats>div')].map(item=>{
+          const top=item.querySelector('dd')!.getBoundingClientRect(),bottom=item.querySelector('dt')!.getBoundingClientRect();
+          return {top:Math.abs(top.top-copy.top),bottom:Math.abs(bottom.bottom-copy.bottom),gap:bottom.top-top.bottom};
+        });
+      });
+      for(const row of alignment){expect(row.top).toBeLessThan(1);expect(row.bottom).toBeLessThan(1);expect(row.gap).toBe(1);}
     }
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await page.screenshot({path:info.outputPath(`final-detail-${width}.png`)});

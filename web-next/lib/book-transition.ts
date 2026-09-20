@@ -45,7 +45,6 @@ function bookLoadingPage(href: string, label = '书籍') {
   const {props} = getImageProps({src:'/icon.png',alt:'',width:48,height:48});
   logo.srcset = props.srcSet ?? ''; logo.src = props.src;
   logo.alt = ''; logo.width = 48; logo.height = 48; logo.className = 'loading-logo';
-  logo.style.width = '48px'; logo.style.height = '48px';
   const message = document.createElement('p');
   message.setAttribute('role', 'status');
   message.textContent = `正在打开${label}`;
