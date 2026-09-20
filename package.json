@@ -4,6 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "monitor": "node tools/site-monitor/main.mjs",
+    "monitor:shortcut": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/site-monitor/create-shortcut.ps1",
+    "monitor:clean": "node tools/storage-maintenance.cjs --site-monitor --apply",
+    "monitor:clean:plan": "node tools/storage-maintenance.cjs --site-monitor",
+    "test:monitor": "node tools/local-run.cjs node --require ./tools/test-env.cjs --test tools/site-monitor/tests/monitor.test.mjs",
     "dev": "node tools/local-run.cjs web dev",
     "build": "node tools/local-run.cjs web build",
     "start": "node tools/local-run.cjs web start",

@@ -92,7 +92,7 @@ function busyCategories(root, processes) {
     if (ancestors.has(p.pid)) continue;
     if (!p.command) { busy.add('all'); continue; }
     const command = norm(p.command).toLowerCase();
-    if (/desktop-browser/.test(command)) continue; // UI profile is never a cleanup target.
+    if (/desktop-browser|site-monitor\/(?:main\.mjs|browser\/)/.test(command)) continue; // Monitor profiles have their own PID leases.
     if (/mongod|--test|test-env\.cjs/.test(command)) { busy.add('temp'); busy.add('build'); busy.add('clean-room'); }
     if (/next[/ ]|next-server|server\/(dev|staging)\.js|clean-room\.mjs/.test(command)) { busy.add('build'); busy.add('clean-room'); }
     if (/novel-crawler/.test(command) && !/desktop\/main\.mjs/.test(command)) busy.add('crawler-cache');
@@ -170,7 +170,7 @@ function evidenceHashes(root, check) {
   for (const relative of ['.novel-crawler/sources.json', '.novel-crawler/jobs', '.novel-crawler/continuations']) visit(inside(root, relative));
   return hashes;
 }
-function plan(root, {now = Date.now(), initial = false, policy = POLICY, processes = processSnapshot(), tracked = trackedFiles(root)} = {}) {
+function plan(root, {now = Date.now(), initial = false, policy = POLICY, processes = processSnapshot(), tracked = trackedFiles(root), scope, reserveBytes = 0} = {}) {
   root = validateRoot(root);
   const busy = busyCategories(root, processes), candidates = [], protectedPaths = [], warnings = [], checkedParents = new Set();
   const check = pendingCheck(root); check(true);
@@ -182,6 +182,14 @@ function plan(root, {now = Date.now(), initial = false, policy = POLICY, process
   function directories(parent, regex, category) {
     return entries(root, parent).filter(e => e.isDirectory() && regex.test(e.name)).map(e => inspect(parent + '/' + e.name, category)).filter(Boolean).sort((a, b) => b.newest - a.newest);
   }
+  // Monitor-only retention uses the same path, fingerprint, pin and Git guards.
+  // It never enumerates business storage. Closed profiles have explicit PID leases.
+  const monitor = require('./site-monitor/storage-policy.cjs');
+  for (const relative of monitor.candidates(root, now, reserveBytes)) {
+    try { candidates.push({...snapshot(root, relative, tracked, checkedParents, check), category:'site-monitor'}); }
+    catch (e) { if (e.code === 'STORAGE_YIELD') throw e; protectedPaths.push({path:relative,reason:e.message}); }
+  }
+  if (scope === 'site-monitor') return {root,scope,reserveBytes,createdAt:new Date(now).toISOString(),initial,candidates,bytes:candidates.reduce((n,x)=>n+x.bytes,0),busy:[],protectedPaths,warnings};
   let defaultBuild = '.next-candidate';
   const config = inside(root, 'web-next/next.config.ts');
   if (fs.existsSync(config)) {
@@ -218,7 +226,7 @@ function plan(root, {now = Date.now(), initial = false, policy = POLICY, process
     if (finished?.success === false && !keptFailure && now - item.newest < policy.cacheAge) { keptFailure = true; continue; }
     if (now - item.newest > (finished ? policy.tempAge : policy.cacheAge)) candidates.push(item);
   }
-  for (const item of directories('.runtime/test-tmp', /^(?:test1-(?:mongo|sqlite)|mongo-mem|novel-browser)-[A-Za-z0-9]+$/, 'temp')) if (now - item.newest > policy.tempAge) candidates.push(item);
+  for (const item of directories('.runtime/test-tmp', /^(?:test1-(?:mongo|sqlite)|mongo-mem|novel-browser|site-monitor-test)-[A-Za-z0-9]+$/, 'temp')) if (now - item.newest > policy.tempAge) candidates.push(item);
   for (const [relative, category] of [['.runtime/npm-cache', 'npm-cache'], ['browser_data/Default/Cache', 'browser-cache']]) {
     if (!fs.existsSync(inside(root, relative))) continue;
     const item = inspect(relative, category);
@@ -268,7 +276,7 @@ function plan(root, {now = Date.now(), initial = false, policy = POLICY, process
 
 function execute(root, proposed, options = {}) {
   // Rebuild the allowlist from current state; never trust a saved path list.
-  const current = proposed.candidates.length ? plan(root, {...options, initial: proposed.initial}) : proposed;
+  const current = proposed.candidates.length ? plan(root, {...options, initial: proposed.initial, scope:proposed.scope, reserveBytes:proposed.reserveBytes||0}) : proposed;
   const allowed = new Map(current.candidates.map(x => [x.path, x]));
   const result = {startedAt: new Date().toISOString(), deleted: [], skipped: [], warnings: current.warnings, busy: current.busy};
   const tracked = options.tracked || trackedFiles(root);
@@ -310,7 +318,7 @@ function maintain({root = ROOT, apply = false, initial = false, ...options} = {}
       if (!alive(read(file).pid)) fs.unlinkSync(file);
     }
     write(root, STATE + '/last-run.json', result);
-    if (!result.busy.length && !result.skipped.length) write(root, STATE + '/last-auto.json', {finishedAt: result.finishedAt});
+    if (!options.scope && !result.busy.length && !result.skipped.length) write(root, STATE + '/last-auto.json', {finishedAt: result.finishedAt});
     return result;
   });
 }
@@ -361,8 +369,8 @@ module.exports = {POLICY, inside, snapshot, plan, execute, maintain, automatic, 
 if (require.main === module) {
   try {
     const args = process.argv.slice(2);
-    if (args.some(x => !['--apply', '--initial', '--auto'].includes(x))) throw Error('Usage: node tools/storage-maintenance.cjs [--apply] [--initial] [--auto]');
+    if (args.some(x => !['--apply', '--initial', '--auto', '--site-monitor'].includes(x))) throw Error('Usage: node tools/storage-maintenance.cjs [--apply] [--initial] [--auto] [--site-monitor]');
     if (args.includes('--auto')) automatic();
-    else console.log(JSON.stringify(maintain({apply: args.includes('--apply'), initial: args.includes('--initial')}), null, 2));
+    else console.log(JSON.stringify(maintain({apply: args.includes('--apply'), initial: args.includes('--initial'), scope:args.includes('--site-monitor')?'site-monitor':undefined}), null, 2));
   } catch (e) { console.error(e.message); process.exitCode = 1; }
 }
