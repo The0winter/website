@@ -4,6 +4,12 @@ import {createHash, randomUUID} from 'node:crypto';
 
 export const hash = value => createHash('sha256').update(typeof value === 'string' || Buffer.isBuffer(value) ? value : JSON.stringify(value)).digest('hex');
 export const readJson = (file, fallback = undefined) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : fallback;
+export function atomicWriteIfChanged(file, data) {
+  const bytes = Buffer.from(JSON.stringify(data, null, 2) + '\n');
+  if (fs.existsSync(file) && fs.readFileSync(file).equals(bytes)) return false;
+  atomicWrite(file, bytes);
+  return true;
+}
 const renameRetryDelays = [10, 20, 40, 80, 160];
 const renameWait = new Int32Array(new SharedArrayBuffer(4));
 export function atomicWrite(file, data, {mode} = {}) {

@@ -29,7 +29,7 @@ export function decode(bytes, contentType = '', encoding) {
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, retries = 2, retryNetworkErrors = false, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal, launchBrowser}) {
+export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, retries = 2, retryNetworkErrors = false, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal, launchBrowser, pacing}) {
   const hosts = new Set(allowedHosts.map(h => h.toLowerCase()));
   const resourceHosts = new Set(browserOptions.resourceHosts || []);
   const actions = [
@@ -42,7 +42,11 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
     return actions.find(action => $(action.selector).length);
   };
   // Also space out search, detail lookup and a new worker's first request.
-  let lastRequest = Date.now();
+  // A library source lane shares this clock across its sequential clients.
+  const clock = pacing || {lastRequest: Date.now()};
+  clock.delayMs = Math.max(clock.delayMs || 0, delayMs);
+  const spacing = () => Math.max(0, clock.lastRequest + clock.delayMs - Date.now(), (clock.blockedUntil || 0) - Date.now());
+  const defer = ms => { clock.blockedUntil = Math.max(clock.blockedUntil || 0, Date.now() + ms); };
   const stats = {requests: 0, cacheHits: 0, retries: 0, bytes: 0};
   let browser, page, closingBrowser, launchPromise, releaseProfile, sessionReady = false, manualAction = false;
   let temporaryProfile, visibleRequested = false, visibleWaiter, isHeadless = true;
@@ -181,11 +185,11 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
     if (render) {
       if (request) throw Error('浏览器模式只支持网页导航');
       for (let attempt = 0; attempt <= retries; attempt++) {
-        await wait(Math.max(0, lastRequest + delayMs - Date.now()));
+        await wait(spacing());
         await ensureBrowser();
         let retryAfterMs, responseListener;
         try {
-          lastRequest = Date.now();
+          clock.lastRequest = Date.now();
           stats.requests++;
           let documentResponse;
           responseListener = response => {
@@ -212,7 +216,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
               // Only observe navigation. The user performs any verification clicks.
               await wait(200);
             }
-            lastRequest = Date.now();
+            clock.lastRequest = Date.now();
             manualAction = false;
             if (browserOptions.minimized) await windowState('minimized');
             onStatus?.({kind: 'active', message: '验证已完成，正在继续读取网页…'});
@@ -221,6 +225,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
           if (status === 429 || status >= 500) {
             const raw = documentResponse.headers()['retry-after'];
             const backoff = raw ? (/^\d+$/.test(raw) ? Number(raw) * 1000 : Date.parse(raw) - Date.now()) : (status === 429 ? 15000 : 1000) * 2 ** attempt;
+            defer(Math.max(delayMs, Number.isFinite(backoff) ? backoff : 15000));
             if (backoff > 60000) throw Object.assign(Error(`服务器要求稍后再试：${original}；Retry-After=${raw}`), {stopSource: true});
             const error = Error(`HTTP ${status}：${original}；网站暂时限制访问，请稍后继续`);
             error.stopSource = status === 429;
@@ -242,8 +247,8 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
               await inputs[0].click({clickCount: 3});
               await inputs[0].press('Backspace');
               await inputs[0].type(searchForm.value);
-              await wait(Math.max(0, lastRequest + delayMs - Date.now()));
-              lastRequest = Date.now(); stats.requests++;
+              await wait(spacing());
+              clock.lastRequest = Date.now(); stats.requests++;
               // The site's ordinary submit handler supplies any dynamic search signature.
               await Promise.all([page.waitForNavigation({waitUntil: 'domcontentloaded', timeout: timeoutMs}), buttons[0].click()]);
               assertUrl(page.url());
@@ -299,7 +304,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
               await wait(200);
             }
             if (!action) {
-              lastRequest = Date.now();
+              clock.lastRequest = Date.now();
               manualAction = false;
               if (browserOptions.minimized) await windowState('minimized');
               onStatus?.({kind: 'active', message: '人工操作已完成，正在继续采集；已保存章节会自动跳过。'});
@@ -327,8 +332,8 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
               const selected = await page.$eval(selector, el => el.value);
               if (selected !== value) {
                 const before = await page.$eval(content, el => el.innerHTML);
-                await wait(Math.max(0, lastRequest + delayMs - Date.now()));
-                lastRequest = Date.now(); stats.requests++;
+                await wait(spacing());
+                clock.lastRequest = Date.now(); stats.requests++;
                 let failureStatus;
                 const responseUrl = selectPages.responseUrl ? assertUrl(httpUrl(selectPages.responseUrl, original)) : null;
                 const observe = response => { if (response.url() === responseUrl && response.status() >= 400) failureStatus = response.status(); };
@@ -390,6 +395,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
           stats.retries++;
         } finally { manualAction = false; if (responseListener) page.off('response', responseListener); }
         onStatus?.({kind: 'retrying', url: original, message: `读取暂时失败，${Math.ceil(retryAfterMs / 1000)} 秒后自动重试（${attempt + 1}/${retries}）；已完成的章节保留。`});
+        defer(retryAfterMs);
         await wait(retryAfterMs);
         onStatus?.({kind: 'active', message: '正在重试读取网页…'});
       }
@@ -399,8 +405,8 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
     for (let redirects = 0; redirects <= 5; redirects++) {
       let response;
       for (let attempt = 0; attempt <= retries; attempt++) {
-        await wait(Math.max(0, lastRequest + delayMs - Date.now()));
-        lastRequest = Date.now();
+        await wait(spacing());
+        clock.lastRequest = Date.now();
         stats.requests++;
         try {
           response = await axios({url, signal, method: request ? 'POST' : 'GET', data: request ? new URLSearchParams(request.form).toString() : undefined, timeout: timeoutMs, responseType: 'arraybuffer', maxRedirects: 0, maxContentLength: maxBytes, maxBodyLength: maxBytes, validateStatus: () => true, headers: {'User-Agent': 'NovelCollector/1.0', Accept: '*/*', ...(request ? {'Content-Type': 'application/x-www-form-urlencoded'} : {})}});
@@ -409,6 +415,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
           if (attempt === retries || error.code === 'ERR_BAD_RESPONSE') throw Error(`下载失败：${url}（${error.code || error.message}）`);
           stats.retries++;
           const backoff = Math.max(delayMs, Math.min(10000, 1000 * 2 ** attempt));
+          defer(backoff);
           onStatus?.({kind: 'retrying', url, message: `网络读取失败，${Math.ceil(backoff / 1000)} 秒后自动重试（${attempt + 1}/${retries}）；已完成的章节保留。`});
           await wait(backoff);
           onStatus?.({kind: 'active', message: '正在重试读取网页…'});
@@ -417,6 +424,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
         if (response.status === 429 || response.status >= 500) {
           const raw = response.headers['retry-after'];
           const backoff = raw ? (/^\d+$/.test(raw) ? Number(raw) * 1000 : Date.parse(raw) - Date.now()) : 1000 * 2 ** attempt;
+          defer(Math.max(delayMs, Number.isFinite(backoff) ? backoff : 1000));
           if (backoff > 60000) throw Object.assign(Error(`服务器要求稍后再试：${url}；Retry-After=${raw}`), {stopSource: true});
           if (attempt === retries) break;
           stats.retries++;

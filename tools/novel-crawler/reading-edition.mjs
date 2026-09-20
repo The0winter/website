@@ -36,8 +36,8 @@ function checkState(state, spec, extraction, outputDir) {
   return outputPath(state, outputDir);
 }
 function fileHash(file) { return fs.existsSync(file) ? hash(fs.readFileSync(file)) : null; }
-function assertOutput(state, file) {
-  const current = fileHash(file);
+function assertOutput(state, file, inspection) {
+  const current = inspection?.files.get(file)?.hash || fileHash(file);
   if (current && current !== state.exportHash) throw Error(`阅读版文件被其他程序修改，拒绝覆盖：${file}`);
 }
 
@@ -56,24 +56,26 @@ function recover(dir, state, spec, extraction, outputDir) {
   return next;
 }
 
-export function loadReadingEdition(dir, spec, extraction, outputDir, {resume = false} = {}) {
+export function loadReadingEdition(dir, spec, extraction, outputDir, {resume = false, inspection} = {}) {
+  if (resume && inspection) throw Error('恢复写入不能使用规划阶段的文件快照');
   if (!hasReadingEdition(dir)) {
     // A variant change creates a new raw job, but must not silently abandon a
     // book's reviewed edition and return to exporting the repeated source.
     const jobs = path.dirname(dir);
-    for (const name of fs.existsSync(jobs) ? fs.readdirSync(jobs) : []) {
+    for (const name of inspection ? inspection.jobs.map(job => path.basename(job.dir)) : fs.existsSync(jobs) ? fs.readdirSync(jobs) : []) {
       const otherDir = path.join(jobs, name);
       if (otherDir === dir || !/^[a-f0-9]{20}$/u.test(name) || !hasReadingEdition(otherDir)) continue;
-      const other = readJson(path.join(otherDir, 'spec.json'));
+      const other = inspection?.jobs.find(job => job.dir === otherDir)?.spec || readJson(path.join(otherDir, 'spec.json'));
       if (other?.sourceUrl === spec.sourceUrl && ['title', 'author'].every(key => normalizedTitle(other[key]) === normalizedTitle(spec[key]))) throw Error('这本书已有另一版本规则的阅读版绑定，请先核对迁移；旧映射和阅读版保留');
     }
     return null;
   }
-  let state = checked(stateFile(dir));
+  // Planning already checked the sealed record; acquire reloads under its lock.
+  let state = inspection?.readingDir === dir ? inspection.readingRecord.value : checked(stateFile(dir));
   checkState(state, spec, extraction, outputDir);
   if (resume) state = recover(dir, state, spec, extraction, outputDir);
   else if (fs.existsSync(pendingFile(dir))) throw Error('上次阅读版更新尚未完成，请继续采集以恢复');
-  assertOutput(state, outputPath(state, outputDir));
+  assertOutput(state, outputPath(state, outputDir), inspection);
   return state;
 }
 
@@ -184,7 +186,7 @@ function orderedChapters(chapters, reviewedPrefix = 0, noticeReviews = [], numbe
   if (!number) throw Error('阅读版未找到连续正文章号');
   return number;
 }
-const editionQuality = (book, mode = 'download') => qualityReport(book.chapters, book.chapters, [], mode);
+const editionQuality = (book, mode = 'download', signatureCache) => qualityReport(book.chapters, book.chapters, [], mode, {signatureCache});
 function checkNewIssues(report, after = 0) {
   const blocking = report.issues.filter(issue => issue.level === 'error' || (issue.chapter > after && issue.level === 'warning' && issue.code !== 'short-outlier'));
   if (blocking.length) throw Error(`阅读版需要核对：${blocking.slice(0, 5).map(i => `第 ${i.chapter} 项 ${i.code}`).join('；')}`);
@@ -298,7 +300,7 @@ export function adoptReadingEdition(dir, spec, extraction, file, outputDir, sour
   return {bindingFile: stateFile(dir), exportFile: state.outputPath, sourceEntries: state.sources.length, readingEntries: book.chapters.length};
 }
 
-export function updateReadingEdition({dir, state, spec, extraction, outputDir, catalog, rawReport}) {
+export function updateReadingEdition({dir, state, spec, extraction, outputDir, catalog, rawReport, signatureCache}) {
   const originalCount = state.book.chapters.length;
   let book = state.book, reusedExport = false, exportFile = null, added = 0, failure, checkedQuality;
   try {
@@ -336,7 +338,7 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
       })) reviewedTailNumber = readingChapterNumber(previous.title) + missingTail.length;
       orderedChapters(chapters, state.sourceOrderReview ? originalCount : 0, state.noticeReviews, state.numberingReviews, reviewedTailNumber);
       const nextBook = {...book, ...Object.fromEntries(['description', 'status', 'category', 'cover_image', 'authorSourceUrl'].filter(key => spec[key] !== undefined).map(key => [key, spec[key]])), chapters};
-      const nextQuality = editionQuality(nextBook);
+      const nextQuality = editionQuality(nextBook, 'download', signatureCache);
       checkNewIssues(nextQuality, originalCount);
       prepareImport(nextBook);
       const file = outputPath(state, outputDir), nextHash = hash(bytes(nextBook));
@@ -349,7 +351,7 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
       book = nextBook; checkedQuality = nextQuality; added = tail.length; exportFile = file;
     }
   } catch (error) { failure = {error: error.message, nextStep: '保留当前阅读版，核对报告中的新增条目或来源映射后再继续。'}; }
-  const quality = checkedQuality || editionQuality(book, rawReport.mode);
+  const quality = checkedQuality || editionQuality(book, rawReport.mode, signatureCache);
   if (failure) { quality.failures.push(failure); quality.errors++; quality.structuralPass = false; }
   return {...rawReport, ...quality, readingEdition: true, sourceExpected: rawReport.expected, sourceDownloaded: rawReport.downloaded, sourceErrors: rawReport.errors, sourceWarnings: rawReport.warnings,
     ...(state.sourceOrderReview ? {acceptedSourceOrder: state.sourceOrderReview} : {}),

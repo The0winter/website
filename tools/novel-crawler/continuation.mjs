@@ -81,7 +81,7 @@ function inventory(outputDir) {
   return books;
 }
 
-export function continuationState(spec, {stateDir, outputDir}) {
+export function continuationState(spec, {stateDir, outputDir, inspection}) {
   const dir = directory(stateDir, spec), file = path.join(dir, 'binding.json');
   if (hasContinuation(spec, stateDir)) {
     const pending = fs.existsSync(path.join(dir, 'pending.json')) ? checked(path.join(dir, 'pending.json')) : null;
@@ -89,13 +89,13 @@ export function continuationState(spec, {stateDir, outputDir}) {
     validateBinding(binding, spec, outputDir);
     const output = targetPath(outputDir, binding.file);
     if (!fs.existsSync(output)) throw Error('已绑定的续更文件被移走，请恢复原文件后继续');
-    const exportHash = hash(fs.readFileSync(output));
+    const exportHash = inspection?.files.get(output)?.hash || hash(fs.readFileSync(output));
     if (!(pending ? [pending.previousExportHash, pending.next.exportHash] : [binding.exportHash]).includes(exportHash)) throw Error('续更文件已被其他程序修改，拒绝覆盖');
     const switching = binding.source.url !== spec.sourceUrl;
     return {state: switching ? 'switch' : 'complete', saved: binding.count, total: binding.count, continuation: {file: binding.file, hash: exportHash},
       message: `已关联本地文件「${binding.file}」· ${binding.count} 项；${switching ? '换源续更会先核对衔接，只追加后续章节。' : '检查更新会沿用当前来源，只追加后续章节。'}`};
   }
-  let candidates = inventory(outputDir).filter(book => sameBook(spec, book));
+  let candidates = (inspection?.books || inventory(outputDir)).filter(book => sameBook(spec, book));
   if (!candidates.some(book => book.sourceUrl !== spec.sourceUrl)) return null;
   // Prefer an explicitly bound reading edition over its raw export.
   const jobs = path.join(stateDir, 'jobs'), reviewed = new Set();

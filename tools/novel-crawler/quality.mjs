@@ -61,7 +61,7 @@ function shingles(text) {
   return result;
 }
 
-export function qualityReport(catalog, chapters, failures = [], mode = 'download') {
+export function qualityReport(catalog, chapters, failures = [], mode = 'download', {signatureCache} = {}) {
   const issues = [...chapters.flatMap(chapterQuality), ...chapterDuplicateIssues(chapters)];
   const inverted = new Map();
   const lengths = chapters.map(c => c.content.trim().length).sort((a, b) => a - b);
@@ -73,7 +73,14 @@ export function qualityReport(catalog, chapters, failures = [], mode = 'download
     const text = normalizedText(chapter.content);
     if (text.length >= 100) {
       const key = hash(text);
-      const signature = shingles(text), candidates = new Map();
+      // Reuse only content-derived signatures, never findings or acceptance.
+      // Both editions still compare every chapter and recompute all issues.
+      let signature = signatureCache?.get(key);
+      if (!signature) {
+        signature = shingles(text);
+        if (signatureCache && signatureCache.size < 8192) signatureCache.set(key, signature);
+      }
+      const candidates = new Map();
       for (const part of signature) for (const item of inverted.get(part) || []) candidates.set(item, (candidates.get(item) || 0) + 1);
       for (const [item, overlap] of candidates) {
         if (item.hash !== key && overlap / (signature.size + item.size - overlap) >= 0.75) issues.push({level: 'warning', code: 'similar-body', chapter: chapter.chapter_number, otherChapter: item.number, detail: '正文高度相似，仅标记，不删章'});

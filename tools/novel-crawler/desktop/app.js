@@ -201,9 +201,12 @@ function render() {
   $('start').textContent = selected?.local?.blocked ? '需先核对本地版本' : $('probe-only').checked ? (selected?.local?.continuation ? '检查衔接 →' : '开始试采 →') : selected?.local?.state === 'switch' ? '换源续更 ↓' : selected?.local?.state === 'complete' ? '检查更新 ↓' : selected?.local?.saved ? '继续采集 ↓' : '试采并下载 ↓';
   if (data.adapterErrors.length) feedback(`有站点配置需要修复：${data.adapterErrors.join('；')}`);
 }
+function currentLibraryBook(batch) {
+  return (batch?.currentControlId && batch.items.find(item => item.controlId === batch.currentControlId)) || batch?.items.find(item => item.state === 'waiting') || batch?.items.find(item => ['running', 'retrying'].includes(item.state));
+}
 function renderLibrary(batch) {
   const upload = batch?.kind === 'upload';
-  const current = batch?.items.find(item => ['running', 'retrying', 'waiting'].includes(item.state));
+  const current = currentLibraryBook(batch);
   const waiting = data.task.phase === 'library-wait' && current?.state === 'waiting';
   retryBook.hidden = !waiting;
   skipBook.hidden = upload || !current || !active;
@@ -221,7 +224,7 @@ function renderLibrary(batch) {
   }
   $('library-summary').hidden = !batch;
   $('library-results').hidden = !batch?.items.length;
-  $('library-summary').textContent = batch ? upload ? `已处理 ${batch.checked} / ${batch.total} 本 · 新书 ${batch.newBooks} 本 · 新增 ${batch.added} 章 · 已同步 ${batch.unchanged} 本${batch.failed ? ` · 未完成 ${batch.failed} 本` : ''}` : `已处理 ${batch.checked} / ${batch.total} 本 · 更新 ${batch.updated} 本 · 最新 ${batch.unchanged} 本 · 新增 ${batch.added} 章${batch.skipped ? ` · 跳过 ${batch.skipped} 本` : ''}` : '';
+  $('library-summary').textContent = batch ? upload ? `已处理 ${batch.checked} / ${batch.total} 本 · 新书 ${batch.newBooks} 本 · 新增 ${batch.added} 章 · 已同步 ${batch.unchanged} 本${batch.failed ? ` · 未完成 ${batch.failed} 本` : ''}` : `已处理 ${batch.checked} / ${batch.total} 本 · 更新 ${batch.updated} 本 · 最新 ${batch.unchanged} 本 · 新增 ${batch.added} 章${batch.active > 1 ? ` · 同时处理 ${batch.active} 本` : ''}${batch.skipped ? ` · 跳过 ${batch.skipped} 本` : ''}` : '';
   const key = JSON.stringify(batch?.items);
   if (key === libraryKey) return;
   libraryKey = key;
@@ -251,7 +254,7 @@ async function search(event) {
 }
 $('search-form').addEventListener('submit', search);
 async function libraryDecision(action) {
-  const current = data.task.batch?.items.find(item => ['running', 'retrying', 'waiting'].includes(item.state));
+  const current = currentLibraryBook(data.task.batch);
   if (!current || libraryDecisionPending) return;
   libraryDecisionPending = true; retryBook.disabled = skipBook.disabled = true;
   try { await api('library-action', {controlId: current.controlId, action}); }

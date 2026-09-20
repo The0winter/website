@@ -2,18 +2,20 @@ import {randomUUID} from 'node:crypto';
 
 // A fresh id per book prevents a delayed click from skipping the next book.
 export function createLibraryControl({signal, shouldStop = () => false} = {}) {
-  let current;
+  const active = new Map();
   const stopped = () => signal?.aborted || shouldStop();
-  const interrupt = () => current?.resolve?.('stop');
-  const abort = () => { current?.controller.abort(); interrupt(); };
+  const interrupt = () => { for (const book of active.values()) book.resolve?.('stop'); };
+  const abort = () => { for (const book of active.values()) book.controller.abort(); interrupt(); };
   signal?.addEventListener('abort', abort, {once: true});
   return {
     begin() {
-      current = {id: randomUUID(), controller: new AbortController(), skipped: false};
+      const current = {id: randomUUID(), controller: new AbortController(), skipped: false};
+      active.set(current.id, current);
       if (stopped()) current.controller.abort();
       return current;
     },
     act(id, action) {
+      const current = active.get(id);
       if (!current || current.id !== id || stopped() || current.skipped) return false;
       if (action === 'skip') {
         current.skipped = true; current.controller.abort(); current.resolve?.('skip');
@@ -30,7 +32,7 @@ export function createLibraryControl({signal, shouldStop = () => false} = {}) {
       });
     },
     interrupt,
-    end(book) { if (current === book) { interrupt(); current = null; } },
-    close() { abort(); signal?.removeEventListener('abort', abort); current = null; },
+    end(book) { if (active.get(book.id) === book) { book.resolve?.('stop'); active.delete(book.id); } },
+    close() { abort(); signal?.removeEventListener('abort', abort); active.clear(); },
   };
 }

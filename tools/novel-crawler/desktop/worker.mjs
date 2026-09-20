@@ -38,6 +38,9 @@ process.on('message', async message => {
     if (message.library) {
       libraryControl = createLibraryControl({signal: controller.signal, shouldStop: () => paused});
       const result = await updateLibrary({stateDir: message.stateDir, outputDir: message.outputDir, sites: message.sites,
+        // Older open desktops select the first running row. Keep those windows
+        // serial until reopened with the UI that follows currentControlId.
+        concurrency: message.libraryConcurrency === 2 ? 2 : 1,
         control: libraryControl,
         signal: controller.signal, shouldStop: () => paused,
         onClient: value => { client = value; },

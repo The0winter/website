@@ -134,7 +134,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
           if (worker === current) worker = null;
           if (!completed && busy(task)) { if (stopRequested) stoppedTask(); else update({phase: 'error', message: `书库更新进程停止，已保存章节保留。${workerError.slice(-300)}`}); }
         });
-        current.send({type: 'start', library: true, stateDir, outputDir, sites: librarySites});
+        current.send({type: 'start', library: true, libraryConcurrency: 2, stateDir, outputDir, sites: librarySites});
         return respond(202, {ok: true});
       }
       if (pathname === '/api/upload-library') {

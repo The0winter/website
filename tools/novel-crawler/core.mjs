@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
-import {atomicWrite, readJson, hash, safeName, withLock} from './storage.mjs';
+import {atomicWrite, atomicWriteIfChanged, readJson, hash, safeName, withLock} from './storage.mjs';
 import {makeClient, httpUrl} from './http.mjs';
 import {getCatalog, getChapter, getResource, refreshNextChapter} from './adapters.mjs';
 import {navigationCatalog, mergeRecent, navigationReport} from './navigation.mjs';
@@ -113,23 +113,23 @@ function exportPath(spec, id, outputDir) {
   return path.join(path.resolve(outputDir || path.join(projectRoot, 'downloads')), `${safeName(spec.title)}--${safeName(spec.author)}--${id.slice(0, 8)}.json`);
 }
 
-export function localBookState(spec, {stateDir = defaultStateDir, outputDir} = {}) {
+export function localBookState(spec, {stateDir = defaultStateDir, outputDir, inspection} = {}) {
   spec = validateSpec(spec);
   try {
-    const continuation = continuationState(spec, {stateDir: path.resolve(stateDir), outputDir: path.resolve(outputDir || path.join(projectRoot, 'downloads'))});
+    const continuation = continuationState(spec, {stateDir: path.resolve(stateDir), outputDir: path.resolve(outputDir || path.join(projectRoot, 'downloads')), inspection});
     if (continuation) return continuation;
   } catch (error) { return {state: 'blocked', blocked: true, saved: 0, total: 0, message: error.message}; }
   const id = jobId(spec), dir = path.join(stateDir, 'jobs', id);
   try {
-    const reading = loadReadingEdition(dir, spec, extractionHash(spec), outputDir || path.join(projectRoot, 'downloads'));
-    const previous = readJson(path.join(dir, 'spec.json'));
+    const reading = loadReadingEdition(dir, spec, extractionHash(spec), outputDir || path.join(projectRoot, 'downloads'), {inspection});
+    const previous = inspection?.jobs.find(job => job.dir === dir)?.spec || readJson(path.join(dir, 'spec.json'));
     if (!previous) return {state: 'new', saved: 0, total: 0, message: '尚未采集'};
     if (extractionHash(previous) !== extractionHash(spec)) return {state: 'incompatible', saved: 0, total: 0, message: '来源规则已有变化，旧进度保留，需先核对适配规则。'};
     const catalog = readJson(path.join(dir, 'catalog.json'), []), chaptersDir = path.join(dir, 'chapters');
     const files = new Set(fs.existsSync(chaptersDir) ? fs.readdirSync(chaptersDir) : []);
     const saved = catalog.filter(entry => files.has(hash(entry.link) + '.json')).length;
     const exported = readJson(path.join(dir, 'export.json')), file = exportPath(spec, id, outputDir);
-    const fileExists = fs.existsSync(file), fileValid = fileExists && exported?.path === file && hash(fs.readFileSync(file)) === exported.hash;
+    const fileExists = fs.existsSync(file), fileValid = fileExists && exported?.path === file && (inspection?.files.get(file)?.hash || hash(fs.readFileSync(file))) === exported.hash;
     const total = spec.catalog?.walk ? readJson(path.join(dir, 'navigation-state.json'), {}).expectedCount || catalog.length : catalog.length;
     if (reading) {
       const readingCount = reading.book.chapters.length;
@@ -200,8 +200,10 @@ function reportMarkdown(report) {
   ].join('\n');
 }
 
+const registryWrites = new Map();
 async function recordSource(stateDir, spec, report, id) {
-  await withLock(path.join(stateDir, 'registry.lock'), async () => {
+  const lock = path.join(stateDir, 'registry.lock');
+  const work = (registryWrites.get(lock) || Promise.resolve()).catch(() => {}).then(() => withLock(lock, async () => {
     const file = path.join(stateDir, 'sources.json');
     const registry = readJson(file, {version: 1, sites: {}});
     const host = new URL(spec.sourceUrl).hostname;
@@ -222,7 +224,10 @@ async function recordSource(stateDir, spec, report, id) {
     site.score = Math.round(books.reduce((sum, b) => sum + b.score, 0) / books.length);
     registry.sites[host] = site;
     atomicWrite(file, registry);
-  });
+  }));
+  registryWrites.set(lock, work);
+  try { await work; }
+  finally { if (registryWrites.get(lock) === work) registryWrites.delete(lock); }
 }
 
 export async function acquire(input, options = {}) {
@@ -255,7 +260,7 @@ async function acquireRaw(input, options = {}) {
     const shouldStop = () => options.signal?.aborted || options.shouldStop?.();
     const client = options.client || makeClient({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser, onStatus: options.onStatus, shouldStop, signal: options.signal});
     const initialStats = {...client.stats};
-    const started = Date.now(), chapters = [], failures = [];
+    const started = Date.now(), chapters = [], failures = [], signatureCache = reading ? new Map() : undefined;
     let catalog = [], source, evidence, report, exportFile, descriptionStatus, paused = false, reusedExport = false;
     try {
       const oldCatalog = readJson(path.join(dir, 'catalog.json'));
@@ -408,8 +413,8 @@ async function acquireRaw(input, options = {}) {
           const saved = checkpoint(entry);
           if (saved) { chapters.push(saved.chapter); loadedLinks.add(entry.link); }
         }
-        report = navigationReport(qualityReport(catalog, chapters, failures, mode), source, catalog);
-        atomicWrite(path.join(dir, 'partial.json'), bookData(spec, chapters));
+        report = navigationReport(qualityReport(catalog, chapters, failures, mode, {signatureCache}), source, catalog);
+        atomicWriteIfChanged(path.join(dir, 'partial.json'), bookData(spec, chapters));
         if (!reading && report.completeAgainstSource && report.structuralPass) {
           const book = bookData(spec, chapters);
           prepareImport(book);
@@ -423,12 +428,12 @@ async function acquireRaw(input, options = {}) {
           if (!reusedExport) atomicWrite(exportFile, book);
           atomicWrite(path.join(dir, 'export.json'), {path: exportFile, hash: hash(fs.readFileSync(exportFile))});
         }
-      } else report = navigationReport(qualityReport(catalog, chapters, failures, mode), source, catalog);
+      } else report = navigationReport(qualityReport(catalog, chapters, failures, mode, {signatureCache}), source, catalog);
     } catch (error) {
       exportFile = null;
       if (shouldStop()) paused = true;
       else failures.push(failureDetails(error));
-      report = navigationReport(qualityReport(catalog, chapters, failures, mode), source, catalog);
+      report = navigationReport(qualityReport(catalog, chapters, failures, mode, {signatureCache}), source, catalog);
       report.structuralPass = false;
       report.completeAgainstSource = false;
     } finally {
@@ -441,7 +446,7 @@ async function acquireRaw(input, options = {}) {
     if (!paused) await recordSource(stateDir, spec, details, id);
     if (reading) {
       options.onStatus?.({kind: 'reading-edition', message: '正在核对来源映射并整理网站阅读版…'});
-      const result = updateReadingEdition({dir, state: reading, spec, extraction: extractionHash(spec), outputDir, catalog, rawReport: details});
+      const result = updateReadingEdition({dir, state: reading, spec, extraction: extractionHash(spec), outputDir, catalog, rawReport: details, signatureCache});
       result.rawReportFile = path.join(dir, `${mode}-report.json`);
       result.reportFile = path.join(dir, `reading-${mode}-report.json`);
       result.summaryFile = path.join(dir, `reading-${mode}-report.md`);

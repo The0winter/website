@@ -48,11 +48,15 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
     catch { /* A known export without a readable job will use guarded tail reconciliation. */ }
   }
   const plans = [];
+  // One read-only inventory per planning pass. Keep hashes/metadata, not whole
+  // novels; the worker still rechecks the selected file before collecting.
+  const inventory = [...groups.values()].flat();
+  const inspection = {books: inventory, files: new Map(inventory.map(book => [path.join(outputDir, book.file), book])), jobs};
   for (const [key, files] of groups) {
     let book = files[0];
     try {
       const related = jobs.filter(job => job.key === key);
-      let binding, reading, rawJob;
+      let binding, reading, readingRecord, rawJob;
       if (hasContinuation(book, stateDir)) {
         const dir = path.join(stateDir, 'continuations', key);
         binding = fs.existsSync(path.join(dir, 'pending.json')) ? sealed(path.join(dir, 'pending.json')).next : sealed(path.join(dir, 'binding.json'));
@@ -64,7 +68,9 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
         if (editions.length > 1) throw Error('有多个阅读版来源绑定，请先核对保留的版本');
         if (editions.length) {
           reading = editions[0];
-          const record = sealed(path.join(reading.dir, 'reading-edition.json'));
+          readingRecord = readJson(path.join(reading.dir, 'reading-edition.json'));
+          if (!readingRecord?.value || readingRecord.hash !== hash(readingRecord.value)) throw Error('来源绑定记录损坏，请先核对；原文件保留');
+          const record = readingRecord.value;
           book = files.find(item => path.join(outputDir, item.file) === record.outputPath);
           if (!book) throw Error('已绑定的阅读版被移走，请恢复原文件后再更新');
           book = {...book, url: reading.spec.sourceUrl};
@@ -86,7 +92,7 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
         }
         if (reading) {
           if (fs.existsSync(path.join(reading.dir, 'reading-edition-pending.json'))) throw Error('上次阅读版更新尚未完成，请先继续更新以恢复');
-          if (sealed(path.join(reading.dir, 'reading-edition.json')).exportHash !== book.hash) throw Error('已绑定的阅读版被修改，请先核对');
+          if (readingRecord.value.exportHash !== book.hash) throw Error('已绑定的阅读版被修改，请先核对');
         }
         plans.push({...book, state: 'pending', message: '等待核对网站书库'});
         continue;
@@ -114,7 +120,7 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
       const spec = applyVerifiedBookStatus(currentSpec, stateDir, currentSpec.identityNormalization);
       if (binding && (binding.source.variant !== (spec.variant || '') || binding.source.extraction !== extractionHash(spec))) throw Error('当前续更来源规则已变化，请先核对适配；原文件保留');
       if (reading && (jobId(reading.spec) !== jobId(spec) || extractionHash(reading.spec) !== extractionHash(spec))) throw Error('阅读版来源规则已变化，请先核对映射；原文件保留');
-      const local = localBookState(spec, {stateDir, outputDir});
+      const local = localBookState(spec, {stateDir, outputDir, inspection: {...inspection, readingRecord, readingDir: reading?.dir}});
       if (binding || reading || (rawJob && jobId(rawJob.spec) === jobId(spec))) {
         if (local.blocked || ['modified', 'incompatible', 'unknown'].includes(local.state)) throw Error(local.message);
       }
@@ -138,22 +144,61 @@ export function librarySummary(items) {
 }
 const publicItem = ({file, title, author, url, count, state, message, added, failure, controlId}) => ({file, title, author, url, count, state, message, added, failure, controlId});
 
+function sourceLanes(plans, sites) {
+  const owners = new Map(), parent = new Map();
+  const root = key => parent.has(key) ? root(parent.get(key)) : key;
+  for (const item of plans) {
+    let host;
+    try { host = new URL(item.url).hostname.toLowerCase(); } catch { host = item.file; }
+    const hosts = new Set([host, ...(item.spec?.allowedHosts || []), ...(sites.find(site => site.hosts.includes(host))?.hosts || [])]);
+    for (const name of hosts) {
+      if (owners.has(name) && root(host) !== root(owners.get(name))) parent.set(root(host), root(owners.get(name)));
+      owners.set(name, host);
+    }
+    item.lane = host;
+  }
+  const lanes = new Map();
+  for (const item of plans) {
+    const key = root(item.lane);
+    if (!lanes.has(key)) lanes.set(key, {items: [], pacing: {lastRequest: Date.now(), delayMs: 0}});
+    const lane = lanes.get(key);
+    lane.items.push(item); lane.pacing.delayMs = Math.max(lane.pacing.delayMs, item.spec?.delayMs ?? 1200);
+  }
+  return [...lanes.values()];
+}
+
 export async function updateLibrary({stateDir, outputDir, sites, shouldStop = () => false, signal, onLibrary = () => {}, onPhase = () => {},
-  onStatus, onProgress, onClient = () => {}, onFailure, control = createLibraryControl({signal, shouldStop}), collect = acquire, createClient = makeClient}) {
-  const plans = planLibrary({stateDir, outputDir, sites}), startedAt = new Date().toISOString();
-  const stopped = () => signal?.aborted || shouldStop();
-  const snapshot = () => ({startedAt, ...librarySummary(plans), items: plans.map(publicItem)});
+  onStatus, onProgress, onClient = () => {}, onFailure, control = createLibraryControl({signal, shouldStop}), collect = acquire, createClient = makeClient, concurrency = 2}) {
+  if (![1, 2].includes(concurrency)) throw Error('书库更新同时处理的来源数只能为1或2');
+  const startedAt = new Date().toISOString(), planningStarted = Date.now();
+  sites ||= loadSites().sites;
+  const plans = planLibrary({stateDir, outputDir, sites}), planningMs = Date.now() - planningStarted;
+  let fatal, presentationKey, lastStatus, lastProgress, lastBatch = 0;
+  const clients = new Map();
+  const stopped = () => !!fatal || signal?.aborted || shouldStop();
+  const needsAttention = () => plans.some(item => item.state === 'waiting' || ['login', 'verification'].includes(item.status?.kind));
+  const selected = () => plans.find(item => item.state === 'waiting') || plans.find(item => ['login', 'verification'].includes(item.status?.kind)) || plans.find(item => ['running', 'retrying'].includes(item.state));
+  const snapshot = () => ({startedAt, planningMs, concurrency, active: plans.filter(item => ['running', 'retrying'].includes(item.state)).length,
+    currentControlId: selected()?.controlId, ...librarySummary(plans), items: plans.map(publicItem)});
+  function publish(progressOnly = false) {
+    const current = selected(), phase = current?.state === 'waiting' ? 'library-wait' : current?.phase;
+    const key = current ? `${current.controlId}:${phase}` : '';
+    const changed = key !== presentationKey;
+    if (changed) { presentationKey = key; lastStatus = lastProgress = null; if (current) onPhase(phase, current); }
+    onClient(clients.get(current) || null);
+    if (current?.state !== 'waiting' && current?.status && current.status !== lastStatus) { lastStatus = current.status; onStatus?.(current.status); }
+    if (current?.state !== 'waiting' && current?.progress && current.progress !== lastProgress) { lastProgress = current.progress; onProgress?.(current.progress); }
+    if (!progressOnly || changed || Date.now() - lastBatch >= 1000) { lastBatch = Date.now(); onLibrary(snapshot()); }
+  }
   onLibrary(snapshot());
-  try {
-    for (const item of plans) {
-      if (stopped()) break;
+  async function updateBook(item, pacing) {
       const bookControl = control.begin();
       item.controlId = bookControl.id;
-      const bookStopped = () => stopped() || bookControl.skipped;
+      const bookStopped = () => stopped() || bookControl.skipped || bookControl.controller.signal.aborted;
       let blocked = item.state === 'blocked' ? item.message : null;
       while (!bookStopped()) {
         item.state = 'running'; item.message = '正在核对来源目录…'; delete item.failure; delete item.interruption;
-        onPhase('probe', item); onLibrary(snapshot());
+        item.phase = 'probe'; item.status = item.progress = null; publish();
         let client, failure;
         try {
           if (blocked) throw Error(blocked);
@@ -161,18 +206,19 @@ export async function updateLibrary({stateDir, outputDir, sites, shouldStop = ()
           if (!fs.lstatSync(file).isFile() || fs.lstatSync(file).isSymbolicLink() || hash(fs.readFileSync(file)) !== item.hash) throw Error('排队期间下载文件被修改或移走，请重新检查；原文件保留');
           const spec = item.spec;
           client = createClient({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts,
-            delayMs: spec.delayMs, retries: 2, retryNetworkErrors: true, timeoutMs: spec.timeoutMs, browser: spec.browser,
+            delayMs: spec.delayMs, pacing, retries: 2, retryNetworkErrors: true, timeoutMs: spec.timeoutMs, browser: spec.browser,
             signal: bookControl.controller.signal, shouldStop: bookStopped, onStatus: status => {
               item.state = status.kind === 'retrying' ? 'retrying' : 'running'; item.message = status.message;
               item.interruption = ['login', 'verification', 'retrying'].includes(status.kind) ? failureDetails(Error(status.message), {url: status.url || item.url}) : null;
-              onStatus?.(status); onLibrary(snapshot());
+              item.status = status; publish();
             }});
-          onClient(client);
-          const options = {stateDir, outputDir, continuation: item.continuation, client, signal: bookControl.controller.signal, shouldStop: bookStopped, stopOnFailure: true, onStatus, onProgress};
+          clients.set(item, client); publish();
+          const options = {stateDir, outputDir, continuation: item.continuation, client, signal: bookControl.controller.signal, shouldStop: bookStopped, stopOnFailure: true,
+            onStatus: status => { item.status = status; publish(); }, onProgress: progress => { item.progress = progress; publish(true); }};
           // Download already validates identity, catalog, checkpoints, every new
           // chapter and the complete edition before replacing the output. A
           // separate probe repeats the catalog and whole-book quality work.
-          onPhase('download', item);
+          item.phase = 'download'; publish();
           const report = await collect(spec, {...options, mode: 'download'});
           if (report.exportFile && report.structuralPass && (report.completeAgainstSource || report.completeSelectedScope)) {
             if (path.resolve(report.exportFile) !== file) throw Error('更新输出与原文件不一致，请核对来源绑定');
@@ -188,13 +234,13 @@ export async function updateLibrary({stateDir, outputDir, sites, shouldStop = ()
         } finally {
           try { await client?.close(); }
           catch (error) { failure = failureDetails(Error(`采集窗口关闭失败：${error.message}`)); }
-          onClient(null);
+          clients.delete(item);
         }
         if (bookStopped()) break;
         if (!failure) break;
-        item.state = 'waiting'; item.message = failure.error; item.failure = failure;
+        item.state = 'waiting'; item.message = failure.error; item.failure = failure; item.status = null;
         const decision = control.wait(bookControl);
-        onPhase('library-wait', item); onLibrary(snapshot());
+        publish();
         if (onFailure) control.act(bookControl.id, await onFailure(publicItem(item)));
         const action = await decision;
         if (action !== 'retry') break;
@@ -202,15 +248,33 @@ export async function updateLibrary({stateDir, outputDir, sites, shouldStop = ()
         // restores a protected file. Never accept a different edition implicitly.
         const refreshed = planLibrary({stateDir, outputDir, sites}).find(book => book.file === item.file && book.title === item.title && book.author === item.author);
         blocked = !refreshed ? '原文件被移走或身份发生变化，请恢复后重试' : refreshed.state === 'blocked' ? refreshed.message : null;
-        if (refreshed && !blocked) Object.assign(item, refreshed, {controlId: bookControl.id});
+        if (refreshed && !blocked) {
+          const hosts = value => [...new Set([new URL(value.url).hostname, ...(value.spec?.allowedHosts || [])])].sort().join(',');
+          if (hosts(refreshed) !== hosts(item)) blocked = '来源域名已变化，请停止后重新更新书库，以重新安排来源限速';
+          else Object.assign(item, refreshed, {controlId: bookControl.id});
+        }
       }
       const completed = ['updated', 'unchanged'].includes(item.state);
       if (bookControl.skipped && !completed) { item.failure ||= item.interruption; item.state = 'skipped'; item.message = `已手动跳过${item.failure ? `：${item.failure.error}` : '，已保存章节保留'}`; }
       else if (!completed && (stopped() || item.state === 'waiting')) { item.state = 'stopped'; item.message = '已停止，已保存的章节可续传'; }
       control.end(bookControl);
-      onLibrary(snapshot());
+      item.status = null; publish();
+  }
+  const lanes = sourceLanes(plans, sites), running = new Map();
+  try {
+    while (!stopped()) {
+      while (running.size < concurrency && !needsAttention() && !stopped()) {
+        const lane = lanes.find(lane => lane.items.length && !running.has(lane));
+        if (!lane) break;
+        const item = lane.items.shift();
+        const work = updateBook(item, lane.pacing).catch(error => { fatal ||= error; control.close(); }).finally(() => running.delete(lane));
+        running.set(lane, work);
+      }
+      if (!running.size) break;
+      await Promise.race(running.values());
     }
-  } finally { control.close(); }
+  } finally { if (stopped()) control.interrupt(); await Promise.all(running.values()); control.close(); onClient(null); }
+  if (fatal) throw fatal;
   for (const item of plans) if (['pending', 'blocked'].includes(item.state)) { item.state = 'stopped'; item.message = '尚未检查，下次更新时继续核对'; }
   const result = {...snapshot(), finishedAt: new Date().toISOString(), stopped: !!stopped()};
   onLibrary(result);

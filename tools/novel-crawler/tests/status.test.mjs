@@ -30,6 +30,7 @@ test('all sources read status only from the selected book; conflicting, missing 
     qiufengshuwu: '<div class="cataloginfo"><div class="infotype"><p>作品状态：已完结</p></div></div>',
     xszj: '<div class="detail-status">已完结</div>',
     youyouxs: '<meta property="og:novel:status" content="已完结">',
+    '80qishu': '<div class="bookcover"><span class="type">已完结</span></div>',
   };
   for (const site of loadSites().sites) for (const metadata of [site.book.metadata, site.spec.metadata]) {
     if (!metadata.status) {
