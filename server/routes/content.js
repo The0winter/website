@@ -3,6 +3,7 @@ import {readChapterBody,chapterResponse} from '../services/chapter-storage.js';
 import Book from '../models/Book.js';
 import Chapter from '../models/Chapter.js';
 import Bookmark from '../models/Bookmark.js';
+import {recordBookMilestones} from '../services/book-milestones.js';
 import Review from '../models/Review.js';
 import {claimMedia,retireUnreferencedCover} from '../services/media-reference.js';
 import {finishCoverRetirement} from '../services/cover-retention.js';
@@ -112,10 +113,31 @@ export function contentRoutes(app,auth) {
   }));
   app.get('/api/users/:userId/bookmarks/:bookId/check',auth.authenticate,own,asyncRoute(async(req,res)=>res.json({isBookmarked:!!await Bookmark.exists({user_id:req.user.id,bookId:req.params.bookId})})));
   app.post('/api/users/:userId/bookmarks',auth.authenticate,own,asyncRoute(async(req,res)=>{
-    if(!await Book.exists({_id:req.body.bookId,deletedAt:null,visibility:{$ne:'private'}}))fail(404,'作品不可用');
-    const b=await Bookmark.findOneAndUpdate({user_id:req.user.id,bookId:req.body.bookId},{$setOnInsert:{user_id:req.user.id,bookId:req.body.bookId}},{new:true,upsert:true});res.json(b);
+    if(typeof req.body.bookId!=='string'||!/^[a-f\d]{24}$/i.test(req.body.bookId))fail(400,'作品ID无效');
+    let bookmark;
+    await mongoose.connection.transaction(async session=>{
+      const book=await Book.findOneAndUpdate({_id:req.body.bookId,deletedAt:null,visibility:{$ne:'private'}},{$inc:{milestoneVersion:1}},{session,timestamps:false});
+      if(!book)fail(404,'作品不可用');
+      const filter={user_id:req.user.id,bookId:book._id};
+      const favorites=await Bookmark.countDocuments({bookId:book._id}).session(session);
+      bookmark=await Bookmark.findOne(filter).session(session);
+      const added=!bookmark;
+      if(added)[bookmark]=await Bookmark.create([filter],{session});
+      await recordBookMilestones(book,{favorites},{favorites:favorites+Number(added)},session);
+    });
+    res.json(bookmark);
   }));
-  app.delete('/api/users/:userId/bookmarks/:bookId',auth.authenticate,own,asyncRoute(async(req,res)=>{await Bookmark.deleteOne({user_id:req.user.id,bookId:req.params.bookId});res.json({success:true});}));
+  app.delete('/api/users/:userId/bookmarks/:bookId',auth.authenticate,own,asyncRoute(async(req,res)=>{
+    await mongoose.connection.transaction(async session=>{
+      const book=await Book.findOneAndUpdate({_id:req.params.bookId},{$inc:{milestoneVersion:1}},{session,timestamps:false});
+      if(book){
+        const favorites=await Bookmark.countDocuments({bookId:book._id}).session(session);
+        // Preserve any pre-existing achievements before removing the bookmark.
+        await recordBookMilestones(book,{favorites},{},session);
+      }
+      await Bookmark.deleteOne({user_id:req.user.id,bookId:req.params.bookId},{session});
+    });res.json({success:true});
+  }));
   app.post('/api/books/:id/reviews',auth.authenticate,asyncRoute(async(req,res)=>{
     const {rating,content}=req.body;
     if(!Number.isInteger(rating)||rating<1||rating>5||typeof content!=='string'||!content.trim()||content.length>4000)fail(400,'评分须为1—5整数，评价1—4000字');

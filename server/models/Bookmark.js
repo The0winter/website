@@ -30,6 +30,7 @@ const bookmarkSchema = new mongoose.Schema({
 
 // 复合索引：防止重复收藏
 bookmarkSchema.index({ user_id: 1, bookId: 1 }, { unique: true });
+bookmarkSchema.index({ bookId: 1 });
 
 const Bookmark = mongoose.model('Bookmark', bookmarkSchema);
 export default Bookmark;

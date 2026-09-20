@@ -1,6 +1,13 @@
 import mongoose from 'mongoose';
 
 const bookSchema = new mongoose.Schema({
+  milestoneVersion: {type: Number, default: 0},
+  milestonesInitializedAt: Date,
+  milestoneHistory: {type: [new mongoose.Schema({
+    kind: {type: String, enum: ['favorites', 'views'], required: true},
+    threshold: {type: Number, required: true},
+    achievedAt: {type: Date, default: null},
+  }, {_id: false})], default: undefined},
   statisticsVersion:Number,
   statisticsLegacy:{daily:Number,weekly:Number,monthly:Number,switchedAt:Date},
   importManaged:{type:Boolean,default:false},

@@ -10,6 +10,7 @@ import Link from './PrefetchLink';
 import ReadingEntryLink from './ReadingEntryLink';
 import RecordBookVisit from './RecordBookVisit';
 import BookCatalogSheet from './BookCatalogSheet';
+import {BookMilestoneEntry, BookMilestoneSheet, useBookMilestones} from './BookMilestones';
 import {useBookCatalog} from '@/lib/useBookCatalog';
 import {formatChapterTitle} from '@/lib/catalog-title';
 import {formatRating, ratingLabel} from '@/lib/rating';
@@ -146,6 +147,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   const recentChapterId = useSyncExternalStore(subscribeReadingSession, () => lastReadChapter(book.id), serverLastReadChapter);
   
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const milestones = useBookMilestones(book.id, isBookmarked);
   const [loading, setLoading] = useState(false);
 
   // 🔥 目录交互状态
@@ -328,7 +330,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   const compactCount = new Intl.NumberFormat('zh-CN', {notation: 'compact', maximumFractionDigits: 1});
   const mobileWordCount = totalWords === null ? null : Math.floor(totalWords >= 10000 ? totalWords / 10000 : totalWords);
   const mobileWordUnit = totalWords !== null && totalWords >= 10000 ? '万字' : '字';
-  const viewCount = compactCount.format(book.views || 0);
+  const liveViews = milestones.data?.counts.views ?? book.views ?? 0;
+  const viewCount = compactCount.format(liveViews);
 
   return (
     // 修改1：增加手机端底部 padding (pb-24)，防止被常驻底栏遮挡内容
@@ -384,7 +387,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                      {/* 电脑端才显示的额外信息 */}
                      <div className="hidden md:flex items-center">
                         <span className="text-gray-500 w-16">阅读量:</span>
-                        <span className="text-gray-900 font-medium">{(book.views || 0).toLocaleString('zh-CN')}</span>
+                        <span className="text-gray-900 font-medium">{liveViews.toLocaleString('zh-CN')}</span>
                      </div>
                      <div className="hidden md:flex items-center">
                         <span className="text-gray-500 w-16">更新时间:</span>
@@ -428,11 +431,14 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                  <div className="mt-4 pt-4 border-t border-gray-100 text-right">
                      <span className="text-xs text-gray-400">评分来自真实用户</span>
                  </div>
+                 <div className="book-desktop-milestone"><BookMilestoneEntry bookId={book.id} state={milestones}/></div>
               </div>
             </div>
 
             {/* 手机端统计与简介卡片 */}
             <div className="book-intro md:hidden mt-4 pt-3 border-t border-gray-100">
+              <div className="book-mobile-overview">
+                <BookMilestoneEntry bookId={book.id} state={milestones}/>
                 <dl className="book-mobile-stats" aria-label="作品数据">
                   <div>
                     <dt>字数</dt>
@@ -450,10 +456,12 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                     </dd>
                   </div>
                 </dl>
+              </div>
                 <BookDescription description={book.description}/>
             </div>
         </div>
 
+        <BookMilestoneSheet title={book.title} state={milestones}/>
         {/* === 第二部分：作品简介 (⚠️ 设为 hidden md:block 仅电脑端独立一栏显示，电脑端排在第2) === */}
         <div className="hidden md:block bg-white rounded-lg shadow-sm p-4 md:p-8 order-2">
           <div className="flex justify-between items-center mb-2 md:mb-4">

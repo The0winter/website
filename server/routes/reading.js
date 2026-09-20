@@ -15,6 +15,7 @@ import {asyncRoute} from '../security.js';
 import {dayKey,fail} from '../services/content.js';
 import {rankedBooks,rankingViewFields} from '../services/ranking.js';
 import {readBookIndex} from '../services/book-reading-index.js';
+import {bookMilestones, recordBookMilestones} from '../services/book-milestones.js';
 
 const receiptSchema=new mongoose.Schema({_id:String,bookId:mongoose.Schema.Types.ObjectId,chapterId:mongoose.Schema.Types.ObjectId,day:String,expiresAt:{type:Date,expires:0}});
 const Receipt=mongoose.models.ReadReceipt||mongoose.model('ReadReceipt',receiptSchema);
@@ -27,6 +28,11 @@ export function readingRoutes(app,auth) {
   libraryRoutes(app,auth);
   paragraphCommentRoutes(app,auth);
   catalogRoutes(app);
+  app.get('/api/books/:bookId/milestones',asyncRoute(async(req,res)=>{
+    const book = await Book.findOne({_id:req.params.bookId,deletedAt:null}).select('views milestoneHistory milestonesInitializedAt').maxTimeMS(3000).lean();
+    if (!book) fail(404,'作品不可用');
+    res.set('Cache-Control','private, no-store').json(await bookMilestones(book));
+  }));
   app.get('/api/authors/:id',asyncRoute(async(req,res)=>{
     const profile=await Author.findById(req.params.id).lean();
     if(profile)return res.json({id:String(profile._id),username:profile.name,avatar:'',created_at:profile.createdAt});
@@ -85,7 +91,9 @@ export function readingRoutes(app,auth) {
     await mongoose.connection.transaction(async session=>{
       counted=false;
       if(await Receipt.exists({_id:id}).session(session))return;
-      if(!await Book.findOneAndUpdate({_id:bookId,deletedAt:null,...publicWork},{$inc:{views:1},$set:{statisticsVersion:2}},{session}))fail(404,'作品不可用');
+      const book=await Book.findOneAndUpdate({_id:bookId,deletedAt:null,...publicWork},{$inc:{views:1},$set:{statisticsVersion:2}},{session});
+      if(!book)fail(404,'作品不可用');
+      await recordBookMilestones(book,{views:book.views || 0},{views:(book.views || 0)+1},session);
       await ChapterRead.updateOne({_id:chapter._id},{$setOnInsert:{bookId,startedAt:new Date()},$inc:{views:1}},{session,upsert:true});
       await Receipt.create([{_id:id,bookId,chapterId:chapter._id,day,expiresAt:new Date(Date.now()+8*86400000)}],{session});
       await Daily.updateOne({_id:`${bookId}:${day}`},{$setOnInsert:{bookId,day},$unset:{expiresAt:1},$inc:{views:1}},{session,upsert:true});counted=true;
