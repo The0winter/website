@@ -30,7 +30,7 @@ const HOT_TOPICS = [
 
 const currentTheme = {
   bg: 'bg-[var(--home-background)]',
-  card: 'bg-[var(--home-surface)]',
+  card: 'md:bg-[var(--home-surface)]',
   textMain: 'text-[var(--home-text)]',
   textSub: 'text-[var(--home-muted)]',
   border: 'border-[var(--home-border)]',
