@@ -90,6 +90,9 @@
 .community-tabs button[aria-selected=true] { color:#1a1a1a; font-weight:600; }
 .community-tabs small { font-size:inherit; font-weight:inherit; color:inherit; }
 .book-review-compose { flex-shrink:0; min-height:32px; padding:2px 12px; border-radius:18px; background:#f6f6f8; color:#55585e; font-size:14px; line-height:24px; cursor:pointer; }
+.book-article-compose { display:inline-flex; align-items:center; justify-content:center; gap:5px; flex-shrink:0; min-height:32px; padding:2px 11px; border:1px solid #bd695338; border-radius:18px; background:#bd695308; color:#a4503c; font-size:14px; line-height:24px; }
+.book-article-compose:hover { background:#bd695314; border-color:#bd69536b; }
+.book-article-compose:focus-visible { outline:2px solid currentColor; outline-offset:3px; }
 .book-review-list { display:flex; flex-direction:column; gap:20px; }
 .book-review { padding:0; text-align:left; }
 .book-review-row { display:flex; align-items:flex-start; gap:12px; }

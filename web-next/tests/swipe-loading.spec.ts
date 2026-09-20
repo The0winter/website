@@ -72,10 +72,10 @@ for(const width of [390,1440]) test(`${width}px book loading uses the site logo 
     await expect.poll(()=>loading.evaluate(element=>element.getBoundingClientRect().x)).toBeCloseTo(0,1);
     await expect(loading.locator('img.loading-logo')).toHaveAttribute('src',/\/_next\/image\?/);
     await expect.poll(()=>loading.locator('img').evaluate(image=>(image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth>0)).toBe(true);
-    await expect(loading.locator('img')).toHaveCSS('width',width<768?'36px':'48px');
+    await expect(loading.locator('img')).toHaveCSS('width','36px');
     const centered=await loading.evaluate(element=>{
-      const logo=element.querySelector('img')!.getBoundingClientRect(),message=element.querySelector('p')!.getBoundingClientRect(),dots=element.querySelector('.loading-dots')!.getBoundingClientRect();
-      return {logoCenter:logo.x+logo.width/2,textCenter:message.x+message.width/2,dotsLeft:dots.left,textRight:message.right};
+      const logo=element.querySelector('img')!.getBoundingClientRect(),message=element.querySelector('p')!.getBoundingClientRect(),text=element.querySelector('p>span')!.getBoundingClientRect(),dots=element.querySelector('.loading-dots')!.getBoundingClientRect();
+      return {logoCenter:logo.x+logo.width/2,textCenter:message.x+message.width/2,dotsLeft:dots.left,textRight:text.right};
     });
     expect(centered.logoCenter).toBeCloseTo(width/2,1);expect(centered.textCenter).toBeCloseTo(width/2,1);expect(centered.dotsLeft).toBeCloseTo(centered.textRight,1);
     const dots=loading.locator('.loading-dots');

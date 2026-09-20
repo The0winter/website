@@ -13,7 +13,7 @@ for (const width of [320, 390, 430]) {
       const number = sheet.locator('[data-reader-page]'), body = sheet.locator('.reader-columns');
       await expect(root).toHaveAttribute('data-reader-ready', 'true');
       await expect(body).toHaveCSS('font-size', '22px');
-      await expect(body).toHaveCSS('line-height', '33px');
+      await expect(body).toHaveCSS('line-height', '30.8px');
       await expect(body.locator('p').first()).toHaveCSS('margin-bottom', '15.84px');
       await page.addStyleTag({content: 'nextjs-portal{display:none!important}'});
       const clip = {x: 2, y: 100, width: 12, height: 600};

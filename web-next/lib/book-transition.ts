@@ -42,12 +42,15 @@ function bookLoadingPage(href: string, label = '书籍') {
   panel.setAttribute('aria-label', `正在打开${label}`);
   panel.setAttribute('aria-busy', 'true');
   const logo = document.createElement('img');
-  const {props} = getImageProps({src:'/icon.png',alt:'',width:48,height:48});
+  const {props} = getImageProps({src:'/icon.png',alt:'',width:36,height:36});
   logo.srcset = props.srcSet ?? ''; logo.src = props.src;
-  logo.alt = ''; logo.width = 48; logo.height = 48; logo.className = 'loading-logo';
+  logo.alt = ''; logo.width = 36; logo.height = 36; logo.className = 'loading-logo';
   const message = document.createElement('p');
+  message.className = 'loading-text';
   message.setAttribute('role', 'status');
-  message.textContent = `正在打开${label}`;
+  const text = document.createElement('span');
+  text.textContent = `正在打开${label}`;
+  message.append(text);
   const dots = document.createElement('span');
   dots.className = 'loading-dots'; dots.setAttribute('aria-hidden', 'true');
   message.append(dots);

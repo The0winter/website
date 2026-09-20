@@ -32,8 +32,8 @@ const turnModes=[
   {value:'scroll',label:'上下滚屏',hint:'上下滑动连续阅读，章节自动衔接'},
   {value:'vertical',label:'上下翻页',hint:'上下滑动或点击上下区域翻页，点击中央打开菜单'},
 ] as const;
-function ReaderModeSetting({value,onChange}:{value:ReaderTurnMode;onChange:(value:ReaderTurnMode)=>void}){
-  return <fieldset className="reader-mode-setting"><legend>翻页方式</legend><div className="reader-mode-options">{turnModes.map(mode=><button key={mode.value} type="button" aria-pressed={value===mode.value} onClick={()=>onChange(mode.value)}>{mode.label}</button>)}</div></fieldset>;
+function ReaderModeSetting({value,onChange,onClose}:{value:ReaderTurnMode;onChange:(value:ReaderTurnMode)=>void;onClose:()=>void}){
+  return <div className="reader-mode-setting" role="group" aria-label="翻页方式"><div className="reader-settings-header"><span>翻页方式</span><button type="button" aria-label="关闭阅读设置" onClick={onClose}><X size={20}/></button></div><div className="reader-mode-options">{turnModes.map(mode=><button key={mode.value} type="button" aria-pressed={value===mode.value} onClick={()=>onChange(mode.value)}>{mode.label}</button>)}</div></div>;
 }
 
 let bgCleanupTimer: NodeJS.Timeout | null = null;
@@ -132,7 +132,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const [themeColor, setThemeColor] = useStoredState('reader_themeColor',settingsCache.themeColor,v=>['gray','cream','green','blue'].includes(String(v)));
   const [fontFamily, setFontFamily] = useStoredState('reader_fontFamily',settingsCache.fontFamily,v=>['sans','serif','kai'].includes(String(v)));
   const [fontSizeNum, setFontSizeNum] = useStoredState('reader_fontSizeNum',settingsCache.fontSizeNum,v=>typeof v==='number'&&Number.isFinite(v)&&v>=12&&v<=72);
-  const [lineHeight, setLineHeight] = useStoredState('reader_lineHeight',isDesktop ? 1.6 : 1.5,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000);
+  const [lineHeight, setLineHeight] = useStoredState('reader_lineHeight',isDesktop ? 1.6 : 1.4,v=>typeof v==='number'&&Number.isFinite(v)&&(isDesktop ? v>0&&v<3000 : v>=1.2&&v<=1.8));
   const [paraSpacing, setParaSpacing] = useStoredState('reader_paraSpacing',settingsCache.paraSpacing,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000); 
   const [pageWidth, setPageWidth] = useStoredState('reader_pageWidth',settingsCache.pageWidth,v=>typeof v==='number'&&Number.isFinite(v)&&v>0&&v<3000);
   const [turnMode,setTurnMode]=useStoredState<ReaderTurnMode>('reader_turnMode',settingsCache.turnMode,value=>turnModes.some(mode=>mode.value===value));
@@ -447,14 +447,8 @@ if (loading) return (
                 borderColor: activeTheme.line 
                 }}
             >
-                <div className="flex justify-end mb-2">
-                    <button onClick={() => setShowSettings(false)} aria-label="关闭阅读设置" className="p-1 hover:bg-black/5 rounded-full">
-                        <X className="w-6 h-6 opacity-60"/>
-                    </button>
-                </div>
-
                 <div className="space-y-6">
-                    <ReaderModeSetting value={turnMode} onChange={setTurnMode}/>
+                    <ReaderModeSetting value={turnMode} onChange={setTurnMode} onClose={()=>setShowSettings(false)}/>
                     {/* Theme */}
                     <div className="flex items-center">
                         <span className="w-20 font-bold opacity-70 shrink-0">阅读主题</span>
@@ -536,9 +530,9 @@ if (loading) return (
                     <div className="flex items-start">
                         <span className="w-20 font-bold opacity-70 shrink-0 pt-2">排版间距</span>
                         <div className="flex-1 flex flex-col gap-4">
-                            {/* 行高 */}
+                            {/* 行距 */}
                             <div>
-                                <div className="text-xs opacity-50 mb-2">行高</div>
+                                <div className="text-xs opacity-50 mb-2">行距</div>
                                 <div className="flex bg-black/5 rounded-lg p-1">
                                     {[1.6, 1.8, 2.0, 2.4].map((lh) => (
                                         <button 
@@ -576,8 +570,7 @@ if (loading) return (
               borderColor: activeTheme.line 
             }}
           >
-            <div className="flex justify-end mb-3"><button aria-label="关闭阅读设置" onClick={()=>setShowSettings(false)} className="p-1"><X size={18}/></button></div>
-            <ReaderModeSetting value={turnMode} onChange={setTurnMode}/>
+            <ReaderModeSetting value={turnMode} onChange={setTurnMode} onClose={()=>setShowSettings(false)}/>
             {/* 紧凑排版：字号调整 (放在最上面方便操作) */}
             <div className="flex items-center gap-3 mb-4 bg-black/5 rounded-lg p-2">
                 <button onClick={() => setFontSizeNum(Math.max(12, fontSizeNum - 1))} className="px-3 font-serif hover:bg-black/10 rounded">A-</button>
@@ -631,21 +624,16 @@ if (loading) return (
                  </div>
               </div>
 
-              {/* 排版间距：行高与段距 (移动端) */}
+              {/* 排版间距：行距与段距 (移动端) */}
               <div className="flex flex-col gap-3">
-                {/* 行高 */}
-                <div className="flex items-center gap-2">
-                    <span className="text-xs opacity-50 font-bold w-10">行高</span>
-                    <div className="flex flex-1 gap-2 bg-black/5 rounded-lg p-1">
-                      {[1.5, 1.6, 1.8, 2.0, 2.4].map((lh) => (
-                        <button
-                          key={lh}
-                          onClick={() => setLineHeight(lh)}
-                          className={`flex-1 py-1 text-xs rounded transition-all ${lineHeight === lh ? 'bg-white shadow-sm font-bold text-blue-600' : ''}`}
-                        >
-                          {lh}
-                        </button>
-                      ))}
+                {/* 行距 */}
+                <div className="reader-line-spacing flex items-center gap-2">
+                    <label htmlFor="reader-line-spacing" className="text-xs opacity-50 font-bold w-10 shrink-0">行距</label>
+                    <div className="reader-line-spacing-control">
+                      <span>1.2</span>
+                      <input id="reader-line-spacing" type="range" min="1.2" max="1.8" step="0.1" value={lineHeight} onChange={event=>setLineHeight(Number(event.target.value))}/>
+                      <span>1.8</span>
+                      <output htmlFor="reader-line-spacing">{lineHeight.toFixed(1)}</output>
                     </div>
                 </div>
                 

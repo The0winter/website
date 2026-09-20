@@ -213,7 +213,7 @@ function CreatePostContent() {
               </>
             ) : (
               <>
-                <LoadingLogo size={40} className="mb-4"/>
+                <LoadingLogo className="mb-4"/>
                 <p className="text-[#646a73] font-medium text-sm"><LoadingText>正在提交</LoadingText></p>
               </>
             )}

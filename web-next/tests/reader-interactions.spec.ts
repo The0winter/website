@@ -77,7 +77,11 @@ for (const width of [390, 1440]) {
         await expect(settings(page)).toBeVisible(); await expectTools(page, true);
       };
       await openSettings();
-      await page.screenshot({path: `../artifacts/reader-interactions-settings-${width}-${mode}.png`});
+      const header = await settings(page).locator('.reader-settings-header').evaluate(element => {
+        const label = element.querySelector('span')!.getBoundingClientRect(), close = element.querySelector('button')!.getBoundingClientRect();
+        return {labelY: label.y + label.height / 2, closeY: close.y + close.height / 2};
+      });
+      expect(header.labelY).toBeCloseTo(header.closeY, 1);
       await expect(settings(page).locator('.reader-mode-setting p')).toHaveCount(0);
       await expect(settings(page)).not.toContainText('滑动或点击');
       await settings(page).getByRole('button', {name: '宋体', exact: true}).click();
@@ -106,3 +110,44 @@ for (const width of [390, 1440]) {
     });
   }
 }
+
+for (const width of [320, 390]) test(`mobile line spacing repaginates and persists within 1.2–1.8 at ${width}px`, async ({page}, info) => {
+  await page.setViewportSize({width, height: 844});
+  await page.goto(reader); await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
+  const open = async () => {
+    if (await settings(page).isVisible()) return;
+    await page.getByRole('button', {name: '阅读菜单', exact: true}).focus();
+    await page.keyboard.press('Enter');
+    await expectTools(page, true);
+    await tools(page).getByRole('button', {name: '设置', exact: true}).click();
+  };
+  await open();
+  const slider = settings(page).getByRole('slider', {name: '行距'});
+  await expect(slider).toHaveValue('1.4');
+  await expect(settings(page)).not.toContainText('行高');
+  const spacing = () => page.locator('.reader-columns').evaluate(element => Number.parseFloat(getComputedStyle(element).lineHeight) / Number.parseFloat(getComputedStyle(element).fontSize));
+  await expect.poll(spacing).toBeCloseTo(1.4, 2);
+  await slider.focus(); await page.keyboard.press('Home'); await page.keyboard.press('ArrowLeft');
+  await expect(slider).toHaveValue('1.2');
+  await expect.poll(spacing).toBeCloseTo(1.2, 2);
+  await page.keyboard.press('End'); await page.keyboard.press('ArrowRight');
+  await expect(slider).toHaveValue('1.8');
+  await expect.poll(spacing).toBeCloseTo(1.8, 2);
+  await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
+  await page.screenshot({path: info.outputPath('verified-line-spacing.png')});
+  await settings(page).getByRole('button', {name: '关闭阅读设置'}).click();
+  await expect(settings(page)).toHaveCount(0);
+  await page.reload(); await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
+  await open(); await expect(slider).toHaveValue('1.8');
+  // Older in-range preferences remain available even between the former presets.
+  await page.evaluate(() => localStorage.setItem('reader_lineHeight', '1.5'));
+  await settings(page).getByRole('button', {name: '关闭阅读设置'}).click();
+  await expect(settings(page)).toHaveCount(0);
+  await page.reload(); await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
+  await open(); await expect(slider).toHaveValue('1.5');
+  await page.evaluate(() => localStorage.setItem('reader_lineHeight', '2.4'));
+  await settings(page).getByRole('button', {name: '关闭阅读设置'}).click();
+  await expect(settings(page)).toHaveCount(0);
+  await page.reload(); await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
+  await open(); await expect(slider).toHaveValue('1.4');
+});

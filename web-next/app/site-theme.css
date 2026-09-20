@@ -68,6 +68,7 @@
 .dark .book-actions .read-now { color:#fff; }
 .dark .book-mobile-stats dd,.dark .community-tabs button[aria-selected=true],.dark .book-review-name,.dark .book-review-content { color:var(--home-text); }
 .dark .book-review-compose { background:var(--home-soft); color:var(--home-muted); }
+.dark .book-article-compose { color:#e2a38b; background:#e2a38b0c; border-color:#e2a38b40; }
 .dark .book-catalog-sheet { --catalog-paper:#24211e; --catalog-border:#3b342e; background:var(--catalog-paper); color:var(--home-text); }
 .dark .book-catalog-header { background:var(--catalog-paper); border-color:var(--catalog-border); }
 .dark .book-catalog-header p,.dark .book-catalog-volume-count,.dark .book-catalog-loading { color:var(--home-muted); }

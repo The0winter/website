@@ -19,7 +19,7 @@ import {beginChapterEntry} from '@/lib/chapter-entry';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, Heart, HeartCrack, X, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, Heart, HeartCrack, X, ChevronRight, ChevronDown, ChevronUp, PenLine } from 'lucide-react';
 import BookArticles from './BookArticles';
 import './book-detail.css';
 import { useAuth } from '@/contexts/AuthContext';
@@ -500,8 +500,9 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
               <button id="articles-tab" role="tab" aria-selected={communityTab === 'articles'} aria-controls="articles-panel" onClick={() => setCommunityTab('articles')}>文章</button>
             </div>
             {communityTab === 'reviews' && !showReviewForm && <button className="book-review-compose" disabled={authLoading || personalLoading || Boolean(personalError)} onClick={openReviewForm}>写书评</button>}
+            {communityTab === 'articles' && <Link className="book-article-compose" href={`/forum/create?type=article&bookId=${book.id}&bookTitle=${encodeURIComponent(book.title)}`}><PenLine size={14} aria-hidden="true"/>写文章</Link>}
             </div>
-            {communityTab === 'articles' && <div id="articles-panel" role="tabpanel" aria-labelledby="articles-tab"><BookArticles bookId={book.id} title={book.title} /></div>}
+            {communityTab === 'articles' && <div id="articles-panel" role="tabpanel" aria-labelledby="articles-tab"><BookArticles bookId={book.id} /></div>}
             <div id="reviews-panel" role="tabpanel" aria-labelledby="reviews-tab" aria-busy={reviewsLoading} hidden={communityTab !== 'reviews'}>
             
             {/* 评论表单 */}
@@ -611,7 +612,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             {chapterError && <p role="alert" className="mb-3 text-sm text-red-600">{chapterError} <button onClick={catalog.retry} className="underline">重试</button></p>}
             {loadingChapters && chapters.length === 0 ? (
                <div className="py-6 md:py-10 text-center text-gray-500 flex flex-col items-center">
-                  <LoadingLogo size={32} className="mb-2"/>
+                  <LoadingLogo className="mb-2"/>
                   <p className="text-xs md:text-sm"><LoadingText>加载目录</LoadingText></p>
                </div>
             ) : chapters.length === 0 ? (

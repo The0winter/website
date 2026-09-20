@@ -2,7 +2,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {ChevronLeft, ChevronRight, Eye, TrendingUp} from 'lucide-react';
 import {safeFetch} from '@/lib/request';
-import {LoadingLogo} from './BrandLoading';
+import {LoadingLogo, LoadingText} from './BrandLoading';
 import './writer-statistics.css';
 
 type Statistics = {period: string; points: {date: string; views: number | null}[]; historyStart: string; totalViews: number; bestChapter: {views: number; title: string} | null; hasPrevious: boolean; hasNext: boolean; previousEnd: string; nextEnd: string};
@@ -42,7 +42,7 @@ export default function WriterStatistics({onReady}: {onReady?: () => void}) {
     </div>
     <section className="ws-trend" aria-label="浏览量趋势">
       <div className="ws-trend-heading"><h3>浏览量趋势</h3><div className="ws-periods" aria-label="统计周期">{[['day','每日'],['week','每周'],['month','每月']].map(([value, title]) => <button type="button" key={value} aria-pressed={period === value} onClick={() => {setEnd(''); setPeriod(value);}}>{title}</button>)}</div></div>
-      {error ? <div className="ws-status" role="alert"><p>{error}</p><button onClick={() => setRetry(n => n + 1)}>重新加载</button></div> : loading ? <div className="ws-status" role="status"><LoadingLogo size={32}/>正在读取浏览量</div> : <>
+      {error ? <div className="ws-status" role="alert"><p>{error}</p><button onClick={() => setRetry(n => n + 1)}>重新加载</button></div> : loading ? <div className="ws-status" role="status"><LoadingLogo/><LoadingText>正在读取浏览量</LoadingText></div> : <>
         <div className="ws-chart" ref={scroll} tabIndex={0} role="region" aria-label="浏览量时间图，可左右滑动">
           <svg width={width} height="240" role="img" aria-label={`按${period === 'day' ? '日' : period === 'week' ? '周' : '月'}统计的浏览量，最大值 ${max}`}>
             {[0, .5, 1].map(n => <g key={n}><line x1="24" x2={width - 24} y1={y(n * max)} y2={y(n * max)} stroke="#e9ddd2" strokeDasharray="4 5"/><text x="8" y={y(n * max) - 8} fill="#927b68" fontSize="11">{Math.round(n * max)}</text></g>)}
