@@ -725,6 +725,30 @@ test('a reviewed notice retains the selected complete text; unrelated or changed
   await assert.rejects(f.run(), /损坏/);
 });
 
+test('unknown duplicate notices require both exact notice reviews before choosing a version', async t => {
+  const f = await fixture(t), original = fs.readFileSync(f.file);
+  f.state.count=7;
+  for(const n of [5,6])f.state.titles[n]='本月抽奖活动加码！以及奖品补充说明';
+  f.state.bodies[5]='完整公告，感谢读者。';f.state.bodies[6]='完整公告，感谢读者。站点广告。';
+  f.state.titles[7]=title(5);f.state.bodies[7]=body(5);
+  const failed=await f.run(), options={...f.options,extraction:extractionHash(f.spec)};
+  assert.equal(failed.completeAgainstSource,false);
+  const review={firstLink:f.base+'/new/c/5',secondLink:f.base+'/new/c/6',keepLink:f.base+'/new/c/5',reason:'两份相同公告，保留没有广告的完整版本'};
+  assert.throws(()=>recordContinuationReview(f.spec,options,review),/不能跨章/);
+  recordContinuationNoticeReview(f.spec,options,{link:review.firstLink,contentHash:hash(f.state.bodies[5]),reason:'全文核实作者活动公告'});
+  assert.throws(()=>recordContinuationReview(f.spec,options,review),/不能跨章/);
+  recordContinuationNoticeReview(f.spec,options,{link:review.secondLink,contentHash:hash(f.state.bodies[6]),reason:'全文核实同一作者活动公告和站点广告'});
+  assert.throws(()=>recordContinuationReview(f.spec,options,{...review,secondLink:f.base+'/new/c/7'}),/不能跨章/);
+  recordContinuationReview(f.spec,options,review);
+  const file=path.join(path.dirname(failed.reportFile),'chapters',hash(review.secondLink)+'.json'),saved=readJson(file),changed={...saved.chapter,content:'后来改成不同的内容。'};
+  atomicWrite(file,{...saved,chapter:changed,hash:hash(changed)});
+  assert.throws(()=>recordContinuationReview(f.spec,options,review),/不能跨章/);
+  assert.equal((await f.run()).completeAgainstSource,false);assert.deepEqual(fs.readFileSync(f.file),original);
+  atomicWrite(file,saved);
+  const result=await f.run();assert.equal(result.completeAgainstSource,true,JSON.stringify(result.failures));
+  assert.equal(result.continuationAdded,2);assert.equal(readJson(f.file).chapters[4].content,f.state.bodies[5]);
+});
+
 test('transport failures stop further requests and preserve completed checkpoints for a later retry', async t => {
   const f = await fixture(t), original = fs.readFileSync(f.file);
   f.state.unavailable = 5;

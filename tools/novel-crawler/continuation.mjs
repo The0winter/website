@@ -193,9 +193,10 @@ export function recordContinuationReview(spec, options, {firstLink, secondLink, 
     if (!saved?.chapter || saved.hash !== hash(saved.chapter) || saved.chapter.link !== link) throw Error('待核对版本的完整检查点缺失或损坏');
     return saved.chapter;
   });
-  const [a, b] = pair.map(chapter => chapterIdentity(chapter.title));
-  if (a ? !b || a.number !== b.number || !compatibleNames(a.name, b.name) : b || !notice(pair[0].title) || normalize(pair[0].title) !== normalize(pair[1].title)) throw Error('只能核对同章号同标题的版本或同名公告，不能跨章删改');
-  const state = loadReviews(spec, options), key = reviewPairKey(pair);
+  const state = loadReviews(spec, options), [a, b] = pair.map(chapter => chapterIdentity(chapter.title));
+  const reviewedNotices = pair.every(chapter => state.noticeDecisions?.some(item => item.key === hash(reviewFingerprint(chapter))));
+  if (a ? !b || a.number !== b.number || !compatibleNames(a.name, b.name) : b || !notice(pair[0].title) && !reviewedNotices || normalize(pair[0].title) !== normalize(pair[1].title)) throw Error('只能核对同章号同标题的版本或同名公告，不能跨章删改');
+  const key = reviewPairKey(pair);
   const decision = {key, versions: pair.map(reviewFingerprint), keepLink, reason: reason.trim(), reviewedAt: new Date().toISOString()};
   state.decisions = [...state.decisions.filter(item => item.key !== key), decision];
   atomicWrite(path.join(sourceDir, 'reviews.json'), sealed(state));
