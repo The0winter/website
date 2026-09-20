@@ -14,8 +14,8 @@ async function readResult(response:Response) {
   return result;
 }
 
-export default function WorkCreator({draftKey, work, embedded, onClose, onComplete}: {
-  draftKey?:string; work?:Book; embedded:boolean; onClose:()=>void; onComplete:()=>void;
+export default function WorkCreator({draftKey, work, embedded, onClose, onComplete, coverOnly = false}: {
+  draftKey?:string; work?:Book; embedded:boolean; onClose:()=>void; onComplete:()=>void; coverOnly?:boolean;
 }) {
   const [title,setTitle]=useState(work?.title || '');
   const [description,setDescription]=useState(work?.description || '');
@@ -32,7 +32,7 @@ export default function WorkCreator({draftKey, work, embedded, onClose, onComple
   const uploaded=useRef<{file:File;url:string}|null>(null);
   const titleLength=Array.from(title).length, descriptionLength=Array.from(description).length;
   const limits=work && !work.manuscriptKey ? {title:100,description:500} : {title:15,description:300};
-  const valid=loaded && Boolean(title.trim() && description.trim()) && titleLength<=limits.title && descriptionLength<=limits.description;
+  const valid=loaded && (coverOnly ? dirty : Boolean(title.trim() && description.trim()) && titleLength<=limits.title && descriptionLength<=limits.description);
 
   useEffect(()=>{
     if(!work)return;
@@ -76,7 +76,7 @@ export default function WorkCreator({draftKey, work, embedded, onClose, onComple
         image=uploaded.current!.url;
       }
       if(work && !work.manuscriptKey) {
-        await readResult(await safeFetch('/api/books/'+work.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,description,cover_image:image})}));
+        await readResult(await safeFetch('/api/books/'+work.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(coverOnly ? {cover_image:image} : {title,description,cover_image:image})}));
       } else {
         const revision=manuscript.current?.revision || 0;
         const body=new FormData();
@@ -91,32 +91,35 @@ export default function WorkCreator({draftKey, work, embedded, onClose, onComple
     finally {lock.current=false;setBusy(false);}
   };
 
-  return <div className={`work-create${embedded ? ' work-create-embedded' : ''}`}>
-    <form ref={form} className="writer-dirty-form work-create-form" aria-label={work ? '编辑作品' : '创建新作品'} data-dirty={dirty} data-busy={busy} onSubmit={event=>{event.preventDefault();void save();}}>
-      {!embedded && <header className="work-create-header"><h1>{work ? '编辑作品' : '创建新作品'}</h1><button type="button" aria-label={work ? '关闭编辑作品' : '关闭新建作品'} disabled={busy} onClick={close}><X size={20}/></button></header>}
+  return <div className={`work-create${embedded ? ' work-create-embedded' : ''}${coverOnly ? ' work-cover-only' : ''}`}>
+    <form ref={form} className="writer-dirty-form work-create-form" aria-label={coverOnly ? '更换封面' : work ? '编辑作品' : '创建新作品'} data-dirty={dirty} data-busy={busy} onSubmit={event=>{event.preventDefault();void save();}}>
+      {!embedded && <header className="work-create-header"><h1>{coverOnly ? '更换封面' : work ? '编辑作品' : '创建新作品'}</h1><button type="button" aria-label={coverOnly ? '关闭更换封面' : work ? '关闭编辑作品' : '关闭新建作品'} disabled={busy} onClick={close}><X size={20}/></button></header>}
+      {coverOnly && <p className="work-cover-title">{title}</p>}
       <div className="work-create-fields">
         <div className="work-create-cover-column">
           <label className="work-create-cover">
-            <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="上传封面（非必要）" disabled={busy || !loaded} onChange={event=>{
+            <input type="file" accept="image/jpeg,image/png,image/webp" aria-label={coverOnly ? '选择新封面' : '上传封面（非必要）'} disabled={busy || !loaded} onChange={event=>{
               const file=event.target.files?.[0];event.target.value='';if(!file)return;
               if(!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size>8*1024*1024){setError('封面支持 8 MB 以内的 JPG、PNG、WebP');return;}
               setCover(file);setDirty(true);setError('');
             }}/>
             <span className="work-create-cover-preview">{(cover && preview) || coverUrl ? <BookCover src={(cover && preview) || coverUrl} alt="作品封面预览"/> : <><ImagePlus size={24}/><span>上传封面</span></>}</span>
-            <small>封面 · 非必要</small>
+            {coverOnly ? <span className="work-cover-select"><ImagePlus size={18}/>{cover ? '重新选择图片' : '选择新封面'}</span> : <small>封面 · 非必要</small>}
           </label>
           {(cover || coverUrl) && <button type="button" className="work-create-remove" disabled={busy || !loaded} onClick={()=>{setCover(null);setPreview('');setCoverUrl('');setDirty(true);}}>移除封面</button>}
         </div>
-        <div className="work-create-copy">
+        {!coverOnly && <div className="work-create-copy">
           <label htmlFor="work-title">书名 <small>{titleLength} / {limits.title}</small></label>
           <input id="work-title" aria-label="书名" value={title} required disabled={busy || !loaded} aria-invalid={titleLength>limits.title} onChange={event=>{setTitle(event.target.value);setDirty(true);}} placeholder="给故事起个名字"/>
           <label htmlFor="work-description">简介 <small>{descriptionLength} / {limits.description}</small></label>
           <textarea id="work-description" aria-label="简介" rows={4} value={description} required disabled={busy || !loaded} aria-invalid={descriptionLength>limits.description} onChange={event=>{setDescription(event.target.value);setDirty(true);}} placeholder="简单介绍你的故事"/>
-        </div>
+        </div>}
       </div>
+      {coverOnly && <p className="work-cover-hint">支持 JPG、PNG、WebP，大小不超过 8 MB</p>}
       <footer className="work-create-footer">
         {error && <p role="alert">{error}</p>}
-        <button type="submit" disabled={busy || !valid}>{busy ? <><Loader2 size={18} className="animate-spin"/>{!loaded ? '正在读取' : work ? '正在保存' : '正在创建'}</> : work ? '保存' : '创建'}</button>
+        {coverOnly && <button className="work-cover-cancel" type="button" disabled={busy} onClick={close}>取消</button>}
+        <button type="submit" disabled={busy || !valid}>{busy ? <><Loader2 size={18} className="animate-spin"/>{!loaded ? '正在读取' : work ? '正在保存' : '正在创建'}</> : coverOnly ? '保存封面' : work ? '保存' : '创建'}</button>
       </footer>
     </form>
   </div>;

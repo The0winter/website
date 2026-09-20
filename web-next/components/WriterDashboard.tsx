@@ -2,6 +2,7 @@
 import BookCover from '@/components/BookCover';
 import WorkCreator from './WorkCreator';
 import WorkActions from './WorkActions';
+import WorkCoverButton from './WorkCoverButton';
 import WritingWorkspace from './WritingWorkspace';
 import WriterStatistics from './WriterStatistics';
 import './writer-desktop.css';
@@ -222,6 +223,7 @@ export default function WriterDashboard({entry}: {entry: string}) {
   };
 
   const openBookManager = (book: Book) => setAdminWork(book);
+  const refreshAdminCovers = () => {void fetchAdminHotBooks(); if (adminBookSearch.trim()) void fetchAdminBookSearchResults(adminBookSearch);};
 
   // Effect
   useEffect(() => {
@@ -541,7 +543,8 @@ export default function WriterDashboard({entry}: {entry: string}) {
                                             <p className="text-xs md:text-sm text-gray-500 mt-1 line-clamp-2">{book.description || '暂无简介'}</p>
                                             <p className="text-xs text-gray-400 mt-1">作者：{getBookAuthorName(book)}</p>
                                         </div>
-                                        <div className="flex gap-2 md:gap-3 mt-3">
+                                        <div className="flex flex-wrap gap-2 md:gap-3 mt-3">
+                                            <WorkCoverButton book={book} onChanged={refreshAdminCovers}/>
                                             <button onClick={() => openBookManager(book)} className="w-32 flex items-center justify-center gap-1 px-3 py-2 bg-white text-gray-700 text-sm font-bold rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 hover:border-gray-300 hover:shadow-md active:scale-95 transition-all cursor-pointer">
                                                 <Settings className="h-3 w-3 md:h-4 md:w-4" /> <span>管理</span>
                                             </button>
@@ -574,7 +577,8 @@ export default function WriterDashboard({entry}: {entry: string}) {
                                             <p className="text-xs md:text-sm text-gray-500 mt-1 line-clamp-2">{book.description || '暂无简介'}</p>
                                             <p className="text-xs text-gray-400 mt-1">作者：{getBookAuthorName(book)} / 今日热度：{book.daily_views || 0}</p>
                                         </div>
-                                        <div className="flex gap-2 md:gap-3 mt-3">
+                                        <div className="flex flex-wrap gap-2 md:gap-3 mt-3">
+                                            <WorkCoverButton book={book} onChanged={refreshAdminCovers}/>
                                             <button onClick={() => openBookManager(book)} className="w-32 flex items-center justify-center gap-1 px-3 py-2 bg-white text-gray-700 text-sm font-bold rounded-lg border border-gray-200 shadow-sm hover:bg-gray-50 hover:border-gray-300 hover:shadow-md active:scale-95 transition-all cursor-pointer">
                                                 <Settings className="h-3 w-3 md:h-4 md:w-4" /> <span>管理</span>
                                             </button>

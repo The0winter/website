@@ -29,6 +29,24 @@
 .work-edit-dialog::backdrop { background:#21160d66; }
 .work-edit-dialog .work-create { min-height:0; padding:0; background:transparent; }
 .work-edit-dialog .work-create-form { border:0; box-shadow:none; }
+.work-cover-dialog { max-width:520px; }
+.work-cover-title { padding:20px 24px 0; text-align:center; font-size:16px; overflow-wrap:anywhere; }
+.work-cover-only .work-create-fields { display:block; padding:20px 24px 4px; }
+.work-cover-only .work-create-cover-column { width:210px; margin:auto; padding-top:0; }
+.work-cover-only .work-create-cover-preview { aspect-ratio:3/4; font-size:15px; }
+.work-cover-only .work-create-cover-preview img { object-fit:contain; }
+.work-cover-select { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; min-height:44px; margin-top:4px; padding:8px 12px; border:1px solid var(--home-border,#d7c4b4); border-radius:9px; background:var(--home-soft,#f2e8de); color:var(--home-text,#634c3b); font-size:15px; font-weight:600; }
+.work-cover-hint { margin:10px 20px 20px; color:var(--home-muted,#927a68); text-align:center; font-size:12px; }
+.work-cover-only .work-create-footer { display:flex; flex-wrap:wrap; gap:12px; padding:0 24px 24px; }
+.work-cover-only .work-create-footer p { flex-basis:100%; margin:0; }
+.work-cover-only .work-create-footer>button { flex:1; width:auto; }
+.work-cover-only .work-create-footer>.work-cover-cancel { background:transparent; border:1px solid var(--home-border,#ddcfc3); color:var(--home-text,#634c3b); font-weight:400; }
+@media(min-width:768px) {
+  .work-edit-dialog:not(.work-cover-dialog) { max-width:760px; }
+  .work-edit-dialog:not(.work-cover-dialog) .work-create-form { max-width:none; }
+  .work-edit-dialog:not(.work-cover-dialog) .work-create-fields { grid-template-columns:160px minmax(0,1fr); gap:30px; padding:28px; }
+  .work-edit-dialog:not(.work-cover-dialog) .work-create-copy textarea { min-height:180px; }
+}
 @media(max-width:767px) {
   .work-create:not(.work-create-embedded) { padding:20px 14px; }
   .work-create-header { padding:14px 18px; }

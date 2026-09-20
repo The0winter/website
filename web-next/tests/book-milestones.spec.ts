@@ -29,6 +29,8 @@ for (const width of [320,390,430,767,768,1440]) {
     if(width<768){
       await expect(page.locator('.book-mobile-stats dd').first()).toHaveCSS('font-size','16px');
       await expect(page.locator('.book-mobile-stats dt').first()).toHaveCSS('font-size','12px');
+      await expect(page.locator('.book-mobile-stats')).toHaveCSS('border-left-width','1px');
+      for (const item of await page.locator('.book-mobile-stats>div').all()) await expect(item).toHaveCSS('border-left-width','0px');
       const boxes=await page.locator('.book-mobile-stats dd').evaluateAll(items=>items.map(el=>({width:el.clientWidth,scroll:el.scrollWidth})));
       expect(boxes.every(box=>box.scroll<=box.width+1),JSON.stringify(boxes)).toBe(true);
     }
@@ -70,4 +72,33 @@ test('empty milestones, recoverable errors, reduced motion and catalog remain us
   await expect(page.getByRole('dialog',{name:'全部目录'})).toBeVisible();
   await page.getByRole('button',{name:'关闭目录'}).click();
   await expect(page.getByRole('dialog',{name:'全部目录'})).not.toBeVisible();
+});
+
+test('both rotations move the outgoing and incoming milestone upward',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto(`${base}/book/${book}`);
+  const entry=page.getByRole('button',{name:'查看作品里程碑'});
+  await expect(entry).toBeVisible();
+  const result=await entry.evaluate(async element=>{
+    const roll=element.querySelector('.milestone-roll')!;
+    const items=[...roll.querySelectorAll<HTMLElement>('.milestone-roll-item')];
+    const previous=new Map<HTMLElement,number>();
+    let rises=0,falls=0,changes=0,active=items.findIndex(item=>item.dataset.active==='true');
+    const start=performance.now();
+    while(performance.now()-start<8000){
+      const next=items.findIndex(item=>item.dataset.active==='true');
+      if(next!==active){changes++;active=next;}
+      const box=roll.getBoundingClientRect();
+      for(const item of items){
+        const r=item.getBoundingClientRect();
+        const visible=getComputedStyle(item).visibility==='visible'&&r.bottom>box.top+1&&r.top<box.bottom-1;
+        const last=previous.get(item);
+        if(visible&&last!==undefined){const delta=r.top-last;if(delta<-.1)rises++;if(delta>.1)falls++;}
+        if(visible)previous.set(item,r.top);else previous.delete(item);
+      }
+      await new Promise(resolve=>requestAnimationFrame(resolve));
+    }
+    return {rises,falls,changes};
+  });
+  expect(result.changes).toBeGreaterThanOrEqual(2);expect(result.rises).toBeGreaterThan(10);expect(result.falls).toBe(0);
 });

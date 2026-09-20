@@ -1,8 +1,12 @@
 .book-milestone-entry { display:block; min-width:0; width:100%; height:49px; text-align:left; cursor:pointer; border-radius:6px; }
 .book-milestone-entry:focus-visible { outline:2px solid #bd903d; outline-offset:4px; }
 .milestone-roll { display:block; position:relative; height:100%; overflow:hidden; }
-.milestone-roll-item { position:absolute; inset:0; display:flex; align-items:center; gap:7px; visibility:hidden; opacity:0; transform:translateY(-100%); transition:transform .5s ease,opacity .4s ease,visibility .5s; }
-.milestone-roll-item[data-active=true] { visibility:visible; opacity:1; transform:translateY(0); }
+.milestone-roll-item { position:absolute; inset:0; display:flex; align-items:center; gap:7px; visibility:hidden; transform:translateY(100%); }
+.milestone-roll-item[data-active=true] { visibility:visible; transform:translateY(0); }
+.milestone-roll[data-running=true] .milestone-roll-item[data-active=true] { animation:milestone-rise-in .5s ease both; }
+.milestone-roll[data-running=true] .milestone-roll-item[data-active=false] { animation:milestone-rise-out .5s ease both; }
+@keyframes milestone-rise-in { from { visibility:visible; transform:translateY(100%); } to { visibility:visible; transform:translateY(0); } }
+@keyframes milestone-rise-out { from { visibility:visible; transform:translateY(0); } to { visibility:hidden; transform:translateY(-100%); } }
 .milestone-mark { display:inline-grid; position:relative; place-items:center; width:34px; height:38px; flex-shrink:0; color:#e9ac32; }
 .milestone-mark>svg:first-child { width:100%; height:100%; }
 .milestone-mark .milestone-mark-symbol { position:absolute; width:19px; height:19px; color:#fffdf4; }
@@ -49,7 +53,8 @@
 .milestone-message button { text-decoration:underline; cursor:pointer; }
 @media(max-width:767px) {
   .book-mobile-overview { display:grid; grid-template-columns:minmax(118px,1.6fr) minmax(0,3fr); align-items:center; gap:7px; margin-bottom:16px; }
-  .book-mobile-overview .book-mobile-stats { margin:0; }
+  .book-mobile-overview .book-mobile-stats { margin:0; border-left:1px solid #e8e0d5; padding-left:8px; column-gap:8px; grid-template-columns:1.15fr .8fr 1.05fr; }
+  .book-mobile-overview .book-mobile-stats>div { padding-inline:0; }
   .book-intro .book-milestone-entry { width:100%; margin:0; padding:0; }
   .book-milestone-sheet { width:100%; height:100dvh; margin:0; border-radius:0; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); box-shadow:none; }
   .milestone-header { min-height:58px; }
@@ -61,5 +66,7 @@
   .milestone-roll-item { gap:5px; }
   .milestone-mark { width:30px; height:34px; }
   .milestone-entry-copy strong { font-size:13px; }
+  .book-mobile-overview .book-mobile-stats { padding-left:6px; column-gap:5px; }
+  .book-mobile-rating[data-rated=false] svg { display:none; }
 }
-@media(prefers-reduced-motion:reduce) { .milestone-roll-item { transition:none; } }
+@media(prefers-reduced-motion:reduce) { .milestone-roll[data-running=true] .milestone-roll-item { animation:none; } }

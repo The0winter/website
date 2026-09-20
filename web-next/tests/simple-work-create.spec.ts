@@ -97,7 +97,7 @@ test('failed creation keeps input and cover, prevents duplicate clicks and retri
   await page.getByRole('button',{name:'创作',exact:true}).click();
   await expect(page.locator('.writing-heading h2')).toHaveText(title);
   await expect(page.getByLabel('书名',{exact:true})).toHaveCount(0);
-  await expect(page.getByRole('tab')).toHaveCount(2);
+  await expect(page.getByRole('tab')).toHaveText(['草稿箱','已发布','回收站']);
 });
 
 test('creating from a later works page returns to the new card on a short screen',async({page})=>{
@@ -149,7 +149,7 @@ for(const width of [320,390,1440]) test(`settings edit metadata while creation o
   await expect(page.getByLabel('书名',{exact:true})).toHaveCount(0);
   await expect(page.getByLabel('简介',{exact:true})).toHaveCount(0);
   await expect(page.getByLabel('上传封面（非必要）')).toHaveCount(0);
-  await page.locator('.writing-chapter').filter({hasText:'第一章 来信'}).click();
+  await page.locator('.writing-chapter').filter({hasText:'第1章 来信'}).click();
   await expect(page.getByLabel('正文',{exact:true})).toHaveValue('应当完整保留的正文。');
   await expect(page.getByLabel('书名',{exact:true})).toHaveCount(0);
 });

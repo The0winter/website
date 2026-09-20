@@ -6,7 +6,7 @@ import type {Book} from '@/lib/api';
 import WorkCreator from './WorkCreator';
 import {lockBodyScroll} from '@/lib/body-scroll-lock';
 
-export default function WorkEditor({book, onClose, onChanged}: {book:Book; onClose:()=>void; onChanged:()=>void}) {
+export default function WorkEditor({book, onClose, onChanged, coverOnly = false}: {book:Book; onClose:()=>void; onChanged:()=>void; coverOnly?:boolean}) {
   const dialog=useRef<HTMLDialogElement>(null);
   const close=useRef<()=>void>(()=>{});
   const complete=useRef(false);
@@ -37,7 +37,7 @@ export default function WorkEditor({book, onClose, onChanged}: {book:Book; onClo
       if(opener?.isConnected)opener.focus({preventScroll:true});
     };
   },[]);
-  return createPortal(<dialog ref={dialog} className="work-edit-dialog" aria-label="编辑作品" onCancel={event=>{event.preventDefault();event.stopPropagation();close.current();}}>
-    <WorkCreator work={book} embedded={false} onClose={()=>close.current()} onComplete={()=>{complete.current=true;close.current();}}/>
+  return createPortal(<dialog ref={dialog} className={`work-edit-dialog${coverOnly ? ' work-cover-dialog' : ''}`} aria-label={coverOnly ? '更换封面' : '编辑作品'} onCancel={event=>{event.preventDefault();event.stopPropagation();close.current();}}>
+    <WorkCreator work={book} coverOnly={coverOnly} embedded={false} onClose={()=>close.current()} onComplete={()=>{complete.current=true;close.current();}}/>
   </dialog>,document.body);
 }

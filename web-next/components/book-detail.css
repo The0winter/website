@@ -135,7 +135,6 @@
   .book-intro { margin:0 calc(-1 * var(--book-gutter)); padding:18px var(--book-gutter) 16px; border:0; border-radius:24px 24px 0 0; background:#fffdf9; }
   .book-mobile-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); margin:0 0 16px; }
   .book-mobile-stats>div { display:flex; flex-direction:column; align-items:center; min-width:0; gap:3px; padding:0 4px; }
-  .book-mobile-stats>div+div { border-left:1px solid #f0ece5; }
   .book-mobile-stats dt { order:1; color:#9a9388; font-size:12px; line-height:1.5; }
   .book-mobile-stats dd { display:flex; align-items:center; justify-content:center; gap:3px; min-height:28px; margin:0; color:#332f2a; font-size:16px; font-weight:600; line-height:1.5; white-space:nowrap; font-variant-numeric:tabular-nums; }
   .book-mobile-stats .book-word-count { align-items:baseline; gap:1px; }

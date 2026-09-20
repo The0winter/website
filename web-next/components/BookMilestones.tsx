@@ -46,16 +46,16 @@ export function BookMilestoneEntry({bookId, state}: {bookId: string; state: Stat
     let timer: ReturnType<typeof setInterval> | undefined;
     const schedule = () => {
       clearInterval(timer);
-      if (!preference.matches && !document.hidden && !open) timer = setInterval(() => setIndex(value => (value + 1) % 2), 3600);
+      if (!preference.matches && !document.hidden && !open) timer = setInterval(() => setIndex(value => value + 1), 3600);
     };
     schedule(); preference.addEventListener('change', schedule); document.addEventListener('visibilitychange', schedule);
     return () => {clearInterval(timer); preference.removeEventListener('change', schedule); document.removeEventListener('visibilitychange', schedule);};
   }, [open]);
   return <button type="button" className="book-milestone-entry" aria-label="查看作品里程碑" aria-haspopup="dialog" onClick={() => openBookMilestones(bookId)}>
-    <span className="milestone-roll" aria-hidden="true">
+    <span className="milestone-roll" data-running={index > 0} aria-hidden="true">
       {kinds.map((kind, position) => {
         const highest = data?.events.filter(event => event.kind === kind).reduce((value, event) => Math.max(value, event.threshold), 0) || 0;
-        return <span className="milestone-roll-item" data-active={position === index} key={kind}>
+        return <span className="milestone-roll-item" data-active={position === index % kinds.length} key={kind}>
           <Mark kind={kind}/><span className="milestone-entry-copy"><strong>{highest ? `${milestoneNumber(highest)}${labels[kind]}` : `${labels[kind]}里程碑`}</strong>
             <span>{data ? `${data.events.length}里程碑` : error ? '点击重试' : '里程碑'}<ChevronRight size={13}/></span>
           </span>

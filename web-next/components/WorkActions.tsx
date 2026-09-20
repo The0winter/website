@@ -5,6 +5,7 @@ import {type Book} from '@/lib/api';
 import {safeFetch} from '@/lib/request';
 import './work-actions.css';
 import WorkEditor from './WorkEditor';
+import WorkCoverButton from './WorkCoverButton';
 
 export default function WorkActions({book, onChanged}: {book: Book; onChanged: () => void}) {
   const menu = useRef<HTMLDetailsElement>(null);
@@ -26,6 +27,7 @@ export default function WorkActions({book, onChanged}: {book: Book; onChanged: (
     finally { setBusy(false); }
   };
   return <div className="work-management">
+    <WorkCoverButton book={book} onChanged={onChanged}/>
     <details ref={menu} onKeyDown={event => {if (event.key === 'Escape' && menu.current) {menu.current.open = false; menu.current.querySelector('summary')?.focus();}}}>
       <summary aria-label={`管理《${book.title}》`} title="管理作品"><Settings size={22} aria-hidden="true"/></summary>
       <div className="work-management-menu">
