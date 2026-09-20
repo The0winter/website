@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { AuthUser } from '@/lib/api';
 import Link from './PrefetchLink';
 import {beginMobileSectionTransition} from '@/lib/mobile-section-navigation';
+import {navigateMobileRoot} from '@/lib/mobile-root-history';
 
 type Props = Omit<ComponentProps<typeof Link>, 'href' | 'onNavigate'> & { href: '/library' | '/profile' };
 
@@ -45,6 +46,7 @@ export default function AccountLink({ href, children, ...props }: Props) {
         setWaiting(false);
         if (location.href === source) {
           const destination = sessionUser ? href : '/login';
+          if (navigateMobileRoot(destination)) return;
           beginMobileSectionTransition(destination);
           router.push(destination);
         }

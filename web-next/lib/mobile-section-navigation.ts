@@ -34,15 +34,16 @@ function sectionLink(source: Element | null, section: Section) {
   return page?.querySelector<HTMLAnchorElement>(`.mh-bottom [data-section="${section}"]`) ?? undefined;
 }
 
-function createTransition(href: string, dragging = false): MobileSectionDrag | undefined {
+function createTransition(href: string, dragging = false, sourceHref = location.href): MobileSectionDrag | undefined {
   if (!matchMedia('(max-width: 767px)').matches) return;
   const target = new URL(href, location.origin);
   const previous = active?.pending() ? active : undefined;
-  const from = previous?.index ?? sections.indexOf(location.pathname), to = sections.indexOf(target.pathname);
+  const sourceUrl = new URL(sourceHref, location.origin);
+  const from = previous?.index ?? sections.indexOf(sourceUrl.pathname), to = sections.indexOf(target.pathname);
   active?.cancel();
   if (target.origin !== location.origin || from < 0 || to < 0 || from === to ||
-    (from === 1 && new URLSearchParams(location.search).has('view')) || (to === 1 && target.searchParams.has('view'))) return;
-  const source = [...document.querySelectorAll<HTMLElement>(selectors[sections.indexOf(location.pathname)] || selectors[from])].find(page => page.getBoundingClientRect().width > 0);
+    (from === 1 && sourceUrl.searchParams.has('view')) || (to === 1 && target.searchParams.has('view'))) return;
+  const source = [...document.querySelectorAll<HTMLElement>(previous ? selectors.join(', ') : selectors[from])].find(page => page.getBoundingClientRect().width > 0);
   const nav = source?.querySelector<HTMLElement>('.mh-bottom'), bar = source?.querySelector<HTMLElement>('.mh-topbar');
   if (!source || !nav || !bar || !nav.getBoundingClientRect().height) return;
 
@@ -275,6 +276,11 @@ function createTransition(href: string, dragging = false): MobileSectionDrag | u
 export function beginMobileSectionTransition(href: string) {
   if (active?.href === new URL(href, location.origin).href) {active.commit(); return true;}
   return Boolean(createTransition(href));
+}
+
+export function beginMobileSectionReturn(sourceHref: string) {
+  if (active?.href === new URL('/', location.origin).href) {active.commit(); return true;}
+  return Boolean(createTransition('/', false, sourceHref));
 }
 
 export function startMobileSectionDrag(source: Element | null, section: Section) {

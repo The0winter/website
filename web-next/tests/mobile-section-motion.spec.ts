@@ -315,7 +315,7 @@ test('a tap slides immediately even while the destination is still loading', asy
   } finally {release();}
 });
 
-test('Back cancels a pending section without leaving an overlay or a late navigation', async ({page}) => {
+test('Back from a pending section reaches Featured without a late navigation, then exits', async ({page}) => {
   await setup(page, '/library');
   await page.locator('.mh-bottom:visible [data-section=home]').click();
   await expect(page).toHaveURL(base + '/');
@@ -327,11 +327,13 @@ test('Back cancels a pending section without leaving an overlay or a late naviga
     await page.locator('.mh-bottom:visible [data-section=forum]').click();
     await expect(page.locator('html')).toHaveAttribute('data-mobile-section-transition', 'loading');
     await page.goBack();
-    await expect(page).toHaveURL(base + '/library');
+    await expect(page).toHaveURL(base + '/');
     await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
     release();
     await page.waitForTimeout(500);
-    await expect(page).toHaveURL(base + '/library');
+    await expect(page).toHaveURL(base + '/');
+    await page.goBack();
+    await expect(page).toHaveURL('about:blank');
   } finally {release();}
 });
 

@@ -53,23 +53,33 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
     let disposed = false;
     let finished = false;
     let timer: ReturnType<typeof setTimeout>;
+    let homeFrame = 0;
     const finish = () => {
       if (finished || disposed) return;
       finished = true;
       element.close(); onCloseRef.current();
     };
-    const animateClose = () => {
+    const animateClose = (waitForHome = false) => {
       if (closing) return;
       closing = true;
-      const reveal = getComputedStyle(element.querySelector('.mw-reveal')!);
-      const content = getComputedStyle(element.querySelector('.mw-scroll')!);
-      element.style.setProperty('--mw-close-transform', reveal.transform === 'none' ? 'scale(1)' : reveal.transform);
-      element.style.setProperty('--mw-close-content-transform', content.transform === 'none' ? 'translate3d(0,0,0)' : content.transform);
-      element.style.setProperty('--mw-close-content-opacity', content.opacity);
-      element.dataset.closing = 'true';
-      timer = setTimeout(finish, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260);
+      const deadline = performance.now() + 5000;
+      const start = () => {
+        // Keep the opaque center until Featured has actually laid out beneath
+        // it. A slow route must not expose the old shelf/forum during the reveal.
+        if (waitForHome && !document.querySelector('.mobile-home:not(.mobile-home-browse)') && performance.now() < deadline) {
+          homeFrame = requestAnimationFrame(start); return;
+        }
+        const reveal = getComputedStyle(element.querySelector('.mw-reveal')!);
+        const content = getComputedStyle(element.querySelector('.mw-scroll')!);
+        element.style.setProperty('--mw-close-transform', reveal.transform === 'none' ? 'scale(1)' : reveal.transform);
+        element.style.setProperty('--mw-close-content-transform', content.transform === 'none' ? 'translate3d(0,0,0)' : content.transform);
+        element.style.setProperty('--mw-close-content-opacity', content.opacity);
+        element.dataset.closing = 'true';
+        timer = setTimeout(finish, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260);
+      };
+      start();
     };
-    const pop = () => {
+    const pop = (event: Event) => {
       const form = element.querySelector<HTMLElement>('.mw-view:not([inert]) .writer-dirty-form');
       const viewId = form?.closest<HTMLElement>('.mw-view')?.dataset.viewId;
       const removing = history.state?.mobileWriter !== marker || !historyWriterViews().some(view => view.id === viewId);
@@ -80,10 +90,11 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
         }
         form.dataset.dirty = 'false';
       }
-      if (history.state?.mobileWriter !== marker) { animateClose(); return; }
+      if (history.state?.mobileWriter !== marker) { animateClose(event.type === 'mobile-root-return'); return; }
       // A cancelled native traversal or Forward can restore this visit before
       // its exit animation ends. The old timer must not tear it down later.
       closing = false;
+      cancelAnimationFrame(homeFrame);
       clearTimeout(timer);
       delete element.dataset.closing;
       const next = historyWriterViews();
@@ -109,6 +120,7 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
         delete state.mobileWriterViews;
         history.replaceState(state, '', location.href);
       }
+      onCloseRef.current();
     };
     navigate.current = clearHistoryMarker;
     if (historyMarker.current || history.state?.mobileWriter) history.replaceState({ ...history.state, mobileWriter: marker }, '', location.href);
@@ -127,6 +139,7 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
     element.addEventListener('close', nativeClose);
     element.showModal();
     window.addEventListener('popstate', pop);
+    window.addEventListener('mobile-root-return', pop);
     const desktop = matchMedia('(min-width: 768px)');
     const resize = () => { if (desktop.matches) history.go(-(historyWriterViews().length + 1)); };
     desktop.addEventListener('change', resize);
@@ -136,14 +149,17 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
     return () => {
       disposed = true;
       clearTimeout(timer);
+      cancelAnimationFrame(homeFrame);
       clearTimeout(openingTimer);
       window.removeEventListener('popstate', pop);
+      window.removeEventListener('mobile-root-return', pop);
       desktop.removeEventListener('change', resize);
       window.removeEventListener('resize', sizeReveal);
       element.removeEventListener('close', nativeClose);
       unlockScroll();
       if (element.open) element.close();
       if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+      else document.querySelector<HTMLButtonElement>('.mobile-home .mh-create')?.focus({preventScroll: true});
     };
   }, [finishOpening]);
 

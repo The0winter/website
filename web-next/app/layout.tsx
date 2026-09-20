@@ -10,6 +10,7 @@ import BookPrefetchSession from "@/components/BookPrefetchSession";
 import BookNavigation from "@/components/BookNavigation";
 import LoginNavigation from "@/components/LoginNavigation";
 import LibraryPrefetch from "@/components/LibraryPrefetch";
+import {MobileWriterProvider} from "@/components/MobileWriterLaunch";
 import { Suspense } from 'react';
 
 import { GoogleAnalytics } from '@next/third-parties/google';
@@ -63,6 +64,7 @@ export default function RootLayout({
           <LibraryPrefetch />
           {/* ✅ Provider 结构正确 */}
           <ReadingSettingsProvider>
+            <MobileWriterProvider>
             
             <Navbar />
             
@@ -72,6 +74,7 @@ export default function RootLayout({
             </main>
             
             <Footer />
+            </MobileWriterProvider>
 
           </ReadingSettingsProvider>
         </AuthProvider>
