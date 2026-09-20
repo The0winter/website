@@ -12,10 +12,10 @@ export async function recordBookMilestones(book, before, after, session, now = n
   const append = events => {
     for (const event of events) if (!known.has(key(event))) {known.add(key(event)); history.push(event);}
   };
-  if (!book.milestonesInitializedAt) {
-    const favorites = before.favorites ?? await Bookmark.countDocuments({bookId: book._id}).session(session);
-    append(reachedMilestones({views: book.views, ...before, favorites}));
-  }
+  const favorites = before.favorites ?? (!book.milestonesInitializedAt ? await Bookmark.countDocuments({bookId: book._id}).session(session) : undefined);
+  // A compatible rollback or an older importer may advance a total without
+  // writing milestones. Those already-reached levels still have unknown dates.
+  append(reachedMilestones({views: book.views, ...before, favorites}));
   append(reachedMilestones(after, now));
   if (!book.milestonesInitializedAt || history.length !== (book.milestoneHistory?.length || 0)) {
     await Book.updateOne({_id: book._id}, {$set: {milestoneHistory: history, milestonesInitializedAt: book.milestonesInitializedAt || now}}, {session, timestamps: false});

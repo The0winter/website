@@ -63,6 +63,14 @@ test('milestones: real thresholds, transactional first attainment, deduplication
     result=await request(`/api/books/${legacy._id}/milestones`); assert.equal(result.data.events.length,3); assert.ok(result.data.events.every(event=>event.achievedAt===null));
     await request(shelf+'/'+legacy._id,'DELETE');
     result=await request(`/api/books/${legacy._id}/milestones`); assert.equal(result.data.events.length,3); assert.equal(result.data.counts.favorites,299);
+    // An older compatible release may advance counters after initialization.
+    // Never relabel those existing thresholds with the next reader's visit date.
+    await Book.updateOne({_id:legacy._id},{$set:{views:100001}});
+    const legacyChapter=await Chapter.create({bookId:legacy._id,title:'Legacy chapter',chapter_number:1,content:'Compatible rollback fixture'});
+    assert.equal((await request(`/api/books/${legacy._id}/views`,'POST',{chapterId:String(legacyChapter._id)})).data.counted,true);
+    result=await request(`/api/books/${legacy._id}/milestones`);
+    assert.equal(result.data.events.find(event=>event.kind==='views'&&event.threshold===100000).achievedAt,null);
+    assert.equal((await Book.findById(legacy._id)).milestoneHistory.length,4);
     const privateBook=await Book.create({title:'Private',visibility:'private',author_id:new mongoose.Types.ObjectId(),views:100000});
     assert.equal((await request(`/api/books/${privateBook._id}/milestones`)).status,404);
     await Book.updateOne({_id:book._id},{$set:{deletedAt:new Date()}});
