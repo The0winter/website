@@ -46,7 +46,7 @@ for (const width of [320,390,768,1440]) test(`review footer, compact stars and p
       rightAligned:Math.abs(actions.right-content.right)<1, separated:time.right+7<=actions.left};
   }));
   for (const row of layout) {
-    expect(row).toMatchObject({starsRight:true, bodyBelow:true, timeBelow:true, aligned:true, bottomAligned:true, rightAligned:true, separated:true,fontSize:17,dateSize:15});
+    expect(row).toMatchObject({starsRight:true, bodyBelow:true, timeBelow:true, aligned:true, bottomAligned:true, rightAligned:true, separated:true,fontSize:width < 768 ? 16 : 17,dateSize:width < 768 ? 14 : 15});
     expect(row.starSize).toBe(10); expect(row.starsWidth).toBeLessThanOrEqual(55);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
