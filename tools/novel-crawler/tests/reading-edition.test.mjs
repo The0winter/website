@@ -172,6 +172,27 @@ test('bare numeric chapter headings append across punctuation styles without wai
   assert.throws(() => recordReadingNoticeReview(f.dir,f.spec,extractionHash(f.spec),f.options.outputDir,{link:chapter.link,contentHash:hash(chapter.content),reason:'不能将数字正文章节改为公告'}),/正文章号/);
 });
 
+test('joined numeric Chinese headings preserve prose and monthly notices without accepting gaps or repeats', async t => {
+  for (const invalid of ['7缺少第六章', '5重复第五章']) await t.test(invalid, async t => {
+    const f = await fixture(t, {sourceOrder: true, titles: {1:'1 开始',2:'2、经过',3:'1 开始',4:'3 转折',5:'4 后续'}});
+    const book = {...f.book, chapters: [1,2,4,5].map((n,i) => ({...formatChapterForExport(f.raw(n)),chapter_number:i+1,sourceChapterNumber:n,sourceChapterUrl:f.raw(n).link}))};
+    atomicWrite(f.file, book);
+    await bindReadingEdition(f.spec, f.file, {...f.options, sourceOrderReview: {catalogHash:hash(readJson(path.join(f.dir,'catalog.json'))),reason:'核对完整重复项',pairs:[{omit:3,keep:1,omitHash:hash(f.raw(3).content),keepHash:hash(f.raw(1).content),reason:'完整正文相同'}]}});
+    f.state.count = 7; f.state.titles[6] = '５研判（4K）'; f.state.titles[7] = '6月总结';
+    const result = await acquire(f.spec, {...f.options,mode:'download'});
+    assert.equal(result.readingAdded, 2, JSON.stringify(result.failures));
+    const updated = readJson(f.file), accepted = fs.readFileSync(f.file);
+    assert.deepEqual(updated.chapters.slice(0,4), book.chapters);
+    assert.deepEqual(updated.chapters.slice(-2).map(c=>[c.title,c.content]), [f.raw(6),f.raw(7)].map(c=>[c.title,c.content]));
+    f.state.count = 8; f.state.titles[8] = invalid;
+    const blocked = await acquire(f.spec, {...f.options,mode:'download'});
+    assert.equal(blocked.exportFile,null); assert.match(blocked.failures[0].error,/章号不连续/);
+    assert.deepEqual(fs.readFileSync(f.file),accepted);
+    const chapter = f.raw(8);
+    assert.throws(() => recordReadingNoticeReview(f.dir,f.spec,extractionHash(f.spec),f.options.outputDir,{link:chapter.link,contentHash:hash(chapter.content),reason:'不能将无空格的数字章节认作公告'}),/正文章号/);
+  });
+});
+
 test('zero-padded bracket chapter headings retain originals and reject missing chapters as notices', async t => {
   const f = await fixture(t, {sourceOrder: true, titles: {1:'0001【开始】',2:'0002【经过】',3:'0001【开始】',4:'0003【转折】',5:'0004【后续】'}});
   const book = {...f.book, chapters: [1,2,4,5].map((n,i) => ({...formatChapterForExport(f.raw(n)),chapter_number:i+1,sourceChapterNumber:n,sourceChapterUrl:f.raw(n).link}))};

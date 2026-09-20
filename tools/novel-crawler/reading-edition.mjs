@@ -112,7 +112,10 @@ export function preserveReviewedCatalogLabels(catalog, previous, dir, state) {
 
 function readingChapterNumber(title) {
   const normalized = String(title).normalize('NFKC').trim();
-  const match = /^([0-9]+)(?:[、.]|\s+\S|【[^【】\n]+】$)/u.exec(normalized);
+  // Monthly summaries are notices; a missing separator before a Chinese
+  // chapter name (e.g. 641研判) still carries an ordinal and must pass continuity.
+  if (/^[0-9]+月总结/u.test(normalized)) return null;
+  const match = /^([0-9]+)(?:[、.]|\s+\S|【[^【】\n]+】$|(?=\p{Script=Han}))/u.exec(normalized);
   const fractional = /^第([0-9]+\.[0-9]+)[章节回]/u.exec(normalized);
   return chapterIdentity(normalized)?.number ?? (fractional ? Number(fractional[1]) : match ? Number(match[1]) : null);
 }
