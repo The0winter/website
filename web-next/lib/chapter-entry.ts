@@ -63,7 +63,9 @@ export function beginChapterEntry(href: string, title: string, position: 'start'
     ink: style?.getPropertyValue('--reader-ink') || ink, desk, width: style?.getPropertyValue('--reader-width') || `${width}px`,
     textured: reader ? reader.querySelector('.reader-frame')?.getAttribute('data-paper') === 'true' : theme === 'cream',
     paperPosition: readerPaperPosition(paperPage), motion, motionComplete: motion === 'none', fullscreen: shouldEnterReaderFullscreen()};
-  if (motion === 'catalog' || mobileEntry && motion === 'none') entry.minimumVisibleMs = 0;
+  // The slide already supplies the entry duration. Prepare the reader beneath
+  // it immediately instead of starting layout checks after another timer.
+  if (mobileEntry) entry.minimumVisibleMs = 0;
   // Cancel older chapter requests before the catalog's asynchronous history pop.
   window.dispatchEvent(new Event('chapter-entry-start'));
   // Paint the opaque reading paper before Next can replace the source route.

@@ -91,9 +91,14 @@ export function freezeBookPage(className = 'book-transition-snapshot', source = 
   const clone = source.cloneNode(true) as HTMLElement;
   const originals = [source, ...source.querySelectorAll<HTMLElement>('*')];
   const copies = [clone, ...clone.querySelectorAll<HTMLElement>('*')];
+  const scrollPositions: {copy: HTMLElement; top: number; left: number}[] = [];
   originals.forEach((original, index) => {
     const copy = copies[index];
     if (!copy) return;
+    // Read while the clone is detached. Alternating live scroll reads with
+    // writes to an attached clone can force layout once for every element.
+    const top = original.scrollTop, left = original.scrollLeft;
+    if (top || left) scrollPositions.push({copy, top, left});
     const computed = getComputedStyle(original);
     const position = computed.position;
     if (position === 'fixed' || position === 'sticky') {
@@ -124,7 +129,7 @@ export function freezeBookPage(className = 'book-transition-snapshot', source = 
   const variables = getComputedStyle(document.documentElement);
   for (const key of variables) if (key.startsWith('--')) wrapper.style.setProperty(key, variables.getPropertyValue(key));
   wrapper.append(clone); shadow.append(wrapper); document.body.append(overlay);
-  originals.forEach((original, index) => { if (copies[index]) { copies[index].scrollTop = original.scrollTop; copies[index].scrollLeft = original.scrollLeft; } });
+  scrollPositions.forEach(({copy, top, left}) => {copy.scrollTop = top; copy.scrollLeft = left;});
   return overlay;
 }
 

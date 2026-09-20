@@ -23,10 +23,10 @@ export default function ChapterLoadingPage() {
     let paperReady = !target.textured || innerWidth >= 1024;
     if (!paperReady) void prepareReaderPaper().then(() => {paperReady = true;});
     let frame = 0, inputAt = -Infinity, disposed = false, stableFrames = 0, previousLayout = '', revealedAt = 0;
-    const revealDuration = target.fullscreen && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 160 : 0;
+    const revealDuration = target.fullscreen && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 100 : 0;
     const pointers = new Set<number>();
     const ready = () => {
-      if (!paperReady || target.motion === 'enter' && !currentChapterEntry()?.motionComplete) return null;
+      if (!paperReady) return null;
       if (target.fullscreen && readerFullscreenPending()) return null;
       if (location.pathname !== target.href) return null;
       const reader = document.querySelector<HTMLElement>(`[data-reader-entry-key="${target.token}"] [data-reader-chapter="${target.chapterId}"][data-reader-ready="true"]`);
@@ -68,16 +68,24 @@ export default function ChapterLoadingPage() {
         if (currentChapterEntry()?.revealing) {
           // Keep input guarded until the catalog has completely left, even
           // when a cached chapter is already visible underneath it.
-          if (!revealedAt) revealedAt = performance.now();
           if (performance.now() - revealedAt >= revealDuration && currentChapterEntry()?.motionComplete && !document.querySelector('.book-catalog-overlay[data-selecting=true]')) {
             flushSync(() => finishChapterEntry(target.token)); return;
           }
         } else {
           // Unlock scrolling and commit the final reader layout while the same
           // opaque loading page remains above it. Then verify actual paint frames.
-          if (currentChapterEntry()?.releasing) flushSync(() => showChapterText(target.token));
-          else flushSync(() => prepareChapterReveal(target.token));
-          stableFrames = 0; previousLayout = '';
+          if (currentChapterEntry()?.releasing) {
+            // Prepare under the moving paper so the slide and layout happen
+            // together. Only reveal after the incoming paper reaches its edge.
+            if (target.motion !== 'enter' || currentChapterEntry()?.motionComplete) {
+              revealedAt = performance.now();
+              flushSync(() => showChapterText(target.token));
+              stableFrames = 0; previousLayout = '';
+            }
+          } else {
+            flushSync(() => prepareChapterReveal(target.token));
+            stableFrames = 0; previousLayout = '';
+          }
         }
       }
       frame = requestAnimationFrame(reveal);

@@ -1,10 +1,14 @@
 import { safeFetch as fetch } from '@/lib/request';
 import { cache } from 'react';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import ReaderClient from '@/components/ReaderClient';
 import type { Book, Chapter } from '@/lib/api';
 import { getApiBaseUrl } from '@/utils/api'; // 新增：引入我们的智能请求地址工具
+
+// Let the paper extend under camera cutouts. Reader controls/text use safe-area
+// insets; other routes retain their own viewport through Next's metadata system.
+export const viewport: Viewport = {viewportFit: 'cover'};
 
 type Props = {
   params: Promise<{

@@ -76,7 +76,8 @@ test('entry keeps the paper over resizing text and ends with a short fade', asyn
   await expect.poll(() => active(page)).toBe(true);
   const cover = page.locator('.chapter-loading-page');
   await expect(cover).toHaveAttribute('data-fullscreen-entry', 'true');
-  await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
+  // Columns must not repeatedly paginate while the native viewport is moving.
+  await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'false');
   await page.setViewportSize({width: 390, height: 930});
   await expect(cover).toHaveAttribute('data-text-revealed', 'false');
   await page.screenshot({path: info.outputPath('verified-covered-resize.png')});
@@ -127,6 +128,33 @@ test('a denied automatic request quietly completes normal reading entry', async 
   await expect(page.locator('.reader-tools')).toHaveAttribute('aria-hidden', 'false');
   await expect(page.locator('.reader-fullscreen-cover')).toHaveCount(0);
   await expect(page.locator('.reader-navigation-error')).toHaveCount(0);
+});
+
+test('fullscreen paper fills the cutout area while text avoids it, and restores viewport on return', async ({page}, info) => {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setSafeAreaInsetsOverride', {insets: {top: 48, bottom: 24, left: 0, right: 0}});
+  await page.goto(detail);
+  const viewport = page.locator('meta[name=viewport]');
+  const original = await viewport.getAttribute('content');
+  await page.locator('.read-now:visible').tap(); await ready(page);
+  await expect(viewport).toHaveAttribute('content', /viewport-fit=cover/);
+  expect(await page.locator('.reader-frame').evaluate(el => {
+    const box = el.getBoundingClientRect();
+    const text = el.querySelector('.reader-text-window')!.getBoundingClientRect();
+    return {top: box.top, fills: box.height === innerHeight, textTop: text.top, paper: getComputedStyle(el).backgroundColor};
+  })).toEqual({top: 0, fills: true, textTop: 72, paper: 'rgb(219, 196, 158)'});
+  await page.screenshot({path: info.outputPath('verified-cutout-portrait.png')});
+  // Rotation moves a camera cutout to a side; pagination must keep its text clear.
+  await page.setViewportSize({width: 844, height: 390});
+  await cdp.send('Emulation.setSafeAreaInsetsOverride', {insets: {top: 0, bottom: 24, left: 48, right: 0}});
+  await expect.poll(() => page.locator('.reader-text-window').evaluate(el => el.getBoundingClientRect().left)).toBe(68);
+  await page.screenshot({path: info.outputPath('verified-cutout-landscape.png')});
+  await page.evaluate(() => document.exitFullscreen());
+  await expect(viewport).toHaveCount(1);
+  await page.keyboard.press('m');
+  await page.locator('.reader-return:visible').click();
+  await expect(page).toHaveURL(detail);
+  await expect(viewport).toHaveAttribute('content', original!);
 });
 
 test('Back during slow entry releases fullscreen before a reader has mounted', async ({page}) => {

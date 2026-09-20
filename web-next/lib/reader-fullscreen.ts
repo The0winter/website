@@ -17,18 +17,19 @@ export function subscribeReaderFullscreen(listener: () => void) {
   return () => {listeners.delete(listener); document.removeEventListener('fullscreenchange', listener);};
 }
 
-// The native toolbar animation can continue resizing after requestFullscreen
-// resolves. Keep the reading paper covered until the final viewport settles.
+// Follow real viewport changes, without adding a fixed pause after the native
+// animation. Three unchanged frames allow resize observers to finish layout.
 function settleViewport() {
   return new Promise<void>(resolve => {
-    let frame = 0, previous = '', stableSince = performance.now();
+    let frame = 0, previous = '', stableFrames = 0;
     const finish = () => {cancelAnimationFrame(frame); clearTimeout(deadline); resolve();};
     const deadline = window.setTimeout(finish, 1000);
     const sample = () => {
       const viewport = visualViewport;
       const size = `${innerWidth}/${innerHeight}/${viewport?.width}/${viewport?.height}/${viewport?.offsetTop}`;
-      if (size !== previous) {previous = size; stableSince = performance.now();}
-      if (document.hidden || performance.now() - stableSince >= 180) {finish(); return;}
+      stableFrames = size === previous ? stableFrames + 1 : 0;
+      previous = size;
+      if (document.hidden || stableFrames >= 3) {finish(); return;}
       frame = requestAnimationFrame(sample);
     };
     frame = requestAnimationFrame(sample);
@@ -47,6 +48,9 @@ export function requestReaderFullscreen(): Promise<void> {
   const request = native.then(async () => {
     if (!owned) {if (readerFullscreenActive()) await document.exitFullscreen(); return;}
     await settleViewport();
+  }).catch(error => {
+    owned = false;
+    throw error;
   }).finally(() => {
     if (pending === request) {pending = null; notify();}
   });

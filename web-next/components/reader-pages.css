@@ -11,7 +11,7 @@
 .reader-page-window { position:absolute; inset:0; overflow:hidden; touch-action:pinch-zoom; -webkit-tap-highlight-color:transparent; outline:none; }
 .reader-page-surface,.reader-page-preview { position:absolute; inset:0; overflow:hidden; background-color:var(--reader-paper); background-image:inherit; }
 .reader-page-surface { display:flex; flex-direction:column; }
-.reader-text-window { flex:1; min-height:0; overflow:hidden; margin:calc(24px + env(safe-area-inset-top)) 20px 0; position:relative; }
+.reader-text-window { flex:1; min-height:0; overflow:hidden; margin:calc(24px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 0 calc(20px + env(safe-area-inset-left)); position:relative; }
 .reader-measure-host { position:absolute; inset:0; visibility:hidden; pointer-events:none; overflow:hidden; }
 .reader-navigation-error { position:fixed; left:50%; bottom:76px; transform:translateX(-50%); z-index:70; padding:12px 18px; border-radius:8px; background:#302b25; color:#fff9eb; font-size:13px; }
 .reader-navigation-error button { margin-left:16px; text-decoration:underline; }
@@ -46,7 +46,10 @@
 .paragraph-bubble[data-hot=true] { color:#c84535; }
 .reader-status-bottom { display:flex; align-items:center; justify-content:space-between; min-height:38px; padding:8px 20px calc(10px + env(safe-area-inset-bottom)); gap:12px; color:var(--reader-muted); font:11px/1.5 Arial,"Microsoft YaHei",sans-serif; flex-shrink:0; }
 .reader-progress { display:flex; align-items:center; gap:13px; font-variant-numeric:tabular-nums; white-space:nowrap; }
-.reader-tools { padding-bottom:env(safe-area-inset-bottom); }
+.reader-tools { padding-bottom:env(safe-area-inset-bottom); padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
+@media(max-width:1023px) {
+  .reader-status-top,.reader-status-bottom { padding-left:calc(20px + env(safe-area-inset-left)); padding-right:calc(20px + env(safe-area-inset-right)); }
+}
 .reader-mode-setting { min-width:0; margin:0 0 16px; font-family:Arial,"Microsoft YaHei",sans-serif; }
 .reader-settings-header { display:flex; align-items:center; justify-content:space-between; min-height:40px; margin-bottom:6px; }
 .reader-settings-header>span { font-size:13px; font-weight:600; opacity:.8; }

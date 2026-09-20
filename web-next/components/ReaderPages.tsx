@@ -9,6 +9,7 @@ import {cachedReaderCounts,loadReaderCounts,rememberReaderCounts} from '@/lib/re
 import {fillReaderPreview,fitReaderColumnHeight,readerChapterTitle,readerColumnLayout} from '@/lib/reader-layout';
 import {useStoredState} from '@/lib/useStoredState';
 import {readerPaperPosition} from '@/lib/reader-paper';
+import {readerFullscreenPending, serverFullscreenSnapshot, subscribeReaderFullscreen} from '@/lib/reader-fullscreen';
 import {useAuth} from '@/contexts/AuthContext';
 import type {Book,Chapter} from '@/lib/api';
 import {useReaderPageTurn,type ReaderTurnMode} from './useReaderPageTurn';
@@ -32,6 +33,7 @@ export default function ReaderPages(props:ReaderPageProps) {
   const {book,chapter,fontFamily,fontSize,lineHeight,paragraphGap,blocked,turnMode,onChapter,onTools,onHideTools,onNearEnd}=props;
   const scrolling=turnMode==='scroll';
   const hydrated=useSyncExternalStore(subscribeHydration,clientReady,serverReady);
+  const fullscreenPending=useSyncExternalStore(subscribeReaderFullscreen,readerFullscreenPending,serverFullscreenSnapshot);
   const {user}=useAuth();
   const title=readerChapterTitle(chapter);
   const paragraphs=useMemo(()=>readerParagraphs(chapter.content,chapter.title,chapter.chapter_number),[chapter.content,chapter.title,chapter.chapter_number]);
@@ -102,7 +104,9 @@ export default function ReaderPages(props:ReaderPageProps) {
   useLayoutEffect(()=>{
     // Wait for stored reader settings before measuring or rewriting saved
     // progress. The server's default paging mode may differ from this browser.
-    if(!hydrated)return;
+    // The entry paper already covers native fullscreen resizing. Paginate at
+    // its final size instead of rebuilding columns during every resize frame.
+    if(!hydrated || fullscreenPending)return;
     const viewport=textWindow.current,body=columns.current;
     if(!viewport || !body)return;
     let active=true,frame=0;
@@ -143,7 +147,7 @@ export default function ReaderPages(props:ReaderPageProps) {
     measure();const observer=new ResizeObserver(schedule);observer.observe(viewport);
     void document.fonts.ready.then(schedule);
     return()=>{active=false;observer.disconnect();cancelAnimationFrame(frame);};
-  },[paragraphs,counts,fontFamily,fontSize,lineHeight,paragraphGap,saveKey,scrolling,turnMode,chapter.id,cancelTurn,columns,textWindow,hydrated]);
+  },[paragraphs,counts,fontFamily,fontSize,lineHeight,paragraphGap,saveKey,scrolling,turnMode,chapter.id,cancelTurn,columns,textWindow,hydrated,fullscreenPending]);
 
   useEffect(()=>{
     if(!layout.width)return;
