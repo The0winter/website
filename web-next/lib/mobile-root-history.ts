@@ -18,8 +18,9 @@ export function navigateMobileRoot(href: string) {
 
 function root(state: State, path: string) {
   if (!section(path)) return false;
-  // Native Back still dismisses each inner screen or management overlay first.
-  return !state.libraryManagement && !state.workEditor && !state.writingManagement && !state.writingEditor &&
+  // The writer is an overlay: dismiss it to its retained source section before
+  // applying the main-section return rule on the next Back.
+  return !state.mobileWriter && !state.libraryManagement && !state.workEditor && !state.writingManagement && !state.writingEditor &&
     !(Array.isArray(state.mobileWriterViews) && state.mobileWriterViews.length);
 }
 
@@ -35,7 +36,7 @@ export function installMobileRootHistory(router: Router) {
   let position: Position = saved?.version === 1 ? saved : {version: 1, visit: crypto.randomUUID(), index: 0};
   let current: State = {...history.state, mobileRoot: position};
   let path = href();
-  let returning: {source: string; writer: boolean} | undefined;
+  let returning: {source: string} | undefined;
 
   const remember = () => {current = history.state; path = href();};
   const push: History['pushState'] = function (data, unused, url) {
@@ -66,13 +67,11 @@ export function installMobileRootHistory(router: Router) {
   const finishReturn = () => {
     const destination = returning!;
     returning = undefined;
-    if (!destination.writer) beginMobileSectionReturn(destination.source);
+    beginMobileSectionReturn(destination.source);
     const state = {...history.state};
     for (const key of ['mobileWriter', 'mobileWriterViews', 'libraryManagement', 'workEditor', 'writingManagement', 'writingEditor']) delete state[key];
     replace(state, '', '/');
     router.replace('/');
-    // A persistent host keeps the writer's circular exit mounted across routes.
-    window.dispatchEvent(new Event('mobile-root-return'));
   };
   const pop = (event: PopStateEvent) => {
     const from = current, source = path, before = position;
@@ -89,20 +88,17 @@ export function installMobileRootHistory(router: Router) {
     if (!mobile() || target.index >= before.index || !root(from, source)) return;
     // Featured is the exit boundary, even if reached by a bottom-nav tap after
     // a long browsing session. The browser owns what happens beyond that slot.
-    if (featured(source) && !from.mobileWriter) {
+    if (featured(source)) {
       if (before.index > 0) {event.stopImmediatePropagation(); history.go(-(target.index + 1));}
       return;
     }
-    // The existing same-route writer dismissal already has the right target;
-    // let its native handler (including Forward cancellation) own the motion.
-    if (featured(source) && from.mobileWriter && target.index === 0 && featured(path)) return;
     event.stopImmediatePropagation();
-    returning = {source, writer: Boolean(from.mobileWriter)};
+    returning = {source};
     if (position.index > 0) history.go(-position.index);
     else finishReturn();
   };
   const select = (destination: string) => {
-    if (!root(current, path) || current.mobileWriter) return false;
+    if (!root(current, path)) return false;
     if (returning) return true;
     if (!featured(destination)) {
       if (destination === path) return true;
@@ -114,7 +110,7 @@ export function installMobileRootHistory(router: Router) {
       return true;
     }
     if (position.index === 0) return featured(path);
-    returning = {source: path, writer: false};
+    returning = {source: path};
     history.go(-position.index);
     return true;
   };

@@ -61,11 +61,21 @@ for (const destination of ['library', 'forum']) test(`${destination}: one animat
   await exit(page);
 });
 
-for (const source of ['library', 'forum']) test(`writer launched from ${source} retains its circular exit over Featured`, async ({page}, info) => {
+for (const source of ['library', 'forum', 'home']) test(`writer launched from ${source} reveals its original section with the full circular exit`, async ({page}, info) => {
   await setup(page);
   await tab(page, 'forum');
   await tab(page, 'library');
   await tab(page, source);
+  if (source === 'library') {
+    await page.getByRole('tab', {name: '浏览记录', exact: true}).click();
+    await expect(page.getByRole('tab', {name: '浏览记录', exact: true})).toHaveAttribute('aria-selected', 'true');
+  }
+  if (source === 'forum') {
+    await page.getByRole('button', {name: '热榜', exact: true}).click();
+    await expect(page.getByRole('button', {name: '热榜', exact: true})).toHaveAttribute('aria-current', 'page');
+  }
+  const originalUrl = page.url();
+  const originalPosition = await page.evaluate(() => history.state.mobileRoot.index);
   await page.getByRole('button', {name: '创作', exact: true}).click();
   await expect(page.locator('.mw-dialog')).toHaveAttribute('data-ready', 'true');
   await page.locator('.mw-dialog').getByRole('link', {name: /新建作品/}).click();
@@ -74,13 +84,13 @@ for (const source of ['library', 'forum']) test(`writer launched from ${source} 
   await expect(page.locator('.mw-view')).toHaveCount(0);
   await expect(page.locator('.mw-dialog')).toBeVisible();
   await page.evaluate(() => {
-    const frames: {closing: boolean; transform: string; home: boolean}[] = [];
+    const frames: {closing: boolean; transform: string; path: string}[] = [];
     Object.assign(window, {rootReturnFrames: frames});
     const sample = () => {
       const dialog = document.querySelector<HTMLElement>('.mw-dialog');
       if (!dialog) return;
       frames.push({closing: dialog.dataset.closing === 'true', transform: getComputedStyle(dialog.querySelector('.mw-reveal')!).transform,
-        home: Boolean(document.querySelector('.mobile-home:not(.mobile-home-browse)'))});
+        path: location.pathname + location.search});
       requestAnimationFrame(sample);
     };
     requestAnimationFrame(sample);
@@ -89,12 +99,20 @@ for (const source of ['library', 'forum']) test(`writer launched from ${source} 
   if (source === 'forum') await page.getByRole('button', {name: '返回上一页', exact: true}).click();
   else await page.goBack();
   await expect(page.locator('.mw-dialog')).toHaveCount(0);
-  const frames = await page.evaluate(() => (window as Window & {rootReturnFrames?: {closing: boolean; transform: string; home: boolean}[]}).rootReturnFrames!);
+  const frames = await page.evaluate(() => (window as Window & {rootReturnFrames?: {closing: boolean; transform: string; path: string}[]}).rootReturnFrames!);
   expect(frames.filter(frame => frame.closing).length).toBeGreaterThan(2);
   expect(new Set(frames.filter(frame => frame.closing).map(frame => frame.transform)).size).toBeGreaterThan(2);
-  expect(frames.some(frame => frame.closing && frame.home)).toBe(true);
+  expect(frames.filter(frame => frame.closing).every(frame => new URL(frame.path, base).href === originalUrl)).toBe(true);
   await info.attach('final-writer-motion', {body: JSON.stringify(frames), contentType: 'application/json'});
   await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
+  await expect(page).toHaveURL(originalUrl);
+  expect(await page.evaluate(() => history.state.mobileRoot.index)).toBe(originalPosition);
+  if (source === 'library') await expect(page.getByRole('tab', {name: '浏览记录', exact: true})).toHaveAttribute('aria-selected', 'true');
+  if (source === 'forum') await expect(page.getByRole('button', {name: '热榜', exact: true})).toHaveAttribute('aria-current', 'page');
+  if (source !== 'home') {
+    await page.goBack();
+    await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
+  }
   await exit(page);
 });
 
@@ -159,18 +177,25 @@ test('reader and book details still return one level at a time before leaving Fe
   await exit(page);
 });
 
-test('a slow Featured route stays covered until the writer exit can reveal it', async ({page}) => {
+test('writer Back after reload returns to its source without requesting Featured', async ({page}) => {
   await setup(page, '/forum');
   await page.getByRole('button', {name: '创作', exact: true}).click();
   await expect(page.locator('.mw-dialog')).toHaveAttribute('data-ready', 'true');
+  const length = await page.evaluate(() => history.length);
+  await page.reload();
+  await expect(page.locator('.mw-dialog')).toHaveAttribute('data-ready', 'true');
+  expect(await page.evaluate(() => history.length)).toBe(length);
+  let homeRequests = 0;
   await page.route(url => url.origin === new URL(base).origin && url.pathname === '/' && url.searchParams.has('_rsc'), async route => {
-    await new Promise(resolve => setTimeout(resolve, 700));
+    homeRequests++;
     await route.continue();
   });
   await page.goBack();
-  await expect(page.locator('.mw-dialog')).toBeVisible();
-  await expect(page.locator('.mobile-home:visible')).toBeVisible();
   await expect(page.locator('.mw-dialog')).toHaveCount(0);
+  await expect(page).toHaveURL(base + '/forum');
+  expect(homeRequests).toBe(0);
+  await page.goBack();
+  await expect(page.locator('.mobile-section-snapshot')).toHaveCount(0);
   await exit(page);
 });
 

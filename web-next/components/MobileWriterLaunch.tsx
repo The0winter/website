@@ -6,7 +6,7 @@ import WriterDialog from './MobileWriterDialog';
 
 const WriterContext = createContext({open: false, launch: () => {}});
 
-// Retain the center while the route underneath returns to Featured.
+// Retain the center across route restoration until its exit animation finishes.
 export function MobileWriterProvider({children}: {children: ReactNode}) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
