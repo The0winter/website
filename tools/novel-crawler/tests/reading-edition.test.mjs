@@ -5,16 +5,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import {acquire, bindReadingEdition, localBookState, jobId, validateSpec, extractionHash, reviewReadingNumbering} from '../core.mjs';
+import {acquire, bindReadingEdition, localBookState, jobId, validateSpec, extractionHash, reviewReadingNumbering, reviewReadingCatalogNumber} from '../core.mjs';
 import {atomicWrite, readJson, hash} from '../storage.mjs';
 import {formatChapterForExport} from '../titles.mjs';
 import {loadReadingEdition, recordReadingNoticeReview, preserveReviewedCatalogLabels} from '../reading-edition.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 
-async function fixture(t, {sourceOrder = false, titles = {}} = {}) {
+async function fixture(t, {sourceOrder = false, titles = {}, fullCatalog = false} = {}) {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'novel-edition-'));
   const state = {count: 5, titles: {...titles}, bodyTitles: {}, bodies: sourceOrder ? {4: '核实过的独立完整正文。'.repeat(90)} : {}, requests: []};
-  const ids = [90, 12, 70, 21, 60, 31, 50, 41];
+  const ids = [90, 12, 70, 21, 60, 31, 50, 41, 81, 82];
   const title = n => state.titles[n] || `第${[1,3,1,2,2][n - 1] || n - 2}章 场景${n === 3 ? 1 : n}`;
   const body = n => state.bodies[n] || (n === 4 ? '銆锛鈥鐨勬姹熸'.repeat(100) : Array.from({length: 100}, (_, i) => String.fromCodePoint(0x4e00 + (n === 3 ? 1 : n) * 200 + i)).join('').repeat(8));
   const chapterPath = n => `/book/A-${ids[n - 1]}.html`;
@@ -22,7 +22,7 @@ async function fixture(t, {sourceOrder = false, titles = {}} = {}) {
   const server = http.createServer((req, res) => {
     state.requests.push(req.url);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    if (req.url === '/book/A.html') return res.end(`<h1>测试书</h1><b>甲作者</b><i>${state.count}</i><ul>${[1,2].map(anchor).join('')}</ul><aside>${[state.count,state.count-1].map(anchor).join('')}</aside>`);
+    if (req.url === '/book/A.html') return res.end(`<h1>测试书</h1><b>甲作者</b><i>${state.count}</i><ul>${(fullCatalog ? Array.from({length:state.count},(_,i)=>i+1) : [1,2]).map(anchor).join('')}</ul><aside>${[state.count,state.count-1].map(anchor).join('')}</aside>`);
     const n = ids.findIndex(id => req.url === `/book/A-${id}.html`) + 1;
     if (!n || n > state.count) { res.statusCode = 404; return res.end(); }
     res.end(`<h1>${state.bodyTitles[n] || title(n)}</h1><article>${body(n)}</article><nav><a class="book" href="/book/A.html">目录</a><a class="next" href="${n < state.count ? chapterPath(n+1) : '/book/A.html'}">下一章</a></nav>`);
@@ -31,6 +31,7 @@ async function fixture(t, {sourceOrder = false, titles = {}} = {}) {
   t.after(async () => { await new Promise(resolve => server.close(resolve)); assert.equal(path.dirname(stateDir), os.tmpdir()); assert.ok(path.basename(stateDir).startsWith('novel-edition-')); fs.rmSync(stateDir, {recursive: true, force: true}); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const spec = validateSpec({version: 1, kind: 'html', variant: 'edition-v1', title: '测试书', author: '甲作者', sourceUrl: base + '/book/A.html', delayMs: 200, retries: 0, metadata: {title: 'h1', author: 'b'}, catalog: {links: 'ul a', count: 'i', walk: {next: '.next', bookLink: '.book', chapterPattern: '^/book/A-(?<chapterId>[0-9]+)\\.html$', recentLinks: 'aside a', recentReverse: true}}, chapter: {title: 'h1', content: 'article'}});
+  if (fullCatalog) { delete spec.catalog.walk; delete spec.catalog.count; }
   const options = {stateDir, outputDir: path.join(stateDir, 'exports')};
   const initial = await acquire(spec, {...options, mode: 'download'});
   assert.equal(initial.completeAgainstSource, true);
@@ -279,6 +280,45 @@ test('the latest chapter may retain a proven numbering defect only with its comp
   const result=await acquire(f.spec,{...f.options,mode:'download'});assert.equal(result.readingAdded,3,JSON.stringify(result.failures));
   assert.deepEqual(readJson(f.file).chapters.slice(0,3),JSON.parse(original).chapters);
   assert.equal(readJson(f.file).chapters.at(-1).title,'第5章 末章');
+});
+
+test('reviewed final-number corrections preserve old prose and reject body changes, new gaps and damaged evidence', async t => {
+  const f = await fixture(t, {sourceOrder:true,fullCatalog:true,titles:{1:'第1章 开始',2:'第2章 经过',3:'第1章 开始',4:'第3章 转折',5:'第4章 后续'}});
+  const book={...f.book,chapters:[1,2,4,5].map((n,i)=>({...formatChapterForExport(f.raw(n)),chapter_number:i+1,sourceChapterNumber:n,sourceChapterUrl:f.raw(n).link}))};
+  atomicWrite(f.file,book);
+  await bindReadingEdition(f.spec,f.file,{...f.options,sourceOrderReview:{catalogHash:hash(readJson(path.join(f.dir,'catalog.json'))),reason:'仅移出已核实重复项',pairs:[{omit:3,keep:1,omitHash:hash(f.raw(3).content),keepHash:hash(f.raw(1).content),reason:'全文相同'}]}});
+  f.state.count=8; Object.assign(f.state.titles,{6:'第5章 前奏',7:'第6章 经过',8:'第6章 末章'});
+  const before=fs.readFileSync(f.file);
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).exportFile,null);
+  const titles=['5、前奏','6、经过','7、末章'],bodyFile=path.join(f.options.stateDir,'publisher.html'),evidence='测试书 甲作者 '+titles.join(' ');
+  fs.writeFileSync(bodyFile,evidence);
+  await reviewReadingNumbering(f.spec,{exportHash:hash(before),links:[6,7,8].map(n=>f.raw(n).link),hashes:[6,7,8].map(n=>hash(f.raw(n).content)),reason:'独立目录核实末章重号',reference:{url:'https://publisher.example/book',bodyFile,hash:hash(evidence),chapters:titles}},f.options);
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).readingAdded,3);
+  const accepted=fs.readFileSync(f.file),checkpoint=fs.readFileSync(path.join(f.dir,'chapters',hash(f.raw(8).link)+'.json'));
+  f.state.titles[8]='第7章 末章';
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).exportFile,null);
+  const review={exportHash:hash(accepted),link:f.raw(8).link,title:f.state.titles[8],reason:'来源仅修正末章编号，全文一致'};
+  await assert.rejects(reviewReadingCatalogNumber(f.spec,{...review,exportHash:'stale'},f.options),/哈希/);
+  await assert.rejects(reviewReadingCatalogNumber(f.spec,{...review,title:'第99章 末章'},f.options),/末章/);
+  f.state.bodies[8]='改变了情节和完整正文。'.repeat(100);
+  await assert.rejects(reviewReadingCatalogNumber(f.spec,review,f.options),/正文变化/);
+  delete f.state.bodies[8];
+  const decision=await reviewReadingCatalogNumber(f.spec,review,f.options);
+  assert.equal(decision.title,'第7章 末章');
+  assert.deepEqual(fs.readFileSync(f.file),accepted);
+  assert.deepEqual(fs.readFileSync(path.join(f.dir,'chapters',hash(f.raw(8).link)+'.json')),checkpoint);
+  f.state.count=9; f.state.titles[9]='第8章 新章';
+  const updated=await acquire(f.spec,{...f.options,mode:'download'});
+  assert.equal(updated.readingAdded,1,JSON.stringify(updated.failures));
+  assert.deepEqual(readJson(f.file).chapters.slice(0,7),JSON.parse(accepted).chapters);
+  assert.equal(readJson(f.file).chapters.at(-1).title,'第8章 新章');
+  const final=fs.readFileSync(f.file);
+  f.state.count=10; f.state.titles[10]='第10章 缺少第九章';
+  const blocked=await acquire(f.spec,{...f.options,mode:'download'});
+  assert.match(blocked.failures[0].error,/章号不连续/);assert.deepEqual(fs.readFileSync(f.file),final);
+  fs.writeFileSync(path.join(f.dir,'reading-catalog-evidence',decision.evidence[0].hash+'.bin'),'changed');
+  assert.match((await acquire(f.spec,{...f.options,mode:'download'})).failures[0].error,/原始证据/);
+  assert.deepEqual(fs.readFileSync(f.file),final);
 });
 
 test('title mismatch review pins exact retained text and blocks unreviewed or changed source titles', async t => {

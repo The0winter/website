@@ -101,7 +101,14 @@ export function preserveReviewedCatalogLabels(catalog, previous, dir, state) {
   if (!state?.sourceOrderReview || !previous) return catalog;
   return catalog.map((entry, index) => {
     const old = previous[index], accepted = state.sources[index];
-    if (!old || !accepted || old.link !== entry.link || old.chapter_number !== entry.chapter_number || old.title === entry.title || entry.title !== accepted.title) return entry;
+    if (!old || !accepted || old.link !== entry.link || old.chapter_number !== entry.chapter_number || old.title === entry.title) return entry;
+    const correction = state.catalogCorrections?.find(item => item.position === index + 1 && item.link === entry.link &&
+      item.catalogTitle === old.title && item.title === entry.title && item.contentHash === accepted.contentHash);
+    if (correction) {
+      if (hash(fingerprint(old, rawChapter(dir, old))) !== hash(accepted)) throw Error('已核对编号修正的正文或映射发生变化');
+      return {...entry, title: old.title};
+    }
+    if (entry.title !== accepted.title) return entry;
     const mapping = state.sourceOrderReview.titleMappings?.find(item => item.position === index + 1 && item.link === old.link && item.catalogTitle === old.title && item.title === entry.title && item.contentHash === accepted.contentHash);
     const duplicate = state.sourceOrderReview.pairs?.find(item => item.omit === index + 1 && item.omitHash === accepted.contentHash);
     if (!mapping && !duplicate) return entry;
@@ -137,6 +144,31 @@ export function recordReadingNoticeReview(dir, spec, extraction, outputDir, {lin
 }
 
 const numberingFingerprint = chapter => ({link:chapter.link, title:normalizedTitle(chapter.title), contentHash:hash(chapter.content), sourcePosition:chapter.sourceChapterNumber || chapter.chapter_number});
+
+// Maintenance review of a mirror correcting its already-reviewed final ordinal.
+// Preserve every old chapter and checkpoint; only the next expected number changes.
+export function recordReadingCatalogCorrection(dir, spec, extraction, outputDir, review, source, incoming, responses) {
+  const state = loadReadingEdition(dir, spec, extraction, outputDir);
+  if (!state?.sourceOrderReview || state.exportHash !== review.exportHash || typeof review.reason !== 'string' || !review.reason.trim()) throw Error('目录编号修正需要原阅读版哈希和具体核对理由');
+  const previous = readJson(path.join(dir, 'catalog.json')), position = state.sources.length;
+  verifyReadingSources(dir, state, previous);
+  const old = previous[position - 1], current = source.catalog[position - 1], last = state.book.chapters.at(-1);
+  if (!old || previous.length !== position || last?.sourceChapterNumber !== position || last.link !== review.link || current?.link !== old.link || review.link !== old.link || current.title !== review.title ||
+      source.catalog.slice(0, position).some((c, i) => c.chapter_number !== i + 1 || c.link !== previous[i].link || i !== position - 1 && c.title !== previous[i].title)) throw Error('只支持既有末章在原位置、原链接上的编号修正');
+  const saved = rawChapter(dir, old), before = chapterIdentity(saved.title), after = chapterIdentity(current.title), prior = chapterIdentity(previous[position - 2]?.title);
+  const accepted = state.numberingReviews?.find(r => r.key === hash(r.window) && r.window.at(-1)?.link === old.link &&
+    r.window.every((expected, i) => hash(numberingFingerprint(rawChapter(dir, previous[position - 3 + i]))) === hash(expected)));
+  if (!accepted || !before || !after || !prior || before.name !== after.name || Math.abs(before.number - after.number) !== 1 || after.number !== prior.number + 1) throw Error('只能核对已经逐项验收过的末章编号错误');
+  const quality = qualityReport([current], [incoming], [], 'probe');
+  if (incoming.link !== old.link || incoming.chapter_number !== position || incoming.title !== current.title || hash(incoming.content) !== hash(saved.content) ||
+      quality.issues.some(i => i.level !== 'info' && i.code !== 'short-outlier')) throw Error('编号修正必须核对同一章的完整正文，不能接受正文变化');
+  if (!responses?.length || responses.some(r => !r.body?.length || hash(r.body) !== r.hash)) throw Error('编号修正缺少原始响应证据');
+  const evidence = [...new Map(responses.map(r => [r.hash, {url:r.url,hash:r.hash,fetchedAt:r.fetchedAt}])).values()];
+  for (const response of responses) atomicWrite(path.join(dir, 'reading-catalog-evidence', response.hash + '.bin'), response.body);
+  const correction = {position, link:old.link, catalogTitle:old.title, title:current.title, contentHash:hash(saved.content), reviewKey:accepted.key, evidence, reason:review.reason.trim(), reviewedAt:new Date().toISOString()};
+  atomicWrite(stateFile(dir), seal({...state, catalogCorrections:[...(state.catalogCorrections || []).filter(r=>r.link!==old.link),correction]}));
+  return correction;
+}
 
 // Only a complete, explicitly reviewed new three-chapter window can retain a
 // source numbering defect. Independent consecutive titles prove the order.
@@ -330,6 +362,15 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
       const start = previous?.sourceChapterNumber, oldTail = Number.isInteger(start) ? state.sources.slice(start) : [];
       const missingTail = oldTail.filter(source => readingChapterNumber(source.title) !== null);
       let reviewedTailNumber;
+      for (const correction of state.catalogCorrections || []) {
+        for (const evidence of correction.evidence) {
+          const file = path.join(dir, 'reading-catalog-evidence', evidence.hash + '.bin');
+          if (!fs.existsSync(file) || hash(fs.readFileSync(file)) !== evidence.hash) throw Error('目录编号修正的原始证据缺失或变化');
+        }
+        if (previous?.sourceChapterNumber === correction.position && previous.link === correction.link && hash(previous.content) === correction.contentHash) {
+          reviewedTailNumber = readingChapterNumber(correction.title);
+        }
+      }
       if (missingTail.length > 0 && missingTail.length <= 3 && oldTail.length <= 8 && oldTail.every((source, i) => {
         if (source.position !== start + i + 1) return false;
         const number = readingChapterNumber(source.title);
@@ -359,6 +400,7 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
   return {...rawReport, ...quality, readingEdition: true, sourceExpected: rawReport.expected, sourceDownloaded: rawReport.downloaded, sourceErrors: rawReport.errors, sourceWarnings: rawReport.warnings,
     ...(state.sourceOrderReview ? {acceptedSourceOrder: state.sourceOrderReview} : {}),
     ...(state.numberingReviews?.length ? {acceptedSourceNumbering: state.numberingReviews} : {}),
+    ...(state.catalogCorrections?.length ? {acceptedCatalogCorrections: state.catalogCorrections} : {}),
     completeAgainstSource: !!exportFile && !state.sourceOrderReview?.gaps?.length, completeSelectedScope: !!exportFile, sourceGaps: state.sourceOrderReview?.gaps || [], exportFile, reusedExport, readingAdded: added,
     mappingFile: stateFile(dir), mapping: book.chapters.map(c => ({chapter_number: c.chapter_number, title: c.title, sourcePosition: c.sourceChapterNumber, sourceUrl: c.link, sourceHash: hash(c.content)})),
     limitation: '沿用这本书已核对的来源映射，阅读版章序保持稳定。新发现的重复、乱码、章号跳转会暂停更新，旧阅读版和原始采集记录保留。只检查可检测异常，不能保证源站无删文或错配。',

@@ -11,7 +11,7 @@ import {formatChapterForExport, preserveCatalogLabels} from './titles.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
 import {failureDetails} from './diagnostics.mjs';
 import {browserProfile} from './browser-session.mjs';
-import {loadReadingEdition, adoptReadingEdition, updateReadingEdition, recordReadingNoticeReview, recordReadingNumberingReview, preserveReviewedCatalogLabels} from './reading-edition.mjs';
+import {loadReadingEdition, adoptReadingEdition, updateReadingEdition, recordReadingNoticeReview, recordReadingNumberingReview, recordReadingCatalogCorrection, preserveReviewedCatalogLabels} from './reading-edition.mjs';
 import {continuationKey, continuationState, hasContinuation, acquireContinuation} from './continuation.mjs';
 
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -161,6 +161,21 @@ export async function reviewReadingNumbering(input, review, {stateDir = defaultS
   const spec=validateSpec(input),dir=path.join(path.resolve(stateDir),'jobs',jobId(spec));
   return withLock(path.join(path.resolve(stateDir),'book-locks',continuationKey(spec)+'.lock'),()=>
     withLock(path.join(dir,'job.lock'),()=>recordReadingNumberingReview(dir,spec,extractionHash(spec),path.resolve(outputDir),review)));
+}
+
+export async function reviewReadingCatalogNumber(input, review, {stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads')} = {}) {
+  const spec = validateSpec(input), dir = path.join(path.resolve(stateDir), 'jobs', jobId(spec));
+  if (spec.catalog?.walk) throw Error('目录编号修正需要完整目录来源');
+  return withLock(path.join(path.resolve(stateDir), 'book-locks', continuationKey(spec) + '.lock'), () => withLock(path.join(dir, 'job.lock'), async () => {
+    const responses = [], client = makeClient({cacheDir:path.join(stateDir,'cache'),allowedHosts:spec.allowedHosts,delayMs:spec.delayMs,retries:spec.retries,timeoutMs:spec.timeoutMs,browser:spec.browser});
+    const fresh = {assertUrl:client.assertUrl,get:async (url, options) => { const r = await client.get(url,{...options,fresh:true}); responses.push(r); return r; }};
+    try {
+      const source = await getCatalog(spec, fresh), entry = source.catalog.find(c=>c.link===review.link);
+      if (!entry) throw Error('核对章节已不在来源目录');
+      const chapter = await getChapter(spec, entry, new Set(source.catalog.map(c=>c.link)), fresh);
+      return recordReadingCatalogCorrection(dir,spec,extractionHash(spec),path.resolve(outputDir),review,source,chapter,responses);
+    } finally { await client.close(); }
+  }));
 }
 
 function bookData(spec, chapters) {
