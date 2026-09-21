@@ -51,17 +51,23 @@ export async function updateLocalBookCategory({record, plan, stateDir, outputDir
         assert.equal(hash(withoutCategory(nextBook)),hash(withoutCategory(book)));
         const nextHash = hash(bytes(nextBook)), updates = new Map([[file,bytes(nextBook)]]);
         const continuationDir = path.join(stateDir,'continuations',key), bindingFile = path.join(continuationDir,'binding.json');
+        let continuationOwnsFile = false;
         assert.ok(!fs.existsSync(path.join(continuationDir,'pending.json')),'需先恢复尚未完成的续更');
         if (fs.existsSync(bindingFile)) {
           const binding = unseal(readJson(bindingFile));
           assert.equal(binding.outputPath,file); assert.equal(binding.exportHash,hash(raw));
+          continuationOwnsFile = true;
           updates.set(bindingFile,bytes(seal({...binding,revision:(binding.revision||0)+1,exportHash:nextHash})));
         }
         for(const dir of related) {
           assert.ok(!fs.existsSync(path.join(dir,'reading-edition-pending.json')),'需先恢复尚未完成的阅读版更新');
           const exportFile = path.join(dir,'export.json'), exported = readJson(exportFile);
-          if(exported?.path===file){assert.equal(exported.hash,hash(raw));updates.set(exportFile,bytes({...exported,hash:nextHash}));}
           const readingFile = path.join(dir,'reading-edition.json'), reading = readJson(readingFile);
+          // A continuation may supersede an older raw/reading checkpoint that
+          // still names this file. Keep that dormant archive intact; only the
+          // verified active binding authorizes updating today's accepted file.
+          if (continuationOwnsFile && ((exported?.path===file && exported.hash!==hash(raw)) || (reading?.value?.outputPath===file && reading.value.exportHash!==hash(raw)))) continue;
+          if(exported?.path===file){assert.equal(exported.hash,hash(raw));updates.set(exportFile,bytes({...exported,hash:nextHash}));}
           if(reading?.value?.outputPath===file){
             const value=unseal(reading);assert.equal(value.exportHash,hash(raw));
             updates.set(readingFile,bytes(seal({...value,revision:(value.revision||0)+1,exportHash:nextHash,book:nextBook})));

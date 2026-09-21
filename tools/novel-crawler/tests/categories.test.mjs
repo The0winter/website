@@ -13,6 +13,7 @@ import {parsePublisherSearch, parsePublisherCategory, lookupPublisherCategory} f
 import {planUpload} from '../desktop/upload.mjs';
 import {atomicWrite, hash} from '../storage.mjs';
 import {updateLocalBookCategory} from '../category-update.mjs';
+import {continuationKey} from '../continuation.mjs';
 
 const temporary = t => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'categories-')); t.after(() => fs.rmSync(dir, {recursive:true, force:true})); return dir; };
 test('category extraction ignores recommendations, tags, numeric IDs and conflicts', () => {
@@ -92,4 +93,16 @@ test('metadata backfill keeps a readable export and its checkpoint in sync, reje
   assert.equal((await updateLocalBookCategory({record,plan,stateDir,outputDir,backupDir})).reused,true);
   fs.appendFileSync(file,' ');
   await assert.rejects(updateLocalBookCategory({record,plan,stateDir,outputDir,backupDir}),/文件发生变化/);
+});
+
+test('an active continuation protects dormant checkpoints while category metadata is updated', async t => {
+  const dir=temporary(t),stateDir=path.join(dir,'state'),outputDir=path.join(dir,'out'),backupDir=path.join(dir,'backup');
+  const book={title:'换源测试',author:'作者',sourceUrl:'https://example.org/book',chapters:[{title:'第一章',chapter_number:1,content:'已核实的阅读版。'}]},file=path.join(outputDir,'book.json'),job=path.join(stateDir,'jobs','a'.repeat(20));
+  atomicWrite(file,book);atomicWrite(path.join(job,'spec.json'),book);atomicWrite(path.join(job,'export.json'),{path:file,hash:'old-export'});
+  const plan={...book,file:'book.json',hash:hash(fs.readFileSync(file))},key=continuationKey(plan),binding={outputPath:file,exportHash:plan.hash,source:{url:'https://other.example/1'},revision:1};
+  atomicWrite(path.join(stateDir,'continuations',key,'binding.json'),{value:binding,hash:hash(binding)});
+  await updateLocalBookCategory({record:{...book,category:'都市',categoryEvidence:{url:book.sourceUrl,checkedAt:new Date().toISOString()}},plan,stateDir,outputDir,backupDir});
+  assert.equal(JSON.parse(fs.readFileSync(path.join(job,'export.json'))).hash,'old-export');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(stateDir,'continuations',key,'binding.json'))).value.exportHash,hash(fs.readFileSync(file)));
+  assert.equal(JSON.parse(fs.readFileSync(file)).category,'都市');
 });
