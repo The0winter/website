@@ -110,7 +110,7 @@ function busyCategories(root, processes) {
   return busy;
 }
 function trackedFiles(root) {
-  return execFileSync('git', ['-C', root, 'ls-files', '-z'], {encoding: 'utf8', maxBuffer: 16 * 1024 ** 2}).split('\0').filter(Boolean);
+  return execFileSync('git', ['-C', root, 'ls-files', '-z'], {encoding: 'utf8', windowsHide: true, maxBuffer: 16 * 1024 ** 2}).split('\0').filter(Boolean);
 }
 function pendingCheck(root) {
   let count = 0;
