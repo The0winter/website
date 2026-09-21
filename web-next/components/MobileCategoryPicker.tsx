@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect, useRef, useState, useSyncExternalStore} from 'react';
+import {useCallback, useEffect, useRef, useState, useSyncExternalStore} from 'react';
 import {BookOpen, LayoutGrid, Flame, Mountain, Building2, ScrollText, Orbit, Sparkles, ScanSearch, Check, Ellipsis, X} from 'lucide-react';
 
 export const mobileCategories = [
@@ -38,29 +38,97 @@ function remember(name: string) {
   window.dispatchEvent(new Event(preferenceEvent));
 }
 const serverSnapshot = () => null;
+const motionDuration = 420;
 
 export default function MobileCategoryPicker({selected, onSelect}: {selected: string; onSelect: (name: string) => void}) {
   const pinned = useSyncExternalStore(subscribe, snapshot, serverSnapshot);
   const [expanded, setExpanded] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const animation = useRef<Animation | null>(null);
+  const closing = useRef(false);
   const ordered = pinned ? [mobileCategories[0], mobileCategories.find(item => item.name === pinned)!, ...mobileCategories.filter(item => item.name !== '全部' && item.name !== pinned)] : mobileCategories;
   const primary = ordered.slice(0, 9), more = ordered.slice(9);
   const selectedInMore = more.some(item => item.name === selected);
+
+  const positionDialog = useCallback(() => {
+    const element = dialog.current, button = trigger.current;
+    if (!element?.open || !button) return;
+    const anchor = button.getBoundingClientRect();
+    const margin = 12, gap = 10, width = Math.min(360, innerWidth - margin * 2);
+    element.style.width = `${width}px`;
+    element.style.maxHeight = 'none';
+    const height = element.offsetHeight;
+    const below = innerHeight - anchor.bottom - gap - margin;
+    const above = anchor.top - gap - margin;
+    const placement = below >= height || below >= above ? 'below' : 'above';
+    const available = Math.max(0, placement === 'below' ? below : above);
+    const left = Math.max(margin, Math.min(anchor.right - width, innerWidth - width - margin));
+    const origin = Math.max(20, Math.min(width - 20, anchor.left + anchor.width / 2 - left));
+    element.style.maxHeight = `${available}px`;
+    element.style.left = `${left}px`;
+    element.style.top = `${placement === 'below' ? anchor.bottom + gap : anchor.top - gap - Math.min(height, available)}px`;
+    element.style.transformOrigin = `${origin}px ${placement === 'below' ? 'top' : 'bottom'}`;
+    element.style.setProperty('--category-anchor', `${origin}px`);
+    element.dataset.placement = placement;
+  }, []);
+
+  function open() {
+    const element = dialog.current;
+    if (!element || element.open) return;
+    closing.current = false;
+    element.dataset.phase = 'opening';
+    element.showModal();
+    positionDialog();
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const origin = `translateY(${element.dataset.placement === 'below' ? -10 : 10}px) scale(.94)`;
+    const enter = element.animate([
+      {opacity: 0, transform: reducedMotion ? 'none' : origin},
+      {opacity: 1, transform: 'none'},
+    ], {duration: motionDuration, easing: 'cubic-bezier(.22,.68,.25,1)'});
+    animation.current = enter;
+    void enter.finished.then(() => {element.dataset.phase = 'open';}).catch(() => {});
+    setExpanded(true);
+  }
+
+  function close(afterClose?: () => void) {
+    const element = dialog.current;
+    if (!element?.open || closing.current) return;
+    closing.current = true;
+    const current = getComputedStyle(element);
+    const from = {opacity: current.opacity, transform: current.transform};
+    element.style.setProperty('--category-backdrop-opacity', getComputedStyle(element, '::backdrop').opacity);
+    animation.current?.cancel();
+    element.dataset.phase = 'closing';
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const exit = element.animate([from, {
+      opacity: 0,
+      transform: reducedMotion ? 'none' : `translateY(${element.dataset.placement === 'below' ? -10 : 10}px) scale(.94)`,
+    }], {duration: motionDuration, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards'});
+    animation.current = exit;
+    void exit.finished.then(() => {element.close(); afterClose?.();}).catch(() => {});
+  }
 
   useEffect(() => {
     if (!expanded) return;
     const element = dialog.current, overflow = document.body.style.overflow;
     const viewport = matchMedia('(max-width: 767px)');
-    const resize = () => {if (!viewport.matches) element?.close();};
+    const resize = () => {if (!viewport.matches) element?.close(); else positionDialog();};
     document.body.style.overflow = 'hidden';
     viewport.addEventListener('change', resize);
-    return () => {viewport.removeEventListener('change', resize); document.body.style.overflow = overflow; element?.close();};
-  }, [expanded]);
+    window.addEventListener('resize', resize);
+    return () => {
+      viewport.removeEventListener('change', resize);
+      window.removeEventListener('resize', resize);
+      document.body.style.overflow = overflow;
+      animation.current?.cancel();
+      element?.close();
+    };
+  }, [expanded, positionDialog]);
 
   function choose(name: string, fromMore = false) {
-    if (fromMore) remember(name);
-    dialog.current?.close();
-    onSelect(name);
+    if (fromMore) close(() => {remember(name); onSelect(name);});
+    else onSelect(name);
   }
   const categoryButton = ({name, icon: Icon}: typeof mobileCategories[number], fromMore = false) => <button type="button" key={name} aria-pressed={selected === name} onClick={() => choose(name, fromMore)}>
     <Icon className="mh-category-icon" size={18} aria-hidden="true"/>
@@ -71,13 +139,13 @@ export default function MobileCategoryPicker({selected, onSelect}: {selected: st
   return <>
     <div className="mh-categories mh-categories-primary" role="group" aria-label="小说分类">
       {primary.map(item => categoryButton(item))}
-      <button type="button" className={`mh-category-more${selectedInMore ? ' is-selected' : ''}`} aria-haspopup="dialog" aria-expanded={expanded} aria-controls="mh-more-categories" onClick={() => {dialog.current?.showModal(); setExpanded(true);}}>
+      <button ref={trigger} type="button" className={`mh-category-more${selectedInMore ? ' is-selected' : ''}`} aria-haspopup="dialog" aria-expanded={expanded} aria-controls="mh-more-categories" onClick={open}>
         <Ellipsis className="mh-category-icon" size={18} aria-hidden="true"/><span className="mh-category-label-long">更多分类</span>
       </button>
     </div>
-    <dialog ref={dialog} id="mh-more-categories" className="mh-category-dialog" aria-labelledby="mh-more-categories-title" onClose={() => setExpanded(false)} onClick={event => {if (event.target === event.currentTarget) dialog.current?.close();}}>
+    <dialog ref={dialog} id="mh-more-categories" className="mh-category-dialog" aria-labelledby="mh-more-categories-title" onClose={() => {animation.current?.cancel(); closing.current = false; setExpanded(false);}} onCancel={event => {event.preventDefault(); close();}} onClick={event => {if (event.target === event.currentTarget) close();}}>
       <div className="mh-category-dialog-content">
-        <div className="mh-category-dialog-heading"><h3 id="mh-more-categories-title">更多分类</h3><button type="button" onClick={() => dialog.current?.close()} aria-label="关闭更多分类"><X size={21}/></button></div>
+        <div className="mh-category-dialog-heading"><h3 id="mh-more-categories-title">更多分类</h3><button type="button" onClick={() => close()} aria-label="关闭更多分类"><X size={21}/></button></div>
         <p>选中后，固定在“全部”后面</p>
         <div className="mh-categories" role="group" aria-label="更多小说分类">{more.map(item => categoryButton(item, true))}</div>
       </div>

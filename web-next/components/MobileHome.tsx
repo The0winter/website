@@ -18,13 +18,18 @@ import {MobileHomeSection, MobileHomeShortcuts} from './MobileHomeFrame';
 import {discoverySections} from '@/lib/discovery-sections';
 import MobileFeaturedBanner from './MobileFeaturedBanner';
 
-const browseCache = new Map<string, {books: Book[]; total: number}>();
+const browsePageSize = 20;
+const browseCache = new Map<string, {books: Book[]; total: number | null}>();
+function BookStatus({status}: {status?: string}) {
+  const completed = ['completed', '完结'].includes(status || '');
+  return <small className="mh-status" data-status={completed ? 'completed' : 'ongoing'}>{completed ? '完结' : '连载'}</small>;
+}
 function Cover({book,priority=false}:{book:Book;priority?:boolean}){
   const [failed,setFailed]=useState(false);
   return <div className="mh-cover">{book.cover_image&&!failed?<BookCover priority={priority} sizes="80px" src={book.cover_image} alt={`${book.title}封面`} onError={()=>setFailed(true)}/>:<><BookOpen size={26}/><span>{book.title}</span></>}</div>;
 }
 function BookRows({books,priority=false}:{books:Book[];priority?:boolean}){
-  return <div className="mh-rows">{books.length?books.map(book=><BookLink className="mh-book" key={book.id} href={`/book/${book.id}`}><Cover book={book} priority={priority}/><div className="mh-book-info"><h3>{book.title}</h3><p>{book.description&&book.description!=='暂无简介'?book.description:'打开这本书，开始一段新的阅读旅程。'}</p><div className="mh-book-meta"><span>{book.category?.split('>').pop()||'综合'} · {book.author||'未知作者'}</span><small>{['completed','完结'].includes(book.status||'')?'完结':'连载'}</small></div></div></BookLink>):<p className="mh-empty">暂时没有书籍</p>}</div>;
+  return <div className="mh-rows">{books.length?books.map(book=><BookLink className="mh-book" key={book.id} href={`/book/${book.id}`}><Cover book={book} priority={priority}/><div className="mh-book-info"><h3>{book.title}</h3><p>{book.description&&book.description!=='暂无简介'?book.description:'打开这本书，开始一段新的阅读旅程。'}</p><div className="mh-book-meta"><span>{book.category?.split('>').pop()||'综合'} · {book.author||'未知作者'}</span><BookStatus status={book.status}/></div></div></BookLink>):<p className="mh-empty">暂时没有书籍</p>}</div>;
 }
 function BookShelf({books,title}:{books:Book[];title:string}){
   return <div className="mh-shelf" role="region" aria-label={`${title}，左右滑动浏览`} tabIndex={0}>{books.map(book=><BookLink className="mh-shelf-book" key={book.id} href={`/book/${book.id}`}><Cover book={book}/><h3>{book.title}</h3><p>{book.category?.split('>').pop()||'综合'}</p></BookLink>)}</div>;
@@ -38,10 +43,11 @@ export default function MobileHome({books,bannerBooks=[]}:{books:Book[];bannerBo
   const requestedPage=Number(search.get('page')||1);
   const page=Number.isSafeInteger(requestedPage)&&requestedPage>0&&requestedPage<=100000?requestedPage:1;
   const key=`${mode}:${category}:${page}`;
-  const [result,setResult]=useState<{key:string;books:Book[];total:number}|null>(null);
+  const [result,setResult]=useState<{key:string;books:Book[];total:number|null}|null>(null);
   const cached=result?.key===key?result:browseCache.get(key);
   const rows=cached?.books||[];
-  const total=cached?.total||0;
+  const total=cached?.total??null;
+  const totalPages=total===null?null:Math.ceil(total/browsePageSize);
   const [failure,setFailure]=useState<{key:string;retry:number;message:string}|null>(null);
   const [retry,setRetry]=useState(0);
   const error=failure?.key===key&&failure.retry===retry?failure.message:'';
@@ -53,13 +59,23 @@ export default function MobileHome({books,bannerBooks=[]}:{books:Book[];bannerBo
   useEffect(()=>{
     if(mode==='home')return;
     const controller=new AbortController();
-    const params=new URLSearchParams({page:String(page),limit:'20',order:'desc',orderBy:mode==='new'?'createdAt':'views'});
+    const params=new URLSearchParams({page:String(page),limit:String(browsePageSize),order:'desc',orderBy:mode==='new'?'createdAt':'views'});
     if(mode==='category'&&category!=='全部')params.set('category',category);
     safeFetch(`/api/books?${params}`,{signal:controller.signal}).then(async response=>{
       if(!response.ok)throw Error('书籍加载失败，请重试');
       const books:Book[]=await response.json();
       if(!controller.signal.aborted){
-        const data={books,total:Number(response.headers.get('X-Total-Count')||page*20+(books.length===20?1:0))};
+        const count=response.headers.get('X-Total-Count');
+        const parsed=count!==null&&/^\d+$/.test(count)?Number(count):NaN;
+        const total=Number.isSafeInteger(parsed)&&parsed>=0?parsed:null;
+        const lastPage=total===null?null:Math.max(1,Math.ceil(total/browsePageSize));
+        if(lastPage!==null&&page>lastPage){
+          const target=new URLSearchParams(location.search);
+          if(lastPage===1)target.delete('page');else target.set('page',String(lastPage));
+          history.replaceState({homeBrowse:Boolean(history.state?.homeBrowse)},'',`/?${target}`);
+          return;
+        }
+        const data={books,total};
         browseCache.set(key,data);
         if(browseCache.size>8)browseCache.delete(browseCache.keys().next().value!);
         setResult({key,...data});
@@ -92,10 +108,10 @@ export default function MobileHome({books,bannerBooks=[]}:{books:Book[];bannerBo
       <section className="mh-section mh-browse">
       {mode==='category'&&<>
         <MobileCategoryPicker selected={category} onSelect={name=>browse('category',1,name,true)}/>
-        <div className="mh-browse-summary"><h3>{category==='全部'?'全部作品':`${category}作品`}</h3><span>{cached?`共 ${total.toLocaleString('zh-CN')} 本 · `:''}按热度排序</span></div>
+        <div className="mh-browse-summary"><h3>{category==='全部'?'全部作品':`${category}作品`}</h3><span>{total!==null?`共 ${total.toLocaleString('zh-CN')} 本 · `:''}按热度排序</span></div>
       </>}
       {loading?<p className="mh-empty" role="status"><LoadingText>正在加载</LoadingText></p>:error?<p role="alert" className="mh-empty">{error} <button onClick={()=>setRetry(n=>n+1)}>重试</button></p>:<BookRows books={rows}/>}
-      <nav className="mh-pagination" aria-label="书籍分页"><button disabled={loading||page===1} onClick={()=>browse(mode,page-1,category,true)}>上一页</button><span>第 {page} 页</span><button disabled={loading||page*20>=total} onClick={()=>browse(mode,page+1,category,true)}>下一页</button></nav>
+      <nav className="mh-pagination" aria-label="书籍分页"><button disabled={loading||!!error||page===1} onClick={()=>browse(mode,page-1,category,true)}>上一页</button><span aria-live="polite">{totalPages===0?'共 0 页':totalPages===null?`第 ${page} 页`:`第 ${page} / ${totalPages} 页`}</span><button disabled={loading||!!error||(totalPages===null?rows.length<browsePageSize:page>=totalPages)} onClick={()=>browse(mode,page+1,category,true)}>下一页</button></nav>
       </section>
     </>}
     {mode==='home'&&<MobileBottomNav/>}
