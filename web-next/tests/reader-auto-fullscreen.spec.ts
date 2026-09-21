@@ -154,8 +154,6 @@ test('fullscreen paper fills the cutout area while text avoids it, and restores 
   await page.screenshot({path: info.outputPath('verified-cutout-landscape.png')});
   await page.evaluate(() => document.exitFullscreen());
   await expect(viewport).toHaveCount(1);
-  await page.keyboard.press('m');
-  await page.goBack();
   await expect(page).toHaveURL(detail);
   await expect(viewport).toHaveAttribute('content', original!);
 });

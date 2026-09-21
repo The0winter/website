@@ -23,6 +23,46 @@ export function subscribeReaderFullscreen(listener: () => void) {
   return () => {listeners.delete(listener); document.removeEventListener('fullscreenchange', listener);};
 }
 
+// Android Back exits native fullscreen without traversing page history. Bridge
+// that exit to reader navigation, while letting app-controlled exits stay put.
+export function installReaderFullscreenBack(onBack: () => void) {
+  let active = readerFullscreenActive();
+  let generation = 0;
+  const cancel = () => {generation++;};
+  const foreground = () => !document.hidden && document.hasFocus();
+  const onChange = () => {
+    const wasActive = active;
+    active = readerFullscreenActive();
+    if (active) cancel();
+    if (active || !wasActive || !owned) return;
+    owned = false;
+    if (document.fullscreenElement || !foreground() || !matchMedia('(max-width: 1023px)').matches || !isReaderPath(location.pathname)) return;
+    const href = location.href;
+    const exit = ++generation;
+    // A history traversal or backgrounding can also end fullscreen. Give those
+    // events time to arrive before issuing a second, unintended Back.
+    void settleViewport().then(() => {
+      if (exit === generation && foreground() && !readerFullscreenActive() && location.href === href) onBack();
+    });
+  };
+  const onVisibility = () => {if (document.hidden) cancel();};
+  document.addEventListener('fullscreenchange', onChange);
+  document.addEventListener('visibilitychange', onVisibility);
+  window.addEventListener('popstate', cancel, true);
+  window.addEventListener('book-navigation-leave', cancel);
+  window.addEventListener('pagehide', cancel);
+  window.addEventListener('blur', cancel);
+  return () => {
+    cancel();
+    document.removeEventListener('fullscreenchange', onChange);
+    document.removeEventListener('visibilitychange', onVisibility);
+    window.removeEventListener('popstate', cancel, true);
+    window.removeEventListener('book-navigation-leave', cancel);
+    window.removeEventListener('pagehide', cancel);
+    window.removeEventListener('blur', cancel);
+  };
+}
+
 // Native fullscreen can start while Next is still loading the reader route.
 // Opt into the cutout before that request, and keep it through metadata swaps.
 function prepareFullscreenViewport() {
@@ -50,9 +90,10 @@ function prepareFullscreenViewport() {
     observer.disconnect();
     document.removeEventListener('fullscreenchange', onExit);
     releaseViewport = null;
-    // The reader route owns its own cover viewport. Restore only an outgoing
-    // source page, and never replace a newer value supplied by its route.
-    if (!isReaderPath(location.pathname)) {
+    // The reader owns its cover viewport once mounted. A pending entry can
+    // already have a reader URL while still displaying the source details.
+    // Never replace a newer value supplied by the destination route.
+    if (!isReaderPath(location.pathname) || !document.querySelector('.reader-entry-content')) {
       for (const [meta, value] of changed) if (meta.isConnected && meta.content === value.applied) meta.content = value.original;
       if (root.style.getPropertyValue('--reader-fullscreen-paper') === paper) {
         if (previousPaper) root.style.setProperty('--reader-fullscreen-paper', previousPaper);
@@ -144,7 +185,10 @@ export async function withReaderFullscreenCover(action: () => Promise<void>) {
 }
 
 export async function exitReaderFullscreen() {
-  await document.exitFullscreen();
+  const wasOwned = owned;
+  // Set this before the native event, including when called from settings.
   owned = false;
+  try {await document.exitFullscreen();}
+  catch (error) {owned = wasOwned && readerFullscreenActive(); throw error;}
   await settleViewport();
 }

@@ -79,7 +79,8 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
     await choose(page, true);
     await page.getByRole('button', {name: '关闭阅读设置'}).click();
     await page.evaluate(() => document.exitFullscreen());
-    await surface(page).locator('.reader-page-window').click({position: {x: 195, y: 420}});
+    await expect(page).toHaveURL(detail);
+    await expect(page.locator('.book-detail')).toBeVisible();
     expect(await active(page)).toBe(false);
   });
 }
