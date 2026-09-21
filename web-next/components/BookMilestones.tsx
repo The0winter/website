@@ -98,7 +98,7 @@ export function BookMilestoneSheet({title, state}: {title: string; state: State}
       <div className="milestone-body">
         <p className="milestone-book-title">{title}</p>
         {explanation && <div className="milestone-explanation" id="milestone-explanation">
-          <p>记录作品达到的收藏与浏览里程碑。收藏按当前书架人数统计，浏览沿用本站去重后的阅读统计；已达成的里程碑永久保留。</p>
+          <p>记录作品达到的收藏与浏览里程碑。统计包含作品基础数据及后续读者行为；已达成的里程碑永久保留。</p>
           <p>收藏从三百、五百、一千、三千、五千、一万起；浏览从一万、五万、十万、二十万、五十万起，后续逐级递增。</p>
           <p>日期按北京时间显示。历史数据无法确认具体达标日期的，统一标为“历史达成”。</p>
         </div>}
