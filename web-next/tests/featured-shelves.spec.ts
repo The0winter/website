@@ -45,7 +45,12 @@ for (const width of [320, 390, 767]) test(`57 unique recommendations alternate t
   await expect(page).toHaveURL(base + '/');
   await expect(page.locator('[data-section-transition]')).toHaveCount(0);
   await page.screenshot({path: info.outputPath('final-shelf-swiped.png')});
-  await shelf.evaluate(el => {el.scrollLeft = el.scrollWidth;});
+  // Keep using native gestures: assigning scrollLeft during touch momentum can
+  // be superseded by the browser's still-running scroll/snap animation.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (await shelf.evaluate(el => el.scrollWidth - el.clientWidth - el.scrollLeft < 2)) break;
+    await drag(page, width - 40, bounds.y + 45, -(width - 90));
+  }
   await expect(shelf.locator('.mh-shelf-book').last()).toBeInViewport();
   await drag(page, width - 40, bounds.y + 45, -(width - 90));
   await expect(page).toHaveURL(base + '/');
