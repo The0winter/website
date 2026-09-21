@@ -1,6 +1,16 @@
 import mongoose from 'mongoose';
 
 const bookSchema = new mongoose.Schema({
+  statisticsSeed: {type: new mongoose.Schema({
+    runId: {type: String, required: true},
+    source: String,
+    qidianRank: Number,
+    views: {type: Number, min: 0, required: true},
+    favorites: {type: Number, min: 0, required: true},
+    rating: {type: Number, min: 0, max: 5, required: true},
+    ratingWeight: {type: Number, min: 1, required: true},
+    initializedAt: {type: Date, required: true},
+  }, {_id: false}), default: undefined},
   milestoneVersion: {type: Number, default: 0},
   milestonesInitializedAt: Date,
   milestoneHistory: {type: [new mongoose.Schema({

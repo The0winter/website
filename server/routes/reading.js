@@ -29,7 +29,7 @@ export function readingRoutes(app,auth) {
   paragraphCommentRoutes(app,auth);
   catalogRoutes(app);
   app.get('/api/books/:bookId/milestones',asyncRoute(async(req,res)=>{
-    const book = await Book.findOne({_id:req.params.bookId,deletedAt:null}).select('views milestoneHistory milestonesInitializedAt').maxTimeMS(3000).lean();
+    const book = await Book.findOne({_id:req.params.bookId,deletedAt:null}).select('views statisticsSeed milestoneHistory milestonesInitializedAt').maxTimeMS(3000).lean();
     if (!book) fail(404,'作品不可用');
     res.set('Cache-Control','private, no-store').json(await bookMilestones(book));
   }));

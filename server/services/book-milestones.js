@@ -1,5 +1,6 @@
 import Book from '../models/Book.js';
 import Bookmark from '../models/Bookmark.js';
+import {favoriteTotal} from './book-statistics.js';
 import {reachedMilestones, milestoneThresholds} from '../../shared/book-milestones.mjs';
 
 const key = event => `${event.kind}:${event.threshold}`;
@@ -15,8 +16,8 @@ export async function recordBookMilestones(book, before, after, session, now = n
   const favorites = before.favorites ?? (!book.milestonesInitializedAt ? await Bookmark.countDocuments({bookId: book._id}).session(session) : undefined);
   // A compatible rollback or an older importer may advance a total without
   // writing milestones. Those already-reached levels still have unknown dates.
-  append(reachedMilestones({views: book.views, ...before, favorites}));
-  append(reachedMilestones(after, now));
+  append(reachedMilestones({views: book.views, ...before, favorites: favorites === undefined ? undefined : favoriteTotal(book, favorites)}));
+  append(reachedMilestones({...after, ...(after.favorites === undefined ? {} : {favorites: favoriteTotal(book, after.favorites)})}, now));
   if (!book.milestonesInitializedAt || history.length !== (book.milestoneHistory?.length || 0)) {
     await Book.updateOne({_id: book._id}, {$set: {milestoneHistory: history, milestonesInitializedAt: book.milestonesInitializedAt || now}}, {session, timestamps: false});
   }
@@ -25,7 +26,7 @@ export async function recordBookMilestones(book, before, after, session, now = n
 
 export async function bookMilestones(book) {
   const favorites = await Bookmark.countDocuments({bookId: book._id}).maxTimeMS(3000);
-  const counts = {favorites, views: Math.max(0, book.views || 0)};
+  const counts = {favorites: favoriteTotal(book, favorites), views: Math.max(0, book.views || 0)};
   const events = (book.milestoneHistory || []).map(event => ({kind: event.kind, threshold: event.threshold, achievedAt: event.achievedAt ?? null}));
   const known = new Set(events.map(key));
   // Legacy totals prove attainment, but cannot prove its original date.

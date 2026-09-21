@@ -66,6 +66,7 @@ interface Book {
   category?: string;
   rating?: number;       
   numReviews?: number;   
+  statisticsSeed?: {rating: number; ratingWeight: number};
   lastUpdated?: string; 
   views?: number;
 }
@@ -224,7 +225,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
         if(!controller.signal.aborted){
           const distribution:Record<string,number>=JSON.parse(response.headers.get('X-Review-Distribution')||'{}');
           const total=Number(response.headers.get('X-Total-Count'));
-          const rating=total?Object.entries(distribution).reduce((sum,[score,count])=>sum+Number(score)*count,0)/total:0;
+          const savedRating=response.headers.get('X-Book-Rating');
+          const rating=savedRating!==null&&Number.isFinite(Number(savedRating))?Number(savedRating):total?Object.entries(distribution).reduce((sum,[score,count])=>sum+Number(score)*count,0)/total:0;
           setReviews(rows);setReviewTotal(total);setReviewResult({key:reviewKey,error:''});
           setBookData(previous=>({...previous,book:{...previous.book,rating,numReviews:total}}));
         }
@@ -441,15 +443,15 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
               {/* 电脑端评分栏 */}
               <div className="hidden md:block w-[280px] border-l border-gray-100 pl-6 pt-2">
                  <div className="flex items-end space-x-2 mb-2">
-                    <span className="text-gray-500 text-xs">书友评分</span>
+                    <span className="text-gray-500 text-xs">{book.statisticsSeed ? '综合评分' : '书友评分'}</span>
                  </div>
-                 <div className="book-desktop-rating flex items-center gap-2 mb-2" aria-label={`书友评分：${ratingLabel(book.rating)}`}>
+                 <div className="book-desktop-rating flex items-center gap-2 mb-2" aria-label={`${book.statisticsSeed ? '综合评分' : '书友评分'}：${ratingLabel(book.rating)}`}>
                     <Star className="w-6 h-6 fill-yellow-400 text-yellow-400 shrink-0" aria-hidden="true" />
                     <strong className={`book-rating-score font-bold text-gray-900 ${book.rating ? 'text-4xl' : 'text-lg'}`}>{displayRating}</strong>
                  </div>
                  <span className="text-xs text-gray-500">{book.numReviews || 0} 人评价</span>
                  <div className="mt-4 pt-4 border-t border-gray-100 text-right">
-                     <span className="text-xs text-gray-400">评分来自真实用户</span>
+                     <span className="text-xs text-gray-400">{book.statisticsSeed ? '基础评分与书友评价综合' : '评分来自真实用户'}</span>
                  </div>
                  <div className="book-desktop-milestone"><BookMilestoneEntry bookId={book.id} state={milestones}/></div>
               </div>
@@ -469,8 +471,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                     <dd>{viewCount}</dd>
                   </div>
                   <div>
-                    <dt>评分</dt>
-                    <dd className="book-mobile-rating" data-rated={displayRating !== '暂无评分'} aria-label={`书友评分：${ratingLabel(book.rating)}`}>
+                    <dt>{book.statisticsSeed ? '综合评分' : '评分'}</dt>
+                    <dd className="book-mobile-rating" data-rated={displayRating !== '暂无评分'} title={book.statisticsSeed ? '基础评分与书友评价综合' : undefined} aria-label={`${book.statisticsSeed ? '综合评分' : '书友评分'}：${ratingLabel(book.rating)}`}>
                       <Star size={15} aria-hidden="true" />
                       <strong>{displayRating}</strong>
                     </dd>

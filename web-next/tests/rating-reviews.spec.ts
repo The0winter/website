@@ -75,3 +75,12 @@ test('an unrated work has no numeric zero score', async ({page}) => {
   await expect(page.locator('.book-rating-score')).toHaveText('暂无评分');
   await expect(page.locator('.book-mobile-rating strong')).toHaveText('暂无评分');
 });
+
+test('initialized score survives loading an empty real review list', async ({page}) => {
+  await page.route(`**/api/books/${book}/reviews?*`, route=>route.fulfill({json:[], headers:{'X-Total-Count':'0','X-Review-Distribution':'{}','X-Book-Rating':'4.75'}}));
+  await page.goto(`${base}/book/${book}`);
+  await expect(page.locator('.book-rating-score')).toHaveText('9.5');
+  await expect(page.locator('.book-mobile-rating strong')).toHaveText('9.5');
+  await page.reload();
+  await expect(page.locator('.book-mobile-rating strong')).toHaveText('9.5');
+});

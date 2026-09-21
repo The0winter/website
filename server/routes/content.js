@@ -5,6 +5,7 @@ import Chapter from '../models/Chapter.js';
 import Bookmark from '../models/Bookmark.js';
 import {recordBookMilestones} from '../services/book-milestones.js';
 import Review from '../models/Review.js';
+import {combinedRating} from '../services/book-statistics.js';
 import {claimMedia,retireUnreferencedCover} from '../services/media-reference.js';
 import {finishCoverRetirement} from '../services/cover-retention.js';
 import {trashChapter} from '../services/writing-trash.js';
@@ -145,10 +146,10 @@ export function contentRoutes(app,auth) {
     let review;
     await mongoose.connection.transaction(async session=>{
       // Serialize review summaries against all other mutations on this book.
-      await lockBook(req.params.id,{role:'import'},session);
+      const book = await lockBook(req.params.id,{role:'import'},session);
       review=await Review.findOneAndUpdate({book:req.params.id,user:req.user.id},{$set:{rating,content}},{new:true,upsert:true,runValidators:true,session});
       const [stats]=await Review.aggregate([{$match:{book:new mongoose.Types.ObjectId(req.params.id)}},{$group:{_id:null,rating:{$avg:'$rating'},count:{$sum:1}}}]).session(session);
-      await Book.updateOne({_id:req.params.id},{$set:{rating:stats.rating,numReviews:stats.count}},{session});
+      await Book.updateOne({_id:req.params.id},{$set:{rating:combinedRating(book,stats.rating,stats.count),numReviews:stats.count}},{session});
     });res.status(201).json(await Review.findById(review._id).populate('user','username avatar'));
   }));
 }
