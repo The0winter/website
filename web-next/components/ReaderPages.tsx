@@ -2,7 +2,7 @@
 
 import {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState,useSyncExternalStore,type CSSProperties} from 'react';
 import {Highlighter,MessageCircle} from 'lucide-react';
-import ReaderReturnLink from './ReaderReturnLink';
+import ReaderHeader from './ReaderHeader';
 import ParagraphComments from './ParagraphComments';
 import {readerParagraphs} from '../../shared/reader-paragraphs.mjs';
 import {cachedReaderCounts,loadReaderCounts,rememberReaderCounts} from '@/lib/reader-chapters';
@@ -112,7 +112,7 @@ export default function ReaderPages(props:ReaderPageProps) {
     let active=true,frame=0;
     const measure=()=>{
       if(!active)return;
-      const height=viewport.getBoundingClientRect().height;
+      const height=Math.round(viewport.getBoundingClientRect().height*64)/64;
       if(scrolling)body.style.height='';else fitReaderColumnHeight(body,height);
       const {width,total:columnTotal}=readerColumnLayout(body);
       if(!width || !height)return;
@@ -356,9 +356,9 @@ export default function ReaderPages(props:ReaderPageProps) {
   const progress=progressAt(props.chapterIndex,(page+1)/layout.total);
   const style={'--reader-paper':props.theme.bg,'--reader-ink':props.theme.text,'--reader-panel':props.theme.panel,'--reader-width':`${props.pageWidth}px`,'--reader-paragraph-gap':paragraphGap} as CSSProperties;
 
-  return <div className="reader-pages-root" data-dark={props.dark} data-mode={turnMode} data-reader-ready={layout.width>0} data-reader-chapter={chapter.id} data-reader-previous={props.previousChapter?.id || ''} data-reader-next={props.nextChapter?.id || ''} style={style}>
+  return <div className="reader-pages-root" data-dark={props.dark} data-mode={turnMode} data-reader-ready={layout.width>0 && !fullscreenPending} data-reader-chapter={chapter.id} data-reader-previous={props.previousChapter?.id || ''} data-reader-next={props.nextChapter?.id || ''} style={style}>
     <section className="reader-frame" data-paper={props.paper && !props.dark} aria-label="章节阅读">
-      <header className="reader-status-top" data-open={props.toolsVisible} inert={!props.toolsVisible} aria-hidden={!props.toolsVisible}><ReaderReturnLink bookId={book.id} title={title}/></header>
+      <ReaderHeader bookId={book.id} title={title} toolsVisible={props.toolsVisible}/>
       <button className="reader-menu-access" onClick={onTools} aria-expanded={props.toolsVisible}>阅读菜单</button>
       <div ref={windowRef} className="reader-page-window" tabIndex={0} aria-label={scrolling?'正文，可上下滚动，点击中央打开菜单':`${turnMode==='vertical'?'上下':'左右'}翻页，点击中央打开菜单`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={cancelGesture} onLostPointerCapture={event=>{if(event.target===event.currentTarget)cancelGesture();}} onClick={click} onTouchStart={touchStart} onTouchEnd={touchEnd} onTouchCancel={()=>{touchEdge.current=null;}} onWheel={wheel}>
         <div ref={surface} className="reader-page-surface" style={{'--reader-paper-position':readerPaperPosition(page)} as CSSProperties}>

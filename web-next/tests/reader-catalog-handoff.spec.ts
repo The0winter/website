@@ -20,7 +20,7 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
       const tools = page.locator('.reader-tools:visible');
       await expect(tools).toHaveAttribute('aria-hidden', 'false');
       await expect(tools.getByRole('link', {name: '详情', exact: true})).toHaveCount(0);
-      await expect(tools.getByRole('button')).toHaveText(['设置', '目录', '日间', '退出全屏']);
+      await expect(tools.getByRole('button')).toHaveText(['设置', '目录', '日间']);
       expect(await page.evaluate(() => document.fullscreenElement === document.documentElement)).toBe(true);
       await tools.getByRole('button', {name: '目录', exact: true}).tap();
       const sheet = page.getByRole('dialog', {name: '全部目录'});

@@ -46,8 +46,8 @@ for (const origin of ['details', 'catalog', 'shelf']) {
     await ready(page);
     expect(await active(page)).toBe(true);
     await page.touchscreen.tap(195, 420);
-    const exit = page.locator('.reader-tools').getByRole('button', {name: '退出全屏'});
-    await expect(exit).toBeVisible();
+    await expect(page.locator('.reader-tools').getByRole('button')).toHaveCount(3);
+    await expect(page.locator('.reader-fullscreen-hint')).toHaveText('在设置中可关闭全屏模式');
     expect(dialogs).toEqual([]);
     await page.locator('.reader-return:visible').click();
     await expect(page).toHaveURL(origin === 'shelf' ? base + '/library' : detail);
@@ -58,6 +58,7 @@ for (const origin of ['details', 'catalog', 'shelf']) {
     else await page.locator('.read-now:visible').tap();
     await ready(page);
     expect(await active(page)).toBe(true);
+    await expect(page.locator('.reader-fullscreen-hint')).toHaveCount(0);
   });
 }
 
@@ -108,15 +109,17 @@ test('direct entry uses one normal reading tap and respects a later explicit exi
   await expect.poll(() => active(page)).toBe(true);
   await expect(page.locator('.reader-fullscreen-cover')).toHaveCount(0);
   const tools = page.locator('.reader-tools');
-  await tools.getByRole('button', {name: '退出全屏'}).tap();
+  await tools.getByRole('button', {name: '设置', exact: true}).tap();
+  await page.getByRole('group', {name: '全屏阅读'}).getByRole('button', {name: '否', exact: true}).tap();
   await expect.poll(() => active(page)).toBe(false);
   await expect(page.locator('.reader-fullscreen-cover')).toHaveCount(0);
+  await page.getByRole('button', {name: '关闭阅读设置'}).tap();
   await page.touchscreen.tap(195, 420);
   await page.touchscreen.tap(195, 420);
   expect(await active(page)).toBe(false);
   await page.reload(); await ready(page);
   await page.touchscreen.tap(195, 420);
-  await expect.poll(() => active(page)).toBe(true);
+  expect(await active(page)).toBe(false);
 });
 
 test('a denied automatic request quietly completes normal reading entry', async ({page}) => {
@@ -142,7 +145,7 @@ test('fullscreen paper fills the cutout area while text avoids it, and restores 
     const box = el.getBoundingClientRect();
     const text = el.querySelector('.reader-text-window')!.getBoundingClientRect();
     return {top: box.top, fills: box.height === innerHeight, textTop: text.top, paper: getComputedStyle(el).backgroundColor};
-  })).toEqual({top: 0, fills: true, textTop: 72, paper: 'rgb(219, 196, 158)'});
+  })).toEqual({top: 0, fills: true, textTop: 96, paper: 'rgb(219, 196, 158)'});
   await page.screenshot({path: info.outputPath('verified-cutout-portrait.png')});
   // Rotation moves a camera cutout to a side; pagination must keep its text clear.
   await page.setViewportSize({width: 844, height: 390});

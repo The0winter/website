@@ -2,7 +2,7 @@
 
 import {memo,useCallback,useEffect,useEffectEvent,useLayoutEffect,useMemo,useRef,useState,type CSSProperties} from 'react';
 import {Highlighter,MessageCircle} from 'lucide-react';
-import ReaderReturnLink from './ReaderReturnLink';
+import ReaderHeader from './ReaderHeader';
 import ParagraphComments from './ParagraphComments';
 import type {ReaderPageProps} from './ReaderPages';
 import type {Chapter} from '@/lib/api';
@@ -254,7 +254,7 @@ export default function ReaderScroll(props:ReaderPageProps){
 
   return <div className="reader-pages-root" data-dark={props.dark} data-mode="scroll" data-reader-ready={ready} data-reader-chapter={props.chapter.id} data-reader-previous={props.previousChapter?.id || ''} data-reader-next={props.nextChapter?.id || ''} style={style}>
     <section className="reader-frame" data-paper={props.paper && !props.dark} aria-label="章节阅读">
-      <header className="reader-status-top" data-open={props.toolsVisible} inert={!props.toolsVisible} aria-hidden={!props.toolsVisible}><ReaderReturnLink bookId={props.book.id} title={title}/></header>
+      <ReaderHeader bookId={props.book.id} title={title} toolsVisible={props.toolsVisible}/>
       <button className="reader-menu-access" onClick={props.onTools} aria-expanded={props.toolsVisible}>阅读菜单</button>
       <div className="reader-page-window" tabIndex={0} aria-label="正文，可连续上下滚动，点击中央打开菜单"
         onPointerDown={event=>{

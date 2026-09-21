@@ -16,7 +16,10 @@ export function fitReaderColumnHeight(body:HTMLElement,height:number){
 export function readerColumnLayout(body:HTMLElement){
   // clientWidth/scrollWidth round to integer CSS pixels. Reusing clientWidth
   // as the column stride accumulates a visible error on fractional viewports.
-  const width=body.getBoundingClientRect().width;
+  // Animated translations introduce floating-point noise (e.g. 350 becomes
+  // 349.999969). Keep layout's fractional precision without treating that as
+  // a resize and cancelling a page turn during a fullscreen transition.
+  const width=Math.round(body.getBoundingClientRect().width*64)/64;
   return {width,step:width+readerColumnGap,total:Math.max(1,Math.ceil((body.scrollWidth+readerColumnGap-1)/(width+readerColumnGap)))};
 }
 

@@ -2,12 +2,12 @@ import {flushSync} from 'react-dom';
 import {mobileReaderCream, readerPaperPosition} from './reader-paper';
 import {freezeBookPage} from './book-transition';
 import {currentSiteTheme} from './site-theme';
-import {isReaderPath, releaseReaderFullscreen, requestReaderFullscreen, shouldEnterReaderFullscreen} from './reader-fullscreen';
+import {isReaderPath, readerFullscreenPreferred, releaseReaderFullscreen, requestReaderFullscreen, shouldEnterReaderFullscreen} from './reader-fullscreen';
 
 type ChapterEntry = {
   token: string; href: string; chapterId: string; title: string; error?: string; position: 'start' | 'resume'; minimumVisibleMs: number;
   paper: string; ink: string; desk: string; width: string; textured: boolean; paperPosition: string; releasing?: boolean; revealing?: boolean;
-  motion: 'none' | 'enter' | 'catalog'; motionComplete: boolean; fullscreen: boolean;
+  motion: 'none' | 'enter' | 'catalog'; motionComplete: boolean; fullscreen: boolean; fullscreenReady: boolean;
 };
 const listeners = new Set<() => void>();
 let entry: ChapterEntry | null = null;
@@ -62,7 +62,7 @@ export function beginChapterEntry(href: string, title: string, position: 'start'
   entry = {token: crypto.randomUUID(), href, chapterId, title, position, minimumVisibleMs, paper: style?.getPropertyValue('--reader-paper') || paper,
     ink: style?.getPropertyValue('--reader-ink') || ink, desk, width: style?.getPropertyValue('--reader-width') || `${width}px`,
     textured: reader ? reader.querySelector('.reader-frame')?.getAttribute('data-paper') === 'true' : theme === 'cream',
-    paperPosition: readerPaperPosition(paperPage), motion, motionComplete: motion === 'none', fullscreen: shouldEnterReaderFullscreen()};
+    paperPosition: readerPaperPosition(paperPage), motion, motionComplete: motion === 'none', fullscreen: shouldEnterReaderFullscreen(), fullscreenReady: false};
   // The slide already supplies the entry duration. Prepare the reader beneath
   // it immediately instead of starting layout checks after another timer.
   if (mobileEntry) entry.minimumVisibleMs = 0;
@@ -70,11 +70,18 @@ export function beginChapterEntry(href: string, title: string, position: 'start'
   window.dispatchEvent(new Event('chapter-entry-start'));
   // Paint the opaque reading paper before Next can replace the source route.
   flushSync(notify);
-  // Start behind the existing entry paper, in the same user gesture as navigation.
-  // Rejection leaves the normal reader usable and never opens a prompt of our own.
-  if (entry.fullscreen) void requestReaderFullscreen().catch(() => {});
+  const token = entry.token;
+  const enterFullscreen = () => {
+    // Give the fully covering loader a painted frame before resizing the browser.
+    requestAnimationFrame(() => requestAnimationFrame(async () => {
+      if (entry?.token !== token || entry.error) return;
+      if (entry.fullscreen && readerFullscreenPreferred() && navigator.userActivation?.isActive) {
+        await requestReaderFullscreen().catch(() => {});
+      }
+      if (entry?.token === token) {entry = {...entry, fullscreenReady: true}; notify();}
+    }));
+  };
   if (snapshot) {
-    const token = entry.token;
     const moving = motion === 'catalog' ? snapshot : document.querySelector<HTMLElement>('.chapter-loading-page')!;
     const animation = moving.animate(motion === 'catalog'
       ? [{transform: 'translateX(0)'}, {transform: 'translateX(calc(100vw + 24px))'}]
@@ -84,9 +91,9 @@ export function beginChapterEntry(href: string, title: string, position: 'start'
     clearMotion = cleanup;
     void animation.finished.then(() => {
       cleanup();
-      if (entry?.token === token) {entry = {...entry, motionComplete: true}; notify();}
+      if (entry?.token === token) {entry = {...entry, motionComplete: true}; notify(); enterFullscreen();}
     }, () => {});
-  }
+  } else enterFullscreen();
   return entry;
 }
 export function failChapterEntry(href: string, error: string) {

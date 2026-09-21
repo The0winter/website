@@ -27,7 +27,7 @@ export default function ChapterLoadingPage() {
     const pointers = new Set<number>();
     const ready = () => {
       if (!paperReady) return null;
-      if (target.fullscreen && readerFullscreenPending()) return null;
+      if (target.fullscreen && (!currentChapterEntry()?.fullscreenReady || readerFullscreenPending())) return null;
       if (location.pathname !== target.href) return null;
       const reader = document.querySelector<HTMLElement>(`[data-reader-entry-key="${target.token}"] [data-reader-chapter="${target.chapterId}"][data-reader-ready="true"]`);
       const sheet = reader?.querySelector<HTMLElement>('.reader-frame');

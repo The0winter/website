@@ -57,8 +57,11 @@ for (const width of [320, 390]) for (const origin of ['continue', 'catalog']) {
         if (origin === 'catalog') {
           expect(await moving.evaluate(element => ({background: getComputedStyle(element).backgroundColor, shadow: getComputedStyle(element).boxShadow})))
             .toEqual({background: 'rgba(0, 0, 0, 0)', shadow: 'none'});
-          if (cached) await expect(loader).toHaveAttribute('data-text-revealed', 'true');
+          // Even cached text stays under the loader until the catalog has left
+          // and the following fullscreen resize has settled.
+          await expect(loader).toHaveAttribute('data-text-revealed', 'false');
         } else await expect(loader).toHaveAttribute('data-text-revealed', 'false');
+        expect(await page.evaluate(() => Boolean(document.fullscreenElement))).toBe(false);
         await testInfo.attach(`${origin}-${cached ? 'cached' : 'slow'}-mid-slide`, {body: await page.screenshot({path: testInfo.outputPath(`${origin}-${cached}-mid-slide.png`)}), contentType: 'image/png'});
         await moving.evaluate(element => element.getAnimations()[0].play());
         await expect(page.locator('.chapter-entry-snapshot')).toHaveCount(0);

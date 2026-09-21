@@ -37,6 +37,15 @@ const paragraphSpacings=[{value:2,label:'紧凑'},{value:4,label:'标准'},{valu
 function ReaderModeSetting({value,onChange,onClose}:{value:ReaderTurnMode;onChange:(value:ReaderTurnMode)=>void;onClose:()=>void}){
   return <div className="reader-mode-setting" role="group" aria-label="翻页方式"><div className="reader-settings-header"><span>翻页方式</span><button type="button" aria-label="关闭阅读设置" onClick={onClose}><X size={20}/></button></div><div className="reader-mode-options">{turnModes.map(mode=><button key={mode.value} type="button" aria-pressed={value===mode.value} onClick={()=>onChange(mode.value)}>{mode.label}</button>)}</div></div>;
 }
+function ReaderFullscreenSetting({enabled, pending, supported, onChange}: {enabled: boolean; pending: boolean; supported: boolean; onChange: (value: boolean) => void}) {
+  return <div className="reader-fullscreen-setting" role="group" aria-label="全屏阅读">
+    <span>全屏阅读</span><div className="reader-fullscreen-options">
+      <button type="button" aria-pressed={enabled} disabled={pending || !supported} onClick={() => onChange(true)}>是</button>
+      <button type="button" aria-pressed={!enabled} disabled={pending} onClick={() => onChange(false)}>否</button>
+    </div>
+    {!supported && <small>当前浏览器暂不支持全屏</small>}
+  </div>;
+}
 
 let bgCleanupTimer: NodeJS.Timeout | null = null;
 
@@ -105,10 +114,10 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   // 导航栏显示状态 (移动端专用)
   const [mobileNav,setShowNav]=useState(false);
   const showNav=mobileNav;
-  const {supported: fullscreenSupported, active: fullscreenActive, pending: fullscreenPending, error: fullscreenError, toggle: toggleFullscreen, clearError: clearFullscreenError} = useReaderFullscreen(() => {
+  const {supported: fullscreenSupported, active: fullscreenActive, pending: fullscreenPending, error: fullscreenError, enabled: fullscreenEnabled, hint: fullscreenHint, change: changeFullscreen, toggle: toggleFullscreen, clearError: clearFullscreenError} = useReaderFullscreen(() => {
     setShowNav(false);
     if (showSettings) closeReaderSettings();
-  });
+  }, Boolean(chapterEntry));
   const setShowCatalog = (open: boolean) => {
     if (open) { setShowNav(false); openBookCatalog(bookId); }
     else closeBookCatalog();
@@ -335,7 +344,7 @@ if (loading) return (
       {themeColor === 'cream' && !isActuallyDark && <link rel="preload" as="image" href={readerPaperImage} media="(max-width:1023px)" />}
       <RecordBookVisit bookId={bookId} chapterId={chapter.id}/>
       <div
-        className="reader-tools fixed bottom-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6 border-t transition-all duration-300 pb-safe"
+        className="reader-tools fixed bottom-0 left-0 right-0 z-50 border-t transition-transform duration-300"
         inert={!showNav}
         aria-hidden={!showNav}
         style={{
@@ -374,14 +383,6 @@ if (loading) return (
                 {isActuallyDark ? '夜间' : '日间'}
              </span>
           </button>
-          {fullscreenSupported && <button
-            type="button" onClick={toggleFullscreen} disabled={fullscreenPending}
-            aria-label={fullscreenActive ? '退出全屏' : '全屏阅读'} aria-pressed={fullscreenActive}
-            className="flex min-h-11 min-w-11 flex-col items-center justify-center gap-1 opacity-80 active:opacity-100 disabled:opacity-40"
-          >
-            {fullscreenActive ? <Minimize className="w-5 h-5"/> : <Maximize className="w-5 h-5"/>}
-            <span className="text-[10px]">{fullscreenActive ? '退出全屏' : '全屏'}</span>
-          </button>}
       </div>
 
 
@@ -450,6 +451,7 @@ if (loading) return (
 
       {navigationError && <div role="alert" className="reader-navigation-error">{navigationError}<button onClick={()=>goToChapter(failedChapter.current || chapterIdParam)}>重试</button><button onClick={()=>setNavigationError('')}>关闭</button></div>}
       {fullscreenError && <div role="alert" className="reader-navigation-error">{fullscreenError}<button type="button" onClick={clearFullscreenError}>关闭</button></div>}
+      {fullscreenHint && <div role="status" className="reader-fullscreen-hint">在设置中可关闭全屏模式</div>}
       {/* 6. 设置弹窗 */}
       {showSettings && (
         <>
@@ -469,6 +471,7 @@ if (loading) return (
             >
                 <div className="space-y-6">
                     <ReaderModeSetting value={turnMode} onChange={setTurnMode} onClose={()=>setShowSettings(false)}/>
+                    <ReaderFullscreenSetting enabled={fullscreenEnabled} pending={fullscreenPending} supported={fullscreenSupported} onChange={changeFullscreen}/>
                     {/* Theme */}
                     <div className="flex items-center">
                         <span className="w-20 font-bold opacity-70 shrink-0">阅读主题</span>
@@ -582,7 +585,7 @@ if (loading) return (
           ) : (
             <div 
             role="dialog" aria-modal="true" aria-label="阅读设置" data-reader-settings
-            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-[360px] max-h-[calc(100dvh-120px)] overflow-y-auto rounded-xl shadow-2xl border p-4 animate-in slide-in-from-bottom-5 fade-in duration-200"
+            className="reader-mobile-settings fixed left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-[360px] overflow-y-auto rounded-xl shadow-2xl border p-4 animate-in slide-in-from-bottom-5 fade-in duration-200"
             style={{ 
               backgroundColor: isActuallyDark ? 'rgba(40,40,40,0.95)' : 'rgba(255,255,255,0.95)',
               backdropFilter: 'blur(10px)',
@@ -591,6 +594,7 @@ if (loading) return (
             }}
           >
             <ReaderModeSetting value={turnMode} onChange={setTurnMode} onClose={()=>setShowSettings(false)}/>
+            <ReaderFullscreenSetting enabled={fullscreenEnabled} pending={fullscreenPending} supported={fullscreenSupported} onChange={changeFullscreen}/>
             {/* 紧凑排版：字号调整 (放在最上面方便操作) */}
             <div className="flex items-center gap-3 mb-4 bg-black/5 rounded-lg p-2">
                 <button onClick={() => setFontSizeNum(Math.max(12, fontSizeNum - 1))} className="px-3 font-serif hover:bg-black/10 rounded">A-</button>

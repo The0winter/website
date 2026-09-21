@@ -10,6 +10,11 @@ export const readerFullscreenActive = () => document.fullscreenElement === docum
 export const readerFullscreenPending = () => Boolean(pending);
 export const serverFullscreenSnapshot = () => false;
 export const isReaderPath = (path: string) => /^\/book\/[^/?#]+\/[^/?#]+$/.test(path);
+export const readerFullscreenPreferenceKey = 'reader_fullscreen';
+export function readerFullscreenPreferred() {
+  try {return localStorage.getItem(readerFullscreenPreferenceKey) !== 'false';}
+  catch {return true;}
+}
 
 export function subscribeReaderFullscreen(listener: () => void) {
   listeners.add(listener);
@@ -42,7 +47,7 @@ export function requestReaderFullscreen(): Promise<void> {
   owned = true;
   let native: Promise<void>;
   try {
-    // Stay in the original click handler to retain Chrome's user activation.
+    // Entry waits only for its paper transition, while activation is still live.
     native = document.documentElement.requestFullscreen({navigationUI: 'hide'});
   } catch (error) {owned = false; return Promise.reject(error);}
   const request = native.then(async () => {
@@ -60,7 +65,7 @@ export function requestReaderFullscreen(): Promise<void> {
 }
 
 export function shouldEnterReaderFullscreen() {
-  return matchMedia('(max-width: 1023px)').matches && readerFullscreenSupported()
+  return readerFullscreenPreferred() && matchMedia('(max-width: 1023px)').matches && readerFullscreenSupported()
     && !readerFullscreenActive() && !isReaderPath(location.pathname) && Boolean(navigator.userActivation?.isActive);
 }
 
