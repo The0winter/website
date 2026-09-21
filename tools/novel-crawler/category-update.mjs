@@ -24,8 +24,14 @@ export async function updateLocalBookCategory({record, plan, stateDir, outputDir
   return withLock(path.join(stateDir, 'book-locks', key + '.lock'), async () => {
     const jobs = fs.readdirSync(path.join(stateDir, 'jobs'), {withFileTypes:true}).filter(e=>e.isDirectory() && /^[a-f0-9]{20}$/.test(e.name)).map(e=>path.join(stateDir,'jobs',e.name));
     const related = jobs.filter(dir => {
-      const raw = readJson(path.join(dir,'export.json')), reading = readJson(path.join(dir,'reading-edition.json'));
-      return raw?.path === file || reading?.value?.outputPath === file;
+      const raw = readJson(path.join(dir,'export.json'));
+      if (raw?.path === file) return true;
+      // Reading-edition records contain a whole novel. Filter their small
+      // identity records first instead of parsing every novel for every book.
+      const spec = readJson(path.join(dir,'spec.json'));
+      if (!spec) return false;
+      try { checkIdentity(plan.spec || plan,spec); } catch { return false; }
+      return readJson(path.join(dir,'reading-edition.json'))?.value?.outputPath === file;
     });
     const locked = async index => index < related.length ? withLock(path.join(related[index],'job.lock'),()=>locked(index+1)) : update();
     const update = () => {
@@ -37,6 +43,7 @@ export async function updateLocalBookCategory({record, plan, stateDir, outputDir
         return {title:record.title,category:record.category,reused:true,unchangedContent:true};
       }
       if (!journal) {
+        assert.ok(fs.lstatSync(file).isFile() && !fs.lstatSync(file).isSymbolicLink(),'下载文件必须是普通文件');
         const raw = fs.readFileSync(file), book = JSON.parse(raw);
         assert.equal(hash(raw),plan.hash,'排队期间下载文件发生变化');
         checkIdentity(record,book); assert.equal(book.sourceUrl,record.sourceUrl);
