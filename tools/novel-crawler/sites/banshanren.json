@@ -17,6 +17,7 @@
     "urlPattern": "^/novel/(?<bookId>[a-zA-Z0-9_-]+)/?$",
     "readySelector": ".novel_title_box > h1",
     "metadata": {
+      "category": ".novel_title_box > .category_list > li:last-child > a",
       "status": [".novel_title_box .novel_summary_box.pc .serializing", ".novel_summary_box.h5 .serializing"],
       "description": [".novel_intro_box.pc > p:first-child", ".novel_intro_box.h5 > p:first-child"],
       "title": ".novel_title_box > h1",
@@ -53,6 +54,7 @@
     "delayMs": 2000,
     "timeoutMs": 30000,
     "metadata": {
+      "category": ".novel_title_box > .category_list > li:last-child > a",
       "status": [".novel_title_box .novel_summary_box.pc .serializing", ".novel_summary_box.h5 .serializing"],
       "description": [".novel_intro_box.pc > p:first-child", ".novel_intro_box.h5 > p:first-child"],
       "title": ".novel_title_box > h1",

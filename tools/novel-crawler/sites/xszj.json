@@ -17,6 +17,7 @@
   "book": {
     "urlPattern": "^/book/(?<bookId>[0-9]+)$",
     "metadata": {
+      "category": ".detail-info a.tag",
       "title": "h1.detail-title",
       "author": {
         "selector": ".detail-author > a[href^='/author/']",
@@ -43,6 +44,7 @@
       "headless": true
     },
     "metadata": {
+      "category": ".detail-info a.tag",
       "title": "h1.detail-title",
       "author": {
         "selector": ".detail-author > a[href^='/author/']",

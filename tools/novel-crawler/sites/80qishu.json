@@ -12,6 +12,7 @@
   "book": {
     "urlPattern": "^/down/txt[0-9]+c(?<bookId>[0-9]+)qishu\\.html$",
     "metadata": {
+      "category": ".bookcover p.gray:contains(分类)",
       "title": ".bookcover h1.title",
       "author": {
         "selector": ".bookcover p.mt10.gray",
@@ -40,6 +41,7 @@
     "timeoutMs": 60000,
     "retries": 1,
     "metadata": {
+      "category": ".bookcover p.gray:contains(分类)",
       "title": ".bookcover h1.title",
       "author": {
         "selector": ".bookcover p.mt10.gray",

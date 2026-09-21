@@ -7,6 +7,7 @@
   "book": {
     "urlPattern": "^/(?:book|[0-9]+)/(?<bookId>[0-9]+)(?:\\.html|/)$",
     "metadata": {
+      "category": ".cataloginfo .infotype > p:contains(作品类别)",
       "title": {"selector": "title", "pattern": "^(.+?)(?:最新章节免费阅读|章节目录)_.+_秋风书屋$"},
       "author": {"selector": "title", "pattern": "^.+(?:最新章节免费阅读|章节目录)_(.+)_秋风书屋$"},
       "description": "#intro > p",
@@ -27,6 +28,7 @@
     "retries": 1,
     "timeoutMs": 25000,
     "metadata": {
+      "category": ".cataloginfo .infotype > p:contains(作品类别)",
       "title": ".cataloginfo > h3",
       "author": ".cataloginfo .infotype > p > a[href*='/author/']",
       "description": "#intro > p",

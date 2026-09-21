@@ -19,6 +19,7 @@
   "book": {
     "urlPattern": "^/(?<bookId>[0-9]+)/$",
     "metadata": {
+      "category": ".itemtxt > h1 + p > span:nth-child(2)",
       "title": ".itemtxt h1 > a",
       "author": {"selector": ".itemtxt a[href*='/modules/article/authorarticle.php?']", "pattern": "^作者[：:]\\s*(.+)$"},
       "description": ".container > .des:first",
@@ -39,6 +40,7 @@
     "timeoutMs": 20000,
     "maxChapterPages": 40,
     "metadata": {
+      "category": ".itemtxt > h1 + p > span:nth-child(2)",
       "title": ".itemtxt h1 > a",
       "author": {"selector": ".itemtxt a[href*='/modules/article/authorarticle.php?']", "pattern": "^作者[：:]\\s*(.+)$"},
       "description": ".container > .des:first",

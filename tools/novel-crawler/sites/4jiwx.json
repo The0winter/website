@@ -32,6 +32,7 @@
   "book": {
     "urlPattern": "^/book/(?<bookId>[A-Za-z0-9]+)\\.html$",
     "metadata": {
+      "category": {"selector":"meta[property=\"og:novel:category\"]","attribute":"content"},
       "title": {
         "selector": "meta[property='og:novel:book_name']",
         "attribute": "content"
@@ -67,6 +68,7 @@
     "timeoutMs": 20000,
     "retries": 1,
     "metadata": {
+      "category": {"selector":"meta[property=\"og:novel:category\"]","attribute":"content"},
       "title": {
         "selector": "meta[property='og:novel:book_name']",
         "attribute": "content"

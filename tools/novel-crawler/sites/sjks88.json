@@ -7,6 +7,7 @@
   "book": {
     "urlPattern": "^/(?<category>[a-z]+)/(?<bookId>[0-9]+)\\.html$",
     "metadata": {
+      "category": ".box-artic > .autor2:contains(类别)",
       "title": {"selector": ".box-artic > h1", "pattern": "^(.+?)(?:\\([0-9]+-[0-9]+\\))?$"},
       "author": {"selector": ".box-artic > .autor2:contains('作者：')", "pattern": "^作者[：:]\\s*(.+)$"},
       "description": {"selector": "meta[name='description']", "attribute": "content"}
@@ -25,6 +26,7 @@
     "retries": 1,
     "browser": {"headless": true},
     "metadata": {
+      "category": ".box-artic > .autor2:contains(类别)",
       "title": {"selector": ".box-artic > h1", "pattern": "^(.+?)(?:\\([0-9]+-[0-9]+\\))?$"},
       "author": {"selector": ".box-artic > .autor2:contains('作者：')", "pattern": "^作者[：:]\\s*(.+)$"},
       "description": {"selector": "meta[name='description']", "attribute": "content"}

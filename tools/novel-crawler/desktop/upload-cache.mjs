@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {atomicWrite, hash, readJson} from '../storage.mjs';
 
-const version = 1;
+const version = 2;
 // Force an occasional fresh directory check even after out-of-band maintenance.
 const maxAge = 30 * 86400000;
 export function fileFingerprint(file) {

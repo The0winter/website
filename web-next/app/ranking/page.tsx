@@ -18,7 +18,7 @@ const RANKS = [
   {id: 'total', name: '总榜', sort: 'rank_total', period: '累计'},
   {id: 'views', name: '浏览榜', sort: 'views', period: '累计'},
 ] as const;
-const CATEGORIES = ['全部', '玄幻', '仙侠', '都市', '历史', '科幻', '奇幻', '悬疑'];
+const CATEGORIES = ['全部', '玄幻', '仙侠', '都市', '历史', '科幻', '奇幻', '悬疑', '轻小说', '诸天无限', '游戏', '体育', '军事', '武侠', '现实', '言情', '文学'];
 type RankId = typeof RANKS[number]['id'];
 const defaultView = {activeRank: 'day', category: '全部'};
 const serverVisit = () => undefined;

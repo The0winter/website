@@ -16,6 +16,7 @@
   "book": {
     "urlPattern": "^/(?<bookId>[0-9]+)/$",
     "metadata": {
+      "category": ".itemtxt > h1 + p > span:nth-child(2)",
       "status": ".itemtxt > h1 + p > span:first-child",
       "description": ".container > .des:has(p)",
       "title": "h1 > a",
@@ -34,6 +35,7 @@
     "retries": 0,
     "timeoutMs": 15000,
     "metadata": {
+      "category": ".itemtxt > h1 + p > span:nth-child(2)",
       "status": ".itemtxt > h1 + p > span:first-child",
       "description": ".container > .des:has(p)",
       "title": "h1 > a",

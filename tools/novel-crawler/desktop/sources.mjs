@@ -5,7 +5,8 @@ import {projectRoot, defaultStateDir, validateSpec} from '../core.mjs';
 import {readJson, atomicWrite} from '../storage.mjs';
 import {makeClient, httpUrl, decode} from '../http.mjs';
 import {browserProfile} from '../browser-session.mjs';
-import {selectValue, extractDescription, extractBookStatus} from '../adapters.mjs';
+import {selectValue, extractDescription, extractBookStatus, extractBookCategory} from '../adapters.mjs';
+import {applyVerifiedBookCategory, categoryFields, mergeBookCategory} from '../categories.mjs';
 import {checkIdentity, normalizedTitle} from '../quality.mjs';
 import {normalizedIdentity} from '../identity.mjs';
 
@@ -104,13 +105,14 @@ export function parseSearch(html, baseUrl, site) {
   return {results, next: next?.attr('href') ? httpUrl(next.attr('href'), baseUrl) : null};
 }
 
-export function specForBook({url, title, author, description, status, statusDetection, statusEvidence}, sites = loadSites().sites) {
+export function specForBook({url, title, author, description, status, statusDetection, statusEvidence, ...extra}, sites = loadSites().sites) {
   const site = siteFor(url, sites), match = bookUrl(url, site);
-  return validateSpec({...fillTemplate(site.spec, {...match.groups, title, author, sourceUrl: url}), ...(description ? {description} : {}), ...(status ? {status} : {}), ...(statusDetection ? {statusDetection, statusEvidence} : {})});
+  return validateSpec({...fillTemplate(site.spec, {...match.groups, title, author, sourceUrl: url}), ...categoryFields(extra), ...(description ? {description} : {}), ...(status ? {status} : {}), ...(statusDetection ? {statusDetection, statusEvidence} : {})});
 }
 
 // Explicitly reviewed endings survive stale mirror metadata and new crawl jobs.
 export function applyVerifiedBookStatus(book, stateDir, identityNormalization) {
+  book = applyVerifiedBookCategory(book, stateDir, identityNormalization);
   const registry = readJson(path.join(stateDir, 'book-statuses.json'), {books: []});
   const verified = (Array.isArray(registry.books) ? registry.books : []).find(item => {
     if (item.sourceUrl !== (book.sourceUrl || book.url) || item.status !== '完结' || !item.evidence?.url || !item.evidence?.checkedAt) return false;
@@ -137,6 +139,7 @@ export async function searchBooks({website, title, author = '', stateDir = defau
       checkIdentity({title, author: author || book.author, identityNormalization: site.spec.identityNormalization}, book);
       bookUrl(book.url, site);
       Object.assign(book, extractBookStatus($, site.book.metadata.status, response));
+      Object.assign(book, extractBookCategory($, site.book.metadata.category, response));
       return [applyVerifiedBookStatus(book, stateDir, site.spec.identityNormalization)];
     }
     if (!site.search) throw Error('该网站暂时只支持书籍详情页，请把网站栏换成书籍详情页地址');
@@ -171,12 +174,13 @@ export async function resolveBook({url, title, author, stateDir = defaultStateDi
     checkIdentity({title, author, identityNormalization: site.spec.identityNormalization}, actual);
     Object.assign(actual, extractDescription($, site.book.metadata.description));
     Object.assign(actual, extractBookStatus($, site.book.metadata.status, response));
+    Object.assign(actual, extractBookCategory($, site.book.metadata.category, response));
     if (reuseSaved) {
       const registry = readJson(path.join(stateDir, 'sources.json'), {sites: {}});
       const saved = Object.values(registry.sites[new URL(url).hostname]?.books || {}).filter(b => b.sourceUrl === url && b.verified && normalizedTitle(b.title) === normalizedTitle(title) && normalizedTitle(b.author) === normalizedTitle(author)).sort((a, b) => b.lastChecked.localeCompare(a.lastChecked))[0];
       if (saved && /^[a-f0-9]{20}$/.test(saved.jobId)) {
         const spec = readJson(path.join(stateDir, 'jobs', saved.jobId, 'spec.json'));
-        if (spec && spec.sourceUrl === url && normalizedTitle(spec.title) === normalizedTitle(title) && normalizedTitle(spec.author) === normalizedTitle(author)) return applyVerifiedBookStatus(validateSpec({...spec, ...(actual.description ? {description: actual.description} : {}), ...(actual.status ? {status: actual.status, statusDetection: actual.statusDetection, statusEvidence: actual.statusEvidence} : {statusDetection: spec.status ? 'retained' : actual.statusDetection})}), stateDir, site.spec.identityNormalization);
+        if (spec && spec.sourceUrl === url && normalizedTitle(spec.title) === normalizedTitle(title) && normalizedTitle(spec.author) === normalizedTitle(author)) return applyVerifiedBookStatus(validateSpec({...spec, ...mergeBookCategory(spec, actual), ...(actual.description ? {description: actual.description} : {}), ...(actual.status ? {status: actual.status, statusDetection: actual.statusDetection, statusEvidence: actual.statusEvidence} : {statusDetection: spec.status ? 'retained' : actual.statusDetection})}), stateDir, site.spec.identityNormalization);
       }
     }
     return applyVerifiedBookStatus(specForBook({url, ...actual}, sites), stateDir, site.spec.identityNormalization);

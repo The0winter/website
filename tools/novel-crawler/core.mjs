@@ -13,6 +13,8 @@ import {failureDetails} from './diagnostics.mjs';
 import {browserProfile} from './browser-session.mjs';
 import {loadReadingEdition, adoptReadingEdition, updateReadingEdition, recordReadingNoticeReview, recordReadingNumberingReview, recordReadingCatalogCorrection, preserveReviewedCatalogLabels} from './reading-edition.mjs';
 import {continuationKey, continuationState, hasContinuation, acquireContinuation} from './continuation.mjs';
+import {applyVerifiedBookCategory, categoryFields, hasBookCategory, mergeBookCategory} from './categories.mjs';
+import {lookupPublisherCategory} from './publisher-category.mjs';
 
 export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const defaultStateDir = path.join(projectRoot, '.novel-crawler');
@@ -39,6 +41,7 @@ export function validateSpec(input) {
   if (!spec.metadata?.title || !spec.metadata?.author) throw Error('必须配置来源页面书名和作者提取规则');
   if (spec.description !== undefined && (typeof spec.description !== 'string' || spec.description.length > 5000)) throw Error('简介须为不超过 5000 字符的文本');
   if (spec.status !== undefined && !['连载', '完结'].includes(spec.status)) throw Error('作品状态必须为连载或完结');
+  if (spec.category !== undefined && (typeof spec.category !== 'string' || spec.category.length > 80)) throw Error('分类须为不超过 80 字符的文本');
   if (spec.kind === 'html' && (!(spec.catalog?.links || spec.catalog?.json) || !spec.chapter?.content || !spec.chapter?.title)) throw Error('HTML 来源需配置目录及章节选择器');
   if (spec.catalog?.link && (spec.catalog.url || spec.catalog.json || spec.catalog.selectPages || spec.catalog.walk)) throw Error('目录入口 link 不能与 url、JSON、下拉或顺序目录混用');
   if (spec.catalog?.titlePattern !== undefined) {
@@ -93,12 +96,12 @@ export function jobId(spec) {
 }
 
 export function extractionHash(spec) {
-  const {delayMs, retries, timeoutMs, maxChapterPages, searchUrl, description, status, statusDetection, statusEvidence, ...extraction} = spec;
+  const {delayMs, retries, timeoutMs, maxChapterPages, searchUrl, description, status, statusDetection, statusEvidence, category, categoryDetection, categoryEvidence, ...extraction} = spec;
   // A larger bounded request budget changes only where an incomplete fetch
   // stops. All page identity, navigation and text extraction rules stay pinned.
   // Book metadata changes do not affect chapter identity, order or extraction.
   if (extraction.metadata) {
-    const {description: descriptionRule, status: statusRule, ...metadata} = extraction.metadata;
+    const {description: descriptionRule, status: statusRule, category: categoryRule, ...metadata} = extraction.metadata;
     extraction.metadata = metadata;
   }
   if (extraction.browser) {
@@ -181,6 +184,7 @@ export async function reviewReadingCatalogNumber(input, review, {stateDir = defa
 function bookData(spec, chapters) {
   return {
     title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl,
+    ...(hasBookCategory(spec.category) ? categoryFields(spec) : {}),
     ...Object.fromEntries(['category', 'description', 'status', 'cover_image', 'authorSourceUrl'].filter(key => spec[key] !== undefined).map(key => [key, spec[key]])),
     chapters: [...chapters].sort((a, b) => a.chapter_number - b.chapter_number).map(formatChapterForExport),
   };
@@ -246,9 +250,14 @@ async function recordSource(stateDir, spec, report, id) {
 }
 
 export async function acquire(input, options = {}) {
-  const spec = validateSpec(input), stateDir = path.resolve(options.stateDir || defaultStateDir), mode = options.mode || 'probe';
+  const stateDir = path.resolve(options.stateDir || defaultStateDir), mode = options.mode || 'probe';
+  const spec = applyVerifiedBookCategory(validateSpec(input), stateDir, input.identityNormalization);
   if (!['probe', 'download'].includes(mode)) throw Error('未知采集模式');
   return withLock(path.join(stateDir, 'book-locks', continuationKey(spec) + '.lock'), async () => {
+    if (options.publisherCategories && spec.categoryDetection !== 'verified' && (!spec.category || spec.category === '未分类' || spec.categoryEvidence?.kind === 'source')) {
+      const publisher = await lookupPublisherCategory(spec, stateDir);
+      Object.assign(spec, mergeBookCategory(spec, publisher));
+    }
     if (options.continuation || hasContinuation(spec, stateDir)) return acquireContinuation(spec, {...options, stateDir, mode, outputDir: path.resolve(options.outputDir || path.join(projectRoot, 'downloads')), extraction: extractionHash(spec), id: jobId(spec)});
     return acquireRaw(spec, options);
   });
@@ -266,6 +275,7 @@ async function acquireRaw(input, options = {}) {
     const reading = loadReadingEdition(dir, spec, extractionHash(spec), outputDir, {resume: true});
     if (reading && options.refresh) throw Error('已绑定阅读版不能强制刷新原始正文；请使用普通检查更新以保留已核对的映射');
     if (!spec.description && previousSpec?.description) spec.description = previousSpec.description;
+    Object.assign(spec, mergeBookCategory(previousSpec, spec));
     if (previousSpec?.status && (!spec.status || (previousSpec.status === '完结' && spec.status !== '完结'))) {
       spec.status = previousSpec.status;
       spec.statusEvidence = previousSpec.statusEvidence;
@@ -319,6 +329,7 @@ async function acquireRaw(input, options = {}) {
       catalog = preserveCatalogLabels(source.catalog, oldCatalog);
       catalog = preserveReviewedCatalogLabels(catalog, oldCatalog, dir, reading);
       evidence = source.evidence;
+      Object.assign(spec, mergeBookCategory(spec, source.actual));
       const description = source.actual?.description || spec.description || previousSpec?.description;
       if (description) spec.description = description;
       descriptionStatus = source.actual?.description ? source.actual.descriptionStatus : description ? 'retained' : source.actual?.descriptionStatus || 'missing';
@@ -454,7 +465,7 @@ async function acquireRaw(input, options = {}) {
     } finally {
       if (!options.client) await client.close();
     }
-    const details = {...report, paused, reusedExport, description: spec.description, descriptionStatus, status: spec.status, statusDetection: spec.statusDetection, statusEvidence: spec.statusEvidence, title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, jobId: id, checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: Object.fromEntries(Object.entries(client.stats).map(([key, value]) => [key, value - initialStats[key]])), evidence, exportFile: exportFile || null};
+    const details = {...report, paused, reusedExport, ...categoryFields(spec), description: spec.description, descriptionStatus, status: spec.status, statusDetection: spec.statusDetection, statusEvidence: spec.statusEvidence, title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl, jobId: id, checkedAt: new Date().toISOString(), elapsedMs: Date.now() - started, requests: Object.fromEntries(Object.entries(client.stats).map(([key, value]) => [key, value - initialStats[key]])), evidence, exportFile: exportFile || null};
     atomicWrite(path.join(dir, `${mode}-report.json`), details);
     atomicWrite(path.join(dir, `${mode}-report.md`), reportMarkdown(details));
     atomicWrite(path.join(dir, 'history', `${Date.now()}-${mode}.json`), details);

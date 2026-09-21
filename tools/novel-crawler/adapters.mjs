@@ -6,6 +6,7 @@ import {decode, httpUrl} from './http.mjs';
 import {atomicWrite, hash} from './storage.mjs';
 import {checkIdentity, normalizedTitle} from './quality.mjs';
 import {rejectedPage} from './diagnostics.mjs';
+import {normalizeBookCategory} from './categories.mjs';
 
 export function selectValue($, rule) {
   if (!rule) throw Error('缺少提取规则');
@@ -87,6 +88,25 @@ function nextPage($, selector, base, client) {
   return client.assertUrl(httpUrl(href, base));
 }
 
+export function extractBookCategory($, rules, page) {
+  if (!rules) return {categoryDetection: 'unconfigured'};
+  const matches = [];
+  for (const rule of Array.isArray(rules) ? rules : [rules]) {
+    const config = typeof rule === 'string' ? {selector: rule} : rule;
+    if ($(config.selector).length !== 1) continue;
+    try {
+      const raw = selectValue($, config);
+      if (raw) matches.push({raw: raw.slice(0, 200), selector: config.selector, category: normalizeBookCategory(raw)});
+    } catch { /* Optional metadata cannot turn a missing label into a category. */ }
+  }
+  const categories = new Set(matches.map(item => item.category).filter(Boolean));
+  return {
+    ...(categories.size === 1 ? {category: [...categories][0]} : {}),
+    categoryDetection: categories.size > 1 ? 'conflict' : categories.size ? 'collected' : matches.length ? 'unrecognized' : 'missing',
+    ...(matches.length ? {categoryEvidence: {kind: 'source', matches, ...(page ? {url: page.url, hash: page.hash, checkedAt: page.fetchedAt} : {})}} : {}),
+  };
+}
+
 export async function getCatalog(spec, client) {
   const inlinePages = spec.catalog?.selectPages && (!spec.catalog.url || httpUrl(spec.catalog.url, spec.sourceUrl) === spec.sourceUrl);
   const first = await client.get(spec.sourceUrl, {encoding: spec.encoding, fresh: true, render: inlinePages || spec.transport === 'browser', readySelector: spec.metadata.readySelector, ...(inlinePages ? {selectPages: spec.catalog.selectPages} : {})});
@@ -95,6 +115,7 @@ export async function getCatalog(spec, client) {
   checkIdentity(spec, actual);
   Object.assign(actual, extractDescription($, spec.metadata.description));
   Object.assign(actual, extractBookStatus($, spec.metadata.status, first));
+  Object.assign(actual, extractBookCategory($, spec.metadata.category, first));
   const catalog = [], seenPages = new Set(), seenLinks = new Set();
   let url = spec.catalog?.url ? client.assertUrl(httpUrl(spec.catalog.url, spec.sourceUrl)) : first.url;
   const config = spec.catalog;
@@ -291,6 +312,7 @@ export async function getResource(spec, client, jobDir) {
   checkIdentity(spec, actual);
   Object.assign(actual, extractDescription($, spec.metadata.description));
   Object.assign(actual, extractBookStatus($, spec.metadata.status, evidence));
+  Object.assign(actual, extractBookCategory($, spec.metadata.category, evidence));
   const config = spec.resource;
   let chapters, response, resourceMetadata;
   if (config.parts) {

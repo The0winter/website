@@ -26,7 +26,7 @@ type HomePageClientProps = {
   initialRecommendedBooks?: Book[];
 };
 
-// --- 0. 分类配置 (保持不变) ---
+// Primary categories shared by imported and locally authored books.
 const categories = [
   { name: '全部分类', icon: BookOpen, slug: 'all' },
   { name: '玄幻', icon: Sparkles, slug: 'fantasy' },
@@ -36,6 +36,15 @@ const categories = [
   { name: '科幻', icon: Rocket, slug: 'sci-fi' },
   { name: '奇幻', icon: Sparkles, slug: 'magic' },
   { name: '悬疑', icon: History, slug: 'mystery' },
+  { name: '轻小说', icon: BookOpen, slug: 'light-novel' },
+  { name: '诸天无限', icon: Sparkles, slug: 'multiverse' },
+  { name: '游戏', icon: BookOpen, slug: 'game' },
+  { name: '体育', icon: BookOpen, slug: 'sports' },
+  { name: '军事', icon: Sword, slug: 'military' },
+  { name: '武侠', icon: Sword, slug: 'martial-arts' },
+  { name: '现实', icon: Building2, slug: 'reality' },
+  { name: '言情', icon: BookOpen, slug: 'romance' },
+  { name: '文学', icon: BookOpen, slug: 'literature' },
 ];
 
 // --- 1. 单个榜单子组件 (最终版：PC端品字形大字版 / 移动端经典列表版) ---

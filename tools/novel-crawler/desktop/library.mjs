@@ -31,7 +31,7 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
         const raw = fs.readFileSync(file), book = JSON.parse(raw.toString('utf8').replace(/^\uFEFF/, ''));
         if (!book.title || !book.author || !Array.isArray(book.chapters) || !book.chapters.length) return null;
         return {file: entry.name, title: book.title, author: book.author, url: book.sourceUrl, sourceUrl: book.sourceUrl,
-          count: book.chapters.length, hash: hash(raw), description: book.description, status: book.status};
+          count: book.chapters.length, hash: hash(raw), description: book.description, status: book.status, category: book.category, categoryEvidence: book.categoryEvidence};
       };
       const item = index ? index.get(entry.name, inspect) : inspect();
       if (!item) continue;
@@ -213,7 +213,7 @@ export async function updateLibrary({stateDir, outputDir, sites, shouldStop = ()
               item.status = status; publish();
             }});
           clients.set(item, client); publish();
-          const options = {stateDir, outputDir, continuation: item.continuation, client, signal: bookControl.controller.signal, shouldStop: bookStopped, stopOnFailure: true,
+          const options = {stateDir, outputDir, continuation: item.continuation, client, publisherCategories: true, signal: bookControl.controller.signal, shouldStop: bookStopped, stopOnFailure: true,
             onStatus: status => { item.status = status; publish(); }, onProgress: progress => { item.progress = progress; publish(true); }};
           // Download already validates identity, catalog, checkpoints, every new
           // chapter and the complete edition before replacing the output. A

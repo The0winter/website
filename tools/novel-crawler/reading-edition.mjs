@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import {mergeBookCategory} from './categories.mjs';
 import path from 'node:path';
 import {load} from 'cheerio';
 import {atomicWrite, readJson, hash} from './storage.mjs';
@@ -381,7 +382,7 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
           ['placeholder', 'truncated'].includes(gap.kind) && gap.reason?.trim() && gap.evidence?.url && gap.evidence?.detail && Number.isFinite(Date.parse(gap.evidence.checkedAt));
       })) reviewedTailNumber = readingChapterNumber(previous.title) + missingTail.length;
       orderedChapters(chapters, state.sourceOrderReview ? originalCount : 0, state.noticeReviews, state.numberingReviews, reviewedTailNumber);
-      const nextBook = {...book, ...Object.fromEntries(['description', 'status', 'category', 'cover_image', 'authorSourceUrl'].filter(key => spec[key] !== undefined).map(key => [key, spec[key]])), chapters};
+      const nextBook = {...book, ...Object.fromEntries(['description', 'status', 'cover_image', 'authorSourceUrl'].filter(key => spec[key] !== undefined).map(key => [key, spec[key]])), ...mergeBookCategory(book, spec), chapters};
       const nextQuality = editionQuality(nextBook, 'download', signatureCache);
       checkNewIssues(nextQuality, originalCount);
       prepareImport(nextBook);

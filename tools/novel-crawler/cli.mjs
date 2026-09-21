@@ -43,7 +43,7 @@ try {
       maintainDefaultCache = stateDir === defaultStateDir;
       if (maintainDefaultCache) retention.queueAutomatic();
       if (command === 'probe' && values['max-new'] !== undefined) throw Error('--max-new 仅用于分批下载，试采必须完成选中的样本');
-      const result = await acquire(JSON.parse(fs.readFileSync(values.spec, 'utf8')), {mode: command, stateDir, outputDir: values['output-dir'], samples: integer('samples', 4, 30), maxNew: integer('max-new', 1, 20000), refresh: values.refresh, onProgress: data => {
+      const result = await acquire(JSON.parse(fs.readFileSync(values.spec, 'utf8')), {mode: command, stateDir, publisherCategories: true, outputDir: values['output-dir'], samples: integer('samples', 4, 30), maxNew: integer('max-new', 1, 20000), refresh: values.refresh, onProgress: data => {
         if (data.downloaded <= 1 || data.downloaded % 20 === 0 || data.downloaded === data.total) console.error(JSON.stringify(data));
       }});
       const {issues, missing = [], ...summary} = result;

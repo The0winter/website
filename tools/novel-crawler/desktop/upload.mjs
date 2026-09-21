@@ -6,6 +6,7 @@ import {createVpsLibrarySession} from '../../../infra/library-sync-session.mjs';
 import {planLibrary} from './library.mjs';
 import {hash, atomicWrite} from '../storage.mjs';
 import {fileFingerprint, uploadCheckpoints} from './upload-cache.mjs';
+import {hasBookCategory, normalizeBookCategory} from '../categories.mjs';
 
 const bodyHash = content => crypto.createHash('sha256').update(content).digest('hex');
 const normalize = value => String(value || '').normalize('NFKC').trim();
@@ -18,6 +19,11 @@ export function planUpload(book, remote, prepared = prepareImport(book)) {
   // Covers have their own verified upload workflow. Absent or stale crawler
   // cover fields must never replace a managed website cover.
   const metadata = Object.fromEntries(metadataKeys.filter(key => book[key] !== undefined).map(key => [key, book[key]]));
+  // Routine uploads fill missing categories. A changed existing category needs
+  // explicit metadata review, including when a stale local file says 未分类.
+  const category = normalizeBookCategory(metadata.category);
+  if (hasBookCategory(remote.book?.category) || !category) delete metadata.category;
+  else metadata.category = category;
   if (remote.book && ['sourceUrl', 'title', 'author'].some(key => normalize(remote.book[key]) !== normalize(book[key]))) throw Error('网站书籍身份与本地文件不一致，请核对书名、作者和稳定来源');
   const existing = new Map(remote.chapters.map(chapter => [chapter.number, chapter]));
   if (existing.size !== remote.chapters.length) throw Error('网站存在重复章号，请先核对');

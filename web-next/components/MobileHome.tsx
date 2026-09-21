@@ -24,6 +24,15 @@ const categories=[
   {name:'科幻',icon:Orbit},
   {name:'奇幻',icon:Sparkles},
   {name:'悬疑',icon:ScanSearch},
+  {name:'轻小说',icon:BookOpen},
+  {name:'诸天无限',icon:Sparkles},
+  {name:'游戏',icon:LayoutGrid},
+  {name:'体育',icon:Flame},
+  {name:'军事',icon:ScrollText},
+  {name:'武侠',icon:Mountain},
+  {name:'现实',icon:Building2},
+  {name:'言情',icon:BookOpen},
+  {name:'文学',icon:BookOpen},
 ];
 const browseCache = new Map<string, {books: Book[]; total: number}>();
 function Cover({book,priority=false}:{book:Book;priority?:boolean}){

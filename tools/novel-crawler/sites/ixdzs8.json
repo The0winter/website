@@ -16,6 +16,7 @@
   "book": {
     "urlPattern": "^/read/(?<bookId>[0-9]+)/?$",
     "metadata": {
+      "category": {"selector":"meta[property=\"og:novel:category\"]","attribute":"content"},
       "status": [{"selector": "meta[property='og:novel:status']", "attribute": "content"}, "h1 ~ p > span.end"],
       "description": {"selector": "#intro", "remove": [".c-more"]},
       "title": "h1", "author": "h1 + p > a.bauthor"
@@ -31,6 +32,7 @@
     "allowedHosts": ["ixdzs8.com"],
     "delayMs": 1200,
     "metadata": {
+      "category": {"selector":"meta[property=\"og:novel:category\"]","attribute":"content"},
       "status": [{"selector": "meta[property='og:novel:status']", "attribute": "content"}, "h1 ~ p > span.end"],
       "description": {"selector": "#intro", "remove": [".c-more"]},
       "title": "h1", "author": "h1 + p > a.bauthor"

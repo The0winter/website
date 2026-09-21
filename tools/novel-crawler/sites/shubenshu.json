@@ -7,6 +7,7 @@
   "book": {
     "urlPattern": "^/(?<bookId>[A-Za-z0-9]+)/$",
     "metadata": {
+      "category": {"selector":"meta[property=\"og:novel:category\"]","attribute":"content"},
       "title": {"selector": "meta[property='og:novel:book_name']", "attribute": "content"},
       "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"},
       "description": "#intro"
@@ -25,6 +26,7 @@
     "retries": 1,
     "browser": {"headless": true},
     "metadata": {
+      "category": {"selector":"meta[property=\"og:novel:category\"]","attribute":"content"},
       "title": {"selector": "meta[property='og:novel:book_name']", "attribute": "content"},
       "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"},
       "description": "#intro"

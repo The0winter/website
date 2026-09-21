@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import {mergeBookCategory} from './categories.mjs';
 import path from 'node:path';
 import {load} from 'cheerio';
 import {atomicWrite, readJson, hash} from './storage.mjs';
@@ -721,6 +722,7 @@ export async function acquireContinuation(spec, options) {
     }
     reviewer.finish();
     nextBook = {...book, chapters: [...book.chapters, ...tail]};
+    Object.assign(nextBook, mergeBookCategory({...book, ...mergeBookCategory(book, spec)}, source.actual));
     // Preserve stable import identity, author mapping, cover and all old chapters.
     if (source.actual?.description) nextBook.description = source.actual.description;
     if (source.actual?.status && book.status !== '完结') nextBook.status = source.actual.status;
