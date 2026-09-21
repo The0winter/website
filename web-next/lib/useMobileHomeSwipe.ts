@@ -11,7 +11,7 @@ export function useMobileHomeSwipe(enabled: boolean) {
     if (!host || !enabled) return;
     let gesture: {x: number; y: number; horizontal: boolean; dx: number; direction?: number; drag?: MobileSectionDrag} | null = null;
     let suppressClick = false;
-    const cancel = () => {gesture?.drag?.release(false); gesture = null;};
+    const cancel = () => {gesture?.drag?.release(false); gesture = null; host.removeEventListener('touchmove', move);};
     const start = (event: TouchEvent) => {
       suppressClick = false;
       cancel();
@@ -19,6 +19,9 @@ export function useMobileHomeSwipe(enabled: boolean) {
         (event.target as Element).closest('button, input, select, textarea, [contenteditable], .mh-bottom, .mh-topbar, .mh-shelf, dialog')) return;
       const touch = event.touches[0];
       gesture = {x: touch.clientX, y: touch.clientY, horizontal: false, dx: 0};
+      // Only section swipes need a cancellable move listener. Leaving one on
+      // the ancestor makes native shelf scrolling wait on the main thread.
+      host.addEventListener('touchmove', move, {passive: false});
     };
     const move = (event: TouchEvent) => {
       if (!gesture) return;
@@ -42,6 +45,7 @@ export function useMobileHomeSwipe(enabled: boolean) {
       if (event.cancelable) event.preventDefault();
     };
     const end = () => {
+      host.removeEventListener('touchmove', move);
       const current = gesture;
       gesture = null;
       if (!current?.horizontal) return;
@@ -55,7 +59,6 @@ export function useMobileHomeSwipe(enabled: boolean) {
       if (suppressClick && event.isTrusted) {event.preventDefault(); event.stopPropagation(); suppressClick = false;}
     };
     host.addEventListener('touchstart', start, {passive: true});
-    host.addEventListener('touchmove', move, {passive: false});
     host.addEventListener('touchend', end);
     host.addEventListener('touchcancel', cancel);
     host.addEventListener('click', click, true);

@@ -7,7 +7,8 @@ import {useRouter,useSearchParams} from 'next/navigation';
 import HomeSearchHeader from './HomeSearchHeader';
 import MobileBottomNav from './MobileBottomNav';
 import BookLink from './BookLink';
-import {BookOpen,LayoutGrid,ChevronRight,ArrowLeft,Flame,Mountain,Building2,ScrollText,Orbit,Sparkles,ScanSearch,Check} from 'lucide-react';
+import {BookOpen,ChevronRight,ArrowLeft} from 'lucide-react';
+import MobileCategoryPicker, {mobileCategories} from './MobileCategoryPicker';
 import type {Book} from '@/lib/api';
 import {safeFetch} from '@/lib/request';
 import {navigateBookLink,syncBookRoute} from '@/lib/book-navigation';
@@ -16,25 +17,6 @@ import './mobile-home.css';
 import {MobileHomeSection, MobileHomeShortcuts} from './MobileHomeFrame';
 import {discoverySections} from '@/lib/discovery-sections';
 
-const categories=[
-  {name:'全部',icon:LayoutGrid},
-  {name:'玄幻',icon:Flame},
-  {name:'仙侠',icon:Mountain},
-  {name:'都市',icon:Building2},
-  {name:'历史',icon:ScrollText},
-  {name:'科幻',icon:Orbit},
-  {name:'奇幻',icon:Sparkles},
-  {name:'悬疑',icon:ScanSearch},
-  {name:'轻小说',icon:BookOpen},
-  {name:'诸天无限',icon:Sparkles},
-  {name:'游戏',icon:LayoutGrid},
-  {name:'体育',icon:Flame},
-  {name:'军事',icon:ScrollText},
-  {name:'武侠',icon:Mountain},
-  {name:'现实',icon:Building2},
-  {name:'言情',icon:BookOpen},
-  {name:'文学',icon:BookOpen},
-];
 const browseCache = new Map<string, {books: Book[]; total: number}>();
 function Cover({book,priority=false}:{book:Book;priority?:boolean}){
   const [failed,setFailed]=useState(false);
@@ -51,7 +33,7 @@ export default function MobileHome({books}:{books:Book[]}){
   const search=useSearchParams();
   const mode=search.get('view')==='new'?'new':search.get('view')==='category'?'category':'home';
   const swipeRoot=useMobileHomeSwipe(mode==='home');
-  const category=categories.find(({name})=>name===search.get('category'))?.name||'全部';
+  const category=mobileCategories.find(({name})=>name===search.get('category'))?.name||'全部';
   const requestedPage=Number(search.get('page')||1);
   const page=Number.isSafeInteger(requestedPage)&&requestedPage>0&&requestedPage<=100000?requestedPage:1;
   const key=`${mode}:${category}:${page}`;
@@ -108,12 +90,7 @@ export default function MobileHome({books}:{books:Book[]}){
       <header className="mh-browse-header"><div className="mh-browse-titlebar"><button type="button" className="mh-back" onClick={back} aria-label="返回精选"><ArrowLeft size={21} aria-hidden="true"/></button><h2>{mode==='new'?'新书上架':'分类找书'}</h2></div></header>
       <section className="mh-section mh-browse">
       {mode==='category'&&<>
-        <div className="mh-categories" role="group" aria-label="小说分类">
-          {categories.map(({name,icon:Icon})=><button type="button" key={name} aria-pressed={category===name} onClick={()=>browse('category',1,name,true)}>
-            <Icon className="mh-category-icon" size={18} aria-hidden="true"/><span>{name}</span>
-            {category===name&&<Check className="mh-category-check" size={10} aria-hidden="true"/>}
-          </button>)}
-        </div>
+        <MobileCategoryPicker selected={category} onSelect={name=>browse('category',1,name,true)}/>
         <div className="mh-browse-summary"><h3>{category==='全部'?'全部作品':`${category}作品`}</h3><span>{cached?`共 ${total.toLocaleString('zh-CN')} 本 · `:''}按热度排序</span></div>
       </>}
       {loading?<p className="mh-empty" role="status"><LoadingText>正在加载</LoadingText></p>:error?<p role="alert" className="mh-empty">{error} <button onClick={()=>setRetry(n=>n+1)}>重试</button></p>:<BookRows books={rows}/>}

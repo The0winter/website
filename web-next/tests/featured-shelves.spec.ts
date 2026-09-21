@@ -63,8 +63,10 @@ for (const width of [320, 390, 767]) test(`57 unique recommendations alternate t
   await last.click();
   await expect(page).toHaveURL(base + href);
   await expect(page.locator('.book-detail')).toBeVisible();
+  await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
   await page.goBack();
   await expect(home.locator('.mh-section')).toHaveCount(12);
+  await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
   await home.locator('.mh-feed-end').scrollIntoViewIfNeeded();
   await expect(home.locator('.mh-feed-end')).toBeVisible();
   await page.screenshot({path: info.outputPath('final-end.png')});
