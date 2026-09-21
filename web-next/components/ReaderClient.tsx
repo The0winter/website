@@ -191,6 +191,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     // 2. 立即把浏览器底色染成当前主题色
     const color = isDesktop ? activeTheme.desk : activeTheme.bg;
     document.body.style.backgroundColor = color;
+    document.documentElement.style.setProperty('--reader-fullscreen-paper', color);
 
     // 3. 组件卸载时的逻辑 (延时清理)
     return () => {
@@ -199,6 +200,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
         // 如果 100ms 后还没新组件（说明用户真的退出了），再恢复默认背景
         bgCleanupTimer = setTimeout(() => {
             document.body.style.backgroundColor = '';
+            document.documentElement.style.removeProperty('--reader-fullscreen-paper');
         }, 100);
     };
 }, [activeTheme, isDesktop]);

@@ -84,6 +84,7 @@ for (const safeArea of [0, 48]) {
         const box = el.getBoundingClientRect(), link = el.querySelector('a')!, hit = link.getBoundingClientRect();
         const label = el.querySelector('span')!, text = el.parentElement!.querySelector('.reader-text-window')!.getBoundingClientRect();
         return {top: box.top, bottom: box.bottom, left: box.left, right: box.right, textTop: text.top,
+          labelTop: label.getBoundingClientRect().top, iconTop: el.querySelector('svg')!.getBoundingClientRect().top,
           linkHeight: hit.height, ellipsis: getComputedStyle(label).textOverflow, overflow: label.scrollWidth > label.clientWidth,
           clickable: link.contains(document.elementFromPoint(hit.x + 8, hit.y + hit.height / 2))};
       });
@@ -92,6 +93,9 @@ for (const safeArea of [0, 48]) {
       expect(bounds.left).toBeGreaterThanOrEqual(landscape ? 48 : 20);
       expect(bounds.right).toBeLessThanOrEqual(landscape ? 828 : 300);
       expect(bounds.linkHeight).toBe(24);
+      expect(bounds.labelTop).toBeGreaterThanOrEqual(bounds.top);
+      expect(bounds.labelTop).toBeLessThan(bounds.top + 2);
+      expect(bounds.iconTop).toBeGreaterThanOrEqual(bounds.top);
       expect(bounds.ellipsis).toBe('ellipsis'); expect(bounds.overflow).toBe(true); expect(bounds.clickable).toBe(true);
       await page.screenshot({path: info.outputPath(`verified-safe-${safeArea}-${landscape ? 'landscape' : 'portrait'}.png`)});
     }

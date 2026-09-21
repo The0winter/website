@@ -174,6 +174,34 @@ test('Back during slow entry releases fullscreen before a reader has mounted', a
   } finally {release();}
 });
 
+test('slow entry covers the cutout before requesting native fullscreen and restores the source viewport on cancel', async ({page}) => {
+  await page.addInitScript(() => {
+    const request = Element.prototype.requestFullscreen;
+    Element.prototype.requestFullscreen = function(options) {
+      Object.assign(window, {requestedViewport: document.querySelector('meta[name=viewport]')?.getAttribute('content')});
+      return request.call(this, options);
+    };
+  });
+  await page.goto(detail);
+  const original = await page.locator('meta[name=viewport]').getAttribute('content');
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => {release = resolve;});
+  await page.route(`**/book/${book}/${book}?_rsc=*`, async route => {await gate; await route.continue();});
+  try {
+    await page.locator('.read-now:visible').tap();
+    await expect.poll(() => page.evaluate(() => (window as unknown as {requestedViewport?: string}).requestedViewport)).toContain('viewport-fit=cover');
+    await expect.poll(() => active(page)).toBe(true);
+    const paper = await page.locator('.chapter-loading-page').evaluate(el => getComputedStyle(el).backgroundColor);
+    await expect(page.locator('html')).toHaveCSS('background-color', paper);
+    await page.locator('meta[name=viewport]').evaluate((meta, value) => meta.setAttribute('content', value!), original);
+    await expect(page.locator('meta[name=viewport]')).toHaveAttribute('content', /viewport-fit=cover/);
+    await page.goBack(); await expect(page).toHaveURL(detail);
+    await expect.poll(() => active(page)).toBe(false);
+    await expect(page.locator('meta[name=viewport]')).toHaveCount(1);
+    await expect(page.locator('meta[name=viewport]')).toHaveAttribute('content', original!);
+  } finally {release();}
+});
+
 test('reduced motion enters fullscreen without the page slide or fade', async ({page}) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
   await enter(page, 'details'); await ready(page);

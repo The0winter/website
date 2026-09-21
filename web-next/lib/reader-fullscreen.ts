@@ -4,6 +4,7 @@ const listeners = new Set<() => void>();
 let owned = false;
 let readers = 0;
 let pending: Promise<void> | null = null;
+let releaseViewport: (() => void) | null = null;
 const notify = () => listeners.forEach(listener => listener());
 export const readerFullscreenSupported = () => Boolean(document.fullscreenEnabled && document.documentElement.requestFullscreen);
 export const readerFullscreenActive = () => document.fullscreenElement === document.documentElement;
@@ -20,6 +21,46 @@ export function subscribeReaderFullscreen(listener: () => void) {
   listeners.add(listener);
   document.addEventListener('fullscreenchange', listener);
   return () => {listeners.delete(listener); document.removeEventListener('fullscreenchange', listener);};
+}
+
+// Native fullscreen can start while Next is still loading the reader route.
+// Opt into the cutout before that request, and keep it through metadata swaps.
+function prepareFullscreenViewport() {
+  if (releaseViewport) return;
+  const changed = new Map<HTMLMetaElement, {original: string; applied: string}>();
+  const ensure = () => {
+    for (const meta of document.head.querySelectorAll<HTMLMetaElement>('meta[name="viewport"]')) {
+      if (/(?:^|[,;])\s*viewport-fit\s*=\s*cover\s*(?:[,;]|$)/i.test(meta.content)) continue;
+      const original = meta.content;
+      const applied = original.split(/[,;]/).filter(part => !/^\s*viewport-fit\s*=/i.test(part)).join(',').replace(/,\s*$/, '') + ', viewport-fit=cover';
+      changed.set(meta, {original, applied});
+      meta.content = applied;
+    }
+  };
+  const root = document.documentElement;
+  const previousPaper = root.style.getPropertyValue('--reader-fullscreen-paper');
+  const source = document.querySelector<HTMLElement>('.chapter-loading-page,.reader-entry-content');
+  const paper = source ? getComputedStyle(source).backgroundColor : previousPaper;
+  if (paper) root.style.setProperty('--reader-fullscreen-paper', paper);
+  ensure();
+  const observer = new MutationObserver(ensure);
+  observer.observe(document.head, {childList: true, subtree: true, attributes: true, attributeFilter: ['content']});
+  const onExit = () => {if (!readerFullscreenActive()) releaseViewport?.();};
+  releaseViewport = () => {
+    observer.disconnect();
+    document.removeEventListener('fullscreenchange', onExit);
+    releaseViewport = null;
+    // The reader route owns its own cover viewport. Restore only an outgoing
+    // source page, and never replace a newer value supplied by its route.
+    if (!isReaderPath(location.pathname)) {
+      for (const [meta, value] of changed) if (meta.isConnected && meta.content === value.applied) meta.content = value.original;
+      if (root.style.getPropertyValue('--reader-fullscreen-paper') === paper) {
+        if (previousPaper) root.style.setProperty('--reader-fullscreen-paper', previousPaper);
+        else root.style.removeProperty('--reader-fullscreen-paper');
+      }
+    }
+  };
+  document.addEventListener('fullscreenchange', onExit);
 }
 
 // Follow real viewport changes, without adding a fixed pause after the native
@@ -45,16 +86,18 @@ export function requestReaderFullscreen(): Promise<void> {
   if (pending) return pending;
   if (readerFullscreenActive()) return Promise.resolve();
   owned = true;
+  prepareFullscreenViewport();
   let native: Promise<void>;
   try {
     // Entry waits only for its paper transition, while activation is still live.
     native = document.documentElement.requestFullscreen({navigationUI: 'hide'});
-  } catch (error) {owned = false; return Promise.reject(error);}
+  } catch (error) {owned = false; releaseViewport?.(); return Promise.reject(error);}
   const request = native.then(async () => {
     if (!owned) {if (readerFullscreenActive()) await document.exitFullscreen(); return;}
     await settleViewport();
   }).catch(error => {
     owned = false;
+    releaseViewport?.();
     throw error;
   }).finally(() => {
     if (pending === request) {pending = null; notify();}
@@ -70,6 +113,7 @@ export function shouldEnterReaderFullscreen() {
 }
 
 export async function releaseReaderFullscreen() {
+  releaseViewport?.();
   if (!owned) return;
   owned = false;
   if (readerFullscreenActive()) await document.exitFullscreen().catch(() => {});
