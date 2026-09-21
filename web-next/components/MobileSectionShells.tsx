@@ -61,7 +61,7 @@ export default function MobileSectionShells() {
       <div data-section-shell-header/>
       <div className="mh-banner"><div><span className="mh-kicker">九天精选 · 好书推荐</span><div className="section-loading-line section-loading-title"/><div className="section-loading-line"/></div><div className="mh-cover"/></div>
       <MobileHomeShortcuts/>
-      {['热门精选', '精选推荐', '新书上架'].map(title => <MobileHomeSection key={title} title={title}>
+      {['为你推荐', '值得一读'].map(title => <MobileHomeSection key={title} title={title}>
         <div className="mh-rows">{[0, 1, 2].map(row => <div key={row} className="mh-book"><div className="mh-cover"/><div className="mh-book-info"><div className="section-loading-line section-loading-title"/><div className="section-loading-line"/><div className="section-loading-line"/></div></div>)}</div>
       </MobileHomeSection>)}
     </div>

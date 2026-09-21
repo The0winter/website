@@ -34,6 +34,17 @@
   .mh-book-meta { display:flex; gap:5px; align-items:center; justify-content:space-between; font-size:11px; color:#ada398; margin-top:auto; padding-top:7px; }
   .mh-book-meta>span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mh-book-meta small { flex-shrink:0; background:#f5eddf; color:#b79b70; border-radius:3px; padding:1px 5px; font-size:10px; }
+  .mh-section-shelf { padding-bottom:16px; overflow:hidden; }
+  .mh-shelf-hint { display:flex; align-items:center; gap:2px; color:var(--home-muted); font-size:11px; white-space:nowrap; }
+  .mh-shelf { display:flex; gap:12px; margin:0 -14px; padding:0 14px 4px; overflow-x:auto; overscroll-behavior-x:contain; scroll-snap-type:x proximity; scroll-padding-inline:14px; scrollbar-width:none; }
+  .mh-shelf::-webkit-scrollbar { display:none; }
+  .mh-shelf-book { flex:0 0 calc((100% - 36px)/3.35); min-width:0; scroll-snap-align:start; }
+  .mh-shelf .mh-cover { width:100%; height:auto; aspect-ratio:3/4; }
+  .mh-shelf h3 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:2.9em; margin:8px 0 4px; font-size:14px; line-height:1.45; font-weight:500; overflow-wrap:anywhere; }
+  .mh-shelf p { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--home-muted); font-size:11px; }
+  .mh-shelf:focus-visible,.mh-shelf-book:focus-visible { outline:2px solid var(--home-accent); outline-offset:-2px; border-radius:5px; }
+  .mh-feed-end { padding:26px 0 12px; text-align:center; color:var(--home-muted); font-size:12px; }
+  .mh-feed-end button { display:flex; align-items:center; justify-content:center; gap:3px; min-height:44px; margin:4px auto 0; color:var(--home-accent); font-size:13px; }
   .mh-browse { margin-top:0; padding-top:12px; }
   .mh-browse-header { position:sticky; top:0; z-index:12; margin:0 -12px; padding:0 12px; background:var(--browse-background); color:var(--browse-text); }
   .mh-browse-titlebar { display:grid; grid-template-columns:32px minmax(0,1fr) 32px; align-items:center; gap:7px; min-height:44px; }

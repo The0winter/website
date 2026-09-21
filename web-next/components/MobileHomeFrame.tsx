@@ -8,6 +8,6 @@ export function MobileHomeShortcuts({onCategory, onNew}: {onCategory?: () => voi
   return <nav className="mh-shortcuts" aria-label="找书入口"><button onClick={onCategory}><span className="mh-icon coral"><LayoutGrid/></span>分类</button><button onClick={onNew}><span className="mh-icon rose"><CalendarDays/></span>新书</button><Link href="/ranking"><span className="mh-icon purple"><Trophy/></span>排行</Link></nav>;
 }
 
-export function MobileHomeSection({title, onMore, children}: {title: string; onMore?: () => void; children: ReactNode}) {
-  return <section className="mh-section"><header><h2>{title}</h2>{title === '新书上架' ? <button onClick={onMore}>更多 <ChevronRight size={14}/></button> : <Link href="/ranking">更多 <ChevronRight size={14}/></Link>}</header>{children}</section>;
+export function MobileHomeSection({title, layout='rows', onMore, children}: {title: string; layout?: 'rows'|'shelf'; onMore?: () => void; children: ReactNode}) {
+  return <section className={`mh-section mh-section-${layout}`}><header><h2>{title}</h2>{layout==='shelf'?<span className="mh-shelf-hint">左滑发现 <ChevronRight size={12}/></span>:onMore?<button onClick={onMore}>更多 <ChevronRight size={14}/></button>:null}</header>{children}</section>;
 }

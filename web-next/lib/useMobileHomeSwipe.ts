@@ -16,7 +16,7 @@ export function useMobileHomeSwipe(enabled: boolean) {
       suppressClick = false;
       cancel();
       if (event.touches.length !== 1 || !matchMedia('(max-width: 767px)').matches ||
-        (event.target as Element).closest('button, input, select, textarea, [contenteditable], .mh-bottom, .mh-topbar, dialog')) return;
+        (event.target as Element).closest('button, input, select, textarea, [contenteditable], .mh-bottom, .mh-topbar, .mh-shelf, dialog')) return;
       const touch = event.touches[0];
       gesture = {x: touch.clientX, y: touch.clientY, horizontal: false, dx: 0};
     };

@@ -55,14 +55,14 @@ async function fetchBooks(params?: Record<string, string>): Promise<Book[]> {
 
 export default async function Page() {
   // 并行拉取首页所需的各个板块数据，极大提高 SSR 渲染速度 [cite: 35]
-  const [allBooks, featuredBooks, weekRankBooks, dayRankBooks, recentBooks, recommendedBooks, newBooks] = await Promise.all([
+  const [allBooks, featuredBooks, weekRankBooks, dayRankBooks, recentBooks, recommendedBooks, discoveryBooks] = await Promise.all([
     fetchBooks(),
     fetchBooks({ orderBy: 'views', order: 'desc', limit: '3' }),
     fetchBooks({ orderBy: 'weekly_views', order: 'desc', limit: '5' }),
     fetchBooks({ orderBy: 'daily_views', order: 'desc', limit: '5' }),
     fetchBooks({ orderBy: 'updatedAt', order: 'desc', limit: '12' }),
     fetchBooks({ orderBy: 'composite', order: 'desc', limit: '5' }),
-    fetchBooks({ orderBy: 'createdAt', order: 'desc', limit: '3' }),
+    fetchBooks({ orderBy: 'discovery', limit: '57' }),
   ]);
 
   const seoRecommendedBooks = (featuredBooks.length > 0 ? featuredBooks : allBooks).slice(0, 12);
@@ -93,7 +93,7 @@ export default async function Page() {
 
       {/* 客户端水合组件，负责炫酷的 UI 交互  */}
       <HomePageClient
-        initialNewBooks={newBooks}
+        initialDiscoveryBooks={discoveryBooks}
         initialBooks={allBooks}
         initialFeaturedBooks={featuredBooks}
         initialWeekRankBooks={weekRankBooks}

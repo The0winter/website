@@ -14,6 +14,7 @@ import {navigateBookLink,syncBookRoute} from '@/lib/book-navigation';
 import {useMobileHomeSwipe} from '@/lib/useMobileHomeSwipe';
 import './mobile-home.css';
 import {MobileHomeSection, MobileHomeShortcuts} from './MobileHomeFrame';
+import {discoverySections} from '@/lib/discovery-sections';
 
 const categories=[
   {name:'全部',icon:LayoutGrid},
@@ -39,10 +40,13 @@ function Cover({book,priority=false}:{book:Book;priority?:boolean}){
   const [failed,setFailed]=useState(false);
   return <div className="mh-cover">{book.cover_image&&!failed?<BookCover priority={priority} sizes="80px" src={book.cover_image} alt={`${book.title}封面`} onError={()=>setFailed(true)}/>:<><BookOpen size={26}/><span>{book.title}</span></>}</div>;
 }
-function BookRows({books}:{books:Book[]}){
-  return <div className="mh-rows">{books.length?books.map((book,index)=><BookLink className="mh-book" key={book.id} href={`/book/${book.id}`}><Cover book={book} priority={index<3}/><div className="mh-book-info"><h3>{book.title}</h3><p>{book.description&&book.description!=='暂无简介'?book.description:'打开这本书，开始一段新的阅读旅程。'}</p><div className="mh-book-meta"><span>{book.category?.split('>').pop()||'综合'} · {book.author||'未知作者'}</span><small>{['completed','完结'].includes(book.status||'')?'完结':'连载'}</small></div></div></BookLink>):<p className="mh-empty">暂时没有书籍</p>}</div>;
+function BookRows({books,priority=false}:{books:Book[];priority?:boolean}){
+  return <div className="mh-rows">{books.length?books.map(book=><BookLink className="mh-book" key={book.id} href={`/book/${book.id}`}><Cover book={book} priority={priority}/><div className="mh-book-info"><h3>{book.title}</h3><p>{book.description&&book.description!=='暂无简介'?book.description:'打开这本书，开始一段新的阅读旅程。'}</p><div className="mh-book-meta"><span>{book.category?.split('>').pop()||'综合'} · {book.author||'未知作者'}</span><small>{['completed','完结'].includes(book.status||'')?'完结':'连载'}</small></div></div></BookLink>):<p className="mh-empty">暂时没有书籍</p>}</div>;
 }
-export default function MobileHome({featured,recommended,newBooks}:{featured:Book[];recommended:Book[];newBooks:Book[]}){
+function BookShelf({books,title}:{books:Book[];title:string}){
+  return <div className="mh-shelf" role="region" aria-label={`${title}，左右滑动浏览`} tabIndex={0}>{books.map(book=><BookLink className="mh-shelf-book" key={book.id} href={`/book/${book.id}`}><Cover book={book}/><h3>{book.title}</h3><p>{book.category?.split('>').pop()||'综合'}</p></BookLink>)}</div>;
+}
+export default function MobileHome({books}:{books:Book[]}){
   const router=useRouter();
   const search=useSearchParams();
   const mode=search.get('view')==='new'?'new':search.get('view')==='category'?'category':'home';
@@ -59,7 +63,8 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
   const [retry,setRetry]=useState(0);
   const error=failure?.key===key&&failure.retry===retry?failure.message:'';
   const loading=mode!=='home'&&!cached&&!error;
-  const hero=featured[0];
+  const hero=books[0];
+  const sections=discoverySections.map(section=>({...section,books:books.slice(section.offset,section.offset+section.size)})).filter(section=>section.books.length);
   const query=search.toString();
   useLayoutEffect(()=>{syncBookRoute('/'+(query?`?${query}`:''));},[query]);
   useEffect(()=>{
@@ -95,9 +100,10 @@ export default function MobileHome({featured,recommended,newBooks}:{featured:Boo
       <HomeSearchHeader/>
       {hero&&<BookLink href={`/book/${hero.id}`} className="mh-banner"><div><span className="mh-kicker">九天精选 · 好书推荐</span><h2>{hero.title}</h2><span className="mh-banner-sub">{hero.author||'九天小说'} <ChevronRight size={13}/></span></div><Cover book={hero} priority/><div className="mh-banner-seal" aria-hidden="true">阅</div></BookLink>}
       <MobileHomeShortcuts onCategory={()=>browse('category')} onNew={()=>browse('new')}/>
-      <MobileHomeSection title="热门精选"><BookRows books={featured.slice(0,3)}/></MobileHomeSection>
-      <MobileHomeSection title="精选推荐"><BookRows books={recommended.slice(0,3)}/></MobileHomeSection>
-      <MobileHomeSection title="新书上架" onMore={()=>browse('new')}><BookRows books={newBooks.slice(0,3)}/></MobileHomeSection>
+      {sections.map((section,index)=><MobileHomeSection key={section.title} title={section.title} layout={section.layout} onMore={()=>browse('category')}>
+        {section.layout==='shelf'?<BookShelf books={section.books} title={section.title}/>:<BookRows books={section.books} priority={index===0}/>}
+      </MobileHomeSection>)}
+      <p className="mh-feed-end">{books.length?'今天的好书先逛到这里':'好故事正在路上'}<button type="button" onClick={()=>browse('category')}>去分类发现更多 <ChevronRight size={13}/></button></p>
     </>:<>
       <header className="mh-browse-header"><div className="mh-browse-titlebar"><button type="button" className="mh-back" onClick={back} aria-label="返回精选"><ArrowLeft size={21} aria-hidden="true"/></button><h2>{mode==='new'?'新书上架':'分类找书'}</h2></div></header>
       <section className="mh-section mh-browse">
