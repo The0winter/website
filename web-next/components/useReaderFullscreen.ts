@@ -4,7 +4,7 @@ import {useEffect, useRef, useState, useSyncExternalStore} from 'react';
 import {exitReaderFullscreen, readerFullscreenActive, readerFullscreenPending, readerFullscreenPreferenceKey, readerFullscreenPreferred, readerFullscreenSupported, requestReaderFullscreen, retainReaderFullscreen, serverFullscreenSnapshot, subscribeReaderFullscreen, withReaderFullscreenCover} from '@/lib/reader-fullscreen';
 import {useStoredState} from '@/lib/useStoredState';
 
-let hintSeen = false;
+let hintDismissedForSession = false;
 export function useReaderFullscreen(onEntered: () => void, entryPending: boolean) {
   const mounted = useRef(false);
   const supported = useSyncExternalStore(subscribeReaderFullscreen, readerFullscreenSupported, serverFullscreenSnapshot);
@@ -14,23 +14,15 @@ export function useReaderFullscreen(onEntered: () => void, entryPending: boolean
   const pending = entering || toggling;
   const [error, setError] = useState('');
   const [enabled, setEnabled] = useStoredState(readerFullscreenPreferenceKey, true);
-  const [hint, setHint] = useState(false);
-
-  useEffect(() => {
-    if (!active || entryPending || hintSeen) return;
-    try {if (localStorage.getItem('reader_fullscreenHintSeen') === 'true') return;} catch {}
-    const frame = requestAnimationFrame(() => {
-      hintSeen = true;
-      try {localStorage.setItem('reader_fullscreenHintSeen', 'true');} catch {}
-      setHint(true);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [active, entryPending]);
-  useEffect(() => {
-    if (!hint) return;
-    const timeout = window.setTimeout(() => setHint(false), 5000);
-    return () => clearTimeout(timeout);
-  }, [hint]);
+  // The former "seen" flag was written automatically and does not establish
+  // acknowledgement. Only this explicit opt-out suppresses future reminders.
+  const [hintDismissed, setHintDismissed] = useStoredState('reader_fullscreenHintDismissed', false);
+  const [dismissedInSession, setDismissedInSession] = useState(() => hintDismissedForSession);
+  const dismissHint = () => {
+    hintDismissedForSession = true;
+    setDismissedInSession(true);
+    setHintDismissed(true);
+  };
 
   useEffect(() => {
     mounted.current = true;
@@ -79,5 +71,5 @@ export function useReaderFullscreen(onEntered: () => void, entryPending: boolean
     }
   };
 
-  return {supported, active, pending, error, enabled, hint: hint && active, change, toggle: () => change(!readerFullscreenActive(), true), clearError: () => setError('')};
+  return {supported, active, pending, error, enabled, hint: active && !entryPending && !hintDismissed && !dismissedInSession, dismissHint, change, toggle: () => change(!readerFullscreenActive(), true), clearError: () => setError('')};
 }

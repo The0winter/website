@@ -100,7 +100,7 @@ test('an uncached failure keeps text readable, can retry, and cannot navigate af
     await page.getByRole('button',{name:'重试',exact:true}).click();await expect(page).toHaveURL(`${base}/book/${bookId}/${chapterIds[2]}`);expect(attempts).toBe(2);
     await page.reload();await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready','true');
     await page.route(`**/api/chapters/${chapterIds[1]}?navigation=1`,async route=>{await new Promise(resolve=>setTimeout(resolve,600));await route.continue();});
-    await page.keyboard.press('Control+ArrowLeft');await page.keyboard.press('m');await page.locator('.reader-return:visible').click();
+    await page.keyboard.press('Control+ArrowLeft');await page.goBack();
     await expect(page).toHaveURL(`${base}/book/${bookId}`);await page.waitForTimeout(750);await expect(page).toHaveURL(`${base}/book/${bookId}`);
   }finally{await context.close();}
 });

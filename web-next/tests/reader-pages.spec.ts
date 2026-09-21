@@ -25,12 +25,12 @@ test('touch hold survives release, marks persist, swipes page, and exiting resto
     await expect(paragraph).toHaveAttribute('data-marked','true');
     await touch('touchStart',320,450);await touch('touchMove',220,450);await touch('touchMove',80,450);await touch('touchEnd');
     await expect(page.locator('.reader-page-window > .reader-page-surface [data-reader-page]:visible')).toHaveText(/^2\//);
-    await expect(page.locator('.reader-status-top')).toHaveAttribute('data-open','true');
+    await expect(page.locator('.reader-status-top')).toHaveCount(0);
     const fraction=await page.locator('.reader-page-window > .reader-page-surface [data-reader-page]:visible').innerText();
     await page.reload();await expect(page.locator('.reader-page-window > .reader-page-surface [data-reader-page]:visible')).toHaveText(fraction);
     await page.keyboard.press('m');
-    await expect(page.locator('.reader-return:visible')).toHaveText('第1章 山间来信');
-    await page.locator('.reader-return:visible').click();
+    await expect(page.locator('.reader-return')).toHaveCount(0);
+    await page.goBack();
     await expect(page).toHaveURL(base+'/book/000000000000000000000101');
     await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.body).overflow)).not.toBe('hidden');
     expect(errors).toEqual([]);
@@ -61,13 +61,13 @@ test('immersive navigation, touch-following turns, cancellation and all three sa
     await expect(pageNumber).not.toHaveText('1/1');
     await page.addStyleTag({content:'nextjs-portal{display:none!important}'});
     await expect(reader.locator('time,.reader-battery,.reader-page-controls')).toHaveCount(0);
-    await expect(reader.locator('.reader-return')).toBeVisible();
+    await expect(reader.locator('.reader-return')).toHaveCount(0);
     const initialBox=await viewport.boundingBox();
     await viewport.tap({position:{x:175,y:330}});
-    await expect(reader.locator('.reader-return')).toBeVisible();
+    await expect(reader.locator('.reader-return')).toHaveCount(0);
     expect(await viewport.boundingBox()).toEqual(initialBox);
     await viewport.tap({position:{x:175,y:330}});
-    await expect(reader.locator('.reader-return')).toBeVisible();
+    await expect(reader.locator('.reader-return')).toHaveCount(0);
     const first=await pageNumber.innerText();
     // A slow, short drag must follow the finger then return to the same page.
     await touch('touchStart',310,420);await touch('touchMove',280,420);

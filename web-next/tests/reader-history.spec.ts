@@ -42,7 +42,7 @@ test('direct entry, chapter changes, reload and forward all keep Back pointed at
   expect(errors).toEqual([]);
 });
 
-test('entering from details and using the return button does not create a back loop', async ({page}) => {
+test('entering from details and using browser Back does not create a back loop', async ({page}) => {
   await page.goto(base);
   await page.locator(`.mobile-home a[href="/book/${book}"]`).first().click();
   await expectDetails(page);
@@ -54,7 +54,7 @@ test('entering from details and using the return button does not create a back l
   await page.keyboard.press('Control+ArrowRight');
   await expect(page).toHaveURL(`${detail}/${second}`);
   await page.keyboard.press('m');
-  await page.locator('.reader-return:visible').click();
+  await page.goBack();
   await expectDetails(page);
   await page.getByRole('link', {name: '继续阅读', exact: true}).click();
   await expect(root(page)).toHaveAttribute('data-reader-chapter', second);

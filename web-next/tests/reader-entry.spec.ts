@@ -125,7 +125,8 @@ for (const [mode, width] of [['scroll', 390], ['horizontal', 390], ['vertical', 
       await page.locator('.reader-tools:visible').getByRole('button', {name: '设置', exact: true}).click();
       await expect(settings).toBeVisible();
       await expect(page.locator('.reader-tools')).toHaveAttribute('aria-hidden', 'false');
-      await expect(page.locator('.reader-status-top')).toHaveAttribute('data-open', 'true');
+      if (width < 1024) await expect(page.locator('.reader-status-top')).toHaveCount(0);
+      else await expect(page.locator('.reader-status-top')).toHaveAttribute('data-open', 'true');
       await page.goBack();
       await expect(settings).toHaveCount(0); await expect(page).toHaveURL(reader);
       await expect(page.locator('.reader-tools')).toHaveAttribute('aria-hidden', 'false');

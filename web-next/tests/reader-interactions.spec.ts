@@ -19,7 +19,8 @@ test.beforeEach(async ({page}) => {
 
 async function expectTools(page: Page, visible: boolean) {
   await expect(tools(page)).toHaveAttribute('aria-hidden', String(!visible));
-  await expect(root(page).locator('.reader-status-top')).toHaveAttribute('data-open', String(visible || page.viewportSize()!.width < 1024));
+  if (page.viewportSize()!.width < 1024) await expect(root(page).locator('.reader-status-top')).toHaveCount(0);
+  else await expect(root(page).locator('.reader-status-top')).toHaveAttribute('data-open', String(visible));
 }
 
 for (const width of [390, 1440]) {

@@ -43,7 +43,7 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
     await page.setViewportSize({width: 390, height: 844});
     await page.addInitScript(mode => localStorage.setItem('reader_turnMode', JSON.stringify(mode)), mode);
     await page.goto(readerUrl); await ready(page);
-    await expect(page.locator('.reader-return')).toBeVisible();
+    await expect(page.locator('.reader-return,.reader-status-top')).toHaveCount(0);
     await openSettings(page);
     await expect(setting(page).getByRole('button', {name: '是', exact: true})).toHaveAttribute('aria-pressed', 'true');
     await choose(page, true);
@@ -56,7 +56,7 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
       await page.keyboard.press(mode === 'horizontal' ? 'ArrowRight' : 'ArrowDown');
       await expect(surface(page).locator('.reader-progress span').first()).toHaveText(/^2\//);
     }
-    await expect(page.locator('.reader-return')).toBeVisible();
+    await expect(page.locator('.reader-return,.reader-status-top')).toHaveCount(0);
     await openTools(page);
     await expect(tools(page).getByRole('button')).toHaveCount(3);
     await tools(page).getByRole('button', {name: '目录', exact: true}).click();
@@ -66,7 +66,8 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
     expect(await active(page)).toBe(true);
     await openSettings(page); await choose(page, false);
     await page.getByRole('button', {name: '关闭阅读设置'}).click();
-    await page.locator('.reader-return').click(); await expect(page).toHaveURL(detail);
+    await expect(page.getByRole('dialog', {name: '阅读设置'})).toHaveCount(0);
+    await page.goBack(); await expect(page).toHaveURL(detail);
     await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
     await page.locator('.read-now:visible').click(); await ready(page);
     expect(await active(page)).toBe(false);
@@ -109,6 +110,41 @@ test('desktop retains its discoverable side control', async ({page}) => {
   await expect.poll(() => active(page)).toBe(true);
   await sidebar.getByRole('button', {name: '退出全屏'}).click();
   await expect.poll(() => active(page)).toBe(false);
+  await openTools(page);
+  await expect(page.locator('.reader-return')).toBeVisible();
+});
+
+test('fullscreen reminder stays until explicitly dismissed and ignores the old automatic seen flag', async ({page}, info) => {
+  await page.setViewportSize({width: 320, height: 844});
+  await page.addInitScript(() => localStorage.setItem('reader_fullscreenHintSeen', 'true'));
+  await page.goto(detail); await page.locator('.read-now:visible').click(); await ready(page);
+  const hint = page.locator('.reader-fullscreen-hint');
+  const dismiss = hint.getByRole('button', {name: '不再提醒', exact: true});
+  await expect(dismiss).toBeInViewport({ratio: 1});
+  expect(await dismiss.evaluate(el => {
+    const box = el.getBoundingClientRect();
+    return box.height >= 44 && el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+  })).toBe(true);
+  await page.waitForTimeout(5200);
+  await expect(dismiss).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('reader_fullscreenHintDismissed'))).toBeNull();
+  await page.screenshot({path: info.outputPath('verified-persistent-reminder-320.png')});
+  await page.goBack(); await expect(page).toHaveURL(detail);
+  await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
+  await page.locator('.read-now:visible').click(); await ready(page);
+  await expect(dismiss).toBeVisible();
+  await openSettings(page);
+  await expect(hint).toHaveCount(0);
+  await page.getByRole('button', {name: '关闭阅读设置'}).click();
+  await expect(dismiss).toBeVisible();
+  await dismiss.click();
+  await expect(hint).toHaveCount(0);
+  expect(await active(page)).toBe(true);
+  expect(await page.evaluate(() => localStorage.getItem('reader_fullscreenHintDismissed'))).toBe('true');
+  await page.reload(); await ready(page);
+  await surface(page).locator('.reader-page-window').click({position: {x: 160, y: 400}});
+  await expect.poll(() => active(page)).toBe(true);
+  await expect(hint).toHaveCount(0);
 });
 
 test('failed chapters keep recovery controls accessible in fullscreen', async ({page}) => {
@@ -131,7 +167,7 @@ test('failed chapters keep recovery controls accessible in fullscreen', async ({
 });
 
 for (const width of [320, 390]) {
-  test(`header and all bottom controls stay in safe areas at ${width}px and on rotation`, async ({page}, info) => {
+  test(`text and all bottom controls stay in safe areas at ${width}px and on rotation`, async ({page}, info) => {
     await page.setViewportSize({width, height: 844});
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setSafeAreaInsetsOverride', {insets: {top: 48, bottom: 34, left: 0, right: 0}});
@@ -143,11 +179,8 @@ for (const width of [320, 390]) {
       }
       await openTools(page);
       await expect(tools(page)).toBeInViewport({ratio: 1});
-      await expect.poll(() => page.locator('.reader-frame').evaluate(el => {
-        const header = el.querySelector('.reader-status-top')!.getBoundingClientRect();
-        const text = el.querySelector('.reader-text-window')!.getBoundingClientRect();
-        return header.bottom <= text.top;
-      })).toBe(true);
+      await expect(page.locator('.reader-status-top,.reader-return')).toHaveCount(0);
+      await expect.poll(() => page.locator('.reader-text-window').evaluate(el => el.getBoundingClientRect().top)).toBe(landscape ? 24 : 72);
       const bounds = await tools(page).getByRole('button').evaluateAll(elements => elements.map(el => {
         const box = el.getBoundingClientRect();
         return {left: box.left, right: box.right, bottom: box.bottom, height: box.height,

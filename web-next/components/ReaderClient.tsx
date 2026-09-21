@@ -114,7 +114,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   // 导航栏显示状态 (移动端专用)
   const [mobileNav,setShowNav]=useState(false);
   const showNav=mobileNav;
-  const {supported: fullscreenSupported, active: fullscreenActive, pending: fullscreenPending, error: fullscreenError, enabled: fullscreenEnabled, hint: fullscreenHint, change: changeFullscreen, toggle: toggleFullscreen, clearError: clearFullscreenError} = useReaderFullscreen(() => {
+  const {supported: fullscreenSupported, active: fullscreenActive, pending: fullscreenPending, error: fullscreenError, enabled: fullscreenEnabled, hint: fullscreenHint, dismissHint: dismissFullscreenHint, change: changeFullscreen, toggle: toggleFullscreen, clearError: clearFullscreenError} = useReaderFullscreen(() => {
     setShowNav(false);
     if (showSettings) closeReaderSettings();
   }, Boolean(chapterEntry));
@@ -451,7 +451,10 @@ if (loading) return (
 
       {navigationError && <div role="alert" className="reader-navigation-error">{navigationError}<button onClick={()=>goToChapter(failedChapter.current || chapterIdParam)}>重试</button><button onClick={()=>setNavigationError('')}>关闭</button></div>}
       {fullscreenError && <div role="alert" className="reader-navigation-error">{fullscreenError}<button type="button" onClick={clearFullscreenError}>关闭</button></div>}
-      {fullscreenHint && <div role="status" className="reader-fullscreen-hint">在设置中可关闭全屏模式</div>}
+      {fullscreenHint && !showSettings && !showCatalog && <div className="reader-fullscreen-hint">
+        <p role="status">在设置中可关闭全屏模式</p>
+        <button type="button" onClick={dismissFullscreenHint}>不再提醒</button>
+      </div>}
       {/* 6. 设置弹窗 */}
       {showSettings && (
         <>

@@ -18,7 +18,7 @@ test.beforeEach(async ({page}) => {
 });
 
 for (const origin of ['details', 'shelf']) {
-  test(`reader return to ${origin} takes 400ms for the button and browser Back`, async ({page}) => {
+  test(`reader return to ${origin} takes 400ms with browser Back on repeated visits`, async ({page}) => {
     await page.addInitScript(() => {
       const durations: number[] = []; Object.assign(window, {readerExitDurations: durations});
       const animate = Element.prototype.animate;
@@ -37,11 +37,11 @@ for (const origin of ['details', 'shelf']) {
     }
     const destination = origin === 'shelf' ? `${base}/library` : detail;
     await page.goto(destination);
-    for (const action of ['button', 'back']) {
-      await (origin === 'shelf' ? page.locator('#shelf-content .shelf-book') : page.getByRole('link', {name: '立即阅读', exact: true})).click();
+    for (let visit = 0; visit < 2; visit++) {
+      await (origin === 'shelf' ? page.locator('#shelf-content .shelf-book') : page.locator('.read-now:visible')).click();
       await expect(reader(page)).toHaveAttribute('data-reader-ready', 'true'); await idle(page);
-      if (action === 'button') {await page.keyboard.press('m'); await page.locator('.reader-return:visible').click();}
-      else await page.goBack();
+      await expect(page.locator('.reader-return')).toHaveCount(0);
+      await page.goBack();
       await expect(page).toHaveURL(destination); await idle(page);
     }
     expect(await page.evaluate(() => (window as unknown as {readerExitDurations: number[]}).readerExitDurations)).toEqual([400, 400]);

@@ -12,8 +12,9 @@ const subscribe = (notify: () => void) => {
 };
 
 export default function ReaderHeader({bookId, title, toolsVisible}: {bookId: string; title: string; toolsVisible: boolean}) {
-  const visible = useSyncExternalStore(subscribe, mobile, serverMobile) || toolsVisible;
-  return <header className="reader-status-top" data-open={visible} inert={!visible} aria-hidden={!visible}>
+  const isMobile = useSyncExternalStore(subscribe, mobile, serverMobile);
+  if (isMobile) return null;
+  return <header className="reader-status-top" data-open={toolsVisible} inert={!toolsVisible} aria-hidden={!toolsVisible}>
     <ReaderReturnLink bookId={bookId} title={title}/>
   </header>;
 }
