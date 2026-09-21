@@ -37,7 +37,7 @@
 .ranking-book-meta>span:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; color:var(--rank-author,#77695d); }
 .ranking-description { margin-top:8px; color:var(--rank-muted); font-size:13px; line-height:1.6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ranking-book-stats { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-top:auto; padding-top:8px; font-size:11px; line-height:1.5; color:var(--rank-muted); font-variant-numeric:tabular-nums; }
-.ranking-rating { display:inline-flex; align-items:center; flex-shrink:0; gap:4px; margin-top:4px; color:var(--rank-rating,#a4773d); font-size:18px; line-height:1.5; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.ranking-rating { display:inline-flex; align-items:center; flex-shrink:0; gap:4px; margin-top:4px; color:var(--rank-rating,#a4773d); font-size:20px; line-height:1.5; white-space:nowrap; font-variant-numeric:tabular-nums; }
 .ranking-rating strong { font-weight:600; }
 .ranking-rating[data-unrated=true] { font-size:12px; color:var(--rank-muted); }
 .ranking-rating svg { fill:currentColor; stroke-width:1.4; }
@@ -46,6 +46,8 @@
 .ranking-views strong { color:var(--rank-author,#77695d); font-size:13px; font-weight:500; }
 .ranking-note { padding:20px 0 16px; font-size:11px; text-align:center; line-height:1.8; color:var(--rank-muted); }
 .ranking-note span { display:block; font-size:10px; opacity:.8; }
+.ranking-more { min-height:52px; display:grid; place-items:center; color:var(--rank-muted); font-size:12px; }
+.ranking-more button { min-height:44px; padding:8px 18px; border-radius:8px; color:var(--rank-accent); }
 .ranking-empty { min-height:360px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; color:var(--rank-muted); }
 .ranking-empty h2 { font-size:15px; color:var(--rank-text); }
 .ranking-empty p { font-size:12px; }
@@ -88,7 +90,7 @@
   .ranking-book-meta>span:first-child { font-size:12px; }
   .ranking-description { display:none; }
   .ranking-book-stats { font-size:10px; padding-top:7px; }
-  .ranking-rating { font-size:14px; gap:3px; margin-top:2px; }
+  .ranking-rating { font-size:16px; gap:3px; margin-top:1px; }
   .ranking-rating[data-unrated=true] { font-size:10px; }
   .ranking-rating svg { width:10px; height:10px; }
   .ranking-views { gap:4px; }

@@ -35,6 +35,6 @@ export function selectDiscoveryBooks(books, limit = 57, now = new Date()) {
 export async function discoveryBooks(filter, skip, limit, now = new Date()) {
   const books = await Book.find(filter).maxTimeMS(3000).lean();
   // Discovery is a finite feed, not an unbounded ranking page.
-  const feed = selectDiscoveryBooks(books, 57, now);
+  const feed = selectDiscoveryBooks(books, 59, now);
   return {rows: feed.slice(skip, skip + limit), total: feed.length};
 }

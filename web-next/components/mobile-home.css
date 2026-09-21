@@ -11,6 +11,19 @@
   .mh-banner-sub { display:flex; align-items:center; gap:4px; font-size:11px; line-height:1.4; color:#dbc7a8; }
   .mh-banner .mh-cover { width:56px; height:78px; transform:rotate(7deg); border:1px solid #dbc09566; box-shadow:4px 6px 10px #201b1b55; background:#c7b38f; color:#66533c; }
   .mh-banner-seal { position:absolute; right:82px; bottom:12px; font:12px SimSun,serif; border:1px solid #c56448; color:#d68a62; padding:2px; opacity:.55; }
+  .mh-carousel { position:relative; border-radius:14px; overflow:hidden; }
+  .mh-banner-track { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none; overscroll-behavior-x:contain; touch-action:manipulation; }
+  .mh-banner-track::-webkit-scrollbar { display:none; }
+  .mh-banner-track .mh-banner { flex:0 0 100%; min-width:0; height:140px; padding-bottom:32px; scroll-snap-align:start; border-radius:0; }
+  .mh-banner-track .mh-banner:nth-child(2) { background:radial-gradient(ellipse at 65% 120%,#688074 0,transparent 65%),linear-gradient(115deg,#253c36,#47655a); }
+  .mh-banner-track .mh-banner:nth-child(3) { background:radial-gradient(ellipse at 65% 120%,#837486 0,transparent 65%),linear-gradient(115deg,#343040,#655569); }
+  .mh-banner-track .mh-banner-seal { bottom:16px; }
+  .mh-banner-controls { position:absolute; bottom:2px; left:12px; right:12px; display:flex; align-items:center; justify-content:space-between; pointer-events:none; }
+  .mh-banner-controls button { display:grid; place-items:center; width:32px; height:30px; color:#ffebc5; pointer-events:auto; border-radius:5px; }
+  .mh-banner-dots { display:flex; gap:0; }
+  .mh-banner-dots span { width:5px; height:5px; border-radius:5px; background:#ffebc570; transition:width .2s,background .2s; }
+  .mh-banner-dots [aria-pressed=true] span { width:16px; background:#ffebc5; }
+  .mh-carousel :focus-visible { outline:2px solid #ffebc5; outline-offset:-3px; }
   .mh-shortcuts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); background:#fbf5ef; border-radius:12px; margin:8px 0; padding:3px 6px; }
   .mh-shortcuts>a,.mh-shortcuts>button { position:relative; display:flex; flex-direction:row; align-items:center; justify-content:center; gap:6px; min-height:44px; border-radius:8px; font-size:13px; font-weight:500; color:#5e554d; }
   .mh-shortcuts>*+*::before { content:''; position:absolute; left:0; top:calc(50% - 9px); height:18px; border-left:1px solid #eadfd6; }

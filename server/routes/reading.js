@@ -16,6 +16,7 @@ import {asyncRoute} from '../security.js';
 import {dayKey,fail} from '../services/content.js';
 import {rankedBooks,rankingViewFields} from '../services/ranking.js';
 import {discoveryBooks} from '../services/discovery.js';
+import {dailyFeaturedBooks} from '../services/daily-featured.js';
 import {readBookIndex} from '../services/book-reading-index.js';
 import {bookMilestones, recordBookMilestones} from '../services/book-milestones.js';
 
@@ -46,7 +47,7 @@ export function readingRoutes(app,auth) {
   }));
   app.get('/api/books',asyncRoute(async(req,res)=>{
     const {orderBy='views',order='desc',author_id,q,category}=req.query;
-    if(!['views','weekly_views','daily_views','monthly_views','updatedAt','createdAt','rating','composite','discovery',...Object.keys(rankingViewFields)].includes(orderBy)||!['asc','desc'].includes(order))fail(400,'排序参数无效');
+    if(!['views','weekly_views','daily_views','monthly_views','updatedAt','createdAt','rating','composite','discovery','featured_daily',...Object.keys(rankingViewFields)].includes(orderBy)||!['asc','desc'].includes(order))fail(400,'排序参数无效');
     const limit=integer(req.query.limit,20,100),page=integer(req.query.page,1,100000);
     const filter={deletedAt:null,...publicWork};
     if(author_id){if(typeof author_id!=='string'||!/^[a-f0-9]{24}$/i.test(author_id))fail(400,'作者ID无效');filter.$and=[{$or:[{author_id:new mongoose.Types.ObjectId(author_id)},{author_profile_id:new mongoose.Types.ObjectId(author_id)}]}];}
@@ -54,6 +55,7 @@ export function readingRoutes(app,auth) {
     if(q){if(typeof q!=='string'||q.length>100)fail(400,'搜索关键词过长');const escaped=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');filter.$or=[{title:{$regex:escaped,$options:'i'}},{author:{$regex:escaped,$options:'i'}}];}
     let books, total;
     if(orderBy==='discovery')({rows: books, total} = await discoveryBooks(filter,(page-1)*limit,limit));
+    else if(orderBy==='featured_daily')({rows: books, total} = await dailyFeaturedBooks(filter,(page-1)*limit,limit));
     else if(Object.hasOwn(rankingViewFields,orderBy))({rows: books, total} = await rankedBooks(filter,orderBy,order,(page-1)*limit,limit));
     else if(orderBy==='composite')books=await Book.aggregate([{$match:filter},{$addFields:{score:{$add:[{$multiply:[{$ifNull:['$rating',0]},60]},{$multiply:[{$ifNull:['$weekly_views',0]},0.4]}]}}},{$sort:{score:order==='asc'?1:-1,_id:1}},{$skip:(page-1)*limit},{$limit:limit},{$unset:'score'}]).option({maxTimeMS:3000});
     else books=await Book.find(filter).sort({[orderBy]:order==='asc'?1:-1,_id:1}).skip((page-1)*limit).limit(limit).populate('author_id','username').maxTimeMS(3000).lean();

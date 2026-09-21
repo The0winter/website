@@ -8,7 +8,7 @@ import BookCover from '@/components/BookCover';
 import BookLink from '@/components/BookLink';
 import {formatRating, ratingLabel} from '@/lib/rating';
 import {currentRankingVisit, selectRankingView, subscribeBookNavigation} from '@/lib/book-navigation';
-import {getRankingSnapshot, loadRanking, rankingScroll, rememberRankingScroll, serverRankingSnapshot, subscribeRanking} from '@/lib/ranking-cache';
+import {getRankingSnapshot, loadRanking, loadMoreRanking, rankingScroll, rememberRankingScroll, serverRankingSnapshot, subscribeRanking} from '@/lib/ranking-cache';
 import './ranking.css';
 
 const RANKS = [
@@ -34,18 +34,21 @@ export default function RankingPage() {
   const {activeRank, category} = visit?.rankingView ?? defaultView;
   const pathname = usePathname();
   const categories = useRef<HTMLElement>(null);
+  const more = useRef<HTMLDivElement>(null);
+  const motion = useRef({top: 0, time: 0, speed: 0});
   const rank = RANKS.find(item => item.id === activeRank) ?? RANKS[0];
   const visitId = visit?.flow ?? '';
   const query = {visit: visitId, orderBy: rank.sort, category};
   const result = useSyncExternalStore(subscribeRanking, () => getRankingSnapshot(query), serverRankingSnapshot);
   const loading = !result.books && !result.error;
+  const hasBooks = Boolean(result.books);
 
   useEffect(() => {
     if (pathname === '/ranking') void loadRanking({visit: visitId, orderBy: rank.sort, category});
   }, [visitId, rank.sort, category, pathname]);
 
   useLayoutEffect(() => {
-    if (pathname !== '/ranking' || !visitId || !result.books) return;
+    if (pathname !== '/ranking' || !visitId || !hasBooks) return;
     const current = {visit: visitId, orderBy: rank.sort, category};
     const position = rankingScroll(current);
     if (position) {
@@ -64,7 +67,30 @@ export default function RankingPage() {
       window.removeEventListener('book-navigation-leave', remember);
       categoryBar?.removeEventListener('scroll', remember);
     };
-  }, [visitId, rank.sort, category, pathname, result.books]);
+  }, [visitId, rank.sort, category, pathname, hasBooks]);
+
+  useEffect(() => {
+    if (pathname !== '/ranking' || !hasBooks || !result.hasMore || result.moreError) return;
+    let frame = 0;
+    motion.current = {top: scrollY, time: performance.now(), speed: 0};
+    const check = () => {
+      frame = 0;
+      if (document.visibilityState !== 'visible' || !more.current || more.current.getClientRects().length === 0) return;
+      const now = performance.now(), elapsed = now - motion.current.time, delta = scrollY - motion.current.top;
+      const speed = elapsed > 0 && elapsed < 300 ? Math.max(0, delta / elapsed) : 0;
+      motion.current = {top: scrollY, time: now, speed: speed * .7 + motion.current.speed * .3};
+      // Predict the distance covered during one request, bounded to three screens.
+      const lead = Math.min(innerHeight * 3, Math.max(innerHeight * .7, motion.current.speed * (result.fetchMs + 350)));
+      if (delta >= 0 && more.current.getBoundingClientRect().top - innerHeight <= lead) {
+        void loadMoreRanking({visit: visitId, orderBy: rank.sort, category});
+      }
+    };
+    const schedule = () => {if (!frame) frame = requestAnimationFrame(check);};
+    window.addEventListener('scroll', schedule, {passive: true});
+    window.addEventListener('resize', schedule);
+    schedule();
+    return () => {cancelAnimationFrame(frame); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule);};
+  }, [visitId, rank.sort, category, pathname, hasBooks, result.books?.length, result.hasMore, result.moreError, result.fetchMs]);
 
   function selectRank(id: RankId) {
     selectRankingView({activeRank: id, category});
@@ -129,6 +155,9 @@ export default function RankingPage() {
               </li>)}
             </ol>}
 
+            {hasBooks && result.hasMore && <div ref={more} className="ranking-more" aria-live="polite">
+              {result.loadingMore ? <span role="status">正在加载更多作品…</span> : <button type="button" onClick={() => void loadMoreRanking(query)}>{result.moreError ? '加载未完成，点击重试' : '继续向下浏览'}</button>}
+            </div>}
             {!loading && !result.error && <p className="ranking-note">{activeRank === 'views' ? '按累计浏览量排序' : '浏览热度占 80% · 综合评分占 20%'}<span>展示前 100 部作品 · 含基础热度与实际阅读</span></p>}
           </section>
         </div>

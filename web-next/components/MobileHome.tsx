@@ -16,6 +16,7 @@ import {useMobileHomeSwipe} from '@/lib/useMobileHomeSwipe';
 import './mobile-home.css';
 import {MobileHomeSection, MobileHomeShortcuts} from './MobileHomeFrame';
 import {discoverySections} from '@/lib/discovery-sections';
+import MobileFeaturedBanner from './MobileFeaturedBanner';
 
 const browseCache = new Map<string, {books: Book[]; total: number}>();
 function Cover({book,priority=false}:{book:Book;priority?:boolean}){
@@ -28,7 +29,7 @@ function BookRows({books,priority=false}:{books:Book[];priority?:boolean}){
 function BookShelf({books,title}:{books:Book[];title:string}){
   return <div className="mh-shelf" role="region" aria-label={`${title}，左右滑动浏览`} tabIndex={0}>{books.map(book=><BookLink className="mh-shelf-book" key={book.id} href={`/book/${book.id}`}><Cover book={book}/><h3>{book.title}</h3><p>{book.category?.split('>').pop()||'综合'}</p></BookLink>)}</div>;
 }
-export default function MobileHome({books}:{books:Book[]}){
+export default function MobileHome({books,bannerBooks=[]}:{books:Book[];bannerBooks?:Book[]}){
   const router=useRouter();
   const search=useSearchParams();
   const mode=search.get('view')==='new'?'new':search.get('view')==='category'?'category':'home';
@@ -45,8 +46,8 @@ export default function MobileHome({books}:{books:Book[]}){
   const [retry,setRetry]=useState(0);
   const error=failure?.key===key&&failure.retry===retry?failure.message:'';
   const loading=mode!=='home'&&!cached&&!error;
-  const hero=books[0];
-  const sections=discoverySections.map(section=>({...section,books:books.slice(section.offset,section.offset+section.size)})).filter(section=>section.books.length);
+  const feed=books.filter(book=>!bannerBooks.some(hero=>hero.id===book.id));
+  const sections=discoverySections.map(section=>({...section,books:feed.slice(section.offset,section.offset+section.size)})).filter(section=>section.books.length);
   const query=search.toString();
   useLayoutEffect(()=>{syncBookRoute('/'+(query?`?${query}`:''));},[query]);
   useEffect(()=>{
@@ -80,7 +81,7 @@ export default function MobileHome({books}:{books:Book[]}){
   return <div ref={swipeRoot} className={`mobile-home md:hidden${mode==='home'?'':' mobile-home-browse'}`} data-home-href={'/'+(query?`?${query}`:'')} aria-busy={loading}>
     {mode==='home'?<>
       <HomeSearchHeader/>
-      {hero&&<BookLink href={`/book/${hero.id}`} className="mh-banner"><div><span className="mh-kicker">九天精选 · 好书推荐</span><h2>{hero.title}</h2><span className="mh-banner-sub">{hero.author||'九天小说'} <ChevronRight size={13}/></span></div><Cover book={hero} priority/><div className="mh-banner-seal" aria-hidden="true">阅</div></BookLink>}
+      <MobileFeaturedBanner books={bannerBooks}/>
       <MobileHomeShortcuts onCategory={()=>browse('category')} onNew={()=>browse('new')}/>
       {sections.map((section,index)=><MobileHomeSection key={section.title} title={section.title} layout={section.layout} onMore={()=>browse('category')}>
         {section.layout==='shelf'?<BookShelf books={section.books} title={section.title}/>:<BookRows books={section.books} priority={index===0}/>}

@@ -14,14 +14,16 @@ async function setup(page: Page, width = 390) {
     document.addEventListener('DOMContentLoaded', () => {const style = document.createElement('style'); style.textContent = 'nextjs-portal{display:none}'; document.head.append(style);});
   });
   const requests: string[] = [];
-  await page.route('**/api/books?*', route => {requests.push(route.request().url()); return route.fulfill({json: books});});
+  await page.route('**/api/books?*', route => {requests.push(route.request().url()); const current = Number(new URL(route.request().url()).searchParams.get('page') || 1); return route.fulfill({headers: {'X-Total-Count': '30'}, json: books.slice((current - 1) * 20, current * 20)});});
   await page.goto(base + '/ranking');
-  await expect(page.locator('.ranking-row')).toHaveCount(30);
+  await expect(page.locator('.ranking-row')).toHaveCount(20);
   await page.getByRole('button', {name: '周榜', exact: true}).click();
   await page.getByRole('button', {name: '悬疑', exact: true}).click();
   await expect(page.locator('.ranking-content')).toHaveAttribute('aria-busy', 'false');
   await page.evaluate(() => {scrollTo(0, 640); document.querySelector('.ranking-categories')!.scrollLeft = 300;});
   await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(page.locator('.ranking-more [role=status]')).toHaveCount(0);
   return requests;
 }
 
@@ -29,18 +31,32 @@ for (const width of [320, 390, 1440]) test(`ranking keeps its exact list and scr
   const requests = await setup(page, width);
   const position = await page.evaluate(() => ({top: scrollY, categories: document.querySelector('.ranking-categories')!.scrollLeft}));
   const count = requests.length;
+  const loaded = await page.locator('.ranking-row').count();
   for (let visit = 0; visit < 2; visit++) {
     // Programmatic activation preserves the chosen scroll even on desktop,
     // where Playwright otherwise scrolls this long list to reveal the link.
     await page.locator(`.ranking-card[href="/book/${book}"]`).evaluate(el => (el as HTMLElement).click());
     await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);
     await page.goBack(); await idle(page);
-    await expect(page.locator('.ranking-row')).toHaveCount(30);
+    await expect(page.locator('.ranking-row')).toHaveCount(loaded);
     await expect(page.getByRole('button', {name: '周榜', exact: true})).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('button', {name: '悬疑', exact: true})).toHaveAttribute('aria-pressed', 'true');
     expect(await page.evaluate(() => ({top: scrollY, categories: document.querySelector('.ranking-categories')!.scrollLeft}))).toEqual(position);
     expect(requests).toHaveLength(count);
   }
+});
+
+test('loaded next pages and their scroll survive a book detail round trip', async ({page}) => {
+  const requests = await setup(page);
+  await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+  await expect(page.locator('.ranking-row')).toHaveCount(30);
+  const position = await page.evaluate(() => scrollY), count = requests.length;
+  await page.locator(`.ranking-card[href="/book/${book}"]`).evaluate(el => (el as HTMLElement).click());
+  await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);
+  await page.goBack(); await idle(page);
+  await expect(page.locator('.ranking-row')).toHaveCount(30);
+  expect(await page.evaluate(() => scrollY)).toBe(position);
+  expect(requests).toHaveLength(count);
 });
 
 for (const top of [0, 640]) test(`the ranking under the incoming book never shifts at scroll ${top}`, async ({page}, info) => {
@@ -75,6 +91,7 @@ test('short reading retains the ranking; five foreground minutes release it acro
   await page.clock.install();
   const requests = await setup(page);
   const count = requests.length;
+  const loaded = await page.locator('.ranking-row').count();
   await page.locator(`.ranking-card[href="/book/${book}"]`).evaluate(el => (el as HTMLElement).click());
   await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);
   await page.getByRole('link', {name:'立即阅读', exact:true}).click();
@@ -82,14 +99,14 @@ test('short reading retains the ranking; five foreground minutes release it acro
   await page.clock.fastForward(2 * 60 * 1000);
   await page.goBack(); await idle(page); await page.goBack(); await idle(page);
   expect(requests).toHaveLength(count);
-  await expect(page.locator('.ranking-row')).toHaveCount(30);
+  await expect(page.locator('.ranking-row')).toHaveCount(loaded);
   await page.goForward(); await idle(page); await page.goForward(); await idle(page);
   await expect(page.locator('[data-reader-ready=true]')).toBeVisible();
   await page.keyboard.press('Control+ArrowRight');
   await expect(page.locator('[data-reader-ready=true]')).not.toHaveAttribute('data-reader-chapter', chapter);
   await page.clock.fastForward(3 * 60 * 1000 + 1000);
   await page.goBack(); await idle(page); await page.goBack(); await idle(page);
-  await expect(page.locator('.ranking-row')).toHaveCount(30);
+  await expect(page.locator('.ranking-row')).toHaveCount(20);
   expect(requests).toHaveLength(count + 1);
   await expect(page.getByRole('button', {name:'周榜', exact:true})).toHaveAttribute('aria-pressed','true');
 });
@@ -98,6 +115,7 @@ test('time in details and a background reader does not expire a ranking', async 
   await page.clock.install();
   const requests = await setup(page);
   const count = requests.length;
+  const loaded = await page.locator('.ranking-row').count();
   await page.locator(`.ranking-card[href="/book/${book}"]`).evaluate(el => (el as HTMLElement).click());
   await expect(page.locator('.book-detail:visible')).toBeVisible(); await idle(page);
   await page.clock.fastForward(10 * 60 * 1000);
@@ -107,6 +125,6 @@ test('time in details and a background reader does not expire a ranking', async 
   await page.clock.fastForward(10 * 60 * 1000);
   await page.evaluate(() => {Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'}); document.dispatchEvent(new Event('visibilitychange'));});
   await page.goBack(); await idle(page); await page.goBack(); await idle(page);
-  await expect(page.locator('.ranking-row')).toHaveCount(30);
+  await expect(page.locator('.ranking-row')).toHaveCount(loaded);
   expect(requests).toHaveLength(count);
 });

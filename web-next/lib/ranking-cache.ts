@@ -2,9 +2,11 @@ import type {Book} from './api';
 import {safeFetch} from './request';
 
 export type RankingQuery = {visit: string; orderBy: string; category: string};
-type Snapshot = {books: Book[] | null; error: boolean};
-type Record = {key: string; snapshot: Snapshot; scroll?: {top: number; categories: number}; readingMs: number; controller?: AbortController; pending?: Promise<void>};
-const empty: Snapshot = {books: null, error: false};
+type Snapshot = {books: Book[] | null; error: boolean; loadingMore: boolean; moreError: boolean; hasMore: boolean; fetchMs: number};
+type Record = {key: string; snapshot: Snapshot; nextPage: number; scroll?: {top: number; categories: number}; readingMs: number; controller?: AbortController; pending?: Promise<void>};
+const empty: Snapshot = {books: null, error: false, loadingMore: false, moreError: false, hasMore: false, fetchMs: 600};
+export const rankingPageSize = 20;
+const rankingLimit = 100;
 const records = new Map<string, Record>();
 const listeners = new Set<() => void>();
 const readingLimit = 5 * 60 * 1000;
@@ -24,6 +26,39 @@ function release(visit: string) {
   notify();
 }
 
+function fetchPage(query: RankingQuery, current: Record) {
+  const controller = new AbortController(), page = current.nextPage, started = performance.now();
+  const previous = current.snapshot.books;
+  current.controller = controller;
+  current.snapshot = {...current.snapshot, loadingMore: Boolean(previous), moreError: false};
+  const valid = () => !controller.signal.aborted && records.get(query.visit) === current;
+  const params = new URLSearchParams({orderBy: query.orderBy, limit: String(rankingPageSize), page: String(page)});
+  if (query.category !== '全部') params.set('category', query.category);
+  current.pending = (async () => {
+    try {
+      const response = await safeFetch(`/api/books?${params}`, {signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)])});
+      if (!response.ok) throw new Error('Ranking unavailable');
+      const books: Book[] = await response.json();
+      if (!Array.isArray(books)) throw new Error('Invalid ranking');
+      if (valid()) {
+        const combined = [...new Map([...(previous || []), ...books].map(book => [book.id, book])).values()].slice(0, rankingLimit);
+        const count = response.headers.get('X-Total-Count');
+        const total = count !== null && Number.isFinite(Number(count)) ? Math.min(Number(count), rankingLimit) : rankingLimit;
+        current.nextPage = page + 1;
+        current.snapshot = {books: combined, error: false, loadingMore: false, moreError: false,
+          hasMore: books.length >= rankingPageSize && page * rankingPageSize < total,
+          fetchMs: Math.max(200, Math.min(5000, performance.now() - started))};
+      }
+    } catch {
+      if (valid()) current.snapshot = {...current.snapshot, loadingMore: false, error: !previous, moreError: Boolean(previous)};
+    } finally {
+      if (valid()) {current.pending = undefined; current.controller = undefined; notify();}
+    }
+  })();
+  notify();
+  return current.pending;
+}
+
 export function loadRanking(query: RankingQuery, force = false) {
   if (!query.visit) return Promise.resolve();
   const key = keyFor(query);
@@ -34,31 +69,17 @@ export function loadRanking(query: RankingQuery, force = false) {
     if (record.snapshot.books || record.snapshot.error) return Promise.resolve();
   }
   record?.controller?.abort();
-  record = {key, snapshot: empty, scroll: record?.key === key ? record.scroll : undefined, readingMs: 0};
-  records.delete(query.visit);
-  records.set(query.visit, record);
-  // Each visit retains only its displayed list (at most 100 books).
+  record = {key, snapshot: empty, nextPage: 1, scroll: record?.key === key ? record.scroll : undefined, readingMs: 0};
+  records.delete(query.visit); records.set(query.visit, record);
+  // Retain loaded pages and scroll for three visits, with at most 100 books each.
   while (records.size > 3) release(records.keys().next().value!);
-  const current = record, controller = new AbortController();
-  current.controller = controller;
-  const valid = () => !controller.signal.aborted && records.get(query.visit) === current;
-  const params = new URLSearchParams({orderBy: query.orderBy, limit: '100'});
-  if (query.category !== '全部') params.set('category', query.category);
-  current.pending = (async () => {
-    try {
-      const response = await safeFetch(`/api/books?${params}`, {signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)])});
-      if (!response.ok) throw new Error('Ranking unavailable');
-      const books: Book[] = await response.json();
-      if (!Array.isArray(books)) throw new Error('Invalid ranking');
-      if (valid()) current.snapshot = {books, error: false};
-    } catch {
-      if (valid()) current.snapshot = {books: null, error: true};
-    } finally {
-      if (valid()) {current.pending = undefined; current.controller = undefined; notify();}
-    }
-  })();
-  notify();
-  return current.pending;
+  return fetchPage(query, record);
+}
+
+export function loadMoreRanking(query: RankingQuery) {
+  const record = records.get(query.visit);
+  if (record?.key !== keyFor(query) || !record.snapshot.books || !record.snapshot.hasMore) return Promise.resolve();
+  return record.pending || fetchPage(query, record);
 }
 
 export function rememberRankingScroll(query: RankingQuery, top: number, categories: number) {

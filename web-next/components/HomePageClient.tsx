@@ -20,6 +20,7 @@ import type { Book } from '@/lib/api';
 type HomePageClientProps = {
   initialBooks: Book[];
   initialDiscoveryBooks?: Book[];
+  initialBannerBooks?: Book[];
   initialFeaturedBooks?: Book[];
   initialWeekRankBooks?: Book[];
   initialDayRankBooks?: Book[];
@@ -236,6 +237,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
 export default function HomePageClient({
   initialBooks,
   initialDiscoveryBooks = [],
+  initialBannerBooks = [],
   initialFeaturedBooks = [],
   initialWeekRankBooks = [],
   initialDayRankBooks = [],
@@ -390,7 +392,7 @@ export default function HomePageClient({
     return (
       <>
       <h1 className="sr-only">九天小说站 - 您的免费在线小说图书馆</h1>
-      <MobileHome books={initialDiscoveryBooks}/>
+      <MobileHome books={initialDiscoveryBooks} bannerBooks={initialBannerBooks}/>
       <div className="desktop-home hidden md:block min-h-screen bg-[var(--home-background)] pb-12">
         
         {/* 🔥🔥🔥 修改点：彻底删除了顶部的黑色导航栏 div === */}

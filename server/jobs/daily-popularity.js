@@ -6,6 +6,7 @@ import Book from '../models/Book.js';
 import Daily from '../models/ReadDaily.js';
 import {dayKey} from '../services/content.js';
 import {connectDatabase} from '../database/index.js';
+import {ensureDailyFeatured} from '../services/daily-featured.js';
 
 const validDay = day => /^\d{4}-\d{2}-\d{2}$/.test(day || '') && new Date(day + 'T00:00:00Z').toISOString().slice(0, 10) === day;
 const nextDay = day => new Date(Date.parse(day + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
@@ -107,7 +108,15 @@ export async function main(args) {
   const stop = () => {stopping = true;};
   process.on('SIGTERM', stop); process.on('SIGINT', stop);
   await connectDatabase();
-  try {console.log(JSON.stringify(await seedDailyPopularity({startDay: process.env.DAILY_POPULARITY_START, apply, shouldStop: () => stopping})));}
+  try {
+    const now = new Date();
+    const report = await seedDailyPopularity({startDay: process.env.DAILY_POPULARITY_START, now, apply, shouldStop: () => stopping});
+    if (apply && !stopping && !report.pendingBooks) {
+      const featured = await ensureDailyFeatured(now);
+      report.featured = {day: featured.day, books: featured.bookIds.length};
+    }
+    console.log(JSON.stringify(report));
+  }
   finally {await mongoose.disconnect(); process.off('SIGTERM', stop); process.off('SIGINT', stop);}
 }
 

@@ -20,16 +20,19 @@ async function drag(page: Page, x: number, y: number, dx: number, dy = 0) {
   await cdp.detach();
 }
 
-for (const width of [320, 390, 767]) test(`57 unique recommendations alternate two lists with an eight-book shelf at ${width}px`, async ({page, request}, info) => {
+for (const width of [320, 390, 767]) test(`daily banner and 56 unique feed recommendations retain eight-book shelves at ${width}px`, async ({page, request}, info) => {
   await page.setViewportSize({width, height: 844});
   const top = (await (await request.get(`${base}/api/books?orderBy=views&limit=50`)).json()).map((book: {id: string}) => `/book/${book.id}`);
   await page.goto(base);
   const home = page.locator('.mobile-home:visible');
   await expect(home.locator('.mh-section')).toHaveCount(12);
-  const links = home.locator('.mh-banner, .mh-book, .mh-shelf-book');
-  await expect(links).toHaveCount(57);
+  const links = home.locator('.mh-book, .mh-shelf-book');
+  await expect(links).toHaveCount(56);
   const hrefs = await links.evaluateAll(nodes => nodes.map(node => node.getAttribute('href')));
-  expect(new Set(hrefs).size).toBe(57);
+  expect(new Set(hrefs).size).toBe(56);
+  const banner = await home.locator('.mh-banner').evaluateAll(nodes => nodes.map(node => node.getAttribute('href')));
+  expect(banner).toHaveLength(3);
+  expect(banner.filter(href => hrefs.includes(href))).toHaveLength(0);
   expect(hrefs.filter(href => top.includes(href))).toHaveLength(0);
   for (let i = 0; i < 12; i++) {
     const section = home.locator('.mh-section').nth(i);
