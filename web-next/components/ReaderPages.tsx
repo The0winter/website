@@ -358,7 +358,7 @@ export default function ReaderPages(props:ReaderPageProps) {
 
   return <div className="reader-pages-root" data-dark={props.dark} data-mode={turnMode} data-reader-ready={layout.width>0 && !fullscreenPending} data-reader-chapter={chapter.id} data-reader-previous={props.previousChapter?.id || ''} data-reader-next={props.nextChapter?.id || ''} style={style}>
     <section className="reader-frame" data-paper={props.paper && !props.dark} aria-label="章节阅读">
-      <ReaderHeader bookId={book.id} title={title} toolsVisible={props.toolsVisible}/>
+      <ReaderHeader bookId={book.id} bookTitle={book.title} title={title} firstPage={page===0} toolsVisible={props.toolsVisible}/>
       <button className="reader-menu-access" onClick={onTools} aria-expanded={props.toolsVisible}>阅读菜单</button>
       <div ref={windowRef} className="reader-page-window" tabIndex={0} aria-label={scrolling?'正文，可上下滚动，点击中央打开菜单':`${turnMode==='vertical'?'上下':'左右'}翻页，点击中央打开菜单`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={cancelGesture} onLostPointerCapture={event=>{if(event.target===event.currentTarget)cancelGesture();}} onClick={click} onTouchStart={touchStart} onTouchEnd={touchEnd} onTouchCancel={()=>{touchEdge.current=null;}} onWheel={wheel}>
         <div ref={surface} className="reader-page-surface" style={{'--reader-paper-position':readerPaperPosition(page)} as CSSProperties}>

@@ -19,7 +19,10 @@ test.beforeEach(async ({page}) => {
 
 async function expectTools(page: Page, visible: boolean) {
   await expect(tools(page)).toHaveAttribute('aria-hidden', String(!visible));
-  if (page.viewportSize()!.width < 1024) await expect(root(page).locator('.reader-status-top')).toHaveCount(0);
+  if (page.viewportSize()!.width < 1024) {
+    if (await page.evaluate(() => Boolean(document.fullscreenElement))) await expect(root(page).locator('.reader-status-top[data-compact=true]')).toBeVisible();
+    else await expect(root(page).locator('.reader-status-top')).toHaveCount(0);
+  }
   else await expect(root(page).locator('.reader-status-top')).toHaveAttribute('data-open', String(visible));
 }
 

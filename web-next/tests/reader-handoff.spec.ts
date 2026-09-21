@@ -40,8 +40,8 @@ for (const origin of ['details', 'shelf']) {
     for (let visit = 0; visit < 2; visit++) {
       await (origin === 'shelf' ? page.locator('#shelf-content .shelf-book') : page.locator('.read-now:visible')).click();
       await expect(reader(page)).toHaveAttribute('data-reader-ready', 'true'); await idle(page);
-      await expect(page.locator('.reader-return')).toHaveCount(0);
-      await page.goBack();
+      await expect(page.locator('.reader-return')).toBeVisible();
+      if (visit) await page.locator('.reader-return').click(); else await page.goBack();
       await expect(page).toHaveURL(destination); await idle(page);
     }
     expect(await page.evaluate(() => (window as unknown as {readerExitDurations: number[]}).readerExitDurations)).toEqual([400, 400]);

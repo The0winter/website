@@ -91,7 +91,7 @@ export default function ReaderScroll(props:ReaderPageProps){
     const page=top+view.clientHeight>=start+height-1?total-1:Math.min(total-1,Math.floor(offset/view.clientHeight));
     const next={id:active.dataset.scrollChapter!,fraction:Math.min(.999,offset/height),page,total};
     const previous=position.current;
-    if(previous.id!==next.id)saveProgress(previous);
+    if(restored.current && previous.id!==next.id)saveProgress(previous);
     position.current=next;
     setProgress(old=>old.id===next.id && old.page===next.page && old.total===next.total?old:next);
     if(navigate && !blocked && !navigating && next.id!==activeChapter.id && scrollNavigation.current!==next.id){
@@ -153,14 +153,17 @@ export default function ReaderScroll(props:ReaderPageProps){
     const observer=new ResizeObserver(()=>resize());observer.observe(view);
     return()=>observer.disconnect();
   },[]);
-  useLayoutEffect(()=>()=>saveProgress(position.current),[]);
+  // A cached chapter window can remount before restoration. Its initial zero
+  // must not overwrite the saved position while adjacent chapters are attached.
+  useLayoutEffect(()=>()=>{if(restored.current)saveProgress(position.current);},[]);
   useEffect(()=>{
     const previous=document.body.style.overflow;document.body.style.overflow='hidden';
-    const save=()=>saveProgress(position.current);window.addEventListener('pagehide',save);
+    const save=()=>{if(restored.current)saveProgress(position.current);};window.addEventListener('pagehide',save);
     return()=>{document.body.style.overflow=previous;save();window.removeEventListener('pagehide',save);cancelAnimationFrame(frame.current);clearTimeout(idle.current);clearTimeout(gesture.current?.timer);};
   },[]);
 
   function settle(){
+    if(!restored.current)return;
     saveProgress(position.current);
     if(touching.current || blocked)return;
     const index=chapters.findIndex(chapter=>chapter.id===position.current.id);
@@ -254,7 +257,7 @@ export default function ReaderScroll(props:ReaderPageProps){
 
   return <div className="reader-pages-root" data-dark={props.dark} data-mode="scroll" data-reader-ready={ready} data-reader-chapter={props.chapter.id} data-reader-previous={props.previousChapter?.id || ''} data-reader-next={props.nextChapter?.id || ''} style={style}>
     <section className="reader-frame" data-paper={props.paper && !props.dark} aria-label="章节阅读">
-      <ReaderHeader bookId={props.book.id} title={title} toolsVisible={props.toolsVisible}/>
+      <ReaderHeader bookId={props.book.id} bookTitle={props.book.title} title={title} firstPage={progress.page===0} toolsVisible={props.toolsVisible}/>
       <button className="reader-menu-access" onClick={props.onTools} aria-expanded={props.toolsVisible}>阅读菜单</button>
       <div className="reader-page-window" tabIndex={0} aria-label="正文，可连续上下滚动，点击中央打开菜单"
         onPointerDown={event=>{

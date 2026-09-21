@@ -56,7 +56,7 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
       await page.keyboard.press(mode === 'horizontal' ? 'ArrowRight' : 'ArrowDown');
       await expect(surface(page).locator('.reader-progress span').first()).toHaveText(/^2\//);
     }
-    await expect(page.locator('.reader-return,.reader-status-top')).toHaveCount(0);
+    await expect(page.locator('.reader-return')).toBeVisible();
     await openTools(page);
     await expect(tools(page).getByRole('button')).toHaveCount(3);
     await tools(page).getByRole('button', {name: '目录', exact: true}).click();
@@ -179,7 +179,7 @@ for (const width of [320, 390]) {
       }
       await openTools(page);
       await expect(tools(page)).toBeInViewport({ratio: 1});
-      await expect(page.locator('.reader-status-top,.reader-return')).toHaveCount(0);
+      await expect(page.locator('.reader-status-top[data-compact=true] .reader-return')).toBeVisible();
       await expect.poll(() => page.locator('.reader-text-window').evaluate(el => el.getBoundingClientRect().top)).toBe(landscape ? 24 : 72);
       const bounds = await tools(page).getByRole('button').evaluateAll(elements => elements.map(el => {
         const box = el.getBoundingClientRect();

@@ -64,10 +64,10 @@ test('immersive navigation, touch-following turns, cancellation and all three sa
     await expect(reader.locator('.reader-return')).toHaveCount(0);
     const initialBox=await viewport.boundingBox();
     await viewport.tap({position:{x:175,y:330}});
-    await expect(reader.locator('.reader-return')).toHaveCount(0);
+    await expect(reader.locator('.reader-return')).toBeVisible();
     expect(await viewport.boundingBox()).toEqual(initialBox);
     await viewport.tap({position:{x:175,y:330}});
-    await expect(reader.locator('.reader-return')).toHaveCount(0);
+    await expect(reader.locator('.reader-return')).toBeVisible();
     const first=await pageNumber.innerText();
     // A slow, short drag must follow the finger then return to the same page.
     await touch('touchStart',310,420);await touch('touchMove',280,420);
