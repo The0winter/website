@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 const bookSchema = new mongoose.Schema({
+  dailyPopularityThrough: String,
   statisticsSeed: {type: new mongoose.Schema({
     runId: {type: String, required: true},
     source: String,

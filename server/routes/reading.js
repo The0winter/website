@@ -11,6 +11,7 @@ import rateLimit from 'express-rate-limit';
 import Book from '../models/Book.js';
 import Chapter from '../models/Chapter.js';
 import UserDaily from '../models/UserDaily.js';
+import Daily from '../models/ReadDaily.js';
 import {asyncRoute} from '../security.js';
 import {dayKey,fail} from '../services/content.js';
 import {rankedBooks,rankingViewFields} from '../services/ranking.js';
@@ -20,9 +21,6 @@ import {bookMilestones, recordBookMilestones} from '../services/book-milestones.
 
 const receiptSchema=new mongoose.Schema({_id:String,bookId:mongoose.Schema.Types.ObjectId,chapterId:mongoose.Schema.Types.ObjectId,day:String,expiresAt:{type:Date,expires:0}});
 const Receipt=mongoose.models.ReadReceipt||mongoose.model('ReadReceipt',receiptSchema);
-const dailySchema=new mongoose.Schema({_id:String,bookId:mongoose.Schema.Types.ObjectId,day:String,views:Number,expiresAt:{type:Date,expires:0}});
-dailySchema.index({day:1,bookId:1});
-const Daily=mongoose.models.ReadDaily||mongoose.model('ReadDaily',dailySchema);
 const integer=(value,fallback,max)=>{const n=value===undefined?fallback:Number(value);if(!Number.isSafeInteger(n)||n<1||n>max)fail(400,'分页参数无效');return n;};
 const formatted=doc=>({...doc,id:String(doc._id)});
 export function readingRoutes(app,auth) {

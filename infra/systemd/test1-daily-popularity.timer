@@ -1,0 +1,14 @@
+[Unit]
+Description=Generate each day's book popularity in Shanghai time, with hourly recovery
+
+[Timer]
+# The first pass is at 00:05 Shanghai time. Hourly checks recover failed work
+# and cover newly published books; durable daily receipts prevent duplicates.
+OnCalendar=*-*-* *:05:00 Asia/Shanghai
+OnBootSec=2min
+Persistent=true
+AccuracySec=30s
+Unit=test1-daily-popularity.service
+
+[Install]
+WantedBy=timers.target

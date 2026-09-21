@@ -129,7 +129,7 @@ export default function RankingPage() {
               </li>)}
             </ol>}
 
-            {!loading && !result.error && <p className="ranking-note">{activeRank === 'views' ? '按累计浏览量排序' : '浏览热度占 80% · 读者评分占 20%'}<span>展示前 100 部作品</span></p>}
+            {!loading && !result.error && <p className="ranking-note">{activeRank === 'views' ? '按累计浏览量排序' : '浏览热度占 80% · 综合评分占 20%'}<span>展示前 100 部作品 · 含基础热度与实际阅读</span></p>}
           </section>
         </div>
       </div>

@@ -1,0 +1,24 @@
+[Unit]
+Description=Initialize daily book popularity and refresh calendar totals
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=test1-api
+Group=test1-api
+WorkingDirectory=/srv/test1/current/server
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/test1/api.env
+EnvironmentFile=/etc/test1/daily-popularity.env
+ExecStart=/opt/node-v22.23.2-linux-x64/bin/node --max-old-space-size=256 jobs/daily-popularity.js --apply
+TimeoutStartSec=45min
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+MemoryMax=384M
+TasksMax=64
