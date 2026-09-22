@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, BookOpen, X } from 'lucide-react';
+import { ArrowLeft, X } from 'lucide-react';
 import {LoadingLogo, LoadingText} from './BrandLoading';
 import WriterStatistics from './WriterStatistics';
 import WritingWorkspace from './WritingWorkspace';
@@ -62,10 +62,10 @@ export default function MobileWriterView({ view, covered, onBack, onExited, onCh
   return <div className="mw-view" data-view-id={view.id} data-kind={create ? 'new' : 'works'} data-closing={view.closing || undefined} inert={covered} aria-hidden={covered || undefined}>
     <div className="mw-view-scrim" aria-hidden="true"/>
     <div ref={panel} className="mw-view-panel" role="dialog" aria-modal="true" aria-label={create ? '新建作品' : title} tabIndex={-1} data-ready={loaded}>
-      {!chapters && <header className="mw-view-header">
+      {!chapters && <header className={`mw-view-header${create ? '' : ' mw-view-header-simple'}`}>
         {create ? <LoadingLogo size={32}/> : <button type="button" aria-label="返回创作中心" onClick={onBack}><ArrowLeft size={20}/></button>}
-        <div>{!create && <span>九天 · 创作者空间</span>}<h2>{create ? '创建新作品' : title}</h2></div>
-        {create ? <button type="button" aria-label="关闭新建作品" onClick={closeNew}><X size={22}/></button> : <BookOpen size={23}/>}
+        <div><h2>{create ? '创建新作品' : title}</h2></div>
+        {create && <button type="button" aria-label="关闭新建作品" onClick={closeNew}><X size={22}/></button>}
       </header>}
       <div className="mw-view-content">
         {!loaded && <div className="mw-view-loading" role="status" aria-live="polite">

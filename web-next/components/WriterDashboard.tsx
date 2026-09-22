@@ -256,7 +256,7 @@ export default function WriterDashboard({entry}: {entry: string}) {
 
   return (
     <div className="writer-page min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
-      <header className="writer-mobile-header"><button type="button" aria-label={fromCreationCenter ? '返回创作中心' : '返回阅读'} onClick={() => fromCreationCenter ? router.back() : router.push('/')}><ArrowLeft size={20}/></button><div><span>九天 · 创作者空间</span><h1>{currentView === 'statistics' ? '作品数据' : '作品管理'}</h1></div><PenTool size={23} aria-hidden="true"/></header>
+      <header className="writer-mobile-header"><button type="button" aria-label={fromCreationCenter ? '返回创作中心' : '返回阅读'} onClick={() => fromCreationCenter ? router.back() : router.push('/')}><ArrowLeft size={20}/></button><h1>{currentView === 'statistics' ? '作品数据' : '作品管理'}</h1></header>
       {/* Toast */}
       {toast && (
         <div className="writer-toast fixed top-4 left-1/2 transform -translate-x-1/2 z-[110] animate-in fade-in slide-in-from-top-4">

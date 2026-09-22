@@ -35,7 +35,7 @@ export default function WriterStatistics({onReady}: {onReady?: () => void}) {
   const path = points.map((p, i) => p.views === null ? '' : `${i === 0 || points[i - 1].views === null ? 'M' : 'L'}${x(i)},${y(p.views)}`).join(' ');
   const label = (date: string) => data?.period === 'month' ? date.slice(0, 7).replace('-', '/') : date.slice(5).replace('-', '/');
   return <section className="writer-statistics" aria-label="作品数据" aria-busy={loading}>
-    <div className="ws-intro"><h2>作品数据</h2><p>看见每一次阅读，陪故事慢慢成长。</p></div>
+    <div className="ws-intro"><h2>作品数据</h2></div>
     <div className="ws-cards">
       <article><Eye size={20}/><span>总浏览量</span><strong>{data ? data.totalViews.toLocaleString() : '—'}</strong><small>全部作品累计</small></article>
       <article><TrendingUp size={20}/><span>单章最高浏览量</span><strong>{data ? (data.bestChapter?.views || 0).toLocaleString() : '—'}</strong><small>{data?.bestChapter?.title || '暂无章节阅读'}</small></article>
@@ -51,10 +51,7 @@ export default function WriterStatistics({onReady}: {onReady?: () => void}) {
           </svg>
         </div>
         <div className="ws-history"><button type="button" disabled={!data?.hasPrevious} onClick={() => setEnd(data!.previousEnd)}><ChevronLeft size={17}/>更早</button><span>左右滑动查看</span><button type="button" disabled={!data?.hasNext} onClick={() => setEnd(data!.nextEnd)}>更近<ChevronRight size={17}/></button></div>
-        {points.every(p => !p.views) && <p className="ws-empty">这段时间暂无阅读，新的阅读会出现在这里。</p>}
-        <details className="ws-table"><summary>查看详细数据</summary><table><thead><tr><th>日期{period === 'week' ? '（周一开始）' : ''}</th><th>浏览量</th></tr></thead><tbody>{points.map(p => <tr key={p.date}><td>{p.date}</td><td>{p.views === null ? '未记录' : p.views.toLocaleString()}</td></tr>)}</tbody></table></details>
       </>}
     </section>
-    <p className="ws-note">按北京时间统计，同一读者当天阅读同一章计一次。{data && `趋势保留自 ${data.historyStart} 起的记录。`}单章浏览量从本次功能上线起累计。</p>
   </section>;
 }

@@ -63,11 +63,12 @@ for(const width of [320,390]) test(`mobile center, statistics and private draft 
   await expect(card).toContainText('私密');
   const cover=await card.locator('.mw-cover').boundingBox(), box=await card.boundingBox();
   const create=await card.getByRole('link',{name:'创作',exact:true}).boundingBox(), gear=await card.locator('summary').boundingBox();
-  expect(cover!.width).toBeLessThanOrEqual(76);
-  expect(box!.height).toBeLessThan(170);
-  expect(cover!.x+cover!.width).toBeLessThan(gear!.x);
-  expect(create!.width).toBeLessThanOrEqual(90);
-  expect(gear!.x+gear!.width).toBeLessThan(create!.x);
+  expect(cover!.height).toBeGreaterThan(cover!.width);
+  expect(box!.width).toBeLessThan(width / 2);
+  expect(gear!.x+gear!.width).toBeLessThanOrEqual(cover!.x+cover!.width);
+  expect(gear!.y).toBeLessThan(cover!.y+10);
+  expect(create!.y).toBeGreaterThanOrEqual(cover!.y+cover!.height);
+  expect(create!.width).toBeCloseTo(cover!.width,0);
   await expect(card.getByRole('link',{name:'创作',exact:true})).toHaveCSS('font-size','15px');
   await expect(card.locator('summary')).toHaveText('');
   expect(await center.evaluate(el=>el.scrollWidth<=innerWidth)).toBe(true);

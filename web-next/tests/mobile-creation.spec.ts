@@ -10,9 +10,16 @@ test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route('**/api/writer/statistics?**', route => route.fulfill({json:{points:[],totalViews:0,bestChapter:null,historyStart:'2026-09-13',hasPrevious:false,hasNext:false}}));
   await page.route('**/api/auth/session', route => route.fulfill({ json: { user: account, profile: account } }));
+  await page.route('**/api/auth/csrf', route => route.fulfill({json: {csrfToken: 'creation-test'}}));
   await page.route('**/api/writer/works?**', route => route.fulfill({ json: [book] }));
   await page.route(`**/api/books/${book.id}/chapters**`, route => route.fulfill({ json: [] }));
-  await page.route('**/api/writer/workspace/**',route=>route.fulfill({json:{work:{reference:'b_'+book.id,title:book.title,bookId:book.id,visibility:'public'},cloudDrafts:[{id:'legacy-test',title:'第一章 风起',content:'留给自己的未发布草稿。',number:1}],published:[],total:0,maxNumber:1,publishedDraftIds:[]}}));
+  await page.route('**/api/writer/workspace/**', route => {
+    if (route.request().method() === 'PUT') {
+      const draft = route.request().postDataJSON();
+      return route.fulfill({json: {...draft, cloudRevision: draft.revision + 1, contentLoaded: true}});
+    }
+    return route.fulfill({json:{work:{reference:'b_'+book.id,title:book.title,bookId:book.id,visibility:'public'},cloudDrafts:[{id:'legacy-test',title:'第一章 风起',content:'留给自己的未发布草稿。',number:1}],published:[],total:0,maxNumber:1,publishedDraftIds:[]}});
+  });
   await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
     const style = document.createElement('style'); style.textContent = 'nextjs-portal{display:none!important}'; document.head.append(style);
   }));
@@ -21,6 +28,10 @@ test.beforeEach(async ({ page }) => {
 for (const width of [320, 390, 430]) {
   test(`quarter-circle entry and creator workspace fit ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: 844 });
+    await page.route('**/api/writer/works?**', route => route.fulfill({json: [
+      {...book, visibility: 'private', cover_image: '/icon.png'},
+      {...book, id: '000000000000000000000200', title: '第二部故事', visibility: 'public'},
+    ]}));
     await page.goto(base);
     const entry = await launch(page).boundingBox();
     const bottom = await page.locator('.mh-bottom:visible').boundingBox();
@@ -39,20 +50,82 @@ for (const width of [320, 390, 430]) {
     await expect(modal(page).getByRole('heading', {name: '我的作品', exact: true})).toHaveCSS('font-size', '22px');
     await expect(modal(page)).not.toContainText('草稿仅');
     const card = page.locator('.mw-book').first();
-    const rightEdges = await card.evaluate(element => {
-      const card = element.getBoundingClientRect(), action = element.querySelector('.mw-book-actions>a')!.getBoundingClientRect();
-      return {gap: card.right - action.right, padding: parseFloat(getComputedStyle(element).paddingRight)};
-    });
-    expect(rightEdges.gap).toBeCloseTo(rightEdges.padding + 1, 0);
-    await card.locator('summary').click();
-    const menu = (await card.locator('.work-management-menu').boundingBox())!;
-    expect(menu.x).toBeGreaterThanOrEqual(0);
-    expect(menu.x + menu.width).toBeLessThanOrEqual(width);
-    await card.locator('summary').click();
+    const cover = (await card.locator('.mw-cover').boundingBox())!;
+    const privateTag = (await card.locator('.work-private').boundingBox())!;
+    const management = (await card.locator('summary').boundingBox())!;
+    const action = (await card.getByRole('link', {name: '创作', exact: true}).boundingBox())!;
+    const second = (await page.locator('.mw-book').nth(1).boundingBox())!;
+    expect(cover.height).toBeGreaterThan(cover.width);
+    expect(privateTag.x).toBeGreaterThanOrEqual(cover.x);
+    expect(privateTag.y - cover.y).toBeLessThanOrEqual(10);
+    expect(privateTag.x + privateTag.width).toBeLessThan(management.x);
+    expect(management.x + management.width).toBeLessThanOrEqual(cover.x + cover.width);
+    expect(management.y - cover.y).toBeLessThanOrEqual(8);
+    expect(action.y).toBeGreaterThanOrEqual(cover.y + cover.height);
+    expect(action.height).toBeGreaterThanOrEqual(44);
+    expect(action.width).toBeCloseTo(cover.width, 0);
+    expect(second.x).toBeGreaterThan(cover.x + cover.width);
+    await expect(card.locator('summary .lucide-ellipsis')).toBeVisible();
+    for (const work of await page.locator('.mw-book').all()) {
+      await work.locator('summary').click();
+      const menu = (await work.locator('.work-management-menu').boundingBox())!;
+      expect(menu.x).toBeGreaterThanOrEqual(0);
+      expect(menu.x + menu.width).toBeLessThanOrEqual(width);
+      await expect(work.getByRole('button', {name: '编辑作品'})).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(modal(page)).toBeVisible();
+      await expect(work.locator('details')).not.toHaveAttribute('open');
+    }
     expect(await modal(page).evaluate(element => element.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: info.outputPath(`center-${width}.png`) });
   });
 }
+
+for (const width of [320, 390, 430, 1440]) test(`compact statistics and period navigation at ${width}px`, async ({page}, info) => {
+  await page.setViewportSize({width, height: 900});
+  await page.route('**/api/writer/statistics?**', route => {
+    const query = new URL(route.request().url()).searchParams;
+    return route.fulfill({json: {period: query.get('period'), points: Array.from({length: 10}, (_, i) => ({date: `2026-09-${String(i + 10).padStart(2, '0')}`, views: i === 0 ? null : 0})), totalViews: 0, bestChapter: null, historyStart: '2026-09-11', hasPrevious: !query.has('end'), hasNext: query.has('end'), previousEnd: '2026-09-09', nextEnd: '2026-09-19'}});
+  });
+  if (width < 768) {
+    await page.goto(base); await launch(page).click();
+    await modal(page).getByRole('link', {name: /作品数据/}).click();
+    await expect(page.locator('.mw-view-panel')).toHaveAttribute('data-ready', 'true');
+    const header = page.locator('.mw-view-header');
+    await expect(header.getByRole('heading', {name: '作品数据'})).toHaveCSS('font-size', '19px');
+    await expect(header.getByRole('button', {name: '返回创作中心'})).toHaveCSS('border-top-width', '0px');
+    expect((await header.boundingBox())!.height).toBeLessThanOrEqual(60);
+    expect((await page.locator('.ws-cards article').first().boundingBox())!.height).toBeLessThan(145);
+  } else {
+    await page.goto(base + '/writer?action=statistics');
+    await expect(page.locator('.ws-intro h2')).toBeVisible();
+    await expect(page.locator('.writer-mobile-header')).toBeHidden();
+  }
+  const statistics = page.locator('.writer-statistics');
+  for (const removed of ['看见每一次阅读', '这段时间暂无阅读', '按北京时间', '查看详细数据']) await expect(statistics).not.toContainText(removed);
+  await expect(page.getByText('九天 · 创作者空间', {exact: true})).toHaveCount(0);
+  await expect(statistics.locator('table, details')).toHaveCount(0);
+  for (const period of ['每周', '每月', '每日']) {
+    await statistics.getByRole('button', {name: period, exact: true}).click();
+    await expect(statistics).toHaveAttribute('aria-busy', 'false');
+    await expect(statistics.getByRole('button', {name: period, exact: true})).toHaveAttribute('aria-pressed', 'true');
+  }
+  await statistics.getByRole('button', {name: '更早', exact: true}).click();
+  await expect(statistics.getByRole('button', {name: '更近', exact: true})).toBeEnabled();
+  await statistics.getByRole('button', {name: '更近', exact: true}).click();
+  await expect(statistics).toHaveAttribute('aria-busy', 'false');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({path: info.outputPath(`verified-statistics-${width}.png`)});
+  if (width < 768) {
+    await page.getByRole('button', {name: '返回创作中心', exact: true}).click();
+    await expect(page.locator('.mw-view')).toHaveCount(0);
+    await expect(modal(page)).toBeVisible();
+  } else {
+    await page.getByRole('button', {name: '作品管理', exact: true}).click();
+    await expect(page.locator('.writer-work summary .lucide-settings')).toBeVisible();
+    await expect(page.locator('.work-cover-shortcut')).toBeVisible();
+  }
+});
 
 test('opening uses a radial reveal and Back/Forward, Escape and focus restore correctly', async ({ page }, info) => {
   await page.goto(base); await page.evaluate(() => scrollTo(0, 180));
@@ -113,7 +186,7 @@ for (const width of [320, 390]) test(`creator actions open the matching creation
   await modal(page).getByRole('link', { name: '创作', exact: true }).click();
   await expect(page.getByRole('tab',{name:/草稿箱/})).toBeVisible();
   await page.screenshot({ path: info.outputPath(`manager-${width}.png`) });
-  await page.locator('.writing-chapter').filter({hasText:'第一章 风起'}).click();
+  await page.locator('.writing-chapter').filter({hasText:'风起'}).click();
   await expect(page.getByLabel('正文',{exact:true})).toHaveValue('留给自己的未发布草稿。');
 });
 

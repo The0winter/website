@@ -1,13 +1,13 @@
 'use client';
 import {useRef, useState} from 'react';
-import {LockKeyhole, Trash2, Settings, Pencil} from 'lucide-react';
+import {LockKeyhole, Trash2, Settings, Ellipsis, Pencil} from 'lucide-react';
 import {type Book} from '@/lib/api';
 import {safeFetch} from '@/lib/request';
 import './work-actions.css';
 import WorkEditor from './WorkEditor';
 import WorkCoverButton from './WorkCoverButton';
 
-export default function WorkActions({book, onChanged}: {book: Book; onChanged: () => void}) {
+export default function WorkActions({book, onChanged, menuIcon = 'settings'}: {book: Book; onChanged: () => void; menuIcon?: 'settings' | 'more'}) {
   const menu = useRef<HTMLDetailsElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -28,8 +28,8 @@ export default function WorkActions({book, onChanged}: {book: Book; onChanged: (
   };
   return <div className="work-management">
     <WorkCoverButton book={book} onChanged={onChanged}/>
-    <details ref={menu} onKeyDown={event => {if (event.key === 'Escape' && menu.current) {menu.current.open = false; menu.current.querySelector('summary')?.focus();}}}>
-      <summary aria-label={`管理《${book.title}》`} title="管理作品"><Settings size={22} aria-hidden="true"/></summary>
+    <details ref={menu} onKeyDown={event => {if (event.key === 'Escape' && menu.current?.open) {event.preventDefault(); event.stopPropagation(); menu.current.open = false; menu.current.querySelector('summary')?.focus();}}}>
+      <summary aria-label={`管理《${book.title}》`} title="管理作品">{menuIcon === 'more' ? <Ellipsis size={22} aria-hidden="true"/> : <Settings size={22} aria-hidden="true"/>}</summary>
       <div className="work-management-menu">
         <button type="button" disabled={busy} onClick={()=>{if(menu.current)menu.current.open=false;setEditing(true);}}><Pencil size={16}/>编辑作品</button>
         <button type="button" disabled={busy || Boolean(book.manuscriptKey)} onClick={() => void change(book.visibility === 'private' ? 'public' : 'private')}><LockKeyhole size={16}/>{book.manuscriptKey ? '已为私密' : book.visibility === 'private' ? '公开作品' : '转为私密'}</button>
