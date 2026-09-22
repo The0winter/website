@@ -1,8 +1,8 @@
 'use client';
 
 // Share parsed styles across the two moving surfaces. Unlike book/reader
-// transitions, section pages have no sticky catalog or nested scroll positions
-// to freeze, so they need no per-element computed-style/layout walk.
+// transitions, only the banner and horizontal shelves need their scroll offsets
+// frozen; the rest needs no per-element computed-style/layout walk.
 const styles = new WeakMap<CSSStyleSheet, {length: number; text: string; sheet?: CSSStyleSheet}>();
 const reset = '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}';
 let resetSheet: CSSStyleSheet | undefined;
@@ -79,11 +79,20 @@ export function captureMobileSection(source: HTMLElement, top: number, height: n
   }
   const box = source.getBoundingClientRect();
   const content = source.cloneNode(true) as HTMLElement;
+  // cloneNode drops scrollLeft. Freeze these small, known rails into the
+  // snapshot so the cover, dots and shelf books stay on the same visible page.
+  const rails = source.querySelectorAll<HTMLElement>('.mh-banner-track, .mh-shelf');
+  content.querySelectorAll<HTMLElement>('.mh-banner-track, .mh-shelf').forEach((rail, index) => {
+    rail.style.scrollSnapType = 'none';
+    rail.style.overflowX = 'clip';
+    for (const child of rail.children) (child as HTMLElement).style.translate = `${-rails[index].scrollLeft}px 0`;
+  });
   // Root-scoped font variables do not resolve identically inside a shadow
   // tree. Preserve the source font so the frame and real route use the same face.
   content.style.fontFamily = getComputedStyle(source).fontFamily;
   content.querySelectorAll('.mh-bottom, script, iframe').forEach(child => child.remove());
   if (!header) content.querySelectorAll<HTMLElement>('.mh-topbar').forEach(bar => {bar.style.visibility = 'hidden';});
+  if (!header) content.querySelectorAll<HTMLElement>('.library-search-header, .forum-masthead').forEach(bar => {bar.style.position = 'static';});
   Object.assign(content.style, {position: 'relative', top: `${box.top - top}px`, left: `${box.left}px`, width: `${box.width}px`, margin: '0'});
   // The forum's floating publish button is the only remaining fixed control.
   const publish = source.querySelector<HTMLElement>('.forum-publish');

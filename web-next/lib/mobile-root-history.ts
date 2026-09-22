@@ -1,4 +1,5 @@
 import {beginMobileSectionReturn, beginMobileSectionTransition} from './mobile-section-navigation';
+import {trackMobileHomeRoute} from './mobile-home-position';
 
 type Position = {version: 1; visit: string; index: number};
 type State = Record<string, unknown> & {mobileRoot?: Position};
@@ -38,7 +39,7 @@ export function installMobileRootHistory(router: Router) {
   let path = href();
   let returning: {source: string} | undefined;
 
-  const remember = () => {current = history.state; path = href();};
+  const remember = () => {current = history.state; path = href(); trackMobileHomeRoute(path);};
   const push: History['pushState'] = function (data, unused, url) {
     if (installation !== token) return originalPush.call(history, data, unused, url);
     position = {...position, index: position.index + 1};

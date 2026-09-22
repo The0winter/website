@@ -345,7 +345,7 @@ function Library() {
     onClickCapture={event => {if (suppressSwipeClick.current && event.nativeEvent.isTrusted) {event.preventDefault(); event.stopPropagation(); suppressSwipeClick.current = false;}}}>
     <div className="library-inner">
       <h1 className="sr-only">我的书架</h1>
-      <div inert={managing}><HomeSearchHeader/></div>
+      <div className="library-search-header" inert={managing}><HomeSearchHeader/></div>
       <section className="shelf-panel" aria-label="个人书架">
         <LibraryToolbar tabs={tabs} tab={tab} sort={sort} managing={managing} empty={!rows.length}
           onTab={value => changeView(value, 1)} onManage={() => managing ? finishManaging() : startManaging()}

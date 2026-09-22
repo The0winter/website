@@ -2,13 +2,14 @@
 
 import {sectionSwipeThreshold, SECTION_TURN_DURATION, SECTION_TURN_EASING} from './section-swipe';
 import {captureMobileSection, captureMobileSectionShell} from './mobile-section-snapshot';
+import {mobileHomeScroll, rememberMobileHomeScroll} from './mobile-home-position';
 
 type Section = 'library' | 'home' | 'forum';
 export type MobileSectionDrag = {update: (dx: number) => void; release: (commit: boolean) => void; cancel: () => void};
 const sections = ['/library', '/', '/forum'];
 const selectors = ['.library-page', '.mobile-home', '.forum-page'];
 let active: {href: string; commit: () => void; cancel: () => void; interrupt: () => boolean; pending: () => boolean; index: number; pane: HTMLElement} | undefined;
-const previews = new Map<number, {element: HTMLElement; key: string}>();
+const previews = new Map<number, {element: HTMLElement; key: string; scroll: number}>();
 let previewUser: string | undefined;
 let navigate: ((href: string) => void) | undefined;
 export function setMobileSectionNavigator(callback: (href: string) => void) {
@@ -55,15 +56,22 @@ function createTransition(href: string, dragging = false, sourceHref = location.
   const key = `${previewUser}:${width}:${top}:${root.className}:${getComputedStyle(root).getPropertyValue('--home-background')}`;
   const animations: Animation[] = [];
   let frame = 0, cancelled = false, committed = false, returning = false, motionDone = false, offset = 0;
-  // Entry routes start at the top and select the first inner tab.
-  const cacheSource = previous || scrollY === 0 && (from === 1 || (from === 0
+  rememberMobileHomeScroll();
+  const sourceScroll = previous && from === 1 ? mobileHomeScroll() : scrollY;
+  // Featured retains its browsing position. The other entry routes continue
+  // to start at their first inner tab, so only cache their top-level frames.
+  const cacheSource = previous || from === 1 || scrollY === 0 && (from === 0
     ? source.querySelector('#tab-shelf[aria-selected="true"]')
-    : source.querySelector('[aria-label="论坛内容分类"] [aria-current="page"]')?.textContent === '推荐'));
+    : source.querySelector('[aria-label="论坛内容分类"] [aria-current="page"]')?.textContent === '推荐');
   const outgoing = previous?.pane ?? captureMobileSection(source, top, height).element;
   if (previous) previews.delete(from);
   outgoing.dataset.sectionPane = 'outgoing';
   const header = captureMobileSection(bar, 0, top, true);
-  const cached = to === 0 ? undefined : previews.get(to);
+  const preview = (index: number) => {
+    const saved = index === 0 ? undefined : previews.get(index);
+    return saved?.key === key && (index !== 1 || saved.scroll === mobileHomeScroll()) ? saved : undefined;
+  };
+  const cached = preview(to);
   const incoming = cached?.key === key ? cached.element : captureMobileSectionShell(target.pathname, top, height);
   if (!incoming) return;
   if (cached?.key === key) previews.delete(to);
@@ -89,7 +97,7 @@ function createTransition(href: string, dragging = false, sourceHref = location.
     observer.disconnect();
     animations.forEach(animation => animation.cancel());
     [outgoing, incoming, backdrop, header.element].forEach(element => element.remove());
-    if (cacheSource) {outgoing.style.transform = ''; previews.set(from, {element: outgoing, key});}
+    if (cacheSource) {outgoing.style.transform = ''; previews.set(from, {element: outgoing, key, scroll: sourceScroll});}
     if (cached?.element === incoming) {incoming.style.transform = ''; previews.set(to, cached);}
     window.removeEventListener('popstate', cancel);
     window.removeEventListener('pagehide', clear);
@@ -194,7 +202,7 @@ function createTransition(href: string, dragging = false, sourceHref = location.
     if (next < 0 || next >= sections.length) {pendingCancel(); return;}
     if (gesture.next !== next) {
       gesture.preview?.remove();
-      const cached = previews.get(next);
+      const cached = preview(next);
       gesture.preview = cached?.key === key ? cached.element : captureMobileSectionShell(sections[next], top, height);
       if (!gesture.preview) return;
       gesture.next = next;

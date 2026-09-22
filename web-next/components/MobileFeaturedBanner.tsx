@@ -10,11 +10,13 @@ export default function MobileFeaturedBanner({books}: {books: Book[]}) {
   const root = useRef<HTMLElement>(null), track = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
   const activeIndex = useRef(0);
-  const lastInteraction = useRef(0);
+  const restartTimer = useRef<() => void>(() => {});
   const requested = useRef<number | null>(null), touching = useRef(false);
   const count = Math.min(3, books.length);
   const offset = count > 1 ? 1 : 0;
+  function interact() {requested.current = null; restartTimer.current();}
   function move(index: number) {
+    restartTimer.current();
     const host = track.current;
     if (!host || count < 2 || !host.clientWidth) return;
     const current = Math.round(host.scrollLeft / host.clientWidth) - offset;
@@ -69,27 +71,37 @@ export default function MobileFeaturedBanner({books}: {books: Book[]}) {
     const host = root.current, rail = track.current;
     if (!host || !rail || count < 2) return;
     let visible = false;
-    const observer = new IntersectionObserver(entries => {visible = entries[0].isIntersecting;}, {threshold: .6});
+    let timer: ReturnType<typeof setTimeout>;
+    const restart = () => {clearTimeout(timer); timer = setTimeout(advance, 6000);};
+    const advance = () => {
+      if (visible && !touching.current && document.visibilityState === 'visible' && location.pathname === '/' &&
+        !document.documentElement.dataset.mobileSectionTransition && !host.contains(document.activeElement) &&
+        !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        const current = Math.round(rail.scrollLeft / rail.clientWidth);
+        requested.current = null;
+        rail.scrollTo({left: Math.min(current + 1, count + 1) * rail.clientWidth, behavior: 'smooth'});
+      }
+      restart();
+    };
+    restartTimer.current = restart;
+    const observer = new IntersectionObserver(entries => {visible = entries[0].isIntersecting; restart();}, {threshold: .6});
     observer.observe(host);
-    const timer = setInterval(() => {
-      if (!visible || touching.current || document.visibilityState !== 'visible' || location.pathname !== '/' ||
-        host.contains(document.activeElement) || matchMedia('(prefers-reduced-motion: reduce)').matches ||
-        Date.now() - lastInteraction.current < 6000) return;
-      const current = Math.round(rail.scrollLeft / rail.clientWidth);
-      requested.current = null;
-      rail.scrollTo({left: Math.min(current + 1, count + 1) * rail.clientWidth, behavior: 'smooth'});
-    }, 6000);
-    return () => {clearInterval(timer); observer.disconnect();};
+    const transition = new MutationObserver(restart);
+    transition.observe(document.documentElement, {attributes: true, attributeFilter: ['data-mobile-section-transition']});
+    document.addEventListener('visibilitychange', restart);
+    host.addEventListener('focusout', restart);
+    restart();
+    return () => {clearTimeout(timer); restartTimer.current = () => {}; observer.disconnect(); transition.disconnect(); document.removeEventListener('visibilitychange', restart); host.removeEventListener('focusout', restart);};
   }, [count]);
   if (!count) return null;
   const selected = books.slice(0, count);
   const slides = count > 1 ? [selected[count - 1], ...selected, selected[0]] : selected;
   return <section ref={root} className="mh-carousel" aria-label="每日精选推荐" aria-roledescription="轮播图"
-    onPointerDown={() => {requested.current = null; lastInteraction.current = Date.now();}}
-    onWheel={() => {requested.current = null; lastInteraction.current = Date.now();}}
-    onTouchStart={() => {touching.current = true; requested.current = null; lastInteraction.current = Date.now();}}
-    onTouchEnd={() => {touching.current = false; lastInteraction.current = Date.now();}}
-    onTouchCancel={() => {touching.current = false; lastInteraction.current = Date.now();}}>
+    onPointerDown={interact}
+    onWheel={interact}
+    onTouchStart={() => {touching.current = true; interact();}}
+    onTouchEnd={() => {touching.current = false; restartTimer.current();}}
+    onTouchCancel={() => {touching.current = false; restartTimer.current();}}>
     <div ref={track} className="mh-banner-track" onScroll={event => {
       const host = event.currentTarget;
       if (!host.clientWidth) return;
@@ -98,7 +110,7 @@ export default function MobileFeaturedBanner({books}: {books: Book[]}) {
       setActive(index);
     }} onKeyDown={event => {
       if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-        event.preventDefault(); lastInteraction.current = Date.now();
+        event.preventDefault();
         move((active + (event.key === 'ArrowRight' ? 1 : count - 1)) % count);
       }
     }}>

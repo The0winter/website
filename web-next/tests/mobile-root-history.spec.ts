@@ -161,7 +161,7 @@ test('desktop keeps normal browser Back between sections', async ({page}) => {
 
 test('reader and book details still return one level at a time before leaving Featured', async ({page}) => {
   await setup(page);
-  await page.locator('.mobile-home a[href^="/book/"]').first().click();
+  await page.locator('.mobile-home a[href^="/book/"]:not([data-banner-clone])').first().click();
   await expect(page.locator('.book-detail:visible')).toBeVisible();
   const detail = page.url();
   await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);

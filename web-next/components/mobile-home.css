@@ -14,7 +14,8 @@
   .mh-carousel { position:relative; border-radius:14px; overflow:hidden; }
   .mh-banner-track { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none; overscroll-behavior-x:contain; touch-action:manipulation; }
   .mh-banner-track::-webkit-scrollbar { display:none; }
-  .mh-banner-track .mh-banner { flex:0 0 100%; min-width:0; height:140px; padding:14px 20px 24px; scroll-snap-align:start; scroll-snap-stop:always; border-radius:0; }
+  .mh-banner-track .mh-banner,.mh-banner-shell { height:140px; padding:14px 20px 24px; }
+  .mh-banner-track .mh-banner { flex:0 0 100%; min-width:0; scroll-snap-align:start; scroll-snap-stop:always; border-radius:0; }
   .mh-banner-controls { position:absolute; bottom:2px; left:12px; right:12px; display:flex; align-items:center; justify-content:space-between; pointer-events:none; }
   .mh-banner-controls button { display:grid; place-items:center; width:32px; height:30px; color:#ffebc5; pointer-events:auto; border-radius:5px; }
   .mh-banner-dots { display:flex; gap:0; }
@@ -33,8 +34,8 @@
   .mh-section { background:#fffaf7; border-radius:16px; padding:18px 14px 4px; margin-top:10px; }
   .mh-section header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:17px; }
   .mh-section h2 { font-size:21px; font-weight:600; }
-  .mh-section-rows,.mh-section-shelf { padding-top:12px; }
-  .mh-section-rows header,.mh-section-shelf header { margin-bottom:10px; }
+  .mh-section-rows,.mh-section-shelf { padding-top:16px; }
+  .mh-section-rows header,.mh-section-shelf header { margin-bottom:14px; }
   .mh-section-rows h2,.mh-section-shelf h2 { font-size:19px; line-height:1.4; }
   .mh-section-rows .mh-book:last-child { margin-bottom:12px; }
   .mh-section header>a,.mh-section header>button { display:flex; align-items:center; gap:2px; border:1px solid #eee5dd; border-radius:18px; padding:3px 9px; color:#a29a92; font-size:12px; }
@@ -43,11 +44,12 @@
   .mh-cover img { width:100%; height:100%; object-fit:cover; }
   .mh-cover>span { font-size:9px; padding:0 6px; text-align:center; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .mh-book-info { min-width:0; flex:1; display:flex; flex-direction:column; }
-  .mh-book-heading { display:flex; align-items:baseline; gap:7px; min-width:0; }
+  .mh-book-heading { display:flex; align-items:center; gap:7px; min-width:0; }
   .mh-book-heading h3 { min-width:0; flex:1; }
   .mh-book .mh-book-heading { margin-bottom:5px; }
   .mh-book h3 { font-size:17px; line-height:1.4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .mh-book-rating { flex-shrink:0; color:#b16a2f; font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .mh-book-rating { display:inline-flex; align-items:center; gap:3px; flex-shrink:0; color:#b16a2f; font-size:14px; line-height:1.4; font-weight:600; font-variant-numeric:tabular-nums; }
+  .mh-book-rating svg { width:12px; height:12px; fill:currentColor; stroke-width:1.5; }
   .mh-book-rating[data-rated=false] { color:var(--home-muted); }
   .dark .mh-book-rating[data-rated=true] { color:#e5b278; }
   .mh-book p { font-size:13px; line-height:1.65; color:#999188; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
@@ -64,9 +66,10 @@
   .mh-shelf::-webkit-scrollbar { display:none; }
   .mh-shelf-book { flex:0 0 calc((100% - 36px)/3.35); min-width:0; }
   .mh-shelf .mh-cover { width:100%; height:auto; aspect-ratio:3/4; }
-  .mh-shelf .mh-book-heading { align-items:flex-start; gap:4px; margin:8px 0 4px; }
-  .mh-shelf .mh-book-rating { font-size:11px; line-height:20px; }
-  .mh-shelf h3 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:2.9em; font-size:14px; line-height:1.45; font-weight:500; overflow-wrap:anywhere; }
+  .mh-shelf-cover { position:relative; }
+  .mh-shelf .mh-book-rating { position:absolute; top:4px; right:4px; gap:2px; padding:2px 4px; border-radius:4px; color:#ffe0a5; background:#251d19d9; font-size:12px; box-shadow:0 1px 4px #0002; }
+  .mh-shelf .mh-book-rating svg { width:10px; height:10px; }
+  .mh-shelf h3 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:2.9em; margin:8px 0 4px; font-size:14px; line-height:1.45; font-weight:500; overflow-wrap:anywhere; }
   .mh-shelf p { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--home-muted); font-size:11px; }
   .mh-shelf:focus-visible,.mh-shelf-book:focus-visible { outline:2px solid var(--home-accent); outline-offset:-2px; border-radius:5px; }
   .mh-feed-end { padding:26px 0 12px; text-align:center; color:var(--home-muted); font-size:12px; }
