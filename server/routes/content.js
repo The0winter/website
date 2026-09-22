@@ -141,15 +141,22 @@ export function contentRoutes(app,auth) {
     });res.json({success:true});
   }));
   app.post('/api/books/:id/reviews',auth.authenticate,asyncRoute(async(req,res)=>{
-    const {rating,content}=req.body;
-    if(!Number.isInteger(rating)||rating<1||rating>5||typeof content!=='string'||!content.trim()||content.length>4000)fail(400,'评分须为1—5整数，评价1—4000字');
+    fields(req.body,['rating','content']);
+    const {rating}=req.body;
+    const content=Object.hasOwn(req.body,'content') ? req.body.content : '';
+    if(!Number.isInteger(rating)||rating<1||rating>5||typeof content!=='string'||content.length>4000)fail(400,'评分须为1—5整数，短评可不填，最多4000字');
     let review;
     await mongoose.connection.transaction(async session=>{
       // Serialize review summaries against all other mutations on this book.
       const book = await lockBook(req.params.id,{role:'import'},session);
-      review=await Review.findOneAndUpdate({book:req.params.id,user:req.user.id},{$set:{rating,content}},{new:true,upsert:true,runValidators:true,session});
+      // Omitting content edits only the score; an explicit empty string removes
+      // the reader's own text without deleting their vote.
+      const update={rating};
+      if(Object.hasOwn(req.body,'content'))update.content=content.trim();
+      review=await Review.findOneAndUpdate({book:req.params.id,user:req.user.id},{$set:update},{new:true,upsert:true,runValidators:true,session});
       const [stats]=await Review.aggregate([{$match:{book:new mongoose.Types.ObjectId(req.params.id)}},{$group:{_id:null,rating:{$avg:'$rating'},count:{$sum:1}}}]).session(session);
-      await Book.updateOne({_id:req.params.id},{$set:{rating:combinedRating(book,stats.rating,stats.count),numReviews:stats.count}},{session});
+      const comments=await Review.countDocuments({book:req.params.id,content:/\S/}).session(session);
+      await Book.updateOne({_id:req.params.id},{$set:{rating:combinedRating(book,stats?.rating,stats?.count),numRatings:stats?.count || 0,numReviews:comments}},{session});
     });res.status(201).json(await Review.findById(review._id).populate('user','username avatar'));
   }));
 }

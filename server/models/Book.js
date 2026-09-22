@@ -10,6 +10,13 @@ const bookSchema = new mongoose.Schema({
     favorites: {type: Number, min: 0, required: true},
     rating: {type: Number, min: 0, max: 5, required: true},
     ratingWeight: {type: Number, min: 1, required: true},
+    ratingSample: {type: new mongoose.Schema({
+      version: {type: Number, enum: [1], required: true},
+      runId: {type: String, required: true},
+      views: {type: Number, min: 0, required: true},
+      initializedAt: {type: Date, required: true},
+      votes: {type: [Number], required: true, validate: values => values.length >= 1 && values.length <= 50 && values.every(value => Number.isInteger(value) && value >= 1 && value <= 5)},
+    }, {_id: false}), default: undefined},
     initializedAt: {type: Date, required: true},
   }, {_id: false}), default: undefined},
   milestoneVersion: {type: Number, default: 0},
@@ -57,6 +64,7 @@ const bookSchema = new mongoose.Schema({
     type: Number, 
     default: 0 
   },
+  numRatings: {type: Number, default: 0, min: 0},
 
   // --- 爬虫专用字段 (已保留) ---
   sourceUrl: { type: String },

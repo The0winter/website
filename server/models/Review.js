@@ -2,10 +2,10 @@ import mongoose from 'mongoose';
 
 const reviewSchema = new mongoose.Schema({
   // 评分 (1-5星)
-  rating: { type: Number, required: true, min: 1, max: 5 },
+  rating: { type: Number, required: true, min: 1, max: 5, validate: Number.isInteger },
   
   // 评论内容
-  content: { type: String, required: true },
+  content: { type: String, default: '', maxlength: 4000 },
   likedBy: { type: [mongoose.Schema.Types.ObjectId], default: [], select: false },
   dislikedBy: { type: [mongoose.Schema.Types.ObjectId], default: [], select: false },
   

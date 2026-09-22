@@ -45,7 +45,7 @@ for (const width of [320, 390, 1440]) test(`ten-point ratings preserve saved sta
   await expect(uploadedAvatar).toHaveAttribute('src', reviews[1].user.avatar!);
   await expect.poll(() => uploadedAvatar.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
   await page.getByRole('button', {name:'写书评', exact:true}).click();
-  await expect(page.getByRole('button', {name:'发表评论', exact:true})).toBeDisabled();
+  await expect(page.getByRole('button', {name:'提交评分', exact:true})).toBeDisabled();
   await expect(page.getByRole('group', {name:'选择评分，最低 2 分，最高 10 分'}).getByRole('button', {pressed:true})).toHaveCount(0);
   for (let star=1; star<=5; star++) {
     await page.getByRole('button', {name:`${star*2} 分（${star} 星）`, exact:true}).click();
@@ -83,4 +83,52 @@ test('initialized score survives loading an empty real review list', async ({pag
   await expect(page.locator('.book-mobile-rating strong')).toHaveText('9.5');
   await page.reload();
   await expect(page.locator('.book-mobile-rating strong')).toHaveText('9.5');
+});
+
+for (const width of [320, 390, 1440]) test(`rating without text counts one reader, keeps comments empty and edits in place at ${width}px`, async ({page}, info) => {
+  await page.setViewportSize({width, height: 900});
+  let mine: {rating: number; content: string; _id: string; user: typeof reader; createdAt: string} | null = null;
+  const writes: unknown[] = [];
+  await page.route('**/api/**', async route => {
+    const request = route.request(), url = new URL(request.url());
+    if (url.pathname === '/api/auth/session') return route.fulfill({json: {user: reader, profile: reader}});
+    if (url.pathname === '/api/auth/csrf') return route.fulfill({json: {csrfToken: 'rating-fixture'}});
+    if (url.pathname.endsWith('/check')) return route.fulfill({json: {isBookmarked: false}});
+    if (url.pathname === `/api/books/${book}/reviews/mine`) return route.fulfill({json: mine});
+    if (url.pathname === `/api/books/${book}/reviews`) {
+      if (request.method() === 'POST') {
+        const input = request.postDataJSON(); writes.push(input);
+        mine = {...input, _id: 'mine', user: reader, createdAt: '2026-09-22T12:00:00Z'};
+        return route.fulfill({status: 201, json: mine});
+      }
+      const summary = {rating: (9 + (mine?.rating || 0)) / (2 + Number(Boolean(mine))), baselineCount: 2, readerCount: Number(Boolean(mine))};
+      return route.fulfill({json: [], headers: {'X-Total-Count': '0', 'X-Book-Rating': String(summary.rating), 'X-Rating-Summary': JSON.stringify(summary)}});
+    }
+    if (url.pathname.endsWith('/history') && request.method() === 'POST') return route.fulfill({json: {success: true}});
+    if (!['GET', 'HEAD'].includes(request.method())) throw Error('Unexpected write: ' + url.pathname);
+    return route.continue();
+  });
+  page.on('dialog', dialog => dialog.accept());
+  await page.goto(`${base}/book/${book}`);
+  const score = page.locator(width < 768 ? '.book-mobile-rating strong:visible' : '.book-rating-score:visible');
+  await expect(score).toHaveText('9.0');
+  await expect(page.locator('.book-rating-counts:visible')).toHaveText('0 人评分 · 2 份基础评分');
+  await page.getByRole('button', {name: '我要评分', exact: true}).click();
+  await page.getByRole('button', {name: '2 分（1 星）', exact: true}).click();
+  await page.getByRole('button', {name: '提交评分', exact: true}).click();
+  await expect(score).toHaveText('6.7');
+  await expect(page.locator('.book-rating-counts:visible')).toHaveText('1 人评分 · 2 份基础评分');
+  await expect(page.locator('#reviews-tab small')).toHaveText('0');
+  await expect(page.locator('.book-review-list article')).toHaveCount(0);
+  await page.reload();
+  await page.getByRole('button', {name: '修改评分', exact: true}).click();
+  await expect(page.getByRole('button', {name: '2 分（1 星）', exact: true})).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', {name: '10 分（5 星）', exact: true}).click();
+  await page.getByRole('button', {name: '提交评分', exact: true}).click();
+  await expect(score).toHaveText('9.3');
+  await expect(page.locator('.book-rating-counts:visible')).toHaveText('1 人评分 · 2 份基础评分');
+  expect(writes).toEqual([{rating: 1, content: ''}, {rating: 5, content: ''}]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.screenshot({path: info.outputPath('verified-rating.png')});
 });
