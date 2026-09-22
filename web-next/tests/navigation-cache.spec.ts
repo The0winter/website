@@ -78,7 +78,7 @@ test('a synthetic home predecessor still loads its actual route after a direct d
 
 test('reload invalidates earlier cache markers and keeps Back functional', async ({page}) => {
   await page.goto(base);
-  await page.locator(`.mh-banner[href="${detail}"]`).click();
+  await page.locator(`.mh-banner:not([data-banner-clone])[href="${detail}"]`).click();
   await expect(page).toHaveURL(base + detail);
   await idle(page);
   await page.reload();

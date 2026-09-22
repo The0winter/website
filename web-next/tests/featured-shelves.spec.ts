@@ -1,4 +1,5 @@
 import {test, expect, type Page} from '@playwright/test';
+import {formatRating} from '../lib/rating';
 
 const base = process.env.FEATURED_BASE || 'http://127.0.0.1:3000';
 test.use({hasTouch: true});
@@ -30,10 +31,18 @@ for (const width of [320, 390, 767]) test(`daily banner and 56 unique feed recom
   await expect(links).toHaveCount(56);
   const hrefs = await links.evaluateAll(nodes => nodes.map(node => node.getAttribute('href')));
   expect(new Set(hrefs).size).toBe(56);
-  const banner = await home.locator('.mh-banner').evaluateAll(nodes => nodes.map(node => node.getAttribute('href')));
+  const banner = await home.locator('.mh-banner:not([data-banner-clone])').evaluateAll(nodes => nodes.map(node => node.getAttribute('href')));
   expect(banner).toHaveLength(3);
   expect(banner.filter(href => hrefs.includes(href))).toHaveLength(0);
   expect(hrefs.filter(href => top.includes(href))).toHaveLength(0);
+  const discovery = await (await request.get(`${base}/api/books?orderBy=discovery&limit=59`)).json();
+  const scores = await links.evaluateAll(nodes => nodes.map(node => ({href: node.getAttribute('href'), score: node.querySelector('.mh-book-rating')?.textContent})));
+  for (const {href, score} of scores) {
+    const book = discovery.find((book: {id: string}) => href === `/book/${book.id}`);
+    const expected = formatRating(book.rating);
+    expect(score).toBe(expected === '暂无评分' ? '—' : expected);
+  }
+  await expect(home.locator('.mh-section h2').first()).toHaveCSS('font-size', '19px');
   for (let i = 0; i < 12; i++) {
     const section = home.locator('.mh-section').nth(i);
     await expect(section.locator(i % 3 === 2 ? '.mh-shelf-book' : '.mh-book')).toHaveCount(i % 3 === 2 ? 8 : 3);

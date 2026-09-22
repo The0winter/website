@@ -17,7 +17,7 @@ for (const width of [320, 390, 767]) test(`daily three-book carousel swipes with
   await page.setViewportSize({width, height: 844});
   await page.goto(base);
   const books = await (await request.get(`${base}/api/books?orderBy=featured_daily&limit=3`)).json();
-  const rail = page.locator('.mh-banner-track'), slides = rail.locator('.mh-banner');
+  const rail = page.locator('.mh-banner-track'), slides = rail.locator('.mh-banner:not([data-banner-clone])');
   await expect(slides).toHaveCount(3);
   expect(await slides.evaluateAll(links => links.map(link => link.getAttribute('href')))).toEqual(books.map((book: {id: string}) => `/book/${book.id}`));
   await drag(page, -(width - 90));
@@ -26,6 +26,17 @@ for (const width of [320, 390, 767]) test(`daily three-book carousel swipes with
   await expect(page.locator('[data-section-transition]')).toHaveCount(0);
   await page.getByRole('button', {name: `查看推荐：${books[2].title}`, exact: true}).click();
   await expect(slides.nth(2)).toHaveAttribute('aria-hidden', 'false');
+  await expect.poll(() => rail.evaluate(el => Math.abs(el.scrollLeft - el.clientWidth * 3))).toBeLessThan(2);
+  await drag(page, -(width - 90));
+  await expect(slides.nth(0)).toHaveAttribute('aria-hidden', 'false');
+  await expect.poll(() => rail.evaluate(el => Math.abs(el.scrollLeft - el.clientWidth))).toBeLessThan(2);
+  await drag(page, width - 90);
+  await expect(slides.nth(2)).toHaveAttribute('aria-hidden', 'false');
+  await expect.poll(() => rail.evaluate(el => Math.abs(el.scrollLeft - el.clientWidth * 3))).toBeLessThan(2);
+  await expect(page.locator('.mh-banner-pause')).toHaveCount(0);
+  await expect(slides.nth(2).locator('.mh-cover')).toHaveCSS('width', '72px');
+  await expect(slides.nth(2).locator('.mh-banner-backdrop')).toHaveCSS('filter', 'blur(20px)');
+  expect(await slides.nth(2).locator('.mh-banner-backdrop img').getAttribute('src')).toBe(await slides.nth(2).locator('.mh-cover img').getAttribute('src'));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({path: info.outputPath('verified-banner.png')});
   await slides.nth(2).click();
@@ -35,19 +46,40 @@ for (const width of [320, 390, 767]) test(`daily three-book carousel swipes with
   await expect(slides).toHaveCount(3);
 });
 
-test('banner rotates, can pause, and stops when reduced motion is requested', async ({page}) => {
+test('automatic rotation always moves left across the last-to-first seam and respects focus and reduced motion', async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
-  await page.goto(base); const slides = page.locator('.mh-banner-track .mh-banner');
+  await page.goto(base); const slides = page.locator('.mh-banner-track .mh-banner:not([data-banner-clone])');
   await expect(slides).toHaveCount(3);
+  await page.locator('.mh-banner-track').evaluate(rail => {
+    const samples: number[] = [rail.scrollLeft];
+    (window as typeof window & {bannerSamples: number[]}).bannerSamples = samples;
+    rail.addEventListener('scroll', () => samples.push(rail.scrollLeft));
+  });
   await expect(slides.nth(1)).toHaveAttribute('aria-hidden', 'false', {timeout: 10000});
-  await page.getByRole('button', {name: '暂停自动轮播'}).click();
+  await expect(slides.nth(2)).toHaveAttribute('aria-hidden', 'false', {timeout: 10000});
+  await expect(slides.nth(0)).toHaveAttribute('aria-hidden', 'false', {timeout: 10000});
+  await expect.poll(() => page.locator('.mh-banner-track').evaluate(el => Math.abs(el.scrollLeft - el.clientWidth))).toBeLessThan(2);
+  const motion = await page.locator('.mh-banner-track').evaluate(rail => {
+    const samples = (window as typeof window & {bannerSamples: number[]}).bannerSamples;
+    const changes = samples.slice(1).map((left, i) => left - samples[i]);
+    return {backwards: changes.filter(delta => delta < -1), width: rail.clientWidth};
+  });
+  // The only backward movement is the instantaneous recenter between identical
+  // copies, exactly three slide widths; no animated rewind across other books.
+  expect(motion.backwards).toHaveLength(1);
+  expect(motion.backwards[0]).toBeCloseTo(-motion.width * 3, 0);
+  await slides.nth(0).focus();
   const current = await page.locator('.mh-banner-dots [aria-pressed=true]').getAttribute('aria-label');
-  await page.locator('.mh-kicker').first().evaluate(() => (document.activeElement as HTMLElement)?.blur());
   await page.waitForTimeout(6500);
   expect(await page.locator('.mh-banner-dots [aria-pressed=true]').getAttribute('aria-label')).toBe(current);
   await page.emulateMedia({reducedMotion: 'reduce'});
-  await page.getByRole('button', {name: '继续自动轮播'}).click();
-  await page.locator('.mh-kicker').first().evaluate(() => (document.activeElement as HTMLElement)?.blur());
+  await slides.nth(0).evaluate(() => (document.activeElement as HTMLElement)?.blur());
   await page.waitForTimeout(6500);
   expect(await page.locator('.mh-banner-dots [aria-pressed=true]').getAttribute('aria-label')).toBe(current);
+  await slides.nth(0).focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(slides.nth(2)).toHaveAttribute('aria-hidden', 'false');
+  await expect.poll(() => page.locator('.mh-banner-track').evaluate(el => Math.abs(el.scrollLeft - el.clientWidth * 3))).toBeLessThan(2);
+  await page.setViewportSize({width: 767, height: 844});
+  await expect.poll(() => page.locator('.mh-banner-track').evaluate(el => Math.abs(el.scrollLeft - el.clientWidth * 3))).toBeLessThan(2);
 });

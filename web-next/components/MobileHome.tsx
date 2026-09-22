@@ -16,6 +16,7 @@ import {useMobileHomeSwipe} from '@/lib/useMobileHomeSwipe';
 import './mobile-home.css';
 import {MobileHomeSection, MobileHomeShortcuts} from './MobileHomeFrame';
 import {discoverySections} from '@/lib/discovery-sections';
+import {formatRating, ratingLabel} from '@/lib/rating';
 import MobileFeaturedBanner from './MobileFeaturedBanner';
 
 const browsePageSize = 20;
@@ -28,11 +29,15 @@ function Cover({book,priority=false}:{book:Book;priority?:boolean}){
   const [failed,setFailed]=useState(false);
   return <div className="mh-cover">{book.cover_image&&!failed?<BookCover priority={priority} sizes="80px" src={book.cover_image} alt={`${book.title}封面`} onError={()=>setFailed(true)}/>:<><BookOpen size={26}/><span>{book.title}</span></>}</div>;
 }
-function BookRows({books,priority=false}:{books:Book[];priority?:boolean}){
-  return <div className="mh-rows">{books.length?books.map(book=><BookLink className="mh-book" key={book.id} href={`/book/${book.id}`}><Cover book={book} priority={priority}/><div className="mh-book-info"><h3>{book.title}</h3><p>{book.description&&book.description!=='暂无简介'?book.description:'打开这本书，开始一段新的阅读旅程。'}</p><div className="mh-book-meta"><span>{book.category?.split('>').pop()||'综合'} · {book.author||'未知作者'}</span><BookStatus status={book.status}/></div></div></BookLink>):<p className="mh-empty">暂时没有书籍</p>}</div>;
+function BookRating({book}:{book:Book}){
+  const score = formatRating(book.rating);
+  return <span className="mh-book-rating" data-rated={score !== '暂无评分'} aria-label={`评分：${ratingLabel(book.rating)}`} title={ratingLabel(book.rating)}>{score === '暂无评分' ? '—' : score}</span>;
+}
+function BookRows({books,priority=false,showRating=false}:{books:Book[];priority?:boolean;showRating?:boolean}){
+  return <div className="mh-rows">{books.length?books.map(book=><BookLink className="mh-book" key={book.id} href={`/book/${book.id}`}><Cover book={book} priority={priority}/><div className="mh-book-info"><div className="mh-book-heading"><h3>{book.title}</h3>{showRating&&<BookRating book={book}/>}</div><p>{book.description&&book.description!=='暂无简介'?book.description:'打开这本书，开始一段新的阅读旅程。'}</p><div className="mh-book-meta"><span>{book.category?.split('>').pop()||'综合'} · {book.author||'未知作者'}</span><BookStatus status={book.status}/></div></div></BookLink>):<p className="mh-empty">暂时没有书籍</p>}</div>;
 }
 function BookShelf({books,title}:{books:Book[];title:string}){
-  return <div className="mh-shelf" role="region" aria-label={`${title}，左右滑动浏览`} tabIndex={0}>{books.map(book=><BookLink className="mh-shelf-book" key={book.id} href={`/book/${book.id}`}><Cover book={book}/><h3>{book.title}</h3><p>{book.category?.split('>').pop()||'综合'}</p></BookLink>)}</div>;
+  return <div className="mh-shelf" role="region" aria-label={`${title}，左右滑动浏览`} tabIndex={0}>{books.map(book=><BookLink className="mh-shelf-book" key={book.id} href={`/book/${book.id}`}><Cover book={book}/><div className="mh-book-heading"><h3>{book.title}</h3><BookRating book={book}/></div><p>{book.category?.split('>').pop()||'综合'}</p></BookLink>)}</div>;
 }
 export default function MobileHome({books,bannerBooks=[]}:{books:Book[];bannerBooks?:Book[]}){
   const router=useRouter();
@@ -100,7 +105,7 @@ export default function MobileHome({books,bannerBooks=[]}:{books:Book[];bannerBo
       <MobileFeaturedBanner books={bannerBooks}/>
       <MobileHomeShortcuts onCategory={()=>browse('category')} onNew={()=>browse('new')}/>
       {sections.map((section,index)=><MobileHomeSection key={section.title} title={section.title} layout={section.layout} onMore={()=>browse('category')}>
-        {section.layout==='shelf'?<BookShelf books={section.books} title={section.title}/>:<BookRows books={section.books} priority={index===0}/>}
+        {section.layout==='shelf'?<BookShelf books={section.books} title={section.title}/>:<BookRows books={section.books} priority={index===0} showRating/>}
       </MobileHomeSection>)}
       <p className="mh-feed-end">{books.length?'今天的好书先逛到这里':'好故事正在路上'}<button type="button" onClick={()=>browse('category')}>去分类发现更多 <ChevronRight size={13}/></button></p>
     </>:<>
