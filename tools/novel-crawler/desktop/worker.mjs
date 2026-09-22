@@ -10,7 +10,13 @@ import retention from '../../storage-maintenance.cjs';
 
 let paused = false, started = false, stopped = false, client, libraryControl;
 const controller = new AbortController();
-const send = value => { if (process.connected) process.send(value); };
+const pendingMessages = new Set();
+const send = value => {
+  if (!process.connected) return;
+  const pending = new Promise(resolve => process.send(value, () => resolve()));
+  pendingMessages.add(pending);
+  pending.then(() => pendingMessages.delete(pending));
+};
 process.on('message', async message => {
   if (message.type === 'library-action') {
     const accepted = libraryControl?.act(message.controlId, message.action) === true;
@@ -71,7 +77,8 @@ process.on('message', async message => {
     catch (error) { send({type: 'error', error: error.message, failure: failureDetails(error)}); }
     // All clients have flushed their sessions and released cache leases.
     if (message.stateDir === path.resolve('.novel-crawler')) retention.queueAutomatic();
-    process.disconnect();
+    await Promise.all(pendingMessages);
+    if (process.connected) process.disconnect();
   }
 });
 process.on('disconnect', () => { paused = true; controller.abort(); });

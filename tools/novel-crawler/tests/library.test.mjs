@@ -64,6 +64,25 @@ async function until(check) {
   assert.fail('timed out');
 }
 
+test('desktop receives the final large library result before worker shutdown', async t => {
+  const f = await fixture(t);
+  for (let i = 0; i < 3; i++) f.legacy(`oversized${i}`, {title: '故障目录'.repeat(8000) + i});
+  const app = await createDesktop({...f.options, loadSources: () => ({sites: [f.site], errors: []})});
+  t.after(() => app.close());
+  assert.equal((await request(app, 'update-library')).status, 202);
+  for (let i = 0; i < 3; i++) {
+    await until(() => app.state().batch?.items.filter(item => item.state === 'skipped').length === i && app.state().batch.items.some(item => item.state === 'waiting'));
+    const item = app.state().batch.items.find(item => item.state === 'waiting');
+    assert.equal((await request(app, 'library-action', {action: 'skip', controlId: item.controlId})).status, 200);
+  }
+  await until(() => ['complete', 'error'].includes(app.state().phase));
+  assert.equal(app.state().phase, 'complete');
+  assert.equal(app.state().batch.checked, 3);
+  assert.equal(app.state().batch.skipped, 3);
+  await new Promise(resolve => setTimeout(resolve, 200));
+  assert.equal(app.state().phase, 'complete');
+});
+
 test('batch accepts a reviewed scope while retaining the explicit source gap', async t => {
   const f = await fixture(t), rawFile = await f.seed('alpha');
   const source = readJson(rawFile), omitted = source.chapters[1];

@@ -14,6 +14,8 @@ import {loadSites, parseSearch} from '../desktop/sources.mjs';
 import {migrateContinuationRules} from '../continuation-migration.mjs';
 import {repairContinuationDuplicates} from '../continuation-repair.mjs';
 import {recordContinuationSourceGap} from '../continuation.mjs';
+import {reviewContinuationCatalogNotice} from '../continuation-catalog-review.mjs';
+import {chapterIdentity} from '../continuation.mjs';
 
 const body = n => Array.from({length: 180}, (_, i) => String.fromCodePoint(0x4e00 + n * 200 + i)).join('').repeat(4);
 const title = n => `第${n}章 山间故事${n}`;
@@ -48,6 +50,58 @@ async function fixture(t) {
   const dir = path.join(stateDir, 'continuations', continuationKey(spec));
   return {state, spec, book, file, options, choose, run, dir, base};
 }
+
+test('digit-by-digit Chinese chapter numbers retain every digit and cannot conceal a gap', async t => {
+  assert.equal(chapterIdentity('第一零二五章 你个瓜娃子').number, 1025);
+  assert.equal(chapterIdentity('第一〇二六章 衔接').number, 1026);
+  assert.equal(chapterIdentity('第一千零二十五章 衔接').number, 1025);
+  const f = await fixture(t);
+  f.state.titles[5] = '第〇〇五章 第五章';
+  f.state.titles[6] = '第一〇〇六章 跳号正文';
+  const report = await f.run();
+  assert.equal(report.structuralPass, false);
+  assert.equal(readJson(f.file).chapters.length, f.book.chapters.length);
+});
+
+test('reviewed notice renumbering preserves original chapters and still blocks changed prose and catalogs', async t => {
+  const f = await fixture(t);
+  f.state.count = 7; f.state.titles[7] = '请假一天'; f.state.bodies[7] = '今日身体不适，请假一天，明日恢复更新。';
+  assert.equal((await f.run()).structuralPass, true);
+  const original = fs.readFileSync(f.file), book = readJson(f.file);
+  const review = {exportHash: hash(original), link: f.base + '/new/c/7', title: '第7章 请假一天', reason: '核对公告全文相同，仅来源增加章号'};
+  f.state.titles[7] = review.title;
+  assert.equal((await f.run()).structuralPass, false);
+  await assert.rejects(reviewContinuationCatalogNotice(f.spec, f.options, {...review, exportHash: 'stale'}));
+  await assert.rejects(reviewContinuationCatalogNotice(f.spec, f.options, {...review, title: '第7章 请假一天！'}), /只支持/);
+  f.state.bodies[7] += '正文后来修改。';
+  await assert.rejects(reviewContinuationCatalogNotice(f.spec, f.options, review), /正文/);
+  f.state.bodies[7] = book.chapters.at(-1).content;
+  f.state.titles[6] = '第6章 其他正文';
+  await assert.rejects(reviewContinuationCatalogNotice(f.spec, f.options, review), /目录/);
+  f.state.titles[6] = title(6);
+  await reviewContinuationCatalogNotice(f.spec, f.options, review);
+  assert.deepEqual(fs.readFileSync(f.file), original);
+  assert.equal((await f.run()).structuralPass, true);
+  // The newly numbered notice does not consume narrative chapter 7.
+  f.state.count = 8; f.state.titles[8] = title(7); f.state.bodies[8] = body(8);
+  const updated = await f.run(); assert.equal(updated.structuralPass, true); assert.equal(updated.continuationAdded, 1);
+  assert.deepEqual(readJson(f.file).chapters.slice(0, book.chapters.length), book.chapters);
+  f.state.count = 9; f.state.titles[9] = '公告'; f.state.bodies[9] = '明天恢复正常更新，谢谢大家支持。';
+  assert.equal((await f.run()).structuralPass, true);
+  const nextReview = {exportHash: hash(fs.readFileSync(f.file)), link: f.base + '/new/c/9', title: '第8章 公告', reason: '再次核对新的末尾公告'};
+  f.state.titles[9] = nextReview.title;
+  await reviewContinuationCatalogNotice(f.spec, f.options, nextReview);
+  assert.equal((await f.run()).structuralPass, true);
+  f.state.titles[7] = '第8章 请假一天';
+  assert.equal((await f.run()).structuralPass, false);
+  f.state.titles[7] = review.title;
+  const binding = readJson(path.join(f.dir, 'binding.json')).value;
+  const dir = path.join(f.dir, 'sources', hash([f.spec.sourceUrl, binding.source.extraction]).slice(0,24));
+  const evidence = readJson(path.join(dir, 'catalog-notice-reviews.json'));
+  evidence.value[0].incoming.content += '损坏证据';
+  atomicWrite(path.join(dir, 'catalog-notice-reviews.json'), {...evidence, hash: hash(evidence.value)});
+  assert.equal((await f.run()).structuralPass, false);
+});
 
 test('reviewed legacy duplicate repair preserves backups, stable ordinals and subsequent update protection', async t => {
   const f = await fixture(t); await f.run();

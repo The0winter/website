@@ -130,7 +130,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
           if (message.type === 'error') { if (stopRequested) stoppedTask(); else update({phase: 'error', message: message.error, failure: message.failure || failureDetails(message)}); }
         });
         current.on('error', error => update({phase: 'error', message: error.message, failure: failureDetails(error)}));
-        current.on('exit', () => {
+        current.on('close', () => {
           if (worker === current) worker = null;
           if (!completed && busy(task)) { if (stopRequested) stoppedTask(); else update({phase: 'error', message: `书库更新进程停止，已保存章节保留。${workerError.slice(-300)}`}); }
         });

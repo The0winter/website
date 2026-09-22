@@ -12,6 +12,7 @@ import {failureDetails} from './diagnostics.mjs';
 import {formatChapterForExport, preserveCatalogLabels} from './titles.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
 import {preservedReadingGap} from './continuation-reading-gaps.mjs';
+import {preserveReviewedNotices} from './continuation-catalog-review.mjs';
 
 const normalize = value => normalizedIdentity(value, 'chinese-simplified');
 const sameBook = (a, b) => ['title', 'author'].every(key => a[key] && b[key] && normalize(a[key]) === normalize(b[key]));
@@ -116,6 +117,7 @@ export function continuationState(spec, {stateDir, outputDir, inspection}) {
 }
 
 function chineseNumber(text) {
+  if (/^[零〇一二三四五六七八九]+$/u.test(text)) return Number([...text].map(c => '零一二三四五六七八九'.indexOf(c === '〇' ? '零' : c)).join(''));
   if (/^[0-9]+$/u.test(text)) return Number(text);
   const digits = '零一二三四五六七八九', units = {十: 10, 百: 100, 千: 1000, 万: 10000};
   let total = 0, section = 0, digit = 0;
@@ -647,7 +649,7 @@ export async function acquireContinuation(spec, options) {
   try {
     options.onStatus?.({kind: 'continuation', message: switching ? '正在对齐新旧目录并核对末尾正文…' : '正在检查当前续更来源的新增目录…'});
     const source = await getCatalog(spec, client);
-    catalog = preserveCatalogLabels(source.catalog, switching ? null : binding.catalog); evidence = source.evidence;
+    catalog = preserveCatalogLabels(switching ? source.catalog : preserveReviewedNotices(source.catalog, binding, book, sourceDir), switching ? null : binding.catalog); evidence = source.evidence;
     const links = new Set(catalog.map(entry => entry.link)), oldNumbers = numbered(book.chapters), newNumbers = numbered(catalog);
     const last = oldNumbers.at(-1);
     if (!last || oldNumbers.length < 3) throw Error('本地书籍不足三个可核对的正文章节，无法自动确定换源衔接点');
