@@ -43,8 +43,10 @@ export function useShelfPageTurn(tab: LibraryTab, enabled: boolean) {
     const origin: Position = {shelf: currentTab.current === 'shelf' ? 0 : width, history: currentTab.current === 'history' ? 0 : -width};
     if (active.current) for (const panel of panels()) origin[panel.dataset.shelfTab as LibraryTab] = new DOMMatrix(getComputedStyle(panel).transform).m41;
     active.current?.animations.forEach(animation => animation.cancel());
-    host.style.minHeight = `${host.getBoundingClientRect().height}px`;
     host.dataset.switching = 'true';
+    // Reserve room for both pages without painting that space. Their own
+    // surfaces keep the same rounded bottom from the first dragged frame.
+    host.style.minHeight = `${Math.max(...panels().map(panel => panel.getBoundingClientRect().height))}px`;
     for (const panel of panels()) panel.style.transform = `translateX(${origin[panel.dataset.shelfTab as LibraryTab]}px)`;
     const motion: Motion = {origin, width, animations: [], dragging: false};
     active.current = motion;

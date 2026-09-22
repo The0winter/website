@@ -132,7 +132,8 @@ test('visiting the shelf preserves manual darkness',async ({page}) => {
   await page.locator('.mh-bottom').getByRole('link',{name:'书架',exact:true}).click();
   await expect(page.locator('.library-page')).toBeVisible();
   await expect(toggle(page)).toHaveAttribute('aria-pressed','true');
-  await expect(page.locator('.shelf-panel')).toHaveCSS('background-color','rgb(36, 33, 30)');
+  await expect(page.locator('.shelf-toolbar')).toHaveCSS('background-color','rgb(36, 33, 30)');
+  await expect(page.locator('#shelf-content')).toHaveCSS('background-color','rgb(36, 33, 30)');
 });
 
 test('a dark reader paints dark before application JavaScript loads',async ({page}) => {

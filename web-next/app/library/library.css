@@ -4,8 +4,9 @@
   .library-page .mh-topbar { max-width:680px; margin-bottom:24px; }
 }
 .library-page .mh-search { background:var(--home-surface); }
-.shelf-panel { background:var(--home-surface); border:1px solid var(--home-border); border-radius:18px; padding:0 28px; touch-action:pan-y pinch-zoom; }
-.shelf-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:56px; border-bottom:1px solid var(--home-border); }
+.shelf-panel { --shelf-gutter:28px; --shelf-radius:18px; --shelf-border:var(--home-border); touch-action:pan-y pinch-zoom; }
+.shelf-toolbar { position:relative; display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:57px; padding:0 var(--shelf-gutter); background:var(--home-surface); border:1px solid var(--shelf-border); border-bottom:0; border-radius:var(--shelf-radius) var(--shelf-radius) 0 0; }
+.shelf-toolbar::before { content:''; position:absolute; bottom:0; left:var(--shelf-gutter); right:var(--shelf-gutter); height:1px; background:var(--home-border); }
 .shelf-tabs,.shelf-actions { display:flex; align-items:center; }
 .shelf-tabs { position:relative; gap:26px; }
 .shelf-tabs button { position:relative; min-height:48px; font-size:18px; white-space:nowrap; color:var(--home-muted); }
@@ -15,11 +16,13 @@
 .shelf-tabs[data-dragging]::after { transition:none; }
 .shelf-viewport { position:relative; isolation:isolate; }
 .shelf-viewport[data-switching] { overflow:clip; }
-.shelf-page { position:relative; width:100%; background:var(--home-surface); }
+/* Each moving page owns its bottom edge; the taller page never leaves a
+   shared surface underneath the shorter one during a turn. */
+.shelf-page { position:relative; display:flow-root; width:100%; padding:0 var(--shelf-gutter); background:var(--home-surface); border:1px solid var(--shelf-border); border-top:0; border-radius:0 0 var(--shelf-radius) var(--shelf-radius); }
 .shelf-page[data-active=false] { display:none; position:absolute; top:0; left:0; }
 .shelf-page[data-active=false][data-shelf-tab=history] { transform:translateX(-100%); }
 .shelf-page[data-active=false][data-shelf-tab=shelf] { transform:translateX(100%); }
-.shelf-viewport[data-switching] .shelf-page { display:block; will-change:transform; }
+.shelf-viewport[data-switching] .shelf-page { display:flow-root; will-change:transform; }
 .shelf-actions { gap:24px; font-size:14px; color:var(--home-muted); }
 .shelf-actions button { min-height:44px; white-space:nowrap; }
 .shelf-actions [aria-pressed=true] { color:#ce3b42; }
@@ -88,8 +91,8 @@
 .shelf-dialog button:disabled { opacity:.5; }
 @media (max-width:767px) {
   .library-page { padding:10px 12px calc(80px + env(safe-area-inset-bottom)); }
-  .shelf-panel { padding:0 14px; border-color:#efe5dc; border-radius:16px; }
-  .shelf-toolbar { min-height:50px; gap:8px; }
+  .shelf-panel { --shelf-gutter:14px; --shelf-radius:16px; --shelf-border:#efe5dc; }
+  .shelf-toolbar { min-height:51px; gap:8px; }
   .shelf-tabs { gap:17px; }
   .shelf-tabs button { font-size:16px; min-height:44px; }
   .shelf-tabs::after { bottom:1px; width:23px; height:3px; }

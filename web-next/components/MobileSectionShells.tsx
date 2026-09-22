@@ -41,6 +41,7 @@ export default function MobileSectionShells() {
     <div data-mobile-section-shell="/library" className="library-page">
       <div className="library-inner"><div data-section-shell-header/>
         <section className="shelf-panel"><LibraryToolbar sort={sort} empty={!shelf.rows?.length}/>
+          <div className="shelf-page">
           {shelf.rows === null ? <div className="shelf-empty"><BookOpen size={32}/><p>{shelf.error || '正在整理你的书架…'}</p></div>
             : shelf.rows.length === 0 ? <div className="shelf-empty"><div className="shelf-empty-icon"><BookOpen size={32}/></div><h2>把喜欢的故事，放进书架</h2><p>找到喜欢的书，加入书架就能随时接着读。</p><Link prefetch={false} href="/">去发现好书 <ChevronRight size={15}/></Link></div>
             : <><div className="shelf-rows">{shelf.rows.map(entry => <article className="shelf-row" key={entry.bookId}>
@@ -49,6 +50,7 @@ export default function MobileSectionShells() {
             </article>)}</div>
             {shelf.total <= 2 && <div className="shelf-discover"><span>下一本好书，等你发现</span><Link prefetch={false} href="/">去精选 <ChevronRight size={14}/></Link></div>}
             {shelf.total > 20 && <nav className="shelf-pagination"><button disabled>上一页</button><span>1 / {Math.ceil(shelf.total / 20)}</span><button>下一页</button></nav>}</>}
+          </div>
         </section>
       </div>
     </div>

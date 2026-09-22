@@ -39,6 +39,7 @@ async function pause(page: Page) {
     animations.forEach(animation => {animation.pause(); animation.currentTime = Number(animation.effect!.getTiming().duration) / 2;});
     const a = incoming.getBoundingClientRect(), b = outgoing.getBoundingClientRect(), bounds = host.getBoundingClientRect();
     return {durations: animations.map(animation => animation.effect!.getTiming().duration), a:a.x,b:b.x,width:bounds.width,left:bounds.x,
+      height:a.height, viewportHeight:bounds.height, outgoingHeight:b.height,
       opacities:[incoming,outgoing].map(element => getComputedStyle(element).opacity), inert: (outgoing as HTMLElement).inert};
   });
 }
@@ -62,6 +63,11 @@ for (const width of [320,390,1440]) for (const method of ['click','swipe']) {
       expect(frame.durations).toEqual([400, 400]);
       expect(frame.opacities).toEqual(['1','1']);
       expect(frame.inert).toBe(true);
+      // Differently sized pages keep their own window from the first frame.
+      // The space below the shorter page must show the library background.
+      await expect(page.locator('.shelf-panel')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      await expect(page.locator('#shelf-content')).toHaveCSS('border-bottom-left-radius', width < 768 ? '16px' : '18px');
+      expect(frame.viewportHeight).toBeGreaterThanOrEqual(Math.max(frame.height, frame.outgoingHeight));
       expect(Math.abs((frame.b-frame.a)*direction-frame.width)).toBeLessThan(1);
       expect((frame.left-frame.a)*direction).toBeGreaterThan(0);
       expect((frame.left-frame.a)*direction).toBeLessThan(frame.width);
@@ -70,6 +76,7 @@ for (const width of [320,390,1440]) for (const method of ['click','swipe']) {
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
       await page.screenshot({path:info.outputPath(`${direction>0?'history':'shelf'}-mid-turn.png`)});
       await resume(page);
+      expect((await page.locator('#shelf-content').boundingBox())!.height).toBe(frame.height);
       await expect(page.locator('#shelf-content .shelf-row h2')).toHaveText(direction>0?['浏览记录作品 1','浏览记录作品 2','浏览记录作品 3']:['书架作品 1']);
       await expect(page).toHaveURL(base+'/library?'+(direction>0?'tab=history&':'')+'sort=updated');
       expect(await page.evaluate(()=>history.length)).toBe(historyLength);
@@ -146,6 +153,12 @@ test('both pages and the tab indicator track the finger before release, then a s
     expect(Math.abs(frame.shelf - box.x - dx)).toBeLessThan(1);
     expect(Math.abs(frame.shelf - frame.history - box.width)).toBeLessThan(1);
     expect(frame.animations).toBe(0);
+    await expect(page.locator('.shelf-panel')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    const windows = await page.locator('.shelf-viewport').evaluate(host => ({
+      height:host.getBoundingClientRect().height,
+      pages:[...host.querySelectorAll('[data-shelf-tab]')].map(panel => panel.getBoundingClientRect().height),
+    }));
+    expect(windows.height).toBeGreaterThanOrEqual(Math.max(...windows.pages));
     expect(frame.indicator).toBeGreaterThan(0);
     await expect(page.getByRole('tab',{name:'书架',exact:true})).toHaveAttribute('aria-selected','true');
     await expect(page).toHaveURL(base+'/library?sort=updated&page=2');

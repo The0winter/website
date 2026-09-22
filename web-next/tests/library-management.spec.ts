@@ -92,7 +92,8 @@ for (const width of [320, 390, 768, 1440]) {
     expect(deleted.sort()).toEqual(entries.slice(0, 2).map(entry => entry.bookId));
     if (width < 768) await expect(page.getByRole('navigation', {name: '移动端主导航'})).toBeVisible();
     await page.goBack();
-    await expect(page).toHaveURL(base + '/forum');
+    // Mobile main sections return to Featured; desktop keeps normal history.
+    await expect(page).toHaveURL(base + (width < 768 ? '/' : '/forum'));
   });
 }
 

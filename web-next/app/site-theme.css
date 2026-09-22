@@ -40,7 +40,7 @@
 .dark .mh-categories [aria-pressed=true] { background:var(--home-accent-soft); color:var(--home-accent); border-color:var(--home-accent); }
 .dark .mh-categories button:active { background:var(--home-accent-soft); }
 .dark .mh-cover,.dark .shelf-cover { background:linear-gradient(145deg,#493d31,#302820); color:#c7b599; }
-.dark .shelf-panel { border-color:var(--home-border); }
+.dark .shelf-panel { --shelf-border:var(--home-border); }
 
 .dark .search-page { --search-bg:var(--home-background); --search-surface:var(--home-surface); --search-text:var(--home-text); --search-muted:var(--home-muted); --search-line:var(--home-border); --search-accent:var(--home-accent); }
 .dark .search-description { color:var(--home-muted); }
