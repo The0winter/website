@@ -7,6 +7,7 @@ test.use({viewport: {width: 390, height: 844}, hasTouch: true, isMobile: true});
 
 test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
+    if (localStorage.getItem('reader_fullscreen') === null) localStorage.setItem('reader_fullscreen', 'true');
     localStorage.setItem('has-seen-reading-hint', 'true');
     Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}});
     document.addEventListener('DOMContentLoaded', () => {
@@ -38,6 +39,36 @@ async function enter(page: Page, origin: string) {
     } else await page.locator('.read-now:visible').tap();
   }
 }
+
+for (const origin of ['details', 'catalog', 'shelf', 'direct']) {
+  test(`${origin} stays windowed by default, including reading taps and reload`, async ({page}) => {
+    await page.addInitScript(() => localStorage.removeItem('reader_fullscreen'));
+    if (origin === 'direct') await page.goto(reader);
+    else await enter(page, origin);
+    await ready(page);
+    expect(await active(page)).toBe(false);
+    await page.touchscreen.tap(195, 420);
+    expect(await active(page)).toBe(false);
+    await page.locator('.reader-tools').getByRole('button', {name: '设置', exact: true}).tap();
+    await expect(page.getByRole('group', {name: '全屏阅读'}).getByRole('button', {name: '否', exact: true})).toHaveAttribute('aria-pressed', 'true');
+    await page.reload(); await ready(page);
+    await page.touchscreen.tap(195, 420);
+    expect(await active(page)).toBe(false);
+  });
+}
+
+test('unavailable preferences do not opt a reader into fullscreen', async ({page}) => {
+  await page.addInitScript(() => {
+    const get = Storage.prototype.getItem;
+    Storage.prototype.getItem = function(key) {
+      if (key === 'reader_fullscreen') throw new DOMException('Storage unavailable', 'SecurityError');
+      return get.call(this, key);
+    };
+  });
+  await enter(page, 'details'); await ready(page);
+  await page.touchscreen.tap(195, 420);
+  expect(await active(page)).toBe(false);
+});
 
 for (const origin of ['details', 'catalog', 'shelf']) {
   test(`${origin} enters fullscreen in the navigation tap and exits on return`, async ({page}) => {

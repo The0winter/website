@@ -12,6 +12,7 @@ async function ready(page: Page) {
 }
 test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
+    localStorage.setItem('reader_fullscreen', 'true');
     localStorage.setItem('has-seen-reading-hint', 'true');
     localStorage.setItem('reader_fullscreenHintDismissed', 'true');
   });

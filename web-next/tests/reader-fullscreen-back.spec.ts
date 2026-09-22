@@ -8,6 +8,7 @@ test.use({viewport: {width: 390, height: 844}, hasTouch: true, isMobile: true});
 
 test.beforeEach(async ({page}) => {
   await page.addInitScript(() => {
+    localStorage.setItem('reader_fullscreen', 'true');
     localStorage.setItem('has-seen-reading-hint', 'true');
     localStorage.setItem('reader_fullscreenHintDismissed', 'true');
     Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}});
@@ -25,7 +26,13 @@ async function detailsReady(page: Page) {
   await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
   expect(await active(page)).toBe(false);
 }
-async function enter(page: Page, shelf = false) {
+async function shelfReady(page: Page) {
+  await expect(page).toHaveURL(base + '/library');
+  await expect(page.locator('#shelf-content .shelf-book')).toBeVisible();
+  await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
+  expect(await active(page)).toBe(false);
+}
+async function enter(page: Page, shelf = false, waitForReader = true) {
   if (shelf) {
     const user = {id: '000000000000000000000001', username: '全屏返回验证', role: 'reader'};
     await page.route('**/api/auth/session', route => route.fulfill({json: {user, profile: user}}));
@@ -37,7 +44,7 @@ async function enter(page: Page, shelf = false) {
     await page.goto(detail);
     await page.locator('.read-now:visible').tap();
   }
-  await ready(page); expect(await active(page)).toBe(true);
+  if (waitForReader) {await ready(page); expect(await active(page)).toBe(true);}
 }
 // Desktop automation cannot dispatch Android's OS gesture. A native exit
 // reproduces the resulting fullscreenchange without a history traversal.
@@ -65,18 +72,51 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
 
 for (const shelf of [false, true]) {
   for (const overlay of ['none', '设置', '目录']) {
-    test(`native fullscreen Back from ${shelf ? 'shelf' : 'details'} with ${overlay} goes directly to details`, async ({page}) => {
+    test(`native fullscreen Back from ${shelf ? 'shelf' : 'details'} with ${overlay} restores its entry page`, async ({page}) => {
       await enter(page, shelf);
       if (overlay !== 'none') {
         await page.keyboard.press('m');
         await page.locator('.reader-tools').getByRole('button', {name: overlay, exact: true}).tap();
         await expect(page.getByRole('dialog', {name: overlay === '设置' ? '阅读设置' : '全部目录'})).toBeVisible();
       }
-      await nativeBack(page); await detailsReady(page);
+      await nativeBack(page);
+      if (shelf) await shelfReady(page);
+      else await detailsReady(page);
       await expect(page.getByRole('dialog')).toHaveCount(0);
-      await page.goBack(); await expect(page).toHaveURL(base + (shelf ? '/library' : '/'));
+      await page.goBack(); await expect(page).toHaveURL(base + '/');
     });
   }
+}
+
+for (const trigger of ['native', 'header', 'native-with-history']) {
+  test(`shelf return via ${trigger} restores the cached shelf after chapter changes without a route request`, async ({page}, info) => {
+    await enter(page, true);
+    await page.keyboard.press('Control+ArrowRight');
+    await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-chapter', '000000000000000000000102');
+    await ready(page);
+    const requests: string[] = [];
+    await page.route('**/*', route => {
+      const request = route.request();
+      if (request.isNavigationRequest() || new URL(request.url()).searchParams.has('_rsc')) {
+        requests.push(request.url()); return route.abort();
+      }
+      return route.fallback();
+    });
+    const start = Date.now();
+    if (trigger === 'header') await page.locator('.reader-return').tap();
+    else if (trigger === 'native-with-history') await page.evaluate(async () => {await document.exitFullscreen(); history.back();});
+    else await nativeBack(page);
+    await shelfReady(page);
+    await info.attach('cached-return', {body: JSON.stringify({milliseconds: Date.now() - start, requests}), contentType: 'application/json'});
+    expect(requests).toEqual([]);
+    await page.waitForTimeout(200);
+    await expect(page).toHaveURL(base + '/library');
+    await page.unroute('**/*');
+    await page.locator('#shelf-content .shelf-book').tap();
+    await ready(page);
+    expect(await active(page)).toBe(true);
+    await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-chapter', '000000000000000000000102');
+  });
 }
 
 test('a native exit and real history Back together do not skip details', async ({page}) => {
@@ -127,4 +167,18 @@ test('desktop native fullscreen exit keeps reading', async ({page}) => {
   await expect.poll(() => active(page)).toBe(false);
   await page.waitForTimeout(200);
   await expect(page).toHaveURL(reader); await ready(page);
+});
+
+test('native fullscreen Back cancels a slow shelf entry without visiting details', async ({page}) => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => {release = resolve;});
+  await page.route(`**/book/${book}/${book}?_rsc=*`, async route => {await gate; await route.continue();});
+  try {
+    await enter(page, true, false);
+    await expect.poll(() => active(page)).toBe(true);
+    await nativeBack(page); await shelfReady(page);
+    await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
+  } finally {release();}
+  await page.waitForTimeout(300);
+  await expect(page).toHaveURL(base + '/library');
 });

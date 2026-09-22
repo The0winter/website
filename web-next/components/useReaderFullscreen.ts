@@ -13,7 +13,7 @@ export function useReaderFullscreen(onEntered: () => void, entryPending: boolean
   const [toggling, setToggling] = useState(false);
   const pending = entering || toggling;
   const [error, setError] = useState('');
-  const [enabled, setEnabled] = useStoredState(readerFullscreenPreferenceKey, true);
+  const [enabled, setEnabled] = useStoredState(readerFullscreenPreferenceKey, false);
   // The former "seen" flag was written automatically and does not establish
   // acknowledgement. Only this explicit opt-out suppresses future reminders.
   const [hintDismissed, setHintDismissed] = useStoredState('reader_fullscreenHintDismissed', false);

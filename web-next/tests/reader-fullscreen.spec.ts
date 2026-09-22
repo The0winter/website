@@ -45,7 +45,7 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
     await page.goto(readerUrl); await ready(page);
     await expect(page.locator('.reader-return,.reader-status-top')).toHaveCount(0);
     await openSettings(page);
-    await expect(setting(page).getByRole('button', {name: '是', exact: true})).toHaveAttribute('aria-pressed', 'true');
+    await expect(setting(page).getByRole('button', {name: '否', exact: true})).toHaveAttribute('aria-pressed', 'true');
     await choose(page, true);
     await page.getByRole('button', {name: '关闭阅读设置'}).click();
     await page.keyboard.press('m');
@@ -116,6 +116,7 @@ test('desktop retains its discoverable side control', async ({page}) => {
 });
 
 test('fullscreen reminder stays until explicitly dismissed and ignores the old automatic seen flag', async ({page}, info) => {
+  await page.addInitScript(() => localStorage.setItem('reader_fullscreen', 'true'));
   await page.setViewportSize({width: 320, height: 844});
   await page.addInitScript(() => localStorage.setItem('reader_fullscreenHintSeen', 'true'));
   await page.goto(detail); await page.locator('.read-now:visible').click(); await ready(page);
@@ -169,6 +170,7 @@ test('failed chapters keep recovery controls accessible in fullscreen', async ({
 
 for (const width of [320, 390]) {
   test(`text and all bottom controls stay in safe areas at ${width}px and on rotation`, async ({page}, info) => {
+    await page.addInitScript(() => localStorage.setItem('reader_fullscreen', 'true'));
     await page.setViewportSize({width, height: 844});
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setSafeAreaInsetsOverride', {insets: {top: 48, bottom: 34, left: 0, right: 0}});
@@ -205,6 +207,7 @@ for (const width of [320, 390]) {
 }
 
 test('fullscreen starts only after the loading paper has covered the outgoing page', async ({page}) => {
+  await page.addInitScript(() => localStorage.setItem('reader_fullscreen', 'true'));
   await page.setViewportSize({width: 390, height: 844});
   await page.addInitScript(() => {
     const original = Element.prototype.requestFullscreen;
@@ -232,6 +235,7 @@ test('fullscreen starts only after the loading paper has covered the outgoing pa
 });
 
 test('Back before the loading slide finishes cancels the deferred fullscreen request', async ({page}) => {
+  await page.addInitScript(() => localStorage.setItem('reader_fullscreen', 'true'));
   await page.setViewportSize({width: 390, height: 844});
   await page.goto(detail);
   await page.locator('.read-now:visible').click();

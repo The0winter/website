@@ -15,7 +15,6 @@ let currentPath = '';
 let pending: Entry | undefined;
 let overlayClosing = false;
 let catalogSelection: (() => void) | undefined;
-let fullscreenDetailReturn: Entry | undefined;
 let documentSession: string | undefined;
 const session = () => documentSession ??= crypto.randomUUID();
 
@@ -164,15 +163,7 @@ function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, t
 function onPopState(event: PopStateEvent) {
   const from = current;
   const target = stored(event.state);
-  const fullscreenDetail = fullscreenDetailReturn;
-  fullscreenDetailReturn = undefined;
   if (!from || !router) { cancelBookTransition(); return; }
-  if (fullscreenDetail && target?.flow === fullscreenDetail.flow && target.kind === 'reader' && target.bookId === fullscreenDetail.bookId && !overlay(target)) {
-    event.stopImmediatePropagation();
-    overlayClosing = false; catalogSelection = undefined;
-    navigate(fullscreenDetail, 'exit', true, true);
-    return;
-  }
   // Author pages start their own list flow, but retain the actual source visit
   // for animated Back/Forward, including cancellation during route loading.
   const authorBack = from.kind === 'author' && from.authorSource?.flow === target?.flow && from.authorSource?.href === target?.href;
@@ -231,19 +222,16 @@ export function installBookNavigation(value: Router) {
   const removeRankingCache = installRankingCache();
   const removeFullscreenBack = installReaderFullscreenBack(() => {
     if (current?.kind !== 'reader' || current.href !== location.pathname || pending && pending.href !== current.href) return;
-    if (current.libraryReturn) {
-      // A shelf shortcut has no detail predecessor. Replace its reader visit so
-      // another Back still reaches the shelf, without reopening the reader.
-      const detail = entryFor({kind: 'detail', href: `/book/${current.bookId}`, bookId: current.bookId}, current.flow);
-      if (overlay(current)) {fullscreenDetailReturn = detail; window.history.back();}
-      else navigate(detail, 'exit', true);
-    } else window.history.go(overlay(current) ? -2 : -1);
+    // Reuse the actual predecessor and Next's cached route, just like the
+    // reader's return link. Skip an open menu in the same traversal so a shelf
+    // entry returns directly to that shelf without loading a detail page.
+    window.history.go(overlay(current) ? -2 : -1);
   });
   window.addEventListener('popstate', onPopState, true);
   window.addEventListener('pagehide', cancelBookTransition);
   return () => {
     removeRankingCache();
-    removeFullscreenBack(); fullscreenDetailReturn = undefined;
+    removeFullscreenBack();
     window.removeEventListener('popstate', onPopState, true);
     window.removeEventListener('pagehide', cancelBookTransition);
     cancelBookTransition(); router = undefined;

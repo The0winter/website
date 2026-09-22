@@ -13,8 +13,8 @@ export const serverFullscreenSnapshot = () => false;
 export const isReaderPath = (path: string) => /^\/book\/[^/?#]+\/[^/?#]+$/.test(path);
 export const readerFullscreenPreferenceKey = 'reader_fullscreen';
 export function readerFullscreenPreferred() {
-  try {return localStorage.getItem(readerFullscreenPreferenceKey) !== 'false';}
-  catch {return true;}
+  try {return localStorage.getItem(readerFullscreenPreferenceKey) === 'true';}
+  catch {return false;}
 }
 
 export function subscribeReaderFullscreen(listener: () => void) {

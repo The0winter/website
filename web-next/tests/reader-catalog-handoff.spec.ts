@@ -10,6 +10,7 @@ for (const mode of ['horizontal', 'vertical', 'scroll']) {
     const gate = new Promise<void>(resolve => {release = resolve;});
     try {
       await page.addInitScript(mode => {
+        localStorage.setItem('reader_fullscreen', 'true');
         localStorage.setItem('has-seen-reading-hint', 'true');
         localStorage.setItem('reader_turnMode', JSON.stringify(mode));
         Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}});
