@@ -58,10 +58,11 @@ export default function ForumPage() {
 
   // ====== 滑动轮播专属状态 ======
   const activeIndex = TABS.findIndex(t => t.id === activeTab);
-  const [touchStartPos, setTouchStartPos] = useState<{x: number, y: number} | null>(null);
+  // Gesture decisions must be synchronous: a quick release can arrive before
+  // React renders the direction/offset updates from the last touchmove.
+  const gesture = useRef<{id: number; x: number; y: number; dx: number; direction: 'h' | 'v' | null; index: number} | null>(null);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [swipeDir, setSwipeDir] = useState<'h' | 'v' | null>(null);
   const suppressSwipeClick = useRef(false);
   const feed = useRef<HTMLDivElement>(null);
   const horizontalSwipe = useRef(false);
@@ -81,41 +82,41 @@ export default function ForumPage() {
     handleTouchCancel();
     suppressSwipeClick.current = false;
     if (e.touches.length !== 1 || (e.target as Element).closest('button, input, select, textarea, [contenteditable], .mh-bottom, .mh-topbar, .forum-publish, dialog')) return;
-    setTouchStartPos({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
+    const touch = e.touches[0];
+    gesture.current = {id: touch.identifier, x: touch.clientX, y: touch.clientY, dx: 0, direction: null, index: activeIndex};
     setIsDragging(true);
     setDragOffset(0);
-    setSwipeDir(null);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (e.touches.length !== 1) {handleTouchCancel(); return;}
-    if (!touchStartPos) return;
-    const currentX = e.targetTouches[0].clientX;
-    const currentY = e.targetTouches[0].clientY;
-    const diffX = currentX - touchStartPos.x;
-    const diffY = currentY - touchStartPos.y;
+    const current = gesture.current;
+    if (!current) return;
+    const touch = e.touches[0];
+    if (touch.identifier !== current.id) {handleTouchCancel(); return;}
+    const diffX = touch.clientX - current.x;
+    const diffY = touch.clientY - current.y;
+    current.dx = diffX;
 
-    let dir = swipeDir;
     // 滑动超过 10px 时锁定防误触方向
-    if (!dir) {
+    if (!current.direction) {
       if (Math.abs(diffX) > 10 || Math.abs(diffY) > 10) {
-        dir = Math.abs(diffX) > Math.abs(diffY) ? 'h' : 'v';
-        setSwipeDir(dir);
+        current.direction = Math.abs(diffX) > Math.abs(diffY) ? 'h' : 'v';
       }
     }
 
-    if (dir === 'h') {
+    if (current.direction === 'h') {
       if (!horizontalSwipe.current && !interruptMobileSectionTransition()) {handleTouchCancel(); return;}
       horizontalSwipe.current = true;
       suppressSwipeClick.current = true;
       let newOffset = diffX;
       // At the recommendation edge the entire section follows the finger.
-      if (activeIndex === 0 && diffX > 0) {
+      if (current.index === 0 && diffX > 0) {
         sectionDrag.current ??= startMobileSectionDrag(e.currentTarget, 'home');
         sectionDrag.current?.update(diffX);
         newOffset = 0;
       }
-      else if (activeIndex === TABS.length - 1 && diffX < 0) {
+      else if (current.index === TABS.length - 1 && diffX < 0) {
         newOffset = diffX * 0.3;
       }
       if (diffX <= 0 && sectionDrag.current) {sectionDrag.current.cancel(); sectionDrag.current = undefined;}
@@ -124,39 +125,39 @@ export default function ForumPage() {
   };
 
   const handleTouchCancel = () => {
-    sectionDrag.current?.release(false); sectionDrag.current = undefined;
+    const drag = sectionDrag.current;
+    sectionDrag.current = undefined;
+    gesture.current = null;
     horizontalSwipe.current = false;
     setIsDragging(false);
     setDragOffset(0);
-    setTouchStartPos(null);
-    setSwipeDir(null);
+    drag?.release(false);
   };
 
   const handleTouchEnd = (event: React.TouchEvent) => {
+    const current = gesture.current;
+    if (event.touches.length || !current || current.direction !== 'h') {handleTouchCancel(); return;}
+    const touch = Array.from(event.changedTouches).find(touch => touch.identifier === current.id);
+    const distance = touch ? touch.clientX - current.x : current.dx;
+    const drag = sectionDrag.current;
+    // Clear ownership before releasing: committing can navigate/unmount this page.
+    sectionDrag.current = undefined;
+    gesture.current = null;
     horizontalSwipe.current = false;
     setIsDragging(false);
-    if (!touchStartPos || swipeDir !== 'h') {
-      setTouchStartPos(null);
-      return;
-    }
-
-    const distance = event.changedTouches[0]?.clientX - touchStartPos.x;
-    const threshold = sectionSwipeThreshold(window.innerWidth);
-    if (sectionDrag.current) {
-      sectionDrag.current.update(distance);
-      sectionDrag.current.release(distance > threshold);
-      sectionDrag.current = undefined;
-    } else if (distance > threshold && activeIndex === 0) {
-      navigateMobileSection(event.currentTarget, 'home');
-    } else if (distance > threshold && activeIndex > 0) {
-      setActiveTab(TABS[activeIndex - 1].id);
-    } else if (distance < -threshold && activeIndex < TABS.length - 1) {
-      setActiveTab(TABS[activeIndex + 1].id);
-    }
-
     setDragOffset(0);
-    setTouchStartPos(null);
-    setSwipeDir(null);
+
+    const threshold = sectionSwipeThreshold(window.innerWidth);
+    if (drag) {
+      drag.update(distance);
+      drag.release(distance > threshold);
+    } else if (distance > threshold && current.index === 0) {
+      navigateMobileSection(event.currentTarget, 'home');
+    } else if (distance > threshold && current.index > 0) {
+      setActiveTab(TABS[current.index - 1].id);
+    } else if (distance < -threshold && current.index < TABS.length - 1) {
+      setActiveTab(TABS[current.index + 1].id);
+    }
   };
 
 // ====== 提取热榜页内容渲染器（纯文字版） ======
