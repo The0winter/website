@@ -105,13 +105,6 @@ interface BookDetailClientProps {
   initialFirstChapterId?: string;
 }
 
-const coverTones = ['sage', 'slate', 'mauve', 'clay', 'olive'] as const;
-function coverTone(bookId: string) {
-  // Keep each book's palette consistent across navigation, reloads and SSR.
-  const hash = Array.from(bookId).reduce((value, character) => (value * 31 + character.charCodeAt(0)) >>> 0, 0);
-  return coverTones[hash % coverTones.length];
-}
-
 function BookDescription({description}: {description: string}) {
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
@@ -375,10 +368,10 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
       <div className="book-layout max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 md:py-8 flex flex-col gap-3 md:gap-6">
         
         {/* === 第一部分：书籍核心信息 === */}
-        <div className="book-hero bg-white rounded-lg shadow-sm p-4 md:p-8 order-1" data-cover-tone={coverTone(book.id)}>
-            <div className="flex flex-row gap-4 md:gap-8">
+        <div className="book-hero bg-white rounded-lg shadow-sm p-4 md:p-8 order-1">
+            <div className="book-hero-main flex flex-row gap-4 md:gap-8">
               {/* 左侧封面 */}
-              <div className="flex-shrink-0">
+              <div className="book-hero-cover flex-shrink-0">
                 {book.cover_image ? (
                   <BookCover priority sizes="(min-width: 768px) 192px, 96px" src={book.cover_image} alt={book.title || '小说封面'} className="w-24 h-32 md:w-48 md:h-64 object-cover rounded shadow-md" />
                 ) : (
@@ -389,7 +382,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
               </div>
 
               {/* 右侧信息 */}
-              <div className="flex-1 flex flex-col justify-between md:justify-start">
+              <div className="book-hero-info flex-1 flex flex-col justify-between md:justify-start">
                  {/* 书名 */}
                  <div className="flex items-start justify-between mb-1 md:mb-4">
                      <h1 className="text-lg md:text-3xl font-bold text-gray-900 line-clamp-2">{book.title}</h1>
@@ -466,6 +459,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                  </div>
                  <div className="book-desktop-milestone"><BookMilestoneEntry bookId={book.id} state={milestones}/></div>
               </div>
+              <span className="book-hero-backdrop" aria-hidden="true"><BookCover src={book.cover_image} alt="" sizes="(min-width: 768px) 480px, 240px" loading="eager"/></span>
             </div>
 
             {/* 手机端统计与简介卡片 */}

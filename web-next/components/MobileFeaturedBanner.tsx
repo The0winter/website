@@ -120,7 +120,7 @@ export default function MobileFeaturedBanner({books}: {books: Book[]}) {
         return <BookLink key={`${position}-${book.id}`} href={`/book/${book.id}`} className="mh-banner" data-banner-clone={clone || undefined}
           tabIndex={!clone && index === active ? 0 : -1} aria-hidden={clone || index !== active} aria-label={`推荐 ${index + 1}/${count}：${book.title}`}>
           <div className="mh-banner-backdrop" aria-hidden="true"><BookCover src={book.cover_image} alt="" sizes="240px" loading="eager"/></div>
-          <div className="mh-banner-copy"><span className="mh-kicker">九天精选 · 每日书单</span><h2>{book.title}</h2><span className="mh-banner-sub">{book.author || '九天小说'} <ChevronRight size={13}/></span></div>
+          <div className="mh-banner-copy"><h2>{book.title}</h2><span className="mh-banner-sub"><span>{book.author || '九天小说'}</span><ChevronRight size={14}/></span></div>
           <div className="mh-cover"><BookCover src={book.cover_image} alt={`${book.title}封面`} sizes="72px" loading="eager" priority={!clone && index === 0}/></div>
         </BookLink>;
       })}
