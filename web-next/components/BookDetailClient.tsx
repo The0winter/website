@@ -10,7 +10,7 @@ import Link from './PrefetchLink';
 import ReadingEntryLink from './ReadingEntryLink';
 import RecordBookVisit from './RecordBookVisit';
 import BookCatalogSheet from './BookCatalogSheet';
-import {BookMilestoneEntry, BookMilestoneSheet, useBookMilestones} from './BookMilestones';
+import {BookMilestoneEntry, BookMilestoneSheet, useBookMilestones, type MilestoneData} from './BookMilestones';
 import {useBookCatalog} from '@/lib/useBookCatalog';
 import {formatChapterTitle} from '@/lib/catalog-title';
 import {formatRating, ratingLabel} from '@/lib/rating';
@@ -103,6 +103,27 @@ interface BookDetailClientProps {
   };
   initialCatalog?: CatalogPage<Chapter>;
   initialFirstChapterId?: string;
+  initialMilestones: MilestoneData | null;
+}
+
+function ReviewEditor({review, submitting, onSubmit}: {review: Review | null; submitting: boolean; onSubmit: (rating: number, content: string) => Promise<void>}) {
+  // Mount only when the personal review is ready, so a late response cannot overwrite a draft.
+  const [rating, setRating] = useState(review?.rating || 0);
+  const [content, setContent] = useState(review?.content || '');
+  return <form onSubmit={event => {event.preventDefault(); void onSubmit(rating, content);}}>
+    <div className="flex flex-wrap items-center gap-2 mb-4">
+      <span className="text-sm font-bold text-gray-700">评价:</span>
+      <div className="flex items-center space-x-2"><StarRating rating={rating} interactive onRate={setRating} size={6}/></div>
+    </div>
+    <label className="block text-sm text-gray-500 mb-2" htmlFor="book-review-content">短评（选填，可以只提交评分）</label>
+    <textarea id="book-review-content" value={content} onChange={event => setContent(event.target.value)} placeholder="写下你的短评..."
+      className="w-full p-3 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:outline-none min-h-[120px] bg-white placeholder-gray-500 text-gray-900 text-sm" maxLength={4000}/>
+    <div className="mt-3 flex justify-end">
+      <button type="submit" disabled={submitting || !rating} className="bg-green-600 text-white px-6 py-2 rounded text-sm hover:bg-green-700 disabled:opacity-50 transition-colors">
+        {submitting ? '保存中...' : content.trim() ? '发表评论' : '提交评分'}
+      </button>
+    </div>
+  </form>;
 }
 
 function BookDescription({description}: {description: string}) {
@@ -135,7 +156,7 @@ function BookDescription({description}: {description: string}) {
   </div>;
 }
 
-export default function BookDetailClient({ initialBookData, initialCatalog, initialFirstChapterId }: BookDetailClientProps) {
+export default function BookDetailClient({ initialBookData, initialCatalog, initialFirstChapterId, initialMilestones }: BookDetailClientProps) {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [bookData,setBookData] = useState(initialBookData);
@@ -143,7 +164,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   const recentChapterId = useSyncExternalStore(subscribeReadingSession, () => lastReadChapter(book.id), serverLastReadChapter);
   
   const [isBookmarked, setIsBookmarked] = useState(false);
-  const milestones = useBookMilestones(book.id, isBookmarked);
+  const milestones = useBookMilestones(book.id, initialMilestones);
   const [loading, setLoading] = useState(false);
 
   // 🔥 目录交互状态
@@ -177,10 +198,11 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   const personalLoading = Boolean(userId) && personalResult?.key !== personalKey;
   const personalError = userId && personalResult?.key === personalKey ? personalResult.error : '';
   const myReview = userId && personalResult?.key === personalKey ? personalResult.review : null;
-  const [myRating, setMyRating] = useState(0);
-  const [myContent, setMyContent] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [showReviewForm, setShowReviewForm] = useState(false);
+  useEffect(() => {
+    if (showReviewForm && !authLoading && !userId) router.push('/login');
+  }, [showReviewForm, authLoading, userId, router]);
 
   // --- 初始化逻辑 ---
   useEffect(() => {
@@ -266,14 +288,14 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
     try {
       if (isBookmarked) {
         const res = await fetch(`/api/users/${userId}/bookmarks/${book.id}`, { method: 'DELETE' });
-        if (res.ok) setIsBookmarked(false);
+        if (res.ok) {setIsBookmarked(false); milestones.retry();}
       } else {
         const res = await fetch(`/api/users/${userId}/bookmarks`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ bookId: book.id })
         });
-        if (res.ok) setIsBookmarked(true);
+        if (res.ok) {setIsBookmarked(true); milestones.retry();}
       }
     } catch (error) {
       console.error('操作失败:', error);
@@ -284,17 +306,13 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
   // --- 操作：评论相关 ---
   const openReviewForm = () => {
-    if (!user) return router.push('/login');
-    if (personalLoading || personalError) return;
-    setMyRating(myReview?.rating || 0);
-    setMyContent(myReview?.content || '');
+    if (!authLoading && !user) return router.push('/login');
     setCommunityTab('reviews');
     setShowReviewForm(true);
     requestAnimationFrame(() => document.getElementById('reviews-section')?.scrollIntoView({block:'start',behavior:'smooth'}));
   };
 
-  const handleSubmitReview = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmitReview = async (myRating: number, myContent: string) => {
     if (!user) return router.push('/login');
     if (submittingReview || myRating < 1 || myRating > 5) return;
 
@@ -348,15 +366,15 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
      return book.author_id;
   };
   const displayRating = formatRating(book.rating);
-  const readerRatingCount = book.numRatings ?? book.numReviews ?? 0;
   const baselineRatingCount = book.ratingSummary?.baselineCount ?? book.statisticsSeed?.ratingSample?.votes.length ?? book.statisticsSeed?.ratingWeight ?? 0;
-  const ratingCountLabel = `${readerRatingCount} 人评分${baselineRatingCount ? ` · ${baselineRatingCount} 份基础评分` : ''}`;
   const ratingOrigin = baselineRatingCount ? '基础评分为初始化样本，不代表真实读者；书友评分按实际提交人数计算。' : '评分来自读者实际提交，每人每书计一次。';
   const compactCount = new Intl.NumberFormat('zh-CN', {notation: 'compact', maximumFractionDigits: 1});
   const mobileWordCount = totalWords === null ? null : Math.floor(totalWords >= 10000 ? totalWords / 10000 : totalWords);
   const mobileWordUnit = totalWords !== null && totalWords >= 10000 ? '万字' : '字';
   const liveViews = milestones.data?.counts.views ?? book.views ?? 0;
-  const viewCount = compactCount.format(liveViews);
+  const viewParts = compactCount.formatToParts(liveViews);
+  const viewCount = viewParts.filter(part => part.type !== 'compact').map(part => part.value).join('');
+  const viewUnit = viewParts.find(part => part.type === 'compact')?.value;
 
   return (
     // 修改1：增加手机端底部 padding (pb-24)，防止被常驻底栏遮挡内容
@@ -452,8 +470,6 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                     <Star className="w-6 h-6 fill-yellow-400 text-yellow-400 shrink-0" aria-hidden="true" />
                     <strong className={`book-rating-score font-bold text-gray-900 ${book.rating ? 'text-4xl' : 'text-lg'}`}>{displayRating}</strong>
                  </div>
-                 <div className="book-rating-counts" title={ratingOrigin}>{ratingCountLabel}</div>
-                 <button className="book-rate-button" onClick={openReviewForm} disabled={authLoading || personalLoading || Boolean(personalError)}>{myReview ? '修改评分' : '我要评分'}</button>
                  <div className="mt-4 pt-4 border-t border-gray-100 text-right">
                      <span className="text-xs text-gray-400">{baselineRatingCount ? '基础评分与书友评分综合' : '评分来自真实用户'}</span>
                  </div>
@@ -469,22 +485,21 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                 <dl className="book-mobile-stats" aria-label="作品数据">
                   <div>
                     <dt>字数</dt>
-                    <dd className="book-word-count">{mobileWordCount === null ? '暂无统计' : <><span className="book-word-count-value">{mobileWordCount}</span><small>{mobileWordUnit}</small></>}</dd>
+                    <dd className="book-stat-count">{mobileWordCount === null ? '暂无统计' : <><span className="book-stat-value">{mobileWordCount}</span><small>{mobileWordUnit}</small></>}</dd>
                   </div>
                   <div>
                     <dt>浏览量</dt>
-                    <dd>{viewCount}</dd>
+                    <dd className="book-stat-count"><span className="book-stat-value">{viewCount}</span>{viewUnit && <small>{viewUnit}</small>}</dd>
                   </div>
                   <div>
                     <dt>{baselineRatingCount ? '综合评分' : '评分'}</dt>
                     <dd className="book-mobile-rating" data-rated={displayRating !== '暂无评分'} title={ratingOrigin} aria-label={`${baselineRatingCount ? '综合评分' : '书友评分'}：${ratingLabel(book.rating)}`}>
                       <Star size={15} aria-hidden="true" />
-                      <strong>{displayRating}</strong>
+                      <strong className="book-stat-value">{displayRating}</strong>
                     </dd>
                   </div>
                 </dl>
               </div>
-                <div className="book-mobile-rating-action"><span className="book-rating-counts" title={ratingOrigin}>{ratingCountLabel}</span><button className="book-rate-button" onClick={openReviewForm} disabled={authLoading || personalLoading || Boolean(personalError)}>{myReview ? '修改评分' : '我要评分'}</button></div>
                 <BookDescription description={book.description}/>
             </div>
         </div>
@@ -507,7 +522,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
               <button id="reviews-tab" role="tab" aria-selected={communityTab === 'reviews'} aria-controls="reviews-panel" onClick={() => setCommunityTab('reviews')}>评论 <small>{reviewTotal}</small></button>
               <button id="articles-tab" role="tab" aria-selected={communityTab === 'articles'} aria-controls="articles-panel" onClick={() => setCommunityTab('articles')}>文章</button>
             </div>
-            {communityTab === 'reviews' && !showReviewForm && <button className="book-review-compose" disabled={authLoading || personalLoading || Boolean(personalError)} onClick={openReviewForm}>写书评</button>}
+            {communityTab === 'reviews' && !showReviewForm && <button className="book-review-compose" onClick={openReviewForm}>写书评</button>}
             {communityTab === 'articles' && <Link className="book-article-compose" href={`/forum/create?type=article&bookId=${book.id}&bookTitle=${encodeURIComponent(book.title)}`}><PenLine size={14} aria-hidden="true"/>写文章</Link>}
             </div>
             {communityTab === 'articles' && <div id="articles-panel" role="tabpanel" aria-labelledby="articles-tab"><BookArticles bookId={book.id} /></div>}
@@ -516,33 +531,9 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             {/* 评论表单 */}
             {showReviewForm && (
                 <div className="mb-8 p-4 md:p-6 bg-gray-50 rounded-lg border border-blue-100 shadow-inner animation-fade-in relative">
-                    <button onClick={() => setShowReviewForm(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
-                    <form onSubmit={handleSubmitReview}>
-                        <div className="flex flex-wrap items-center gap-2 mb-4">
-                            <span className="text-sm font-bold text-gray-700">评价:</span>
-                            <div className="flex items-center space-x-2">
-                                <StarRating rating={myRating} interactive={true} onRate={setMyRating} size={6} />
-                            </div>
-                        </div>
-                        <label className="block text-sm text-gray-500 mb-2" htmlFor="book-review-content">短评（选填，可以只提交评分）</label>
-                        <textarea
-                            id="book-review-content"
-                            value={myContent}
-                            onChange={(e) => setMyContent(e.target.value)}
-                            placeholder="写下你的短评..."
-                            className="w-full p-3 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:outline-none min-h-[120px] bg-white placeholder-gray-500 text-gray-900 text-sm"
-                            maxLength={4000}
-                        />
-                        <div className="mt-3 flex justify-end">
-                            <button 
-                                type="submit" 
-                                disabled={submittingReview || !myRating}
-                                className="bg-green-600 text-white px-6 py-2 rounded text-sm hover:bg-green-700 disabled:opacity-50 transition-colors"
-                            >
-                                {submittingReview ? '保存中...' : myContent.trim() ? '发表评论' : '提交评分'}
-                            </button>
-                        </div>
-                    </form>
+                    <button aria-label="关闭书评" onClick={() => setShowReviewForm(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
+                    {authLoading || personalLoading || !userId ? <p className="book-review-loading" role="status"><LoadingText>正在准备书评</LoadingText></p>
+                      : personalError ? null : <ReviewEditor key={userId} review={myReview} submitting={submittingReview} onSubmit={handleSubmitReview}/>}
                 </div>
             )}
 

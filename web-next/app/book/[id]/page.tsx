@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { cache } from 'react';
 import { notFound } from 'next/navigation';
 import BookDetailClient from '@/components/BookDetailClient';
+import type {MilestoneData} from '@/components/BookMilestones';
 import { formatRelativeUpdate } from '@/lib/relative-update';
 import type { Book, Chapter } from '@/lib/api';
 import { getApiBaseUrl } from '@/utils/api'; // 新增：引入我们写的智能地址判断工具
@@ -34,7 +35,7 @@ const getBook = cache(async (id: string): Promise<Book | null> => {
   try {
     const baseUrl = getApiBaseUrl(); // 动态获取：服务端走内网，客户端走公网
     const res = await fetch(`${baseUrl}/books/${id}`, { 
-      next: { revalidate: 60 } 
+      cache: 'no-store'
     });
     if (res.status===404) return null;
     if (!res.ok) throw new Error('作品服务暂不可用');
@@ -84,6 +85,17 @@ async function getTotalWords(id: string): Promise<number | null> {
   }
 }
 
+async function getMilestones(id: string): Promise<MilestoneData | null> {
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/books/${id}/milestones`, {cache: 'no-store'});
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    // Keep a stable entry on failure; opening the sheet lets the reader retry.
+    return null;
+  }
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const book = await getBook(id);
@@ -106,11 +118,12 @@ export default async function BookDetailPage({ params }: Props) {
   const { id } = await params;
   
   // 并行请求书籍和章节数据
-  const [book, catalog, firstChapter, totalWords] = await Promise.all([
+  const [book, catalog, firstChapter, totalWords, milestones] = await Promise.all([
     getBook(id),
     getChapters(id),
     getChapters(id, 'asc'),
     getTotalWords(id),
+    getMilestones(id),
   ]);
   
   if (!book) {
@@ -143,7 +156,7 @@ export default async function BookDetailPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, String.fromCharCode(92) + 'u003c') }}
       />
-      <BookDetailClient key={book.id} initialBookData={{ book, chapters, summary: { totalWords, updatedLabel } }} initialCatalog={firstChapter} initialFirstChapterId={firstChapter?.rows[0]?.id} />
+      <BookDetailClient key={book.id} initialBookData={{ book, chapters, summary: { totalWords, updatedLabel } }} initialMilestones={milestones} initialCatalog={firstChapter} initialFirstChapterId={firstChapter?.rows[0]?.id} />
     </>
   );
 }

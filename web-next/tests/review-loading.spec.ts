@@ -16,6 +16,43 @@ async function setup(page:Page){
   });
 }
 
+test('write review is usable before sign-in resolves and waits for the saved draft',async({page})=>{
+  await setup(page);await page.setViewportSize({width:390,height:844});
+  const auth=gate(),personal=gate();
+  await page.route('**/api/auth/session',async route=>{await auth.promise;await route.fulfill({json:{user:reader,profile:reader}});});
+  await page.route(`**/api/books/${book}/reviews/mine`,async route=>{await personal.promise;await route.fulfill({json:{...review,rating:3,content:'已保存的书评'}});});
+  try{
+    await page.goto(`${base}/book/${book}`);
+    const compose=page.getByRole('button',{name:'写书评',exact:true});
+    await expect(compose).toBeEnabled();await expect(compose).toHaveCSS('opacity','1');
+    await compose.click();
+    await expect(page.getByRole('status').filter({hasText:'正在准备书评'})).toBeVisible();
+    await expect(page.getByPlaceholder('写下你的短评...')).toHaveCount(0);
+    auth.release();
+    await expect(page).toHaveURL(`${base}/book/${book}`);
+    personal.release();
+    await expect(page.getByPlaceholder('写下你的短评...')).toHaveValue('已保存的书评');
+    await expect(page.getByRole('button',{name:'6 分（3 星）',exact:true})).toHaveAttribute('aria-pressed','true');
+    await page.getByPlaceholder('写下你的短评...').fill('继续编辑');
+    await expect(page.getByPlaceholder('写下你的短评...')).toHaveValue('继续编辑');
+  }finally{auth.release();personal.release();}
+});
+
+test('a pending review can be cancelled without reopening after sign-in',async({page})=>{
+  await setup(page);const auth=gate();
+  await page.route('**/api/auth/session',async route=>{await auth.promise;await route.fulfill({json:{user:null,profile:null}});});
+  try{
+    await page.goto(`${base}/book/${book}`);
+    await page.getByRole('button',{name:'写书评',exact:true}).click();
+    await page.getByRole('button',{name:'关闭书评'}).click();
+    auth.release();
+    await expect(page.getByRole('button',{name:'写书评',exact:true})).toBeEnabled();
+    await expect(page).toHaveURL(`${base}/book/${book}`);
+    await page.getByRole('button',{name:'写书评',exact:true}).click();
+    await expect(page).toHaveURL(/\/login$/);
+  }finally{auth.release();}
+});
+
 test('comments show before sign-in and personal review, without duplicate list reads',async({page},info)=>{
   await setup(page);await page.setViewportSize({width:390,height:844});
   const auth=gate(),list=gate(),personal=gate();let reads=0,personalReads=0,failPersonal=true;
@@ -28,14 +65,14 @@ test('comments show before sign-in and personal review, without duplicate list r
   try{
     await page.goto(`${base}/book/${book}`);
     await expect(page.getByRole('status').filter({hasText:'正在加载评论'})).toBeVisible();
-    await expect(page.getByText('还没有人评价，快来抢沙发！')).toHaveCount(0);
+    await expect(page.getByText('还没有文字评论，可以先评分，也可以写下读后感。')).toHaveCount(0);
     await page.screenshot({path:info.outputPath('verified-review-loading.png')});
     list.release();await expect(page.getByText(review.content,{exact:true})).toBeVisible();
     const initialReads=reads;
     auth.release();await expect.poll(()=>personalReads).toBeGreaterThan(0);
     expect(reads).toBe(initialReads);
     await expect(page.getByText(review.content,{exact:true})).toBeVisible();
-    await expect(page.getByRole('button',{name:'写书评',exact:true})).toBeDisabled();
+    await expect(page.getByRole('button',{name:'写书评',exact:true})).toBeEnabled();
     personal.release();await expect(page.getByRole('alert').filter({hasText:'个人书评读取失败'})).toBeVisible();
     await expect(page.getByText(review.content,{exact:true})).toBeVisible();
     failPersonal=false;await page.getByRole('button',{name:'重试',exact:true}).click();
@@ -56,12 +93,12 @@ for(const width of [320,1440])test(`empty comments appear only after a successfu
     await page.goto(`${base}/book/${book}`);
     const panel=page.locator('#reviews-panel');
     await expect(panel).toHaveAttribute('aria-busy','true');
-    await expect(page.getByText('还没有人评价，快来抢沙发！')).toHaveCount(0);
+    await expect(page.getByText('还没有文字评论，可以先评分，也可以写下读后感。')).toHaveCount(0);
     response.release();await expect(panel.getByRole('alert')).toContainText('评论加载失败');
-    await expect(page.getByText('还没有人评价，快来抢沙发！')).toHaveCount(0);
+    await expect(page.getByText('还没有文字评论，可以先评分，也可以写下读后感。')).toHaveCount(0);
     fail=false;await panel.getByRole('button',{name:'重试',exact:true}).click();
     await expect(panel).toHaveAttribute('aria-busy','false');
-    await expect(page.getByText('还没有人评价，快来抢沙发！')).toBeVisible();
+    await expect(page.getByText('还没有文字评论，可以先评分，也可以写下读后感。')).toBeVisible();
   }finally{response.release();}
 });
 

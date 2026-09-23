@@ -117,7 +117,6 @@
 .book-review-error { margin:8px 0; font-size:13px; color:#a34747; }
 .book-review-error button { text-decoration:underline; }
 .book-review-loading { padding:24px 0; text-align:center; color:var(--home-muted,#9a9388); font-size:14px; line-height:24px; }
-.book-review-compose:disabled { opacity:.5; cursor:wait; }
 @media(hover:hover) {
   .book-review-reactions button:not(:disabled):hover { color:#d84b55; background:#fff5f5; }
 }
@@ -144,12 +143,12 @@
   .book-mobile-stats>div { display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:0; gap:1px; padding:0 4px; }
   .book-mobile-stats dt { order:1; color:#9a9388; font-size:12px; line-height:18px; }
   .book-mobile-stats dd { display:flex; align-items:center; justify-content:center; gap:3px; height:24px; margin:0; color:#332f2a; font-size:17px; font-weight:600; line-height:24px; white-space:nowrap; font-variant-numeric:tabular-nums; }
-  .book-mobile-stats .book-word-count { align-items:baseline; gap:1px; }
-  .book-word-count-value { letter-spacing:-.04em; font-variant-numeric:proportional-nums; }
-  .book-word-count small { font-size:14px; font-weight:400; letter-spacing:normal; }
+  .book-mobile-stats .book-stat-count { align-items:baseline; gap:1px; }
+  .book-stat-value { font-family:Arial,"Microsoft YaHei",sans-serif; font-size:17px; font-weight:600; letter-spacing:normal; font-variant-numeric:tabular-nums; }
+  .book-stat-count small { font-size:14px; font-weight:400; letter-spacing:normal; }
   .book-mobile-rating svg { color:#d8a74c; fill:currentColor; flex-shrink:0; }
   .book-mobile-rating strong { font-weight:inherit; }
-  .book-mobile-rating[data-rated=false] { font-size:13px; font-weight:400; }
+  .book-mobile-rating[data-rated=false] .book-stat-value { font-size:13px; font-weight:400; }
   .book-intro .book-description { font-size:16px; line-height:1.6; letter-spacing:normal; color:#625e56; }
   .book-intro button { background:none; color:#978369; justify-content:flex-end; width:auto; margin-left:auto; padding:4px 0; font-size:13px; }
   .book-catalog { border-radius:0; box-shadow:none; background:#fffdf9; margin-bottom:10px; }
@@ -171,7 +170,3 @@
   .book-actions .read-now { background:#df343b; font-size:16px; font-weight:500; flex:1.65; }
   .book-actions .read-now svg { display:none; }
 }
-.book-rating-counts { font-size:12px; line-height:1.6; color:#8f8b83; }
-.book-rate-button { min-height:40px; padding:6px 0; font-size:13px; color:#978369; }
-.book-rate-button:disabled { opacity:.5; }
-.book-mobile-rating-action { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:-8px 0 10px; }

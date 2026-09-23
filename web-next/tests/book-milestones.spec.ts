@@ -16,6 +16,33 @@ const sample = {
 test.beforeEach(async ({page}) => {
   await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
 });
+
+test('the server-rendered milestone and statistics stay stable through hydration',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await page.emulateMedia({reducedMotion:'reduce'});
+  let milestoneReads=0;
+  await page.route(`**/api/books/${book}/milestones`,route=>{milestoneReads++;return route.fulfill({json:sample});});
+  await page.addInitScript(()=>{
+    const snapshots:string[]=[];
+    Object.assign(window,{detailSnapshots:snapshots});
+    const sample=()=>{
+      const overview=document.querySelector('.book-mobile-overview');
+      if(overview){const value=overview.textContent || '';if(snapshots.at(-1)!==value)snapshots.push(value);}
+      if(snapshots.length<10)requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await page.goto(`${base}/book/${book}`);
+  await expect(page.locator('#reviews-panel')).toHaveAttribute('aria-busy','false');
+  await expect(page.locator('html')).not.toHaveAttribute('data-book-transition',/.+/);
+  expect(milestoneReads).toBe(0);
+  const snapshots=await page.evaluate(()=>(window as Window & {detailSnapshots?:string[]}).detailSnapshots);
+  expect(snapshots).toHaveLength(1);
+  await expect(page.locator('.book-mobile-rating-action, .book-rate-button')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'写书评',exact:true})).toBeEnabled();
+  await page.getByRole('button',{name:'查看作品里程碑'}).click();
+  await expect(page.locator('.milestone-event')).toHaveCount(7);
+  expect(milestoneReads).toBe(1);
+});
 for (const width of [320,390,430,767,768,1440]) {
   test(`milestone entry, timeline and browser history at ${width}px`, async ({page}, info) => {
     await page.setViewportSize({width,height:844});
@@ -25,6 +52,9 @@ for (const width of [320,390,430,767,768,1440]) {
     await expect(page.locator('html')).not.toHaveAttribute('data-book-transition',/.+/);
     const entry=page.getByRole('button',{name:'查看作品里程碑'});
     await expect(entry).toBeVisible();
+    await entry.click();
+    await expect(page.locator('.milestone-event')).toHaveCount(7);
+    await page.getByRole('button',{name:'返回书籍详情'}).click();
     await expect(entry.locator('[data-active=true]')).toContainText('五千收藏');
     if(width<768){
       await expect(page.locator('.book-mobile-stats dd').first()).toHaveCSS('font-size','17px');

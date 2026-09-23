@@ -7,18 +7,20 @@ import {bookMilestonesOpen, closeBookMilestones, openBookMilestones, serverCatal
 import {milestoneNumber, type BookMilestone, type MilestoneKind} from '../../shared/book-milestones.mjs';
 import './book-milestones.css';
 
-type MilestoneData = {counts: Record<MilestoneKind, number>; events: BookMilestone[]; next: Record<MilestoneKind, number | null>};
+export type MilestoneData = {counts: Record<MilestoneKind, number>; events: BookMilestone[]; next: Record<MilestoneKind, number | null>};
 const kinds = ['favorites', 'views'] as const;
 const labels = {favorites: '收藏', views: '浏览'};
 const compact = (value: number) => new Intl.NumberFormat('zh-CN', {notation: 'compact', maximumFractionDigits: 1}).format(value);
 
-export function useBookMilestones(bookId: string, bookmarked: boolean) {
-  const [data, setData] = useState<MilestoneData | null>(null);
+export function useBookMilestones(bookId: string, initialData: MilestoneData | null) {
+  const [data, setData] = useState(initialData);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
   const open = useSyncExternalStore(subscribeBookNavigation, () => bookMilestonesOpen(bookId), serverCatalogClosed);
   const retry = useCallback(() => setRevision(value => value + 1), []);
   useEffect(() => {
+    // The entry is complete in the server response. Refresh only after interaction.
+    if (!open && revision === 0) return;
     let active = true;
     void safeFetch(`/api/books/${bookId}/milestones`, {cache: 'no-store'}).then(async response => {
       if (!response.ok) throw new Error('里程碑暂时无法加载');
@@ -26,7 +28,7 @@ export function useBookMilestones(bookId: string, bookmarked: boolean) {
       if (active) {setData(result); setError('');}
     }).catch(() => {if (active) setError('里程碑暂时无法加载，请重试');});
     return () => {active = false;};
-  }, [bookId, bookmarked, open, revision]);
+  }, [bookId, open, revision]);
   return {data, error, open, retry};
 }
 type State = ReturnType<typeof useBookMilestones>;
