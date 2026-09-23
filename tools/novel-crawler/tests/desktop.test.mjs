@@ -9,8 +9,9 @@ import net from 'node:net';
 import {once} from 'node:events';
 import puppeteer from 'puppeteer';
 import iconv from 'iconv-lite';
+import axios from 'axios';
 import {createDesktop} from '../desktop/server.mjs';
-import {rememberWebsite, readSettings, normalizeWebsite, loadSites, parseSearch, fillTemplate, searchBooks, specForBook} from '../desktop/sources.mjs';
+import {rememberWebsite, readSettings, normalizeWebsite, loadSites, parseSearch, fillTemplate, searchBooks, resolveBook, specForBook} from '../desktop/sources.mjs';
 import {acquire} from '../core.mjs';
 import {checkIdentity} from '../quality.mjs';
 import {getCatalog, getChapter} from '../adapters.mjs';
@@ -138,7 +139,40 @@ test('keyword searches retain partial titles, rank exact titles first, and keep 
   assert.deepEqual(await searchBooks({...options, author: '甲作'}), []);
   assert.deepEqual(await searchBooks({...options, title: '不存在'}), []);
   assert.deepEqual((await searchBooks({...options, title: '《红 楼》'})).map(book => book.title), ['紅樓夢']);
+  for (const website of [source.home + 'novel/', source.home + 'search/index?keyword=旧书', source.home + 'novel/story/chapter1']) {
+    assert.deepEqual((await searchBooks({...options, website})).map(book => book.title), ['小城', '小城故事', '别册小城记']);
+  }
   await assert.rejects(searchBooks({...options, title: '《》'}), /有效的书名或关键词/);
+});
+
+test('a stale detail URL falls back to keyword search, while matching detail keywords resolve the full title', async t => {
+  const calls = [], statuses = [];
+  const server = http.createServer((req, res) => {
+    calls.push(req.url); res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    if (req.url.startsWith('/search?')) res.end('<div class="result"><a href="/book/fox">九尾天狐之山间故事</a><b>测试作者</b></div>');
+    else res.end(`<h1>${req.url === '/book/fox' ? '九尾天狐之山间故事' : '别的故事'}</h1><b>测试作者</b>`);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`, originalAdapter = axios.defaults.adapter;
+  axios.defaults.adapter = config => {
+    const parsed = new URL(config.url); assert.equal(parsed.hostname, 'books.example');
+    return axios({...config, url: base + parsed.pathname + parsed.search, adapter: originalAdapter});
+  };
+  t.after(() => { axios.defaults.adapter = originalAdapter; });
+  const site = {id: 'fixture', name: '测试来源', home: 'https://books.example/', hosts: ['books.example'],
+    search: {url: 'https://books.example/search?q=${query}', items: '.result', title: 'a', link: 'a', author: 'b'},
+    book: {urlPattern: '^/book/[a-z]+$', metadata: {title: 'h1', author: 'b'}}, spec: {delayMs: 1}};
+  const options = {website: site.home + 'book/old', title: '九尾天狐之', stateDir: temp(t), sites: [site], onStatus: status => statuses.push(status.message)};
+  const expected = [{title: '九尾天狐之山间故事', author: '测试作者', url: site.home + 'book/fox', site: site.name}];
+  assert.deepEqual(await searchBooks(options), expected);
+  assert.equal(calls[0], '/book/old'); assert.ok(calls[1].startsWith('/search?')); assert.match(statuses[0], /重新站内查找/);
+  calls.length = 0;
+  assert.deepEqual(await searchBooks({...options, website: expected[0].url}), [{...expected[0], statusDetection: 'unconfigured', categoryDetection: 'unconfigured'}]);
+  assert.deepEqual(calls, ['/book/fox']);
+  assert.deepEqual(await searchBooks({...options, website: expected[0].url, author: '另一个作者'}), []);
+  await assert.rejects(searchBooks({...options, sites: [{...site, search: undefined}]}), /当前网址对应《别的故事》.*目标书籍/);
+  await assert.rejects(resolveBook({url: expected[0].url, title: '别的故事', author: '测试作者', stateDir: options.stateDir, sites: [site]}), /作品身份不匹配/);
 });
 
 test('shudugu details adapter handles variable book IDs and chapter pages without following the next chapter', async t => {

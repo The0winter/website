@@ -128,19 +128,24 @@ export async function searchBooks({website, title, author = '', stateDir = defau
   const normalize = value => normalizedIdentity(value, site.spec.identityNormalization);
   const query = normalize(title), requestedAuthor = normalize(author);
   if (!query) throw Error('请输入有效的书名或关键词');
+  const matchesQuery = book => normalize(book.title).includes(query) && (!author.trim() || normalize(book.author) === requestedAuthor);
   const client = makeSiteClient(site, stateDir, {delayMs: site.search?.delayMs ?? site.spec.delayMs, onStatus, shouldStop, signal});
   onClient(client);
   try {
-    if (new URL(website).pathname !== '/') {
-      bookUrl(website, site);
+    // A category/search/chapter URL still identifies the site. Only an actual
+    // book-detail URL should bypass its configured keyword search.
+    if (new RegExp(site.book.urlPattern, 'u').test(new URL(website).pathname)) {
       const response = await client.get(website, {encoding: site.spec.encoding, fresh: true, render: (site.book.transport || site.spec.transport) === 'browser', readySelector: site.book.readySelector});
       const $ = load(decode(response.body, response.contentType, site.spec.encoding));
       const book = {title: selectValue($, site.book.metadata.title), author: selectValue($, site.book.metadata.author), url: response.url, site: site.name};
-      checkIdentity({title, author: author || book.author, identityNormalization: site.spec.identityNormalization}, book);
       bookUrl(book.url, site);
-      Object.assign(book, extractBookStatus($, site.book.metadata.status, response));
-      Object.assign(book, extractBookCategory($, site.book.metadata.category, response));
-      return [applyVerifiedBookStatus(book, stateDir, site.spec.identityNormalization)];
+      if (matchesQuery(book)) {
+        Object.assign(book, extractBookStatus($, site.book.metadata.status, response));
+        Object.assign(book, extractBookCategory($, site.book.metadata.category, response));
+        return [applyVerifiedBookStatus(book, stateDir, site.spec.identityNormalization)];
+      }
+      if (!site.search) throw Error(`当前网址对应《${book.title}》（${book.author}），与输入的书名或作者不符；该站尚未适配搜索，请填写目标书籍的详情页地址`);
+      onStatus?.({kind: 'searching', message: `当前网址对应《${book.title}》，正在按“${title.trim()}”重新站内查找…`});
     }
     if (!site.search) throw Error('该网站暂时只支持书籍详情页，请把网站栏换成书籍详情页地址');
     let url = fillTemplate(site.search.url, {query: encodeURIComponent(title.trim())});
@@ -151,7 +156,7 @@ export async function searchBooks({website, title, author = '', stateDir = defau
       const response = await client.get(url, {encoding: site.spec.encoding, fresh: true, render: (site.search.transport || site.spec.transport) === 'browser', readySelector: site.search.readySelector, ...(page === 0 && site.search.form ? {searchForm: {...site.search.form, value: title.trim()}} : {})});
       const parsed = parseSearch(decode(response.body, response.contentType, site.spec.encoding), response.url, site);
       // Search accepts title fragments; collection still verifies the selected book's full identity.
-      const matches = parsed.results.filter(b => normalize(b.title).includes(query) && (!author.trim() || normalize(b.author) === requestedAuthor));
+      const matches = parsed.results.filter(matchesQuery);
       matches.sort((a, b) => Number(normalize(b.title) === query) - Number(normalize(a.title) === query));
       if (matches.length) return [...new Map(matches.map(b => [b.url, applyVerifiedBookStatus(b, stateDir, site.spec.identityNormalization)])).values()];
       url = parsed.next;
