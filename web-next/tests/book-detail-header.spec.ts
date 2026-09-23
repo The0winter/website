@@ -22,6 +22,9 @@ for (const width of [320, 390, 430, 1440]) test(`detail navigation fits at ${wid
     await expect(page.locator('nav[data-site-chrome]')).not.toBeVisible();
     await expect(actions).toBeVisible();
     await expect(actions.getByRole('link')).toHaveCount(2);
+    const logo = actions.getByRole('img', {name:'九天小说'});
+    await expect(logo).toBeVisible();
+    await expect.poll(() => logo.evaluate(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0)).toBe(true);
     const nav = (await actions.boundingBox())!, cover = (await page.locator('.book-hero-cover').boundingBox())!;
     expect(nav.x).toBeGreaterThanOrEqual(8);expect(nav.y).toBeGreaterThanOrEqual(8);
     expect(nav.x + nav.width).toBeLessThan(width / 2);

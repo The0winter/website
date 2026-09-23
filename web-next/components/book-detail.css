@@ -131,7 +131,7 @@
   .book-home-actions a { display:flex; align-items:center; justify-content:center; width:24px; height:44px; border-radius:8px; color:inherit; -webkit-tap-highlight-color:transparent; }
   /* Fade the complete icon once so adjoining strokes cannot accumulate opacity. */
   .book-home-actions a>svg { flex-shrink:0; opacity:.6; }
-  .book-home-actions a:last-child>svg { opacity:.5; }
+  .book-home-logo { flex-shrink:0; width:20px; height:20px; object-fit:contain; }
   .book-home-actions a:active { background:#ffffff1f; }
   .book-home-actions a:focus-visible { outline:2px solid currentColor; outline-offset:-3px; }
   .book-hero-main::before { inset:-20px calc(-1 * var(--book-gutter)) -24px; background:linear-gradient(110deg,#171411a8,#171411b8); }

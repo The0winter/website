@@ -8,6 +8,7 @@ import { safeFetch as fetch, type CatalogPage } from '@/lib/request';
 import { useState, useEffect, useMemo, useRef, useSyncExternalStore, useId } from 'react';
 import Link from './PrefetchLink';
 import HomeLink from 'next/link';
+import Image from 'next/image';
 import ReadingEntryLink from './ReadingEntryLink';
 import RecordBookVisit from './RecordBookVisit';
 import BookCatalogSheet from './BookCatalogSheet';
@@ -392,9 +393,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
               <nav className="book-home-actions" aria-label="详情页导航">
                 <HomeLink href="/" prefetch={false} aria-label="返回精选"><ChevronLeft size={24} strokeWidth={1.8} aria-hidden="true"/></HomeLink>
                 <HomeLink href="/" prefetch={false} aria-label="精选主页">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M4 10.5 12 3.5l8 7V20h-5v-6H9v6H4Z"/>
-                  </svg>
+                  <Image src="/icon.png" alt="九天小说" width={20} height={20} sizes="20px" loading="eager" className="book-home-logo"/>
                 </HomeLink>
               </nav>
               {/* 左侧封面 */}
