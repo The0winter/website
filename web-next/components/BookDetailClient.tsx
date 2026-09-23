@@ -152,7 +152,7 @@ function BookDescription({description}: {description: string}) {
   }, [description]);
   return <div className="relative">
     <div ref={text} id={id} className={`book-description text-gray-600 leading-relaxed text-sm whitespace-pre-wrap ${!expanded ? 'line-clamp-4' : ''}`}>{description || '暂无简介'}</div>
-    {overflowing && <button aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)} className="flex w-full mt-1.5 items-center justify-center text-blue-500 bg-blue-50/50 rounded py-1 text-xs font-medium active:bg-blue-100 transition-colors">
+    {overflowing && <button aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)} className="book-description-toggle flex w-full mt-1.5 items-center justify-center text-blue-500 bg-blue-50/50 rounded py-1 text-xs font-medium active:bg-blue-100 transition-colors">
       {expanded ? <><ChevronUp className="w-3 h-3 mr-1"/> 收起简介</> : <><ChevronDown className="w-3 h-3 mr-1"/> 展开简介</>}
     </button>}
   </div>;
@@ -393,7 +393,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
               <nav className="book-home-actions" aria-label="详情页导航">
                 <HomeLink href="/" prefetch={false} aria-label="返回精选"><ChevronLeft size={24} strokeWidth={1.8} aria-hidden="true"/></HomeLink>
                 <HomeLink href="/" prefetch={false} aria-label="精选主页">
-                  <Image src="/icon.png" alt="九天小说" width={20} height={20} sizes="20px" loading="eager" className="book-home-logo"/>
+                  <Image src="/icon.png" alt="九天小说" width={24} height={24} sizes="24px" loading="eager" className="book-home-logo"/>
                 </HomeLink>
               </nav>
               {/* 左侧封面 */}

@@ -127,11 +127,11 @@
   .book-layout { padding:0; gap:0; }
   .book-hero { padding:calc(8px + env(safe-area-inset-top)) var(--book-gutter) 0; border-radius:0; box-shadow:none; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; background:#303937; }
   .book-hero-main { gap:16px; padding-top:48px; padding-bottom:20px; }
-  .book-home-actions { position:absolute; top:0; left:2px; display:flex; color:#fffaf0; }
+  .book-home-actions { position:absolute; top:0; left:-8px; display:flex; color:#fffaf0; }
   .book-home-actions a { display:flex; align-items:center; justify-content:center; width:24px; height:44px; border-radius:8px; color:inherit; -webkit-tap-highlight-color:transparent; }
   /* Fade the complete icon once so adjoining strokes cannot accumulate opacity. */
   .book-home-actions a>svg { flex-shrink:0; opacity:.6; }
-  .book-home-logo { flex-shrink:0; width:20px; height:20px; object-fit:contain; }
+  .book-home-logo { flex-shrink:0; width:24px; height:24px; object-fit:contain; }
   .book-home-actions a:active { background:#ffffff1f; }
   .book-home-actions a:focus-visible { outline:2px solid currentColor; outline-offset:-3px; }
   .book-hero-main::before { inset:-20px calc(-1 * var(--book-gutter)) -24px; background:linear-gradient(110deg,#171411a8,#171411b8); }
@@ -159,6 +159,7 @@
   .book-mobile-rating[data-rated=false] .book-stat-value { font-size:13px; font-weight:400; letter-spacing:normal; }
   .book-intro .book-description { font-size:16px; line-height:1.6; letter-spacing:normal; color:#625e56; }
   .book-intro button { background:none; color:#978369; justify-content:flex-end; width:auto; margin-left:auto; padding:4px 0; font-size:13px; }
+  .book-intro .book-description-toggle { margin-top:0; padding-top:0; }
   .book-catalog { border-radius:0; box-shadow:none; background:#fffdf9; margin-bottom:10px; }
   .mobile-catalog { width:100%; display:flex; align-items:center; gap:8px; min-height:52px; padding:12px var(--book-gutter); border-top:1px solid #f0ece5; text-align:left; }
   .mobile-catalog strong { flex-shrink:0; font-size:19px; font-weight:500; line-height:26px; }
