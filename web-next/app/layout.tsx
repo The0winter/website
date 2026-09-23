@@ -14,7 +14,7 @@ import {MobileWriterProvider} from "@/components/MobileWriterLaunch";
 import { Suspense } from 'react';
 
 import { GoogleAnalytics } from '@next/third-parties/google';
-import {siteOrigin} from '@/lib/seo';
+import {siteDescription, siteOrigin, siteTitle} from '@/lib/seo';
 import {siteThemeScript} from '@/lib/site-theme';
 
 const inter = Inter({ subsets: ["latin"] });
@@ -31,11 +31,8 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(siteOrigin),
   robots:process.env.SITE_INDEXING==='enabled'?{index:true,follow:true}:{index:false,follow:false},
-  // 🔥 修改 1：标题加长，包含核心关键词（小说、免费、玄幻等）
-  title: "九天小说站 - 热门小说 - 无弹窗 - 免费在线阅读 - 笔趣阁",
-  
-  // 🔥 修改 2：描述改为面向用户的自然语言，包含吸引点击的词汇
-  description: "九天小说站网为您提供最新最全的玄幻、都市、言情、修真、历史等热门小说在线阅读。每日更新，拒绝书荒，永久免费！精选榜单助你发现好书。",
+  title: siteTitle,
+  description: siteDescription,
   
   // (可选) 补充关键词
   keywords: ["小说", "免费小说", "在线阅读", "热门小说", "九天小说站", "电子书"],

@@ -16,6 +16,6 @@ export async function generateMetadata({params, searchParams}: Props) {
   const {page: rawPage} = await searchParams;
   const number = Number(rawPage || 1);
   const page = Number.isSafeInteger(number) && number > 1 && number <= 100000 ? number : 1;
-  return publicMetadata(`${profile.username}的作品${page > 1 ? ` - 第${page}页` : ''} - 九天小说站`, `查看${profile.username}的作品列表、小说介绍与最近更新，在线阅读尽在九天小说站。`, `/author/${id}${page > 1 ? `?page=${page}` : ''}`);
+  return publicMetadata(`${profile.username}的小说作品${page > 1 ? ` - 第${page}页` : ''} - 九天小说站`, `查看${profile.username}的小说作品列表、作品介绍与最近更新，在线免费阅读尽在九天小说站。`, `/author/${id}${page > 1 ? `?page=${page}` : ''}`);
 }
 export default function AuthorPage() { return <AuthorPageClient/>; }

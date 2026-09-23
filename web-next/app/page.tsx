@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import HomePageClient from '@/components/HomePageClient';
 import type { Book } from '@/lib/api';
 import { getApiBaseUrl } from '@/utils/api'; // 引入我们写的智能地址判断工具
-import {publicMetadata, siteTitle} from '@/lib/seo';
+import {publicMetadata, siteDescription, siteTitle} from '@/lib/seo';
 
 const REVALIDATE_SECONDS = 60;
 export const dynamic = 'force-dynamic';
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 const PUBLIC_IMAGE_HOST = '';
 
 export const metadata: Metadata = {
-  ...publicMetadata(siteTitle, '九天小说站首页，提供热门推荐、排行榜与最近更新小说，支持免费在线阅读。', '/'),
+  ...publicMetadata(siteTitle, siteDescription, '/'),
   keywords: ['九天小说', '小说', '免费小说', '小说推荐', '排行榜', '最近更新'],
 };
 

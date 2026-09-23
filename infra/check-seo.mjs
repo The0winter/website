@@ -13,17 +13,27 @@ async function read(path, status = 200) {
   return {response, body: await response.text()};
 }
 const locs = body => [...body.matchAll(/<loc>([^<]+)<\/loc>/g)].map(match => match[1].replaceAll('&amp;', '&'));
+const escapeHtml = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#x27;');
 
-async function page(path, {index = true, canonical = true} = {}) {
+async function page(path, {index = true, canonical = true, title: expectedTitle} = {}) {
   const {response, body} = await read(path);
   const robots = [...body.matchAll(/<meta\b[^>]*name="robots"[^>]*>/g)].map(match => match[0]).join(' ');
   assert.equal(/noindex/i.test(response.headers.get('x-robots-tag') || '') || /noindex/i.test(robots), !index, `${path}: indexing policy`);
-  assert.match(body, /<title>[^<]+<\/title>/, `${path}: title`);
+  const titles = [...body.matchAll(/<title>([^<]+)<\/title>/g)];
+  assert.equal(titles.length, 1, `${path}: one page title`);
+  const title = titles[0][1];
+  if (expectedTitle) assert.equal(title, escapeHtml(expectedTitle), `${path}: descriptive title`);
+  const description = body.match(/<meta name="description" content="([^"]*)"/)?.[1];
+  assert.ok(description?.trim(), `${path}: description`);
+  if (index) {
+    assert.equal(body.match(/<meta property="og:title" content="([^"]*)"/)?.[1], title, `${path}: matching share title`);
+    assert.equal(body.match(/<meta property="og:description" content="([^"]*)"/)?.[1], description, `${path}: matching share description`);
+  }
   if (canonical) {
     const href = body.match(/rel="canonical" href="([^"]+)"/)?.[1];
     assert.ok(href && new URL(href).href === new URL(site + path).href, `${path}: canonical`);
   }
-  report.pages.push({path, status: response.status, index});
+  report.pages.push({path, status: response.status, index, title, description});
   return body;
 }
 
@@ -31,7 +41,7 @@ const {body: robots} = await read('/robots.txt');
 assert.match(robots, /^Allow: \/$/m);
 assert.doesNotMatch(robots, /^Disallow: \/$/m);
 assert.ok(robots.includes(`Sitemap: ${site}/sitemap.xml`));
-const home = await page('/');
+const home = await page('/', {title: '九天小说站 - 热门小说免费在线阅读 - 笔趣阁'});
 assert.equal([...home.matchAll(/<h1\b/gi)].length, 1, 'homepage has one shared primary heading across screen sizes');
 assert.match(home, /<title>[^<]*笔趣阁[^<]*<\/title>/);
 assert.ok(home.includes('G-DWMPP2NRQ1'), 'GA4 is included in the production HTML');
@@ -50,15 +60,22 @@ const {body: chaptersBody} = await read(`/api/books/${id}/chapters?order=asc&lim
 const [chapter] = JSON.parse(chaptersBody);
 assert.ok(chapter, 'public chapter exists');
 const chapterPath = `/book/${id}/${chapter.id}`;
-await page('/book/' + id);
-const reader = await page(chapterPath);
+const bookTitle = [book.title.trim(), book.author?.trim(), '在线免费阅读'].filter(Boolean).join('_') + ' - 九天小说站';
+const detail = await page('/book/' + id, {title: bookTitle});
+assert.ok(detail.includes(escapeHtml(`《${book.title.trim()}》${book.author?.trim() ? `，作者：${book.author.trim()}` : ''}。提供小说介绍、章节目录和在线免费阅读。`)), 'book description identifies the work and reading features');
+const chapterTitle = chapter.title.trim().startsWith('第') ? chapter.title.trim() : `第${chapter.chapter_number}章 ${chapter.title.trim()}`;
+const reader = await page(chapterPath, {title: `${chapterTitle} - ${book.title.trim()} - 九天小说站`});
 assert.ok(reader.includes('reader-pages-root'), 'server renders chapter reader');
 assert.ok(reader.includes('BreadcrumbList'), 'chapter breadcrumb schema');
 const {body: contentBody} = await read('/api/chapters/' + chapter.id);
 const content = JSON.parse(contentBody).content;
 assert.ok(content?.length > 100, 'chapter body available');
 const author = book.author_profile_id || (typeof book.author_id === 'string' ? book.author_id : book.author_id?._id);
-if (author) await page('/author/' + author);
+if (author) {
+  const {body: profileBody} = await read('/api/authors/' + author);
+  const profile = JSON.parse(profileBody);
+  await page('/author/' + author, {title: `${profile.username}的小说作品 - 九天小说站`});
+}
 
 const missing = '000000000000000000000001';
 for (const path of [`/book/${missing}`, `/book/${id}/${missing}`, `/book/${missing}/${chapter.id}`, '/book/invalid', `/book/${id}/invalid`, `/author/${missing}`, '/author/invalid', `/forum/${missing}`, `/forum/question/${missing}`, '/seo-nonexistent-page']) {

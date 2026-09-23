@@ -6,6 +6,7 @@ import BookDetailClient from '@/components/BookDetailClient';
 import { formatRelativeUpdate } from '@/lib/relative-update';
 import type { Book, Chapter } from '@/lib/api';
 import { getApiBaseUrl } from '@/utils/api'; // 新增：引入我们写的智能地址判断工具
+import {bookDescription, bookPageTitle, publicMetadata} from '@/lib/seo';
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -83,29 +84,18 @@ async function getTotalWords(id: string): Promise<number | null> {
   }
 }
 
-function buildDescription(book: Book): string {
-  const raw = (book.description || '').replace(/[\r\n\t]+/g, ' ').trim();
-  if (raw) return raw.length > 120 ? `${raw.slice(0, 120)}...` : raw;
-  return `${book.title}，作者${book.author || '佚名'}。查看作品介绍、章节目录与最新更新，在线阅读尽在九天小说站。`;
-}
-
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const book = await getBook(id);
 
   if (!book) notFound();
 
-  const description = buildDescription(book);
-  const canonicalUrl = `${SITE_URL}/book/${id}`;
+  const metadata = publicMetadata(bookPageTitle(book), bookDescription(book), `/book/${id}`);
   
   return {
-    title: `${book.title}${book.author ? `（${book.author}）` : ''} - 章节目录与在线阅读 - 九天小说站`,
-    description,
-    alternates: { canonical: canonicalUrl },
+    ...metadata,
     openGraph: {
-      title: book.title,
-      description,
-      url: canonicalUrl,
+      ...metadata.openGraph,
       images: book.cover_image ? [book.cover_image] : [],
       type: 'book',
     },
@@ -132,7 +122,7 @@ export default async function BookDetailPage({ params }: Props) {
   // Compute once on the server to keep relative-time boundaries stable during hydration.
   const updatedLabel = formatRelativeUpdate(book.lastUpdated);
 
-  const description = buildDescription(book);
+  const description = bookDescription(book);
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Book',

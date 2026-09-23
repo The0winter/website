@@ -1,5 +1,6 @@
 'use client';
 import {useStoredState} from '@/lib/useStoredState';
+import {chapterPageTitle} from '@/lib/seo';
 import {mobileReaderCream, readerPaperImage} from '@/lib/reader-paper';
  
 
@@ -246,7 +247,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     window.addEventListener('chapter-entry-start',invalidate);
     return()=>{invalidate();window.removeEventListener('popstate',restore);window.removeEventListener('book-navigation-leave',invalidate);window.removeEventListener('chapter-entry-start',invalidate);};
   },[bookId]);
-  useEffect(()=>{if(chapter && book)document.title=`${chapter.title} - ${book.title}`;},[chapter,book]);
+  useEffect(()=>{if(chapter && book)document.title=chapterPageTitle(book,chapter);},[chapter,book]);
 
   const toggleBookmark = async () => {
     if (!user) return router.push('/login');

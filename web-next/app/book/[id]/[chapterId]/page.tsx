@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import ReaderClient from '@/components/ReaderClient';
 import type { Book, Chapter } from '@/lib/api';
 import { getApiBaseUrl } from '@/utils/api'; // 新增：引入我们的智能请求地址工具
+import {chapterHeading, chapterPageTitle} from '@/lib/seo';
 
 // Let the paper extend under camera cutouts. Reader controls/text use safe-area
 // insets; other routes retain their own viewport through Next's metadata system.
@@ -52,14 +53,8 @@ const getReaderData = cache(async (bookId: string, chapterId: string): Promise<R
   }
 });
 
-function getChapterTitle(chapter: Chapter): string {
-  if (!chapter?.title) return '\u7AE0\u8282\u9605\u8BFB'; // 章节阅读
-  if (chapter.title.startsWith('\u7B2C')) return chapter.title; // 第
-  return `\u7B2C${chapter.chapter_number}\u7AE0 ${chapter.title}`; // 第X章
-}
-
 function getDescription(book: Book, chapter: Chapter): string {
-  const title = getChapterTitle(chapter);
+  const title = chapterHeading(chapter);
   const plainContent = (chapter.content || '')
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
@@ -76,8 +71,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   if (!book || !chapter) notFound();
 
-  const chapterTitle = getChapterTitle(chapter);
-  const fullTitle = `${chapterTitle} - ${book.title} - 九天小说站`;
+  const fullTitle = chapterPageTitle(book, chapter);
   const description = getDescription(book, chapter);
   const canonicalUrl = `${SITE_URL}/book/${bookId}/${chapterId}`;
 
@@ -106,7 +100,7 @@ export default async function Page({ params }: Props) {
     notFound();
   }
 
-  const chapterTitle = getChapterTitle(chapter);
+  const chapterTitle = chapterHeading(chapter);
   const description = getDescription(book, chapter);
   const chapterUrl = `${SITE_URL}/book/${bookId}/${chapterId}`;
 
