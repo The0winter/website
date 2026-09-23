@@ -204,6 +204,23 @@ function render() {
   queueUI.render(data, active);
   if (data.adapterErrors.length) feedback(`有站点配置需要修复：${data.adapterErrors.join('；')}`);
 }
+function applyTheme(theme) {
+  const dark = theme === 'dark';
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  const label = dark ? '日间模式' : '夜间模式';
+  $('theme-label').textContent = label;
+  $('theme-toggle').title = `切换到${label}`;
+  $('theme-toggle').setAttribute('aria-label', `切换到${label}`);
+}
+applyTheme(document.documentElement.dataset.theme);
+$('theme-toggle').onclick = async () => {
+  const previous = document.documentElement.dataset.theme;
+  const next = previous === 'dark' ? 'light' : 'dark';
+  $('theme-toggle').disabled = true; applyTheme(next);
+  try { await api('theme', {theme: next}); }
+  catch (error) { applyTheme(previous); feedback(`外观设置未保存：${error.message}`); }
+  finally { $('theme-toggle').disabled = false; }
+};
 function currentLibraryBook(batch) {
   return (batch?.currentControlId && batch.items.find(item => item.controlId === batch.currentControlId)) || batch?.items.find(item => item.state === 'waiting') || batch?.items.find(item => ['running', 'retrying'].includes(item.state));
 }

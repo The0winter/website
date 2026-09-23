@@ -43,13 +43,20 @@ export function rememberWebsite(stateDir, website) {
   const previous = readJson(file, {});
   // Remember sites, not individual book URLs, so the next title searches the whole site.
   const recentWebsites = [...new Set([origin, ...(previous.recentWebsites || [])])];
-  const next = {version: 1, lastWebsite: origin, recentWebsites};
+  const next = {...previous, version: 1, lastWebsite: origin, recentWebsites};
   atomicWrite(file, next);
   return next;
 }
 
 export function readSettings(stateDir) {
   return readJson(path.join(stateDir, 'desktop-settings.json'), {version: 1, lastWebsite: '', recentWebsites: []});
+}
+
+export function rememberTheme(stateDir, theme) {
+  if (!['light', 'dark'].includes(theme)) throw Error('外观模式无效');
+  const next = {...readSettings(stateDir), theme};
+  atomicWrite(path.join(stateDir, 'desktop-settings.json'), next);
+  return next;
 }
 
 export function fillTemplate(value, context) {

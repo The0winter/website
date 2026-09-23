@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>拾页 · 小说采集</title><link rel="icon" href="/icon.svg"><link rel="stylesheet" href="/app.css">
@@ -13,7 +13,8 @@
     <div class="sidebar-bottom"><span class="local-dot"></span> 本地运行</div>
   </aside>
   <main>
-    <header><h1>采集书籍</h1><div class="library-actions"><button id="update-library" class="library-button" type="button" title="连接每本已下载书籍的来源，检查并补齐新章节"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 6a8 8 0 0 1 13 2l1 4M4 12l1 4a8 8 0 0 0 13 2"/></svg><span id="update-library-label">更新书库</span></button><button id="upload-library" class="library-button upload-button" type="button" title="把本地书库的新书、新章节同步到 jiutianxiaoshuo.com"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/></svg><span id="upload-library-label">上传书库</span></button></div></header>
+    <header><h1>采集书籍</h1><div class="library-actions"><button id="update-library" class="library-button" type="button" title="连接每本已下载书籍的来源，检查并补齐新章节"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 6a8 8 0 0 1 13 2l1 4M4 12l1 4a8 8 0 0 0 13 2"/></svg><span id="update-library-label">更新书库</span></button><button id="upload-library" class="library-button upload-button" type="button" title="把本地书库的新书、新章节同步到 jiutianxiaoshuo.com"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/></svg><span id="upload-library-label">上传书库</span></button></div>
+    <button id="theme-toggle" class="secondary theme-toggle" type="button" title="切换到夜间模式" aria-label="切换到夜间模式"><svg class="theme-moon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.7 13.3A9 9 0 0 1 10.7 3.3a9 9 0 1 0 10 10Z"/></svg><svg class="theme-sun" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg><span id="theme-label">夜间模式</span></button></header>
     <section class="card input-card">
       <div class="section-title"><h2>书籍来源</h2></div>
       <form id="search-form">

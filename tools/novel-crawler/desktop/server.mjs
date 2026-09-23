@@ -6,7 +6,7 @@ import {randomBytes} from 'node:crypto';
 import {fork} from 'node:child_process';
 import {defaultStateDir, projectRoot, localBookState} from '../core.mjs';
 import {readJson, atomicWrite} from '../storage.mjs';
-import {loadSites, readSettings, rememberWebsite, searchBooks, resolveBook, specForBook, normalizeWebsite} from './sources.mjs';
+import {loadSites, readSettings, rememberWebsite, rememberTheme, searchBooks, resolveBook, specForBook, normalizeWebsite} from './sources.mjs';
 import {failureDetails} from '../diagnostics.mjs';
 import {clearBrowserSession} from '../browser-session.mjs';
 import {openLocal} from './open-local.mjs';
@@ -188,8 +188,12 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
       res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
       if (publicFiles[pathname] && req.method === 'GET') {
         const [file, type] = publicFiles[pathname];
+        let body = fs.readFileSync(path.join(here, file));
+        // The desktop uses a new port on restart. Render the disk preference
+        // before first paint instead of relying on origin-scoped localStorage.
+        if (pathname === '/') body = body.toString('utf8').replace('data-theme="light"', `data-theme="${readSettings(stateDir).theme === 'dark' ? 'dark' : 'light'}"`);
         res.writeHead(200, {'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-store'});
-        return res.end(fs.readFileSync(path.join(here, file)));
+        return res.end(body);
       }
       if (!pathname.startsWith('/api/')) return respond(404, {error: '页面不存在'});
       if (req.headers['x-desktop-token'] !== token || (req.headers.origin && req.headers.origin !== `http://${expectedHost}`)) return respond(403, {error: '窗口已过期，请重新打开程序'});
@@ -232,6 +236,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
       }
       if (pathname === '/api/focus') { await onFocus(); return respond(200, {ok: true}); }
       if (pathname === '/api/remember') return respond(200, rememberWebsite(stateDir, input.website));
+      if (pathname === '/api/theme') return respond(200, rememberTheme(stateDir, input.theme));
       if (pathname === '/api/clear-login') {
         if (busy(task) || worker || operation) return respond(409, {error: '请先停止当前任务，等待采集窗口关闭后再清除登录'});
         const host = new URL(normalizeWebsite(input.website)).hostname;
