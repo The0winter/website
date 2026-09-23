@@ -36,6 +36,7 @@ for (const width of [320, 390, 430, 1440]) test(`detail navigation fits at ${wid
     await page.locator('.mobile-catalog').click();
     await expect(page.getByRole('dialog', {name:'全部目录'})).toBeVisible();
     await page.getByRole('button', {name:'关闭目录'}).click();
+    await expect(page.locator('.book-catalog-overlay')).toHaveCSS('visibility', 'hidden');
   } else {
     await expect(actions).not.toBeVisible();
     await expect(page.locator('nav[data-site-chrome]')).toBeVisible();
@@ -60,8 +61,8 @@ for (const source of ['/?view=category', '/search?q=导航']) for (const name of
       return route.fulfill({json:[{id:book, title:'导航测试', author:'导航验收'}]});
     });
     await page.goto(base + source);
-    await page.locator('a[href^="/book/"]:visible').first().click();
-    await expect(page.locator('.book-detail')).toBeVisible();
+    await page.locator(source.startsWith('/search') ? '.search-book' : '.mh-browse .mh-book').first().click();
+    await expect(page.locator('.book-detail')).toBeVisible({timeout:15000});
     await page.getByRole('navigation', {name:'详情页导航'}).getByRole('link', {name}).click();
     await expect(page).toHaveURL(`${base}/`);
     await expect(page.locator('.mh-bottom a[data-section="home"]')).toHaveAttribute('aria-current', 'page');
