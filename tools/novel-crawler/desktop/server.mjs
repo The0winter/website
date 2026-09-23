@@ -10,18 +10,22 @@ import {loadSites, readSettings, rememberWebsite, searchBooks, resolveBook, spec
 import {failureDetails} from '../diagnostics.mjs';
 import {clearBrowserSession} from '../browser-session.mjs';
 import {openLocal} from './open-local.mjs';
+import {createBookQueue, queueInput} from './queue.mjs';
+import {normalizedIdentity} from '../identity.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const publicFiles = {'/': ['index.html', 'text/html'], '/app.css': ['app.css', 'text/css'], '/app.js': ['app.js', 'text/javascript'], '/icon.svg': ['icon.svg', 'image/svg+xml']};
+const publicFiles = {'/': ['index.html', 'text/html'], '/app.css': ['app.css', 'text/css'], '/app.js': ['app.js', 'text/javascript'], '/queue-ui.js': ['queue-ui.js', 'text/javascript'], '/icon.svg': ['icon.svg', 'image/svg+xml']};
 const busy = task => ['upload', 'library', 'library-wait', 'search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(task.phase);
 function visibleReport(report) {
   if (!report) return null;
   return {...Object.fromEntries(['title', 'author', 'description', 'descriptionStatus', 'status', 'statusDetection', 'jobId', 'mode', 'checkedAt', 'downloaded', 'expected', 'errors', 'warnings', 'structuralPass', 'completeAgainstSource', 'exportFile', 'summaryFile', 'reportFile', 'limitation', 'reusedExport', 'readingEdition', 'readingAdded', 'sourceExpected', 'sourceDownloaded', 'rawReportFile', 'continuation', 'switching', 'continuationAdded', 'originalCount', 'originalSourceUrl', 'automaticResolutions'].map(key => [key, report[key]])), failures: (report.failures || []).map(item => failureDetails(item, item))};
 }
-export async function createDesktop({stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads'), port = 0, sitesDirectory, loadSources = loadSites, open = openLocal, onFocus = () => {}, findBooks = searchBooks, prepareBook = resolveBook, uploadWorker = path.join(here, 'worker.mjs')} = {}) {
+export async function createDesktop({stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads'), port = 0, sitesDirectory, loadSources = loadSites, open = openLocal, onFocus = () => {}, findBooks = searchBooks, prepareBook = resolveBook, uploadWorker = path.join(here, 'worker.mjs'), bookWorker = path.join(here, 'worker.mjs')} = {}) {
   const token = randomBytes(32).toString('hex');
   let worker, operation, operationClient, stopRequested = false, closing = false, selectedBook = null, candidates = [], lastProgress = 0;
   const resolvedSpecs = new Map();
+  const queue = createBookQueue(stateDir);
+  let queueWork = null, queueWake, queueSaveRetry;
   let task = readJson(path.join(stateDir, 'desktop-last-task.json'), {phase: 'idle', message: '准备好后，先查找你的书。'});
   // Older desktop summaries omitted failures; recover them from the original report.
   if (task.report && /^[a-f0-9]{20}$/.test(task.report.jobId) && !task.report.failures) {
@@ -67,6 +71,111 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
   }
   const statusValues = status => ({message: status.message, action: status.kind, actionUrl: status.url || null, actionDeadline: status.deadline || null});
   const controls = controller => ({signal: controller.signal, shouldStop: () => closing || controller.signal.aborted, onClient: client => { operationClient = client; }, onStatus: status => { if (!controller.signal.aborted) update(statusValues(status)); }});
+  function wakeQueue() {
+    if (closing || queueWake) return;
+    queueWake = setImmediate(() => { queueWake = null; pumpQueue(); });
+  }
+  function finishQueueTask(id, result = structuredClone(task)) {
+    try {
+      if (id) queue.finish(id, result);
+      else if (queue.hasWork() && ['error', 'paused', 'stopped', 'partial'].includes(result.phase)) queue.pause();
+      clearTimeout(queueSaveRetry); queueSaveRetry = null;
+      wakeQueue();
+    } catch {
+      // A completed worker must not lose its queue result to a locked file or
+      // launch the next book before that result is durably recorded.
+      clearTimeout(queueSaveRetry);
+      if (!closing) queueSaveRetry = setTimeout(() => finishQueueTask(id, result), 1000).unref();
+    }
+  }
+  function pumpQueue() {
+    if (closing || queueWork || queueSaveRetry || worker || operation || busy(task) || (task.phase === 'ready' && candidates.length)) return;
+    const item = queue.next();
+    if (!item || item.state !== 'queued') return;
+    queueWork = runQueuedBook(item).finally(() => { queueWork = null; wakeQueue(); });
+  }
+  async function runQueuedBook(item) {
+    try {
+      let book = item.book;
+      candidates = []; selectedBook = null; stopRequested = false;
+      task = {kind: 'book', queueId: item.id, phase: 'ready', title: item.input.title, author: item.input.author, sourceUrl: book?.url, message: '准备处理队列中的书籍…'};
+      if (!book) {
+        queue.mark(item.id, {state: 'searching', message: '正在查找书籍'});
+        update({phase: 'search', message: '正在查找队列中的书籍…'});
+        const controller = new AbortController(); operation = controller;
+        let found;
+        try { found = (await findBooks({...item.input, stateDir, sites: sites().sites, ...controls(controller)})).map(withLocalState); }
+        finally { if (operation === controller) { operation = null; operationClient = null; } }
+        if (controller.signal.aborted || closing) { stoppedTask(); finishQueueTask(item.id); return; }
+        if (!found.length) throw Error('没有找到匹配书籍，请编辑书名、作者或来源后重试');
+        const normalize = text => normalizedIdentity(text, 'chinese-simplified');
+        const matches = found.filter(candidate => normalize(candidate.title) === normalize(item.input.title) && (!item.input.author || normalize(candidate.author) === normalize(item.input.author)));
+        if (matches.length !== 1) {
+          queue.mark(item.id, {state: 'waiting', candidates: found.slice(0, 100), message: '请核对作者并选择要采集的书籍'});
+          queue.pause(); update({phase: 'ready', message: '队列等待选择书籍，请在下方核对匹配结果。'}); return;
+        }
+        book = matches[0];
+        update({phase: 'ready', message: '已匹配书名和作者，准备采集…'});
+      }
+      queue.mark(item.id, {state: 'running', book, candidates: undefined, message: '正在采集'});
+      await startBook(book, item.input, item.id);
+      if (!worker) finishQueueTask(item.id);
+    } catch (error) {
+      if (stopRequested || closing) stoppedTask();
+      else update({kind: 'book', queueId: item.id, phase: 'error', title: item.input.title, author: item.input.author, message: error.message, failure: failureDetails(error)});
+      finishQueueTask(item.id);
+    }
+  }
+  async function startBook(book, input = {}, queueId = null) {
+    if (busy(task) || worker || operation) throw Error('当前任务还在处理，请稍后再试');
+    selectedBook = withLocalState(book);
+    if (!selectedBook) throw Error('请先查找并选择书籍');
+    if (selectedBook.local?.blocked) throw Error(selectedBook.local.message);
+    const requestedContinuation = selectedBook.local?.continuation;
+    stopRequested = false;
+    const controller = new AbortController(); operation = controller;
+    update({kind: 'book', queueId, batch: null, phase: 'resolving', message: '正在读取书籍信息…', title: selectedBook.title, author: selectedBook.author, sourceUrl: selectedBook.url, description: null, status: null, statusDetection: null, report: null, progress: null, probeOnly: input.probeOnly === true});
+    let spec;
+    try { spec = await prepareBook({...selectedBook, stateDir, sites: sites().sites, ...controls(controller)}); }
+    catch (error) {
+      if (controller.signal.aborted) { stoppedTask(); return {stopped: true}; }
+      update({phase: 'error', message: error.message, failure: failureDetails(error)}); throw error;
+    } finally { if (operation === controller) { operation = null; operationClient = null; } }
+    if (closing || controller.signal.aborted) { stoppedTask(); return {stopped: true}; }
+    resolvedSpecs.set(selectedBook.url, spec);
+    update({local: localBookState(spec, {stateDir, outputDir}), description: spec.description || null, status: spec.status || null, statusDetection: spec.statusDetection});
+    if (task.local.blocked) {
+      update({phase: 'error', message: task.local.message, failure: failureDetails(Error(task.local.message))});
+      throw Error(task.local.message);
+    }
+    worker = fork(bookWorker, [], {windowsHide: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc']});
+    const current = worker;
+    let workerError = '';
+    worker.stderr.on('data', chunk => { workerError = (workerError + chunk.toString()).slice(-1500); });
+    current.on('message', message => {
+      if (message.type === 'status' && !['pausing', 'stopping'].includes(task.phase)) update(statusValues(message));
+      if (message.type === 'phase' && !['pausing', 'stopping'].includes(task.phase)) update({phase: message.phase, message: task.local?.continuation ? (message.phase === 'probe' ? '正在核对新旧来源的目录与衔接正文…' : '正在接续后续章节，完成检查后更新原文件…') : `${task.local?.saved ? `已保存 ${task.local.saved} 章，本次会跳过已有正文。` : ''}${message.phase === 'probe' ? '先抽样检查目录、正文和编码…' : '正在补齐章节，完成后检查并导出…'}`, progress: null});
+      if (message.type === 'progress') {
+        task.progress = message;
+        if (Date.now() - lastProgress > 1000) { save(); lastProgress = Date.now(); }
+      }
+      if (message.type === 'done') {
+        const report = visibleReport(message.report), complete = !!report.exportFile;
+        update({phase: message.stopped || stopRequested ? 'stopped' : message.paused ? 'paused' : complete ? 'complete' : message.report.structuralPass && task.probeOnly ? 'probed' : 'error', report,
+          message: message.stopped || stopRequested ? '已停止，采集页面已关闭；已保存的章节保留，下次会接着补齐。' : message.paused ? '已暂停，完成的章节已保存。' : complete ? report.continuation ? `已${report.switching ? '换源并接续' : '更新'}，原文件共 ${report.expected} 项，本次追加 ${report.continuationAdded} 项。${report.automaticResolutions ? `自动处理 ${report.automaticResolutions} 项重复或编号差异。` : ''}${report.reusedExport ? '文件没有变化。' : '原有章节已保留。'}` : report.readingEdition ? `已沿用来源映射，网站阅读版共 ${report.expected} 项，本次追加 ${report.readingAdded} 项。${report.reusedExport ? '文件没有变化，已复用原文件。' : '已自动更新阅读版文件。'}` : report.reusedExport ? '已下载过这本书，本次目录没有新增章节；已复用原文件，没有重复下载正文。' : '下载完成，已生成书籍文件和质量报告。' : message.report.structuralPass && task.probeOnly ? report.continuation ? '衔接抽样检查通过，原文件尚未改变；取消仅试采后可继续换源续更。' : '试采通过，可以继续下载整本。' : `本次未导出完整书籍：${message.report.failures?.[0]?.error || '检查发现异常，详见质量报告。'}`});
+        candidates = candidates.map(withLocalState);
+      }
+      if (message.type === 'error') { if (stopRequested) stoppedTask(); else update({phase: 'error', message: message.error, failure: message.failure || failureDetails(message)}); }
+    });
+    current.on('error', error => { if (stopRequested) stoppedTask(); else update({phase: 'error', message: error.message}); });
+    current.on('close', () => {
+      if (worker === current) worker = null;
+      if (busy(task)) { if (stopRequested) stoppedTask(); else update({phase: 'error', message: `采集进程意外停止。已完成章节可续传。${workerError.slice(-300)}`}); }
+      finishQueueTask(queueId);
+    });
+    worker.send({type: 'start', spec, stateDir, outputDir, continuation: requestedContinuation || task.local.continuation, probeOnly: input.probeOnly === true});
+    return {ok: true};
+  }
   const server = http.createServer(async (req, res) => {
     const address = server.address();
     if (!address) { res.writeHead(503); res.end('程序正在退出'); return; }
@@ -86,13 +195,41 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
       if (req.headers['x-desktop-token'] !== token || (req.headers.origin && req.headers.origin !== `http://${expectedHost}`)) return respond(403, {error: '窗口已过期，请重新打开程序'});
       if (pathname === '/api/state' && req.method === 'GET') {
         const loaded = sites();
-        return respond(200, {settings: readSettings(stateDir), sites: loaded.sites.map(({id, name, home, hosts, spec, search, book}) => ({id, name, home, hosts, remembersLogin: [spec.transport, search?.transport, book?.transport].includes('browser')})), adapterErrors: loaded.errors, task: {...currentTask(), busy: busy(task) || !!worker || !!operation, canShowBrowser: !!(worker?.connected || operationClient) && busy(task) && ['login', 'verification'].includes(task.action)}, candidates, outputDir});
+        return respond(200, {settings: readSettings(stateDir), sites: loaded.sites.map(({id, name, home, hosts, spec, search, book}) => ({id, name, home, hosts, remembersLogin: [spec.transport, search?.transport, book?.transport].includes('browser')})), adapterErrors: loaded.errors, task: {...currentTask(), busy: busy(task) || !!worker || !!operation || !!queueWork, canShowBrowser: !!(worker?.connected || operationClient) && busy(task) && ['login', 'verification'].includes(task.action)}, candidates, outputDir, queue: queue.snapshot()});
       }
       if (req.method !== 'POST') return respond(405, {error: '请求方式无效'});
       let raw = '';
       for await (const chunk of req) { raw += chunk; if (Buffer.byteLength(raw) > 12000) return respond(413, {error: '输入过长'}); }
       const input = raw ? JSON.parse(raw) : {};
       if (closing) return respond(409, {error: '程序正在退出'});
+      if (pathname === '/api/draft') { queue.draft(input); wakeQueue(); return respond(200, {ok: true}); }
+      if (pathname === '/api/queue/add') {
+        const fields = queueInput(input);
+        if (!sites().sites.some(site => site.hosts.includes(new URL(fields.website).hostname))) throw Error('此来源尚未适配，请先添加网站适配');
+        const book = input.url ? candidates.find(book => book.url === input.url) : undefined;
+        if (input.url && !book) throw Error('匹配结果已变化，请重新查找');
+        if (book && book.url === task.sourceUrl && busy(task)) throw Error('这本书正在采集，无需重复加入队列');
+        if (book?.local?.blocked) throw Error(book.local.message);
+        const item = queue.add(fields, book);
+        if (task.phase === 'ready' && !queueWork) candidates = [];
+        wakeQueue(); return respond(202, {ok: true, id: item.id});
+      }
+      if (pathname.startsWith('/api/queue/')) {
+        const action = pathname.slice('/api/queue/'.length);
+        if (action === 'pause') queue.pause();
+        else if (action === 'resume') queue.resume();
+        else if (action === 'edit') {
+          const fields = queueInput(input);
+          if (!sites().sites.some(site => site.hosts.includes(new URL(fields.website).hostname))) throw Error('此来源尚未适配，请先添加网站适配');
+          queue.edit(input.id, fields);
+        }
+        else if (action === 'remove') queue.remove(input.id);
+        else if (action === 'move') queue.move(input.id, input.direction);
+        else if (action === 'choose') { queue.choose(input.id, input.url); queue.resume(); }
+        else if (action === 'retry') { queue.retry(input.id); queue.resume(); }
+        else return respond(404, {error: '队列操作不存在'});
+        wakeQueue(); return respond(200, {ok: true});
+      }
       if (pathname === '/api/focus') { await onFocus(); return respond(200, {ok: true}); }
       if (pathname === '/api/remember') return respond(200, rememberWebsite(stateDir, input.website));
       if (pathname === '/api/clear-login') {
@@ -104,7 +241,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         return respond(200, {message: `已清除${site.name}在拾页中的登录状态，需要登录时会重新提示；已保存章节保留。`});
       }
       if (pathname === '/api/update-library') {
-        if (busy(task) || worker || operation) return respond(409, {error: '请先停止当前任务，等待采集窗口关闭后再更新书库'});
+        if (busy(task) || worker || operation || queueWork || queueSaveRetry || queue.next()) return respond(409, {error: '请先暂停队列并等待当前任务保存结束，再更新书库'});
         const librarySites = sites().sites;
         stopRequested = false; candidates = []; selectedBook = null;
         task = {kind: 'library', phase: 'library', message: '正在整理本地书库及每本书的来源…', batch: null}; save();
@@ -133,12 +270,13 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         current.on('close', () => {
           if (worker === current) worker = null;
           if (!completed && busy(task)) { if (stopRequested) stoppedTask(); else update({phase: 'error', message: `书库更新进程停止，已保存章节保留。${workerError.slice(-300)}`}); }
+          finishQueueTask(null);
         });
         current.send({type: 'start', library: true, libraryConcurrency: 2, stateDir, outputDir, sites: librarySites});
         return respond(202, {ok: true});
       }
       if (pathname === '/api/upload-library') {
-        if (busy(task) || worker || operation) return respond(409, {error: '请先停止当前任务，等待进度保存完成后再上传书库'});
+        if (busy(task) || worker || operation || queueWork || queueSaveRetry || queue.next()) return respond(409, {error: '请先暂停队列并等待当前任务保存结束，再上传书库'});
         stopRequested = false; candidates = []; selectedBook = null;
         task = {kind: 'upload', phase: 'upload', message: '正在整理本地书库，准备同步到 jiutianxiaoshuo.com…', batch: null}; save();
         worker = fork(uploadWorker, [], {windowsHide: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc']});
@@ -157,9 +295,10 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
           if (message.type === 'error') { completed = true; update({phase: stopRequested ? 'stopped' : 'partial', message: message.error}); }
         });
         current.on('error', () => update({phase: 'partial', message: '无法启动上传进程，请重新打开拾页后重试'}));
-        current.on('exit', () => {
+        current.on('close', () => {
           if (worker === current) worker = null;
           if (!completed && busy(task)) update({phase: stopRequested ? 'stopped' : 'partial', message: '上传进程已停止。再次点击“上传书库”会核对网站并续传，已上传内容保留。'});
+          finishQueueTask(null);
         });
         current.send({type: 'start', upload: true, stateDir, outputDir});
         return respond(202, {ok: true});
@@ -179,7 +318,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         return respond(200, {ok: true});
       }
       if (pathname === '/api/search') {
-        if (busy(task) || worker) return respond(409, {error: '请先停止当前任务，等待进度保存完成'});
+        if (busy(task) || worker || operation || queueWork || queueSaveRetry || queue.next()) return respond(409, {error: '当前任务正在处理，可以先加入队列'});
         stopRequested = false;
         const settings = rememberWebsite(stateDir, input.website);
         const controller = new AbortController(); operation = controller;
@@ -194,55 +333,14 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         } catch (error) {
           if (controller.signal.aborted) { stoppedTask(); return respond(200, {candidates: [], settings, task}); }
           update({phase: 'error', message: error.message, failure: failureDetails(error)}); throw error;
-        } finally { if (operation === controller) operation = null; }
+        } finally { if (operation === controller) { operation = null; operationClient = null; } finishQueueTask(null); }
       }
       if (pathname === '/api/start') {
-        if (busy(task) || worker) return respond(409, {error: '当前任务还在处理，请稍后再试'});
-        selectedBook = candidates.find(book => book.url === input.url);
-        if (!selectedBook) throw Error('请先查找并选择书籍');
-        if (selectedBook.local?.blocked) return respond(409, {error: selectedBook.local.message});
-        const requestedContinuation = selectedBook.local?.continuation;
-        stopRequested = false;
-        const controller = new AbortController(); operation = controller;
-        update({kind: 'book', batch: null, phase: 'resolving', message: '正在读取书籍信息…', title: selectedBook.title, author: selectedBook.author, sourceUrl: selectedBook.url, description: null, status: null, statusDetection: null, report: null, progress: null, probeOnly: input.probeOnly === true});
-        let spec;
-        try { spec = await prepareBook({...selectedBook, stateDir, sites: sites().sites, ...controls(controller)}); }
-        catch (error) {
-          if (controller.signal.aborted) { stoppedTask(); return respond(200, {stopped: true}); }
-          update({phase: 'error', message: error.message, failure: failureDetails(error)}); throw error;
-        } finally { if (operation === controller) operation = null; }
-        if (closing || controller.signal.aborted) { stoppedTask(); return respond(200, {stopped: true}); }
-        resolvedSpecs.set(selectedBook.url, spec);
-        update({local: localBookState(spec, {stateDir, outputDir}), description: spec.description || null, status: spec.status || null, statusDetection: spec.statusDetection});
-        if (task.local.blocked) {
-          update({phase: 'error', message: task.local.message, failure: failureDetails(Error(task.local.message))});
-          return respond(409, {error: task.local.message});
-        }
-        worker = fork(path.join(here, 'worker.mjs'), [], {windowsHide: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc']});
-        let workerError = '';
-        worker.stderr.on('data', chunk => { workerError = (workerError + chunk.toString()).slice(-1500); });
-        worker.on('message', message => {
-          if (message.type === 'status' && !['pausing', 'stopping'].includes(task.phase)) update(statusValues(message));
-          if (message.type === 'phase' && !['pausing', 'stopping'].includes(task.phase)) update({phase: message.phase, message: task.local?.continuation ? (message.phase === 'probe' ? '正在核对新旧来源的目录与衔接正文…' : '正在接续后续章节，完成检查后更新原文件…') : `${task.local?.saved ? `已保存 ${task.local.saved} 章，本次会跳过已有正文。` : ''}${message.phase === 'probe' ? '先抽样检查目录、正文和编码…' : '正在补齐章节，完成后检查并导出…'}`, progress: null});
-          if (message.type === 'progress') {
-            task.progress = message;
-            if (Date.now() - lastProgress > 1000) { save(); lastProgress = Date.now(); }
-          }
-          if (message.type === 'done') {
-            const report = visibleReport(message.report), complete = !!report.exportFile;
-            update({phase: message.stopped || stopRequested ? 'stopped' : message.paused ? 'paused' : complete ? 'complete' : message.report.structuralPass && task.probeOnly ? 'probed' : 'error', report,
-              message: message.stopped || stopRequested ? '已停止，采集页面已关闭；已保存的章节保留，下次会接着补齐。' : message.paused ? '已暂停，完成的章节已保存。' : complete ? report.continuation ? `已${report.switching ? '换源并接续' : '更新'}，原文件共 ${report.expected} 项，本次追加 ${report.continuationAdded} 项。${report.automaticResolutions ? `自动处理 ${report.automaticResolutions} 项重复或编号差异。` : ''}${report.reusedExport ? '文件没有变化。' : '原有章节已保留。'}` : report.readingEdition ? `已沿用来源映射，网站阅读版共 ${report.expected} 项，本次追加 ${report.readingAdded} 项。${report.reusedExport ? '文件没有变化，已复用原文件。' : '已自动更新阅读版文件。'}` : report.reusedExport ? '已下载过这本书，本次目录没有新增章节；已复用原文件，没有重复下载正文。' : '下载完成，已生成书籍文件和质量报告。' : message.report.structuralPass && task.probeOnly ? report.continuation ? '衔接抽样检查通过，原文件尚未改变；取消仅试采后可继续换源续更。' : '试采通过，可以继续下载整本。' : `本次未导出完整书籍：${message.report.failures?.[0]?.error || '检查发现异常，详见质量报告。'}`});
-            candidates = candidates.map(withLocalState);
-          }
-          if (message.type === 'error') { if (stopRequested) stoppedTask(); else update({phase: 'error', message: message.error, failure: message.failure || failureDetails(message)}); }
-        });
-        worker.on('error', error => { if (stopRequested) stoppedTask(); else update({phase: 'error', message: error.message}); });
-        worker.on('exit', () => {
-          worker = null;
-          if (busy(task)) { if (stopRequested) stoppedTask(); else update({phase: 'error', message: `采集进程意外停止。已完成章节可续传。${workerError.slice(-300)}`}); }
-        });
-        worker.send({type: 'start', spec, stateDir, outputDir, continuation: requestedContinuation || task.local.continuation, probeOnly: input.probeOnly === true});
-        return respond(200, {ok: true});
+        if (busy(task) || worker || operation || queueWork || queueSaveRetry || (queue.next() && task.phase !== 'ready')) return respond(409, {error: '当前任务还在处理，请稍后再试；队列正在运行时可先暂停队列'});
+        const book = candidates.find(book => book.url === input.url);
+        if (!book) throw Error('请先查找并选择书籍');
+        try { return respond(200, await startBook(book, input)); }
+        finally { if (!worker) finishQueueTask(null); }
       }
       if (pathname === '/api/show-browser') {
         if (!busy(task) || !['login', 'verification'].includes(task.action)) throw Error('当前没有等待操作的采集窗口');
@@ -260,6 +358,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         return respond(200, {ok: true});
       }
       if (pathname === '/api/stop') {
+        try { queue.pause(); } catch { /* Stopping current work must still succeed; its result will retry the save. */ }
         if (!busy(task)) return respond(200, {ok: true});
         stopRequested = true;
         update({phase: 'stopping', message: task.kind === 'upload' ? '正在停止上传，已成功上传的批次保留…' : '正在停止请求并关闭采集页面…'});
@@ -269,6 +368,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         return respond(200, {ok: true});
       }
       if (pathname === '/api/pause') {
+        try { queue.pause(); } catch { /* The worker must still preserve its current chapter. */ }
         if (task.phase === 'stopping') return respond(200, {ok: true});
         if (worker?.connected) { worker.send({type: 'pause'}); update({phase: 'pausing', message: '正在保存当前章节，请稍候…'}); }
         return respond(200, {ok: true});
@@ -293,13 +393,16 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   return {server, token, baseUrl, url: `${baseUrl}/#${token}`, state: currentTask, async close() {
     closing = true;
+    clearImmediate(queueWake); clearTimeout(queueSaveRetry);
+    try { queue.pause(); } catch { /* Original queue record still recovers paused on restart. */ }
     stopRequested = true;
     operation?.abort();
     if (worker) {
       const current = worker;
       if (current.connected) current.send({type: 'stop'});
-      await new Promise(resolve => current.once('exit', resolve));
+      await new Promise(resolve => current.once('close', resolve));
     }
+    await queueWork;
     await new Promise(resolve => {
       server.close(resolve);
       // Work has stopped above. Polling pages and unfinished HTTP requests must
@@ -307,6 +410,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
       server.closeAllConnections();
     });
     clearTimeout(saveRetry); saveRetry = null;
+    clearTimeout(queueSaveRetry);
     if (persistenceWarning) save();
   }};
 }

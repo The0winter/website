@@ -1,3 +1,4 @@
+import {createQueueUI} from './queue-ui.js';
 const $ = id => document.getElementById(id);
 const token = location.hash.slice(1) || sessionStorage.getItem('desktop-token');
 if (token) sessionStorage.setItem('desktop-token', token);
@@ -72,7 +73,7 @@ function renderDiagnostics(task) {
       if (failures.length > 20) { const more = document.createElement('p'); more.textContent = '其余失败项见质量报告。'; diagnostics.append(more); }
     }
   }
-  if (task.phase !== 'error') { interruptionKey = ''; if ($('interruption-dialog').open) $('interruption-dialog').close(); return; }
+  if (task.phase !== 'error' || task.queueId) { interruptionKey = ''; if ($('interruption-dialog').open) $('interruption-dialog').close(); return; }
   const errorKey = JSON.stringify([task.title, task.report?.checkedAt, task.message, failures]);
   if (errorKey === interruptionKey) return;
   interruptionKey = errorKey;
@@ -97,7 +98,7 @@ function adapterStatus() {
     button.setAttribute('aria-pressed', String(selected));
   }
 }
-function chooseWebsite(url) { $('website').value = url; adapterStatus(); remember(); }
+function chooseWebsite(url) { $('website').value = url; adapterStatus(); remember(); queueUI.saveDraft(); }
 async function remember() { if (!$('website').value.trim()) return; try { const settings = await api('remember', {website: $('website').value}); if (data) { data.settings = settings; renderSettings(); adapterStatus(); $('sites').scrollTop = 0; } } catch {} }
 function renderSettings() {
   const nextSitesKey = JSON.stringify([data.sites, data.settings.recentWebsites]);
@@ -117,7 +118,6 @@ function renderSettings() {
       const button = document.createElement('button');
       button.type = 'button'; button.className = 'site-choice'; button.title = url;
       button.dataset.host = host; button.dataset.siteId = site?.id || '';
-      button.disabled = working(data.task.phase);
       const heading = document.createElement('span'), name = document.createElement('span'), status = document.createElement('span');
       heading.className = 'site-choice-heading'; name.className = 'site-choice-name'; name.textContent = site?.name || host;
       status.className = `site-state ${site ? 'adapted' : 'pending'}`;
@@ -135,6 +135,7 @@ function render() {
     $('website').value = data.settings.lastWebsite || data.sites[0]?.home || '';
     if (!['upload', 'library'].includes(data.task.kind) && data.task.title) $('title').value = data.task.title;
     if (!['upload', 'library'].includes(data.task.kind) && data.task.author) $('author').value = data.task.author;
+    queueUI.restoreDraft(data.queue?.draft);
     initialized = true;
   }
   renderSettings(); adapterStatus();
@@ -148,8 +149,7 @@ function render() {
   $('update-library').dataset.running = String(isLibrary && active && task.phase !== 'library-wait');
   $('update-library-label').textContent = task.phase === 'library-wait' ? '等待处理' : isLibrary && active ? '正在更新' : '更新书库';
   document.title = task.phase === 'library-wait' ? '需要你处理 · 拾页' : '拾页 · 小说采集';
-  for (const id of ['website', 'title', 'author', 'search', 'probe-only', 'clear-login']) $(id).disabled = active;
-  for (const button of document.querySelectorAll('.site-choice')) button.disabled = active;
+  for (const id of ['search', 'clear-login']) $(id).disabled = active;
   $('search').textContent = task.phase === 'search' ? '正在查找…' : '查找书籍 →';
   const actionLabel = active && {login: '等待登录', verification: '等待验证', retrying: '自动重试'}[task.action];
   $('phase').textContent = actionLabel || phases[task.phase] || '等待开始';
@@ -157,6 +157,8 @@ function render() {
   $('stop').hidden = !active;
   $('stop').disabled = task.phase === 'stopping';
   $('stop').textContent = task.phase === 'stopping' ? '正在停止…' : '停止';
+  if (task.kind === 'book' && task.phase !== 'stopping') $('stop').textContent = '停止当前书';
+  $('stop').title = '停止当前任务，保留已保存章节，并暂停后续队列';
   const isEmpty = ['idle', 'ready'].includes(task.phase);
   $('task-empty').hidden = !isEmpty;
   $('task-content').hidden = isEmpty;
@@ -179,7 +181,7 @@ function render() {
   if (report) $('report-stats').replaceChildren(...[[report.expected, report.continuation ? '本地书籍条目' : report.readingEdition ? '阅读版条目' : '目录章节'], [report.errors, '错误'], [report.warnings, '待核对']].map(([number, label]) => { const div = document.createElement('div'), strong = document.createElement('strong'); strong.textContent = number; div.append(strong, label); return div; }));
   renderDiagnostics(task);
   renderLibrary(batch);
-  $('resume').hidden = isLibrary || isUpload || !['paused', 'stopped', 'probed', 'error'].includes(task.phase) || !task.sourceUrl;
+  $('resume').hidden = !!task.queueId || isLibrary || isUpload || !['paused', 'stopped', 'probed', 'error'].includes(task.phase) || !task.sourceUrl;
   $('results-panel').hidden = !data.candidates.length;
   const nextKey = JSON.stringify(data.candidates);
   if (nextKey !== resultsKey) {
@@ -199,6 +201,7 @@ function render() {
   const selected = data.candidates.find(book => book.url === selectedUrl);
   $('start').disabled = active || !selectedUrl || !!selected?.local?.blocked;
   $('start').textContent = selected?.local?.blocked ? '需先核对本地版本' : $('probe-only').checked ? (selected?.local?.continuation ? '检查衔接 →' : '开始试采 →') : selected?.local?.state === 'switch' ? '换源续更 ↓' : selected?.local?.state === 'complete' ? '检查更新 ↓' : selected?.local?.saved ? '继续采集 ↓' : '试采并下载 ↓';
+  queueUI.render(data, active);
   if (data.adapterErrors.length) feedback(`有站点配置需要修复：${data.adapterErrors.join('；')}`);
 }
 function currentLibraryBook(batch) {
@@ -292,7 +295,7 @@ $('pause').onclick = async () => { try { await api('pause', {}); } catch (error)
 $('stop').onclick = async () => { $('stop').disabled = true; try { await api('stop', {}); } catch (error) { feedback(error.message); } await poll(); };
 showBrowser.onclick = async () => { showBrowser.disabled = true; try { await api('show-browser', {}); } catch (error) { feedback(error.message); } finally { showBrowser.disabled = false; } };
 $('dismiss-interruption').onclick = () => { $('interruption-dialog').close(); $('task-diagnostics').scrollIntoView({block: 'nearest'}); };
-$('resume').onclick = async () => { if (data.task.title) $('title').value = data.task.title; if (data.task.author) $('author').value = data.task.author; if (data.task.sourceUrl) $('website').value = data.task.sourceUrl; $('probe-only').checked = false; await search(); $('results-panel').scrollIntoView({behavior: 'smooth', block: 'nearest'}); };
+$('resume').onclick = async () => { if (data.task.title) $('title').value = data.task.title; if (data.task.author) $('author').value = data.task.author; if (data.task.sourceUrl) $('website').value = data.task.sourceUrl; $('probe-only').checked = false; queueUI.saveDraft(); await search(); $('results-panel').scrollIntoView({behavior: 'smooth', block: 'nearest'}); };
 $('folder-nav').onclick = async () => {
   $('folder-nav').disabled = true;
   try { await api('open', {kind: 'folder'}); }
@@ -300,5 +303,6 @@ $('folder-nav').onclick = async () => {
   finally { $('folder-nav').disabled = false; }
 };
 document.querySelector('.brand').onclick = event => event.preventDefault();
+const queueUI = createQueueUI({api, poll, feedback});
 await poll();
 setInterval(poll, 1000);

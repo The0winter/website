@@ -21,17 +21,35 @@
         <div class="site-input"><span aria-hidden="true">◎</span><input id="website" name="website" type="text" placeholder="网站首页或书籍详情页" autocomplete="off" required maxlength="2000"><span id="adapter-status" class="input-tag">输入网址</span></div>
         <div id="login-memory" class="login-memory" hidden><span>已启用登录记忆</span><button id="clear-login" type="button" class="text-button" title="清除当前网站在拾页中的登录信息，下次重新登录；已保存章节保留">清除本站登录</button></div>
         <div class="book-fields"><div><label for="title">书名</label><input id="title" name="title" placeholder="输入书名或关键词" required maxlength="200" autocomplete="off"></div><div><label for="author">作者 <span>选填</span></label><input id="author" name="author" placeholder="作者名" maxlength="200" autocomplete="off"></div></div>
-        <div class="form-footer"><span id="form-note" hidden></span><button id="search" class="primary" type="submit">查找书籍 <span>→</span></button></div>
+        <div class="form-footer"><span id="form-note" hidden></span><div class="form-buttons"><button id="search" class="secondary" type="submit">查找书籍 <span>→</span></button><button id="enqueue" class="primary" type="button">加入队列 <span>＋</span></button></div></div>
+        <p id="queue-input-hint" class="form-hint">可先查找确认，也可输入完整书名后加入队列，依次查找并采集。</p><span id="draft-status" class="draft-status" role="status"></span>
       </form>
       <div id="feedback" class="feedback" role="alert" hidden></div>
-      <div id="results-panel" hidden><div class="results-heading">匹配书籍 <span>核对后开始采集</span></div><div id="results"></div><div class="result-actions"><label class="checkbox"><input id="probe-only" type="checkbox">仅试采</label><button id="start" class="primary" type="button">试采并下载 <span>↓</span></button></div></div>
+      <div class="input-options"><label class="checkbox"><input id="probe-only" type="checkbox">仅试采</label></div>
+      <div id="results-panel" hidden><div class="results-heading">匹配书籍 <span>核对后开始采集</span></div><div id="results"></div><div class="result-actions"><button id="enqueue-selected" class="secondary" type="button">将选中书籍加入队列</button><button id="start" class="primary" type="button">试采并下载 <span>↓</span></button></div></div>
     </section>
     <section class="card task-card" aria-live="polite">
       <div class="task-heading"><div class="section-title"><h2>采集进度</h2></div><div class="task-controls"><span id="phase" class="status-pill">等待开始</span><button id="stop" type="button" class="stop-button" title="停止当前任务并关闭采集页面，保留已保存章节" hidden>停止</button></div></div>
       <div id="task-empty" class="empty-state"><span class="empty-icon" aria-hidden="true">↓</span><p>选择书籍后开始采集</p></div>
       <div id="task-content" hidden><div id="library-summary" class="library-summary" hidden></div><h3 id="task-title"></h3><p id="book-status" aria-live="polite"></p><p id="task-message"></p><div class="progress-track"><div id="progress-bar"></div></div><div class="progress-caption"><span id="progress-text"></span><button id="pause" type="button" class="text-button" hidden>暂停采集</button></div><div id="report-stats" class="stats" hidden></div><div id="library-results" class="library-results" hidden></div><div class="task-actions"><button id="resume" type="button" class="secondary" hidden>继续采集</button></div></div>
     </section>
+    <section class="card queue-card" aria-labelledby="queue-title">
+      <div class="queue-heading"><div><h2 id="queue-title">采集队列 <span id="queue-count">0</span></h2><p id="queue-summary" class="form-hint">按顺序逐本采集，关闭后保留队列。</p></div><button id="queue-toggle" class="secondary" type="button" hidden>暂停队列</button></div>
+      <p id="queue-warning" class="attention-box" role="alert" hidden></p>
+      <p id="queue-empty" class="queue-empty">还没有排队的书籍。采集期间也可以继续添加。</p>
+      <div id="queue-list"></div>
+      <details id="queue-history" hidden><summary id="queue-history-summary">已完成</summary><div id="queue-history-list"></div></details>
+    </section>
   </main>
+  <dialog id="queue-edit-dialog" aria-labelledby="queue-edit-title">
+    <form id="queue-edit-form"><h2 id="queue-edit-title">编辑待采集书籍</h2><input id="queue-edit-id" type="hidden">
+      <label for="queue-edit-website">来源网址</label><input id="queue-edit-website" required maxlength="2000">
+      <label for="queue-edit-book">书名</label><input id="queue-edit-book" required maxlength="200">
+      <label for="queue-edit-author">作者（选填）</label><input id="queue-edit-author" maxlength="200">
+      <label class="checkbox"><input id="queue-edit-probe" type="checkbox">仅试采</label><p id="queue-edit-error" role="alert" hidden></p>
+      <div class="form-buttons"><button id="queue-edit-cancel" type="button" class="secondary">取消</button><button type="submit" class="primary">保存修改</button></div>
+    </form>
+  </dialog>
   <dialog id="interruption-dialog" aria-labelledby="interruption-title" aria-describedby="interruption-summary">
     <h2 id="interruption-title">采集已中断</h2>
     <p id="interruption-summary"></p>
