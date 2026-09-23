@@ -53,7 +53,7 @@
 .milestone-message button { text-decoration:underline; cursor:pointer; }
 @media(max-width:767px) {
   .book-mobile-overview { display:grid; grid-template-columns:minmax(118px,1.6fr) minmax(0,3fr); align-items:center; gap:7px; margin-bottom:16px; }
-  .book-mobile-overview .book-mobile-stats { height:49px; margin:0; border-left:1px solid #e8e0d5; padding-left:8px; column-gap:8px; grid-template-columns:repeat(3,max-content); justify-content:space-between; }
+  .book-mobile-overview .book-mobile-stats { height:49px; margin:0; border-left:1px solid #e8e0d5; padding-left:8px; column-gap:12px; grid-template-columns:repeat(3,max-content); justify-content:start; }
   .book-mobile-overview .book-mobile-stats>div { padding-inline:0; }
   .book-mobile-overview .milestone-entry-copy { gap:1px; }
   .book-intro .book-milestone-entry { width:100%; margin:0; padding:0; }
