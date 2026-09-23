@@ -120,17 +120,25 @@
 @media(hover:hover) {
   .book-review-reactions button:not(:disabled):hover { color:#d84b55; background:#fff5f5; }
 }
-.book-home-actions { display:none; }
+.book-top-controls { display:none; }
 @media (max-width:767px) {
   body:has(.book-detail) [data-site-chrome] { display:none; }
   .book-detail { --book-gutter:16px; background:#f7f5f2; color:#292724; padding-bottom:calc(100px + env(safe-area-inset-bottom)); }
   .book-layout { padding:0; gap:0; }
   .book-hero { padding:calc(8px + env(safe-area-inset-top)) var(--book-gutter) 0; border-radius:0; box-shadow:none; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; background:#303937; }
   .book-hero-main { gap:16px; padding-top:48px; padding-bottom:20px; }
-  .book-home-actions { position:absolute; top:0; left:-8px; display:flex; gap:4px; color:#fffaf0; }
-  .book-home-actions a { display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:8px; color:inherit; -webkit-tap-highlight-color:transparent; }
+  .book-top-controls { position:absolute; top:0; left:0; right:0; display:grid; grid-template-columns:72px minmax(0,1fr) 72px; gap:8px; align-items:center; height:44px; }
+  .book-home-actions { position:relative; left:-4px; display:flex; color:#fffaf099; }
+  .book-home-actions a { display:flex; align-items:center; justify-content:center; width:36px; height:44px; border-radius:8px; color:inherit; -webkit-tap-highlight-color:transparent; }
+  .book-home-actions a:last-child { color:#fffaf080; }
   .book-home-actions a:active { background:#ffffff1f; }
   .book-home-actions a:focus-visible { outline:2px solid currentColor; outline-offset:-3px; }
+  .book-detail-search { display:flex; align-items:center; min-width:0; height:32px; border:1px solid #fffaf03d; border-radius:16px; background:transparent; color:#fffaf08c; }
+  .book-detail-search:focus-within { border-color:#fffaf080; }
+  .book-detail-search button { display:grid; place-items:center; flex:0 0 32px; height:40px; color:inherit; }
+  .book-detail-search button:focus-visible { outline:1px solid currentColor; outline-offset:-5px; border-radius:16px; }
+  .book-detail-search input { min-width:0; width:100%; height:30px; padding:0 10px 0 0; border:0; outline:0; background:transparent; color:#fffaf0cc; font-size:16px; }
+  .book-detail-search input::-webkit-search-cancel-button { display:none; }
   .book-hero-main::before { inset:-20px calc(-1 * var(--book-gutter)) -24px; background:linear-gradient(110deg,#171411a8,#171411b8); }
   .book-hero-backdrop { inset:-52px -48px -56px; }
   .book-hero-cover>img,.book-hero-cover>span,.book-hero-cover>div { width:102px; height:140px; border-radius:5px; box-shadow:0 5px 18px #0004; }

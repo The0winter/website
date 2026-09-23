@@ -26,11 +26,18 @@ for (const width of [320, 390, 430, 1440]) test(`detail navigation fits at ${wid
     expect(nav.x).toBeGreaterThanOrEqual(8);expect(nav.y).toBeGreaterThanOrEqual(8);
     expect(nav.x + nav.width).toBeLessThan(width / 2);
     expect(nav.y + nav.height).toBeLessThanOrEqual(cover.y);
+    const search = page.locator('.book-detail-search');
+    await expect(search.getByRole('searchbox', {name:'搜索书名或作者'})).toBeVisible();
+    await expect(search).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    const searchBox = (await search.boundingBox())!;
+    expect(Math.abs(searchBox.x + searchBox.width / 2 - width / 2)).toBeLessThan(1);
+    expect(searchBox.x).toBeGreaterThan(nav.x + nav.width);
+    expect(searchBox.y + searchBox.height).toBeLessThan(cover.y);
     for (const name of ['返回精选', '精选主页']) {
       const link = actions.getByRole('link', {name});
       await expect(link).toHaveAttribute('href', '/');
       const box = (await link.boundingBox())!;
-      expect(box.width).toBeGreaterThanOrEqual(44);expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.width).toBeGreaterThanOrEqual(36);expect(box.height).toBeGreaterThanOrEqual(44);
       await link.focus();await expect(link).toBeFocused();
     }
     await page.locator('.mobile-catalog').click();
@@ -46,10 +53,30 @@ for (const width of [320, 390, 430, 1440]) test(`detail navigation fits at ${wid
   await page.screenshot({path:info.outputPath(`verified-icons-${width}.png`)});
   if (width === 390) {
     await page.evaluate(() => {document.documentElement.classList.add('dark');document.documentElement.dataset.theme='dark';});
-    await expect(actions).toHaveCSS('color', 'rgb(255, 250, 240)');
+    await expect(actions).toHaveCSS('color', 'rgba(255, 250, 240, 0.6)');
     await page.screenshot({path:info.outputPath('verified-icons-dark.png')});
   }
   expect(errors).toEqual([]);
+});
+
+for (const method of ['Enter', 'button']) test(`detail search submits with ${method}`, async ({page}) => {
+  await page.setViewportSize({width:method === 'Enter' ? 320 : 390, height:844});
+  await page.route('**/api/books?*', route => {
+    if (!new URL(route.request().url()).searchParams.has('q')) return route.continue();
+    return route.fulfill({json:[]});
+  });
+  await page.goto(detail);
+  const search = page.locator('.book-detail-search'), input = search.getByRole('searchbox');
+  await input.fill(' 夜无疆 & 辰东 ');
+  if (method === 'Enter') await input.press('Enter');
+  else await search.getByRole('button', {name:'搜索', exact:true}).click();
+  await expect(page).toHaveURL(`${base}/search?${new URLSearchParams({q:'夜无疆 & 辰东'})}`);
+  await expect(page.getByRole('searchbox', {name:'搜索书名或作者'})).toHaveValue('夜无疆 & 辰东');
+  await page.goBack();
+  await expect(page.locator('.book-detail')).toBeVisible({timeout:15000});
+  await input.fill('');
+  await search.getByRole('button', {name:'搜索', exact:true}).click();
+  await expect(page).toHaveURL(`${base}/search`);
 });
 
 // Both icons must select Featured even when the previous page was another list.
