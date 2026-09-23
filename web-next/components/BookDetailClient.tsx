@@ -10,6 +10,7 @@ import Link from './PrefetchLink';
 import ReadingEntryLink from './ReadingEntryLink';
 import RecordBookVisit from './RecordBookVisit';
 import BookCatalogSheet from './BookCatalogSheet';
+import HomeSearchHeader from './HomeSearchHeader';
 import {BookMilestoneEntry, BookMilestoneSheet, useBookMilestones, type MilestoneData} from './BookMilestones';
 import {useBookCatalog} from '@/lib/useBookCatalog';
 import {formatChapterTitle} from '@/lib/catalog-title';
@@ -380,6 +381,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
     // 修改1：增加手机端底部 padding (pb-24)，防止被常驻底栏遮挡内容
     <div data-book-id={book.id} className="book-detail min-h-screen bg-gray-50 pb-24 md:pb-12">
       <RecordBookVisit bookId={book.id}/>
+      <HomeSearchHeader className="book-mobile-header"/>
       <div className="hidden md:block h-[20px]"></div>
 
       {/* ⚠️ 修改2：将 space-y 替换为 flex flex-col 和 gap，以便利用 order 属性实现手机端模块换位 */}
