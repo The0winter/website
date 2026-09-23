@@ -20,7 +20,7 @@ import {beginChapterEntry} from '@/lib/chapter-entry';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, Heart, HeartCrack, X, ChevronRight, ChevronDown, ChevronUp, PenLine, ArrowLeft, House } from 'lucide-react';
+import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, Heart, HeartCrack, X, ChevronRight, ChevronDown, ChevronUp, PenLine, ChevronLeft } from 'lucide-react';
 import BookArticles from './BookArticles';
 import './book-detail.css';
 import { useAuth } from '@/contexts/AuthContext';
@@ -390,8 +390,12 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
         <div className="book-hero bg-white rounded-lg shadow-sm p-4 md:p-8 order-1">
             <div className="book-hero-main flex flex-row gap-4 md:gap-8">
               <nav className="book-home-actions" aria-label="详情页导航">
-                <HomeLink href="/" prefetch={false} aria-label="返回精选"><ArrowLeft size={24} aria-hidden="true"/></HomeLink>
-                <HomeLink href="/" prefetch={false} aria-label="精选主页"><House size={22} strokeWidth={1.7} aria-hidden="true"/></HomeLink>
+                <HomeLink href="/" prefetch={false} aria-label="返回精选"><ChevronLeft size={24} strokeWidth={1.8} aria-hidden="true"/></HomeLink>
+                <HomeLink href="/" prefetch={false} aria-label="精选主页">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M4 10.5 12 3.5l8 7V20h-5v-6H9v6H4Z"/>
+                  </svg>
+                </HomeLink>
               </nav>
               {/* 左侧封面 */}
               <div className="book-hero-cover flex-shrink-0">

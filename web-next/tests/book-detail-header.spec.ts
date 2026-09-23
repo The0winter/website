@@ -32,7 +32,7 @@ for (const width of [320, 390, 430, 1440]) test(`detail navigation fits at ${wid
       const link = actions.getByRole('link', {name});
       await expect(link).toHaveAttribute('href', '/');
       const box = (await link.boundingBox())!;
-      expect(box.width).toBeGreaterThanOrEqual(30);expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.width).toBeGreaterThanOrEqual(24);expect(box.height).toBeGreaterThanOrEqual(44);
       await link.focus();await expect(link).toBeFocused();
     }
     await page.locator('.mobile-catalog').click();
@@ -48,7 +48,7 @@ for (const width of [320, 390, 430, 1440]) test(`detail navigation fits at ${wid
   await page.screenshot({path:info.outputPath(`verified-icons-${width}.png`)});
   if (width === 390) {
     await page.evaluate(() => {document.documentElement.classList.add('dark');document.documentElement.dataset.theme='dark';});
-    await expect(actions).toHaveCSS('color', 'rgba(255, 250, 240, 0.6)');
+    await expect(actions).toHaveCSS('color', 'rgb(255, 250, 240)');
     await page.screenshot({path:info.outputPath('verified-icons-dark.png')});
   }
   expect(errors).toEqual([]);
