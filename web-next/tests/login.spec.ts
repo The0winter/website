@@ -88,7 +88,7 @@ test('book login supports Back, Forward and a real username session returning to
 test('search query survives login and email authentication', async ({ page }) => {
   const source = '/search?q=' + encodeURIComponent('山海');
   await page.goto(base + source);
-  await page.locator('nav').getByRole('link', { name: '登录', exact: true }).click(); await atLogin(page);
+  await page.locator('footer').getByRole('link', { name: '我的书架', exact: true }).click(); await atLogin(page);
   await page.getByRole('button', { name: '邮箱登录', exact: true }).click();
   await page.getByPlaceholder('请输入邮箱').fill('reader@example.test');
   await page.getByPlaceholder('请输入密码').fill('Local-test-12345');

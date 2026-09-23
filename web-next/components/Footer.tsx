@@ -11,7 +11,7 @@ export default function Footer() {
   const { user, loading } = useAuth();
 
   // 3. 如果当前路径是 /writer（创作中心），则直接不渲染 Footer
-  if (pathname === '/login' || ((pathname === '/profile' || pathname === '/library') && (loading || !user)) || pathname?.startsWith('/writer')) {
+  if (pathname === '/login' || pathname === '/register' || ((pathname === '/profile' || pathname === '/library') && (loading || !user)) || pathname?.startsWith('/writer')) {
     return null;
   }
 

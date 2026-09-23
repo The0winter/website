@@ -1,27 +1,29 @@
 'use client';
-import { safeFetch as fetch } from '@/lib/request';
- 
 
-import { useState, useEffect } from 'react'; 
-import { useRouter } from 'next/navigation'; 
-import { useAuth } from '@/contexts/AuthContext'; 
+import { useState, useEffect } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { safeFetch as fetch } from '@/lib/request';
+import { useAuth } from '@/contexts/AuthContext';
+import { leaveRegistration, registrationLogin } from '@/lib/register-navigation';
+import './register.css';
 
 export default function Register() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  
+  const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState('');
   const [countdown, setCountdown] = useState(0);
-  
+  const [sending, setSending] = useState(false);
+  const [sentEmail, setSentEmail] = useState('');
   const [error, setError] = useState('');
-  // ✅ 新增：成功提示状态
-  const [success, setSuccess] = useState(''); 
   const [loading, setLoading] = useState(false);
-  
-  const { register, signIn } = useAuth();
-  const router = useRouter(); 
+  const { register } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     if (countdown > 0) {
@@ -31,188 +33,116 @@ export default function Register() {
   }, [countdown]);
 
   const handleSendCode = async () => {
-    if (!email || !email.includes('@')) {
+    if (sending || countdown > 0 || loading) return;
+    const recipient = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
       setError('请输入有效的邮箱地址');
       return;
     }
-    
+    setError('');
+    setSentEmail('');
+    setSending(true);
     try {
-      setError('');
-      setSuccess(''); // 发送前清空之前的提示
-      
-      const res = await fetch('/api/auth/send-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+      const response = await fetch('/api/auth/send-code', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: recipient }),
       });
-      
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || '发送失败');
-      
-      setCountdown(60); 
-      
-      // ✅ 修改：不再弹 alert，而是设置页面内的成功状态
-      setSuccess('验证码已发送至您的邮箱，请查收！');
-      
-      // 3秒后自动关闭提示，体验更好
-      setTimeout(() => setSuccess(''), 3000);
-
-    } catch (caught: unknown) { const err = caught instanceof Error ? caught : new Error('操作失败');
-      setError(err.message);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || data.message || '验证码发送失败，请重试');
+      setCountdown(60);
+      setSentEmail(recipient);
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : '验证码发送失败，请重试');
+    } finally {
+      setSending(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (password !== confirmPassword) {
-      return setError('两次输入的密码不一致');
-    }
-    if (!code) { 
-      return setError('请输入验证码');
-    }
-
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (loading || sending) return;
+    if (!username.trim()) return setError('请输入用户名');
+    if (password !== confirmPassword) return setError('两次输入的密码不一致');
+    setError('');
+    setLoading(true);
     try {
-      setError('');
-      setLoading(true);
-
-      const result = await register(username, email, password, code);
+      const result = await register(username.trim(), email.trim(), password, code.trim());
       if (result.error) throw result.error;
-
-      router.push('/'); 
-    } catch (caught: unknown) { const err = caught instanceof Error ? caught : new Error('操作失败'); 
-      setError(err.message || '注册失败');
-    } finally {
+      router.replace('/');
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : '注册失败，请重试');
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-       <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-lg shadow-md">
-         <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-900">注册账户</h2>
-         </div>
-         
-         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-            
-            {/* ✅ 新增：成功提示框 (仅在 success 有值时显示) */}
-            {success && (
-              <div className="rounded-md bg-green-50 p-4 border border-green-200 animate-fade-in-down">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    {/* 一个绿色的小勾图标 */}
-                    <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-green-800">
-                      {success}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-4">
-              {/* 用户名 */}
-              <div>
-                <label htmlFor="username" className="sr-only">用户名</label>
-                <input
-                  id="username"
-                  type="text"
-                  required
-                  className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="用户名"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                />
-              </div>
-
-              {/* 邮箱 */}
-              <div>
-                <label htmlFor="email" className="sr-only">邮箱地址</label>
-                <input
-                  id="email"
-                  type="email"
-                  required
-                  autoComplete="off"
-                  className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="邮箱地址"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-
-              {/* 验证码输入框 + 按钮 */}
-              <div className="flex gap-2">
-                <div className="relative flex-grow">
-                  <label htmlFor="code" className="sr-only">验证码</label>
-                  <input
-                    id="code"
-                    type="text"
-                    required
-                    className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                    placeholder="邮箱验证码"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSendCode}
-                  disabled={countdown > 0}
-                  className="whitespace-nowrap px-4 py-2 border border-transparent text-sm font-medium rounded-md text-blue-600 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {countdown > 0 ? `${countdown}s 后重发` : '获取验证码'}
-                </button>
-              </div>
-
-              {/* 密码 */}
-              <div>
-                <label htmlFor="password" className="sr-only">密码</label>
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  autoComplete="off"
-                  className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="密码"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-
-              {/* 确认密码 */}
-              <div>
-                <label htmlFor="confirm-password" className="sr-only">确认密码</label>
-                <input
-                  id="confirm-password"
-                  type="password"
-                  required
-                  autoComplete="new-password"
-                  className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                  placeholder="确认密码"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {error && <div className="text-red-500 text-sm text-center">{error}</div>}
-
-            <div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                {loading ? '注册中...' : '注册'}
+    <div className="register-page">
+      <button type="button" className="register-back" onClick={() => leaveRegistration(router)}>
+        <ArrowLeft size={18} aria-hidden="true" /> 返回
+      </button>
+      <section className="register-card" aria-labelledby="register-title">
+        <header className="register-heading">
+          <Link href="/" className="register-brand" aria-label="九天小说首页">
+            <Image src="/icon.png" alt="" width={32} height={32} priority />
+            <span>九天小说</span>
+          </Link>
+          <h1 id="register-title">注册账号</h1>
+          <p>收藏喜欢的小说，随时接着读。</p>
+        </header>
+        <form onSubmit={handleSubmit} aria-busy={loading}>
+          <div className="register-field">
+            <label htmlFor="username">用户名</label>
+            <input id="username" name="username" type="text" autoComplete="username" autoCapitalize="none"
+              maxLength={40} spellCheck={false} required placeholder="取一个喜欢的名字"
+              value={username} onChange={event => setUsername(event.target.value)} />
+          </div>
+          <div className="register-field">
+            <label htmlFor="email">邮箱地址</label>
+            <input id="email" name="email" type="email" autoComplete="email" autoCapitalize="none"
+              spellCheck={false} required placeholder="用于接收注册验证码"
+              value={email} onChange={event => setEmail(event.target.value)} />
+          </div>
+          <div className="register-field">
+            <label htmlFor="code">邮箱验证码</label>
+            <div className="register-code-row">
+              <input id="code" name="code" type="text" inputMode="numeric" autoComplete="one-time-code"
+                maxLength={6} pattern="[0-9]{6}" required placeholder="6 位验证码" aria-describedby="register-code-hint"
+                value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} />
+              <button type="button" className="register-send" onClick={handleSendCode}
+                disabled={sending || countdown > 0 || loading} aria-busy={sending}>
+                {sending ? '发送中…' : countdown > 0 ? `${countdown}s 后重发` : '获取验证码'}
               </button>
             </div>
-         </form>
-       </div>
+            <p className="register-hint" id="register-code-hint">验证码有效期为 5 分钟</p>
+            {sentEmail === email.trim() && sentEmail && <p className="register-success" role="status">
+              <CheckCircle2 size={15} aria-hidden="true" /> 验证码已发送，请查收邮箱
+            </p>}
+          </div>
+          <div className="register-field">
+            <label htmlFor="password">密码</label>
+            <div className="register-password">
+              <input id="password" name="password" type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password" minLength={8} required placeholder="至少 8 个字符"
+                value={password} onChange={event => setPassword(event.target.value)} />
+              <button type="button" aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </div>
+          <div className="register-field">
+            <label htmlFor="confirm-password">确认密码</label>
+            <input id="confirm-password" name="confirm-password" type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password" minLength={8} required placeholder="再次输入密码"
+              value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} />
+          </div>
+          {error && <p className="register-error" role="alert">{error}</p>}
+          <button type="submit" className="register-submit" disabled={loading || sending}>
+            {loading ? '注册中…' : '注册账号'}
+          </button>
+        </form>
+        <p className="register-login">已有账号？<button type="button" onClick={() => registrationLogin(router)}>立即登录</button></p>
+      </section>
     </div>
   );
 }
