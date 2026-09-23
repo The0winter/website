@@ -7,10 +7,10 @@ import { safeFetch as fetch, type CatalogPage } from '@/lib/request';
 
 import { useState, useEffect, useMemo, useRef, useSyncExternalStore, useId } from 'react';
 import Link from './PrefetchLink';
+import HomeLink from 'next/link';
 import ReadingEntryLink from './ReadingEntryLink';
 import RecordBookVisit from './RecordBookVisit';
 import BookCatalogSheet from './BookCatalogSheet';
-import HomeSearchHeader from './HomeSearchHeader';
 import {BookMilestoneEntry, BookMilestoneSheet, useBookMilestones, type MilestoneData} from './BookMilestones';
 import {useBookCatalog} from '@/lib/useBookCatalog';
 import {formatChapterTitle} from '@/lib/catalog-title';
@@ -20,7 +20,7 @@ import {beginChapterEntry} from '@/lib/chapter-entry';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, Heart, HeartCrack, X, ChevronRight, ChevronDown, ChevronUp, PenLine } from 'lucide-react';
+import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, Heart, HeartCrack, X, ChevronRight, ChevronDown, ChevronUp, PenLine, ArrowLeft, House } from 'lucide-react';
 import BookArticles from './BookArticles';
 import './book-detail.css';
 import { useAuth } from '@/contexts/AuthContext';
@@ -381,7 +381,6 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
     // 修改1：增加手机端底部 padding (pb-24)，防止被常驻底栏遮挡内容
     <div data-book-id={book.id} className="book-detail min-h-screen bg-gray-50 pb-24 md:pb-12">
       <RecordBookVisit bookId={book.id}/>
-      <HomeSearchHeader className="book-mobile-header"/>
       <div className="hidden md:block h-[20px]"></div>
 
       {/* ⚠️ 修改2：将 space-y 替换为 flex flex-col 和 gap，以便利用 order 属性实现手机端模块换位 */}
@@ -390,6 +389,10 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
         {/* === 第一部分：书籍核心信息 === */}
         <div className="book-hero bg-white rounded-lg shadow-sm p-4 md:p-8 order-1">
             <div className="book-hero-main flex flex-row gap-4 md:gap-8">
+              <nav className="book-home-actions" aria-label="详情页导航">
+                <HomeLink href="/" prefetch={false} aria-label="返回精选"><ArrowLeft size={24} aria-hidden="true"/></HomeLink>
+                <HomeLink href="/" prefetch={false} aria-label="精选主页"><House size={23} aria-hidden="true"/></HomeLink>
+              </nav>
               {/* 左侧封面 */}
               <div className="book-hero-cover flex-shrink-0">
                 {book.cover_image ? (

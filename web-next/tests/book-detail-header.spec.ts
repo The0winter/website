@@ -11,70 +11,61 @@ test.beforeEach(async ({page}) => {
   await page.route('**/api/auth/session', route => route.fulfill({json:{user:null, profile:null}}));
 });
 
-for (const width of [320, 390, 430, 1440]) test(`detail has one usable navigation bar at ${width}px`, async ({page}, info) => {
+for (const width of [320, 390, 430, 1440]) test(`detail navigation fits at ${width}px`, async ({page}, info) => {
   await page.setViewportSize({width, height:844});
   const errors:string[]=[];page.on('pageerror', error => errors.push(error.message));
   await page.goto(detail);
-  const mobile = page.locator('.book-mobile-header');
-  const header = width < 768 ? mobile : page.locator('nav[data-site-chrome]');
-  await expect(header).toBeVisible();
-  await expect(page.getByRole('combobox', {name:'搜索书名或作者'})).toHaveCount(1);
+  const actions = page.getByRole('navigation', {name:'详情页导航'});
+  await expect(page.locator('.book-mobile-header')).toHaveCount(0);
   if (width < 768) {
+    await expect(page.getByRole('combobox', {name:'搜索书名或作者'})).toHaveCount(0);
     await expect(page.locator('nav[data-site-chrome]')).not.toBeVisible();
-    await expect(header.getByRole('link', {name:'九天小说首页'})).toBeVisible();
-    await expect(header.getByRole('link', {name:'个人中心'})).toBeVisible();
-    const top = await header.boundingBox(), hero = await page.locator('.book-hero').boundingBox();
-    expect(top!.x).toBe(0);expect(top!.width).toBe(width);
-    expect(hero!.y).toBeGreaterThanOrEqual(top!.y + top!.height);
-    await page.evaluate(() => scrollTo(0, 240));
-    await expect.poll(async () => (await header.boundingBox())!.y).toBe(0);
-    await page.evaluate(() => scrollTo(0, 0));
-    await expect(page.locator('.book-stat-value').first()).toHaveCSS('font-size', '18px');
-    await expect(page.locator('.book-stat-value').first()).toHaveCSS('letter-spacing', /^(normal|0px)$/);
+    await expect(actions).toBeVisible();
+    await expect(actions.getByRole('link')).toHaveCount(2);
+    const nav = (await actions.boundingBox())!, cover = (await page.locator('.book-hero-cover').boundingBox())!;
+    expect(nav.x).toBeGreaterThanOrEqual(8);expect(nav.y).toBeGreaterThanOrEqual(8);
+    expect(nav.x + nav.width).toBeLessThan(width / 2);
+    expect(nav.y + nav.height).toBeLessThanOrEqual(cover.y);
+    for (const name of ['返回精选', '精选主页']) {
+      const link = actions.getByRole('link', {name});
+      await expect(link).toHaveAttribute('href', '/');
+      const box = (await link.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);expect(box.height).toBeGreaterThanOrEqual(44);
+      await link.focus();await expect(link).toBeFocused();
+    }
+    await page.locator('.mobile-catalog').click();
+    await expect(page.getByRole('dialog', {name:'全部目录'})).toBeVisible();
+    await page.getByRole('button', {name:'关闭目录'}).click();
   } else {
-    await expect(mobile).not.toBeVisible();
+    await expect(actions).not.toBeVisible();
+    await expect(page.locator('nav[data-site-chrome]')).toBeVisible();
+    await expect(page.getByRole('combobox', {name:'搜索书名或作者'})).toHaveCount(1);
   }
-  const toggle = header.getByRole('button', {name:/切换到夜间模式/});
-  await toggle.click();await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await header.getByRole('button', {name:/切换到日间模式/}).click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({path:info.outputPath(`verified-header-${width}.png`)});
+  await page.screenshot({path:info.outputPath(`verified-icons-${width}.png`)});
+  if (width === 390) {
+    await page.evaluate(() => {document.documentElement.classList.add('dark');document.documentElement.dataset.theme='dark';});
+    await expect(actions).toHaveCSS('color', 'rgb(255, 250, 240)');
+    await page.screenshot({path:info.outputPath('verified-icons-dark.png')});
+  }
   expect(errors).toEqual([]);
 });
 
-test('detail search suggestions stay above the cover and submit to full search', async ({page}) => {
-  await page.setViewportSize({width:390, height:844});
-  await page.route('**/api/books?*', route => {
-    if (!new URL(route.request().url()).searchParams.has('q')) return route.continue();
-    return route.fulfill({json:[{id:book, title:'顶部导航搜索测试', author:'导航验收'}]});
+// Both icons must select Featured even when the previous page was another list.
+for (const source of ['/?view=category', '/search?q=导航']) for (const name of ['返回精选', '精选主页']) {
+  test(`${name} selects Featured after opening a book from ${source}`, async ({page}) => {
+    await page.setViewportSize({width:390, height:844});
+    await page.route('**/api/books?*', route => {
+      if (!new URL(route.request().url()).searchParams.has('q')) return route.continue();
+      return route.fulfill({json:[{id:book, title:'导航测试', author:'导航验收'}]});
+    });
+    await page.goto(base + source);
+    await page.locator('a[href^="/book/"]:visible').first().click();
+    await expect(page.locator('.book-detail')).toBeVisible();
+    await page.getByRole('navigation', {name:'详情页导航'}).getByRole('link', {name}).click();
+    await expect(page).toHaveURL(`${base}/`);
+    await expect(page.locator('.mh-bottom a[data-section="home"]')).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('.mh-topbar:visible')).toHaveCount(1);
+    await expect(page.locator('.book-detail:visible')).toHaveCount(0);
   });
-  await page.goto(detail);
-  const header = page.locator('.book-mobile-header');
-  const input = header.getByRole('combobox', {name:'搜索书名或作者'});
-  await input.fill('导航');
-  const option = header.getByRole('option', {name:'顶部导航搜索测试 导航验收'});
-  await expect(option).toBeVisible();
-  expect(await option.evaluate(element => {
-    const r=element.getBoundingClientRect();
-    return element.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));
-  })).toBe(true);
-  await input.press('Escape');await expect(header.getByRole('listbox')).toHaveCount(0);
-  await input.press('Enter');await expect(page).toHaveURL(`${base}/search?q=${encodeURIComponent('导航')}`);
-  await page.goBack();await expect(page.locator('.book-mobile-header')).toBeVisible();
-});
-
-test('detail logo, account entry and catalog work with the new header', async ({page}) => {
-  await page.setViewportSize({width:390, height:844});
-  await page.goto(detail);
-  await page.locator('.mobile-catalog').click();
-  await expect(page.getByRole('dialog', {name:'全部目录'})).toBeVisible();
-  await page.getByRole('button', {name:'关闭目录'}).click();
-  await page.locator('.book-mobile-header').getByRole('link', {name:'九天小说首页'}).click();
-  await expect(page).toHaveURL(`${base}/`);
-  await expect(page.locator('.mh-topbar:visible')).toHaveCount(1);
-  // The shared home link returns to the existing home entry in browser history.
-  await page.goForward();await expect(page.locator('.book-mobile-header')).toBeVisible();
-  await page.locator('.book-mobile-header').getByRole('link', {name:'个人中心'}).click();
-  await expect(page).toHaveURL(/\/login(?:\?|$)/);
-});
+}
