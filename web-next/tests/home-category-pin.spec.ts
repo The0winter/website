@@ -12,7 +12,7 @@ test.beforeEach(async ({page}) => {
 const primary = (page: Page) => page.getByRole('group', {name: '小说分类', exact: true});
 const more = (page: Page) => page.getByRole('dialog', {name: '更多分类'});
 
-for (const width of [320, 390]) test(`two rows keep a chosen overflow category second across selection and reload at ${width}px`, async ({page}, info) => {
+for (const width of [320, 390]) test(`two rows keep a chosen overflow category before more across selection and reload at ${width}px`, async ({page}, info) => {
   await page.setViewportSize({width, height: 844});
   await page.goto(base + '/?view=category');
   const buttons = primary(page).getByRole('button');
@@ -31,27 +31,27 @@ for (const width of [320, 390]) test(`two rows keep a chosen overflow category s
   await page.screenshot({path: info.outputPath('verified-categories-more.png')});
   await more(page).getByRole('button', {name: '武侠', exact: true}).click();
   await expect(more(page)).not.toBeVisible();
-  await expect(buttons.nth(1)).toHaveText('武侠');
-  await expect(buttons.nth(1)).toHaveAttribute('aria-pressed', 'true');
+  await expect(buttons).toHaveText(['全部', '玄幻', '仙侠', '都市', '历史', '科幻', '奇幻', '悬疑', '武侠', '更多分类']);
+  await expect(buttons.nth(8)).toHaveAttribute('aria-pressed', 'true');
   await expect(page).toHaveURL(/category=%E6%AD%A6%E4%BE%A0/);
   await expect(page.getByRole('heading', {name: '武侠作品', exact: true})).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
   expect(await page.evaluate(key => localStorage.getItem(key), preference)).toBe('武侠');
   await buttons.first().click();
-  await expect(buttons.nth(1)).toHaveText('武侠');
+  await expect(buttons.nth(8)).toHaveText('武侠');
   await page.reload();
-  await expect(buttons.nth(1)).toHaveText('武侠');
+  await expect(buttons.nth(8)).toHaveText('武侠');
   await page.getByRole('button', {name: '返回精选'}).click();
   await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
   await page.locator('.mh-shortcuts').getByRole('button', {name: '分类', exact: true}).click();
-  await expect(buttons.nth(1)).toHaveText('武侠');
+  await expect(buttons.nth(8)).toHaveText('武侠');
   await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
   await buttons.last().click();
   await more(page).getByRole('button', {name: '轻小说', exact: true}).click();
-  await expect(buttons.nth(1)).toHaveText('轻小说');
+  await expect(buttons).toHaveText(['全部', '玄幻', '仙侠', '都市', '历史', '科幻', '奇幻', '悬疑', '轻小说', '更多分类']);
   await expect(buttons).toHaveCount(10);
   await page.reload();
-  await expect(buttons.nth(1)).toHaveText('轻小说');
+  await expect(buttons.nth(8)).toHaveText('轻小说');
   await page.evaluate(() => document.documentElement.classList.add('dark'));
   await expect(buttons.first()).toHaveCSS('background-color', 'rgb(46, 40, 35)');
   await page.screenshot({path: info.outputPath('verified-categories-pinned-dark.png')});
@@ -74,9 +74,9 @@ test('invalid saved categories are ignored and unavailable storage still allows 
   await expect(primary(page).getByRole('button').nth(1)).toHaveText('玄幻');
   await primary(page).getByRole('button', {name: '更多分类', exact: true}).click();
   await more(page).getByRole('button', {name: '诸天无限', exact: true}).click();
-  await expect(primary(page).getByRole('button').nth(1)).toHaveText('诸天无限');
+  await expect(primary(page).getByRole('button').nth(8)).toHaveText('诸天无限');
   await primary(page).getByRole('button', {name: '全部', exact: true}).click();
-  await expect(primary(page).getByRole('button').nth(1)).toHaveText('诸天无限');
+  await expect(primary(page).getByRole('button').nth(8)).toHaveText('诸天无限');
   await expect(primary(page).getByRole('button')).toHaveCount(10);
 });
 

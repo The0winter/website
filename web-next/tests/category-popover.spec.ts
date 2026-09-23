@@ -66,7 +66,7 @@ test('short screens keep the popup in view and reduced motion still fades for at
   expect(box.y + box.height).toBeLessThanOrEqual(310);
   await dialog(page).getByRole('button', {name: '文学', exact: true}).click();
   await expect(dialog(page)).not.toBeVisible();
-  await expect(page.getByRole('group', {name: '小说分类', exact: true}).getByRole('button').nth(1)).toHaveText('文学');
+  await expect(page.getByRole('group', {name: '小说分类', exact: true}).getByRole('button').nth(8)).toHaveText('文学');
 });
 
 async function mockBooks(page: Page, total: string | null) {

@@ -47,8 +47,9 @@ export default function MobileCategoryPicker({selected, onSelect}: {selected: st
   const trigger = useRef<HTMLButtonElement>(null);
   const animation = useRef<Animation | null>(null);
   const closing = useRef(false);
-  const ordered = pinned ? [mobileCategories[0], mobileCategories.find(item => item.name === pinned)!, ...mobileCategories.filter(item => item.name !== '全部' && item.name !== pinned)] : mobileCategories;
-  const primary = ordered.slice(0, 9), more = ordered.slice(9);
+  const fixed = mobileCategories.slice(0, 8);
+  const last = mobileCategories.find(item => item.name === pinned && !fixed.includes(item)) ?? mobileCategories[8];
+  const primary = [...fixed, last], more = mobileCategories.filter(item => !primary.includes(item));
   const selectedInMore = more.some(item => item.name === selected);
 
   const positionDialog = useCallback(() => {
@@ -146,7 +147,7 @@ export default function MobileCategoryPicker({selected, onSelect}: {selected: st
     <dialog ref={dialog} id="mh-more-categories" className="mh-category-dialog" aria-labelledby="mh-more-categories-title" onClose={() => {animation.current?.cancel(); closing.current = false; setExpanded(false);}} onCancel={event => {event.preventDefault(); close();}} onClick={event => {if (event.target === event.currentTarget) close();}}>
       <div className="mh-category-dialog-content">
         <div className="mh-category-dialog-heading"><h3 id="mh-more-categories-title">更多分类</h3><button type="button" onClick={() => close()} aria-label="关闭更多分类"><X size={21}/></button></div>
-        <p>选中后，固定在“全部”后面</p>
+        <p>选中后，替换“更多分类”前的分类</p>
         <div className="mh-categories" role="group" aria-label="更多小说分类">{more.map(item => categoryButton(item, true))}</div>
       </div>
     </dialog>
