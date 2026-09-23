@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "id": "diyibanzhu",
+  "name": "第一版主网",
+  "home": "https://m.diyibanzhu.click/",
+  "hosts": [
+    "m.diyibanzhu.click"
+  ],
+  "search": {
+    "url": "https://m.diyibanzhu.click/",
+    "form": {
+      "input": "form.search-form input[name='wd']",
+      "submit": "form.search-form input[type='submit']"
+    },
+    "items": "li.column-2:has(> .right > a.name)",
+    "title": ".right > a.name",
+    "author": {
+      "selector": ".right > p.info",
+      "pattern": "^作者[：:]\\s*([\\s\\S]*?)\\s*字数[：:]"
+    },
+    "link": ".right > a.name",
+    "next": ".pagelistbox > strong + a:not(.endPage):not(.indexPage)",
+    "maxPages": 8,
+    "readySelector": "h1"
+  },
+  "book": {
+    "urlPattern": "^/list/(?<bookId>[0-9]+)\\.html$",
+    "readySelector": ".right > h1",
+    "metadata": {
+      "title": ".right > h1",
+      "author": {
+        "selector": "h1 + p.info",
+        "pattern": "^作者[：:]\\s*([\\s\\S]*?)\\s*类型[：:]"
+      },
+      "category": {
+        "selector": "h1 + p.info",
+        "pattern": "类型[：:]\\s*([\\s\\S]*?)\\s*字数[：:]"
+      },
+      "status": {"selector": ".right > .status", "pattern": "^(.+?)[•·\\s]*$"},
+      "description": ".book-intro > .bd"
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-diyibanzhu-v1",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": [
+      "m.diyibanzhu.click"
+    ],
+    "transport": "browser",
+    "browser": {
+      "headless": false,
+      "minimized": true,
+      "responseMode": "dom",
+      "manualVerificationMs": 180000
+    },
+    "delayMs": 2000,
+    "timeoutMs": 30000,
+    "metadata": {
+      "title": ".right > h1",
+      "author": {
+        "selector": "h1 + p.info",
+        "pattern": "^作者[：:]\\s*([\\s\\S]*?)\\s*类型[：:]"
+      },
+      "category": {
+        "selector": "h1 + p.info",
+        "pattern": "类型[：:]\\s*([\\s\\S]*?)\\s*字数[：:]"
+      },
+      "status": {"selector": ".right > .status", "pattern": "^(.+?)[•·\\s]*$"},
+      "description": ".book-intro > .bd",
+      "readySelector": ".chapter-list ul.list"
+    },
+    "catalog": {
+      "links": ".chapter-list:has(h4:contains('章节列表')) .list > li > a[href^='/view/']",
+      "next": ".pagelistbox > a.nextPage[href^='/list/${bookId}_']",
+      "maxPages": 100,
+      "readySelector": ".chapter-list ul.list"
+    },
+    "chapter": {
+      "title": "h1.page-title",
+      "content": "#nr1",
+      "remove": [
+        ".chapterPages",
+        "font:contains('本章未完，点击[ 数字分页 ]继续阅读')"
+      ],
+      "next": "#nr1 .chapterPages > .curr + a",
+      "maxPages": 100
+    }
+  }
+}
