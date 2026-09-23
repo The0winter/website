@@ -13,6 +13,7 @@ import {createDesktop} from '../desktop/server.mjs';
 import {atomicWrite, hash, readJson} from '../storage.mjs';
 import {continuationKey} from '../continuation.mjs';
 import {createVpsLibraryTransport, applyLibraryBatches} from '../../../infra/library-sync-vps.mjs';
+import {reviewedUploadIdentity} from '../desktop/upload-identity.mjs';
 
 const sha = content => crypto.createHash('sha256').update(content).digest('hex');
 const chapter = number => ({chapter_number: number, title: `第${number}章 ${String.fromCodePoint(0x5000 + number)}`, content: Array.from({length: 300}, (_, i) => String.fromCodePoint(0x4e00 + number * 350 + i)).join(''), link: `https://example.test/chapter/${number}`});
@@ -69,6 +70,30 @@ test('all overlapping chapters are checked before any upload, including gaps, ol
   assert.throws(() => planUpload(source, {...online, book: {...source, author: '同名其他作者'}}), /身份/);
   const noLink = snapshot(source); delete noLink.chapters[0].link;
   assert.equal(planUpload(source, noLink).batches.length, 0, 'missing provenance must not re-upload an existing body');
+});
+
+test('reviewed title aliases preserve the website title and all identity and chapter guards', async t => {
+  const f = fixture(t), source = book('本地旧名', 4), online = {...source, title: '网站新名', chapters: source.chapters.slice(0, 3)};
+  f.save('book.json', source);
+  const value = {sourceUrl: source.sourceUrl, author: source.author, localTitle: source.title, websiteTitle: online.title, bookId: '123'};
+  const file = path.join(f.stateDir, 'library-upload-identities', hash(source.sourceUrl) + '.json');
+  atomicWrite(file, {value, hash: hash(value)});
+  const transport = memoryTransport([online]);
+  const result = await uploadLibrary({...f, transport: transport.send});
+  assert.equal(result.failed, 0); assert.equal(result.added, 1);
+  assert.equal(transport.books.get(source.sourceUrl).title, online.title);
+  for (const remote of [
+    {...snapshot(online), bookId: 'other'},
+    snapshot({...online, author: '其他作者'}),
+    snapshot({...online, sourceUrl: 'https://example.test/other'}),
+    snapshot({...online, title: '再次改名'}),
+    snapshot(null),
+  ]) assert.throws(() => reviewedUploadIdentity(source, remote, f.stateDir), /映射/);
+  assert.throws(() => reviewedUploadIdentity({...source, title: '不同书籍'}, snapshot(online), f.stateDir), /映射/);
+  const conflict = snapshot(online); conflict.chapters[0].hash = sha('changed');
+  assert.throws(() => planUpload(reviewedUploadIdentity(source, conflict, f.stateDir), conflict), /第 1 章/);
+  atomicWrite(file, {value: {...value, websiteTitle: '篡改'}, hash: hash(value)});
+  assert.throws(() => reviewedUploadIdentity(source, snapshot(online), f.stateDir), /映射/);
 });
 
 test('large Unicode bodies split by actual JSON bytes before the HTTP body limit', () => {

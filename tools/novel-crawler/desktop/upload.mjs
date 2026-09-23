@@ -7,6 +7,7 @@ import {planLibrary} from './library.mjs';
 import {hash, atomicWrite} from '../storage.mjs';
 import {fileFingerprint, uploadCheckpoints} from './upload-cache.mjs';
 import {hasBookCategory, normalizeBookCategory} from '../categories.mjs';
+import {reviewedUploadIdentity} from './upload-identity.mjs';
 
 const bodyHash = content => crypto.createHash('sha256').update(content).digest('hex');
 const normalize = value => String(value || '').normalize('NFKC').trim();
@@ -105,7 +106,8 @@ export async function uploadLibrary({stateDir, outputDir, signal, shouldStop = (
       const remote = cached || await inspect(identity);
       if (cached) metrics.reusedDirectories++;
       if (stopped()) break;
-      const plan = planUpload(book, remote, prepared);
+      const uploadBook = reviewedUploadIdentity(book, remote, stateDir);
+      const plan = planUpload(uploadBook, remote, prepared);
       item.newBook = plan.newBook; item.bookId = remote.bookId;
       if (!plan.batches.length) {
         checkpoints.save(item, remote, cached ? checkpoint.verifiedAt : undefined);
@@ -128,7 +130,7 @@ export async function uploadLibrary({stateDir, outputDir, signal, shouldStop = (
         for (const chapter of verified.chapters) merged.set(chapter.number, chapter);
         verified = {...verified, partial: false, chapters: [...merged.values()].sort((a, b) => a.number - b.number)};
       }
-      if (planUpload(book, verified, prepared).batches.length) throw Error('网站回读尚未确认完整同步，请再次上传核对；已完成批次保留');
+      if (planUpload(reviewedUploadIdentity(book, verified, stateDir), verified, prepared).batches.length) throw Error('网站回读尚未确认完整同步，请再次上传核对；已完成批次保留');
       checkpoints.save(item, verified, partial && cached ? checkpoint.verifiedAt : undefined);
       item.state = 'uploaded'; item.message = plan.newBook ? `新书已上传，新增 ${item.added} 章` : item.added ? `已同步新增 ${item.added} 章` : '书籍信息已同步';
     } catch (error) {
