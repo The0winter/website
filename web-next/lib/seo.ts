@@ -1,6 +1,7 @@
 import type {Metadata} from 'next';
 import type {Book, Chapter} from './api';
 
+export const siteName = '九天小说站';
 export const siteTitle = '九天小说站 - 热门小说免费在线阅读 - 笔趣阁';
 export const siteDescription = '九天小说站提供小说免费在线阅读、作品介绍和章节目录，通过热门推荐、小说排行榜与最近更新发现好书。';
 export const siteOrigin = (process.env.NEXT_PUBLIC_SITE_URL || 'http://127.0.0.1:3000').replace(/\/+$/, '');
@@ -8,7 +9,7 @@ export const privateRobots: Metadata['robots'] = {index: false, follow: false};
 
 export function publicMetadata(title: string, description: string, path: string): Metadata {
   const url = siteOrigin + path;
-  return {title, description, alternates: {canonical: url}, openGraph: {title, description, url, siteName: '九天小说站', locale: 'zh_CN', type: 'website'}};
+  return {title, description, alternates: {canonical: url}, openGraph: {title, description, url, siteName, locale: 'zh_CN', type: 'website'}};
 }
 
 export function plainDescription(value: string, fallback: string): string {

@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import HomePageClient from '@/components/HomePageClient';
 import type { Book } from '@/lib/api';
 import { getApiBaseUrl } from '@/utils/api'; // 引入我们写的智能地址判断工具
-import {publicMetadata, siteDescription, siteTitle} from '@/lib/seo';
+import {publicMetadata, siteDescription, siteName, siteOrigin, siteTitle} from '@/lib/seo';
 
 const REVALIDATE_SECONDS = 60;
 export const dynamic = 'force-dynamic';
@@ -71,6 +71,17 @@ export default async function Page() {
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{__html: JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'WebSite',
+          name: siteName,
+          url: `${siteOrigin}/`,
+          description: siteDescription,
+          inLanguage: 'zh-CN',
+        }).replace(/</g, '\\u003c')}}
+      />
       {/* 专门给搜索引擎爬虫看的纯 HTML 结构 [cite: 38] */}
       <section className="sr-only" aria-label="推荐书籍与最近更新">
         <h2>推荐书籍</h2>

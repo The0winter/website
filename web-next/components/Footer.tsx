@@ -30,9 +30,9 @@ export default function Footer() {
               九天小说站
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed max-w-xs">
-              致力打造最舒适的阅读体验。
+              提供小说介绍、章节目录和免费在线阅读。
               <br />
-              基于 MERN Stack 技术栈构建。
+              通过热门推荐、排行榜与最近更新发现好书。
             </p>
           </div>
 
