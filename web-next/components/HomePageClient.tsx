@@ -110,7 +110,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
 
                         <div className="flex-shrink-0">
                             {showRating ? (
-                                <span className="text-yellow-500 font-bold text-sm">{ratingLabel(book.rating)}</span>
+                                <span data-nosnippet="" className="text-yellow-500 font-bold text-sm">{ratingLabel(book.rating)}</span>
                             ) : (
                                 <ChevronRight className="w-5 h-5 text-gray-300" />
                             )}
@@ -151,7 +151,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                             {first.title}
                         </h4>
                         {/* 修改：去除作者和简介，保留热度显示 */}
-                        <div className="flex items-center gap-2 mb-1">
+                        <div data-nosnippet="" className="flex items-center gap-2 mb-1">
                             <span className="text-xs text-red-500 font-medium bg-red-50 px-1.5 py-0.5 rounded">{(first.views || 0).toLocaleString()} 热度</span>
                             <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{first.category}</span>
                         </div>
@@ -187,7 +187,7 @@ const RankingList = ({ title, icon: Icon, books, rankColor, showRating = false }
                                                 {book.title}
                                             </h5>
                                             {/* 修改：去除简介，仅保留分类和热度 */}
-                                            <div className="flex items-center gap-2 text-xs text-gray-400">
+                                            <div data-nosnippet="" className="flex items-center gap-2 text-xs text-gray-400">
                                                 <span>{book.category}</span>
                                                 <span className="text-red-400">{((book.views || 0)/10000).toFixed(1)}w</span>
                                             </div>
@@ -726,7 +726,7 @@ export default function HomePageClient({
                                 <BookOpen className="w-10 h-10" />
                               </div>
                             )}
-                            <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <div data-nosnippet="" className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1">
                               <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
                               {ratingLabel(book.rating)}
                             </div>
@@ -735,7 +735,7 @@ export default function HomePageClient({
                           <h4 className="font-bold text-gray-900 line-clamp-1 group-hover:text-blue-600 transition-colors">
                             {book.title}
                           </h4>
-                          <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
+                          <div data-nosnippet="" className="flex items-center justify-between text-xs text-gray-500 mt-2">
                         {/* 修改：左侧原为作者，现改为分类 */}
                         <span className="bg-gray-100 px-1.5 py-0.5 rounded text-[10px] text-gray-500">{book.category}</span>
                         <span>{(book.views||0) > 10000 ? `${((book.views || 0)/10000).toFixed(1)}万` : book.views}热度</span>

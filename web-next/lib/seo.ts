@@ -3,7 +3,7 @@ import type {Book, Chapter} from './api';
 
 export const siteName = '九天小说站';
 export const siteTitle = '九天小说站 - 热门小说免费在线阅读 - 笔趣阁';
-export const siteDescription = '九天小说站提供小说免费在线阅读、作品介绍和章节目录，通过热门推荐、小说排行榜与最近更新发现好书。';
+export const siteDescription = '九天小说站提供玄幻、仙侠、都市、历史等小说免费在线阅读。查看作品简介、章节目录和最新更新，通过热门推荐与排行榜发现好书。';
 export const siteOrigin = (process.env.NEXT_PUBLIC_SITE_URL || 'http://127.0.0.1:3000').replace(/\/+$/, '');
 export const privateRobots: Metadata['robots'] = {index: false, follow: false};
 

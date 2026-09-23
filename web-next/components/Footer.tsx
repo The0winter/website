@@ -5,6 +5,7 @@ import AccountLink from './AccountLink';
 import { ExternalLink } from 'lucide-react';
 import { usePathname } from 'next/navigation'; // 1. 引入路径获取钩子
 import { useAuth } from '@/contexts/AuthContext';
+import { siteDescription, siteName } from '@/lib/seo';
 
 export default function Footer() {
   const pathname = usePathname(); // 2. 获取当前路由路径
@@ -22,22 +23,20 @@ export default function Footer() {
       {/* 调整了移动端的上下 padding (py-4)，保留网页端的 py-12 */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-12">
         
-        {/* 桌面端显示的三列信息，移动端直接隐藏 (hidden md:grid) */}
-        <div className="hidden md:grid md:grid-cols-3 gap-8">
+        {/* 首页在手机上也显示完整简介，导航仍采用桌面端布局。 */}
+        <div className={`${pathname === '/' ? 'grid' : 'hidden md:grid'} md:grid-cols-3 gap-8`}>
           {/* 1. 网站简介 */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-              九天小说站
+          <div className="space-y-2 md:space-y-4">
+            <h3 className="text-base md:text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              {siteName}
             </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed max-w-xs">
-              提供小说介绍、章节目录和免费在线阅读。
-              <br />
-              通过热门推荐、排行榜与最近更新发现好书。
+            <p data-site-description="true" className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed md:max-w-xs">
+              {siteDescription}
             </p>
           </div>
 
           {/* 2. 快速导航 */}
-          <div className="space-y-4">
+          <div className="hidden md:block space-y-4" data-nosnippet="">
             <h3 className="text-sm font-bold uppercase tracking-wider text-gray-900 dark:text-gray-100">
               快速导航
             </h3>
@@ -50,7 +49,7 @@ export default function Footer() {
           </div>
 
           {/* 3. 友情链接 */}
-          <div className="space-y-4">
+          <div className="hidden md:block space-y-4" data-nosnippet="">
             <h3 className="text-sm font-bold uppercase tracking-wider text-gray-900 dark:text-gray-100 flex items-center gap-2">
               友情链接 <ExternalLink className="w-3 h-3 opacity-50"/>
             </h3>
@@ -71,7 +70,7 @@ export default function Footer() {
         </div>
 
         {/* 底部区域（移动端精简展示） */}
-        <div className="mt-0 md:mt-8 pt-2 md:pt-8 md:border-t md:border-gray-100 dark:md:border-[#333] flex flex-col md:flex-row justify-between items-center gap-2 md:gap-4">
+        <div data-nosnippet="" className="mt-0 md:mt-8 pt-2 md:pt-8 md:border-t md:border-gray-100 dark:md:border-[#333] flex flex-col md:flex-row justify-between items-center gap-2 md:gap-4">
           <div className="text-center md:text-left flex flex-col items-center md:items-start">
             <p className="text-[10px] md:text-xs text-gray-400">
               &copy; {new Date().getFullYear()} 九天小说站. 

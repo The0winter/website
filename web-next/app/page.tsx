@@ -82,8 +82,8 @@ export default async function Page() {
           inLanguage: 'zh-CN',
         }).replace(/</g, '\\u003c')}}
       />
-      {/* 专门给搜索引擎爬虫看的纯 HTML 结构 [cite: 38] */}
-      <section className="sr-only" aria-label="推荐书籍与最近更新">
+      {/* 保留可访问的书籍链接，避免重复列表被支持此属性的搜索引擎拼入摘要。 */}
+      <section className="sr-only" aria-label="推荐书籍与最近更新" data-nosnippet="">
         <h2>推荐书籍</h2>
         <ul>
           {seoRecommendedBooks.map((book) => (

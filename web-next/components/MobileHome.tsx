@@ -31,7 +31,7 @@ function Cover({book,priority=false}:{book:Book;priority?:boolean}){
 }
 function BookRating({book}:{book:Book}){
   const score = formatRating(book.rating);
-  return <span className="mh-book-rating" data-rated={score !== '暂无评分'} aria-label={`评分：${ratingLabel(book.rating)}`} title={ratingLabel(book.rating)}><Star aria-hidden="true"/>{score === '暂无评分' ? '—' : score}</span>;
+  return <span className="mh-book-rating" data-nosnippet="" data-rated={score !== '暂无评分'} aria-label={`评分：${ratingLabel(book.rating)}`} title={ratingLabel(book.rating)}><Star aria-hidden="true"/>{score === '暂无评分' ? '—' : score}</span>;
 }
 function BookRows({books,priority=false,showRating=false}:{books:Book[];priority?:boolean;showRating?:boolean}){
   return <div className="mh-rows">{books.length?books.map(book=><BookLink className="mh-book" key={book.id} href={`/book/${book.id}`}><Cover book={book} priority={priority}/><div className="mh-book-info"><div className="mh-book-heading"><h3>{book.title}</h3>{showRating&&<BookRating book={book}/>}</div><p>{book.description&&book.description!=='暂无简介'?book.description:'打开这本书，开始一段新的阅读旅程。'}</p><div className="mh-book-meta"><span>{book.category?.split('>').pop()||'综合'} · {book.author||'未知作者'}</span><BookStatus status={book.status}/></div></div></BookLink>):<p className="mh-empty">暂时没有书籍</p>}</div>;
