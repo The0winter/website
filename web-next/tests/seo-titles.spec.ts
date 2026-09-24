@@ -21,7 +21,7 @@ for (const width of [390, 1440]) {
     expect(chaptersResponse.ok()).toBeTruthy();
     const chapters = await chaptersResponse.json();
     expect(chapters.length).toBe(2);
-    const title = [book.title.trim(), book.author?.trim(), '在线免费阅读'].filter(Boolean).join('_') + ' - 九天小说站';
+    const title = [book.title.trim(), '最新完整章节', '在线免费阅读', book.author?.trim(), '笔趣阁'].filter(Boolean).join('_') + ' - 九天小说站';
     await page.goto(detail);
     await expect(page.locator('.book-detail')).toBeVisible();
     await expect(page).toHaveTitle(title);

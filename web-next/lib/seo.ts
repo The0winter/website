@@ -2,7 +2,7 @@ import type {Metadata} from 'next';
 import type {Book, Chapter} from './api';
 
 export const siteName = '九天小说站';
-export const siteTitle = '九天小说站 - 热门小说免费在线阅读 - 笔趣阁';
+export const siteTitle = '九天小说站 - 热门小说免费在线阅读';
 export const siteDescription = '九天小说站提供玄幻、仙侠、都市、历史等小说免费在线阅读。查看作品简介、章节目录和最新更新，通过热门推荐与排行榜发现好书。';
 export const siteOrigin = (process.env.NEXT_PUBLIC_SITE_URL || 'http://127.0.0.1:3000').replace(/\/+$/, '');
 export const privateRobots: Metadata['robots'] = {index: false, follow: false};
@@ -18,7 +18,7 @@ export function plainDescription(value: string, fallback: string): string {
 }
 
 export function bookPageTitle(book: Pick<Book, 'title' | 'author'>): string {
-  return [book.title.trim(), book.author?.trim(), '在线免费阅读'].filter(Boolean).join('_') + ' - 九天小说站';
+  return [book.title.trim(), '最新完整章节', '在线免费阅读', book.author?.trim(), '笔趣阁'].filter(Boolean).join('_') + ' - 九天小说站';
 }
 
 export function bookDescription(book: Pick<Book, 'title' | 'author' | 'description'>): string {
