@@ -7,8 +7,7 @@ import { safeFetch as fetch, type CatalogPage } from '@/lib/request';
 
 import { useState, useEffect, useMemo, useRef, useSyncExternalStore, useId } from 'react';
 import Link from './PrefetchLink';
-import HomeLink from 'next/link';
-import Image from 'next/image';
+import BookDetailNavigation from './BookDetailNavigation';
 import ReadingEntryLink from './ReadingEntryLink';
 import RecordBookVisit from './RecordBookVisit';
 import BookCatalogSheet from './BookCatalogSheet';
@@ -21,7 +20,7 @@ import {beginChapterEntry} from '@/lib/chapter-entry';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, Heart, HeartCrack, X, ChevronRight, ChevronDown, ChevronUp, PenLine, ChevronLeft } from 'lucide-react';
+import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, Heart, HeartCrack, X, ChevronRight, ChevronDown, ChevronUp, PenLine } from 'lucide-react';
 import BookArticles from './BookArticles';
 import './book-detail.css';
 import { useAuth } from '@/contexts/AuthContext';
@@ -386,16 +385,11 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
       {/* ⚠️ 修改2：将 space-y 替换为 flex flex-col 和 gap，以便利用 order 属性实现手机端模块换位 */}
       <div className="book-layout max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 md:py-8 flex flex-col gap-3 md:gap-6">
+        <BookDetailNavigation bookId={book.id}/>
         
         {/* === 第一部分：书籍核心信息 === */}
         <div className="book-hero bg-white rounded-lg shadow-sm p-4 md:p-8 order-1">
             <div className="book-hero-main flex flex-row gap-4 md:gap-8">
-              <nav className="book-home-actions" aria-label="详情页导航">
-                <HomeLink href="/" prefetch={false} aria-label="返回精选"><ChevronLeft size={24} strokeWidth={1.8} aria-hidden="true"/></HomeLink>
-                <HomeLink href="/" prefetch={false} aria-label="精选主页">
-                  <Image src="/icon.png" alt="九天小说" width={24} height={24} sizes="24px" loading="eager" className="book-home-logo"/>
-                </HomeLink>
-              </nav>
               {/* 左侧封面 */}
               <div className="book-hero-cover flex-shrink-0">
                 {book.cover_image ? (

@@ -14,8 +14,8 @@ function MatchedText({text, query}: {text: string; query: string}) {
   return <>{text.slice(0, start)}<mark>{text.slice(start, start + query.length)}</mark>{text.slice(start + query.length)}</>;
 }
 
-export default function BookSearch({appearance = 'home', dark = false, autoFocus = false, onNavigate}: {
-  appearance?: 'home' | 'navbar'; dark?: boolean; autoFocus?: boolean; onNavigate?: () => void;
+export default function BookSearch({appearance = 'home', dark = false, autoFocus = false, onNavigate, navigate}: {
+  appearance?: 'home' | 'navbar'; dark?: boolean; autoFocus?: boolean; onNavigate?: () => void; navigate?: (href: string) => void;
 }) {
   const router = useRouter();
   const listId = useId();
@@ -70,7 +70,7 @@ export default function BookSearch({appearance = 'home', dark = false, autoFocus
     if (!query || composing.current) return;
     close();
     input.current?.blur();
-    router.push(`/search?${new URLSearchParams({q: query})}`);
+    (navigate ?? router.push)(`/search?${new URLSearchParams({q: query})}`);
   }
   function select(index: number) {
     setSelected(index);
@@ -113,7 +113,10 @@ export default function BookSearch({appearance = 'home', dark = false, autoFocus
         {books.map((book, index) => {
           const author = typeof book.author_id === 'object' && book.author_id?.username || book.author || '佚名';
           return <li key={book.id} role="presentation"><BookLink href={`/book/${book.id}`} id={`${listId}-${index}`} role="option" aria-selected={selected === index}
-            className="book-search-option" onNavigate={close} onMouseEnter={() => setSelected(index)}>
+            className="book-search-option" onNavigate={event => {
+              close();
+              if (navigate) {event.preventDefault(); navigate(`/book/${book.id}`);}
+            }} onMouseEnter={() => setSelected(index)}>
             <BookOpen size={18} aria-hidden="true"/><span><strong><MatchedText text={book.title} query={query}/></strong><small><MatchedText text={author} query={query}/></small></span>
           </BookLink></li>;
         })}
