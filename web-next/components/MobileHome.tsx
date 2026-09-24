@@ -18,6 +18,7 @@ import {MobileHomeSection, MobileHomeShortcuts} from './MobileHomeFrame';
 import {discoverySections} from '@/lib/discovery-sections';
 import {formatRating, ratingLabel} from '@/lib/rating';
 import MobileFeaturedBanner from './MobileFeaturedBanner';
+import BookShelf from './BookShelf';
 
 const browsePageSize = 20;
 const browseCache = new Map<string, {books: Book[]; total: number | null}>();
@@ -35,9 +36,6 @@ function BookRating({book}:{book:Book}){
 }
 function BookRows({books,priority=false,showRating=false}:{books:Book[];priority?:boolean;showRating?:boolean}){
   return <div className="mh-rows">{books.length?books.map(book=><BookLink className="mh-book" key={book.id} href={`/book/${book.id}`}><Cover book={book} priority={priority}/><div className="mh-book-info"><div className="mh-book-heading"><h3>{book.title}</h3>{showRating&&<BookRating book={book}/>}</div><p>{book.description&&book.description!=='暂无简介'?book.description:'打开这本书，开始一段新的阅读旅程。'}</p><div className="mh-book-meta"><span>{book.category?.split('>').pop()||'综合'} · {book.author||'未知作者'}</span><BookStatus status={book.status}/></div></div></BookLink>):<p className="mh-empty">暂时没有书籍</p>}</div>;
-}
-function BookShelf({books,title}:{books:Book[];title:string}){
-  return <div className="mh-shelf" role="region" aria-label={`${title}，左右滑动浏览`} tabIndex={0}>{books.map(book=><BookLink className="mh-shelf-book" key={book.id} href={`/book/${book.id}`}><div className="mh-shelf-cover"><Cover book={book}/><BookRating book={book}/></div><h3>{book.title}</h3><p>{book.category?.split('>').pop()||'综合'}</p></BookLink>)}</div>;
 }
 export default function MobileHome({books,bannerBooks=[]}:{books:Book[];bannerBooks?:Book[]}){
   const router=useRouter();

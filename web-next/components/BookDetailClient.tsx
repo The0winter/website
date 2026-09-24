@@ -8,6 +8,7 @@ import { safeFetch as fetch, type CatalogPage } from '@/lib/request';
 import { useState, useEffect, useMemo, useRef, useSyncExternalStore, useId } from 'react';
 import Link from './PrefetchLink';
 import BookDetailNavigation from './BookDetailNavigation';
+import BookRecommendations from './BookRecommendations';
 import ReadingEntryLink from './ReadingEntryLink';
 import RecordBookVisit from './RecordBookVisit';
 import BookCatalogSheet from './BookCatalogSheet';
@@ -596,6 +597,8 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             </div>
             </div>
         </div>
+
+        <BookRecommendations key={book.id} book={book}/>
 
         {/* === 第四部分：目录 (⚠️ 利用 order-4 md:order-3 在手机端沉底，电脑端仍为第3) === */}
         <div role="region" aria-label="章节目录" aria-busy={loadingChapters} className="book-catalog bg-white rounded-lg shadow-sm order-3">

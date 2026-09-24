@@ -121,6 +121,18 @@
   .book-review-reactions button:not(:disabled):hover { color:#d84b55; background:#fff5f5; }
 }
 .book-home-actions { display:none; }
+.book-recommendations { order:5; min-width:0; --shelf-gutter:32px; --shelf-muted:#8f8b83; padding:24px var(--shelf-gutter); border-radius:8px; background:#fff; color:#292724; box-shadow:0 1px 2px #0000000d; }
+.book-recommendations header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:14px; }
+.book-recommendations h2 { font-size:19px; line-height:1.4; font-weight:500; }
+.book-recommendations header>span { display:flex; align-items:center; gap:2px; color:var(--shelf-muted); font-size:11px; }
+.book-recommendations-status { padding:24px 0; color:var(--shelf-muted); text-align:center; font-size:14px; }
+.book-recommendations-status button { padding:8px; color:var(--home-accent); text-decoration:underline; }
+@media(min-width:768px) {
+  .book-recommendations { --shelf-book-width:max(112px,calc((100% - 84px)/8)); }
+  .book-recommendations .mh-shelf { scrollbar-width:thin; padding-bottom:12px; }
+  .book-recommendations .mh-shelf::-webkit-scrollbar { display:block; height:6px; }
+  .book-recommendations header>span { display:none; }
+}
 @media (max-width:767px) {
   body:has(.book-detail) [data-site-chrome] { display:none; }
   .book-detail { --book-gutter:16px; background:#f7f5f2; color:#292724; padding-bottom:calc(100px + env(safe-area-inset-bottom)); }
@@ -131,8 +143,9 @@
   .book-home-actions>a,.book-detail-search-toggle { display:flex; align-items:center; justify-content:center; flex-shrink:0; width:44px; height:44px; border-radius:8px; color:inherit; -webkit-tap-highlight-color:transparent; }
   /* Fade the complete icon once so adjoining strokes cannot accumulate opacity. */
   .book-home-actions>a>svg,.book-detail-search-toggle>svg { flex-shrink:0; opacity:.6; }
-  .book-home-back>svg { transform:translateX(-2px); }
-  .book-home-logo { flex-shrink:0; width:24px; height:24px; object-fit:contain; transform:translateX(-4px); }
+  .book-home-actions>.book-home-back { width:31px; }
+  .book-home-back>svg { transform:translateX(4.5px); }
+  .book-home-logo { flex-shrink:0; width:24px; height:24px; object-fit:contain; transform:translateX(-10px); }
   .book-home-actions>a:active,.book-detail-search-toggle:active { background:#ffffff1f; }
   .book-home-actions>a:focus-visible,.book-detail-search-toggle:focus-visible { outline:2px solid currentColor; outline-offset:-3px; }
   .book-home-link { transition:opacity 160ms ease; }
@@ -178,6 +191,7 @@
   .mobile-catalog>span { min-width:0; margin-left:auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right; font-size:14px; color:#8f8b83; line-height:20px; }
   .mobile-catalog svg { flex-shrink:0; color:#b5aea3; }
   .book-community { border-radius:0; box-shadow:none; padding:16px var(--book-gutter) 20px; background:#fffdf9; }
+  .book-recommendations { --shelf-gutter:var(--book-gutter); margin-top:10px; padding:16px var(--shelf-gutter) 20px; border-radius:0; box-shadow:none; background:#fffdf9; }
   .book-review-name,.book-review-content { font-size:16px; }
   .book-review-footer time,.book-review-reactions button { font-size:14px; }
   .book-articles>div:first-child { margin-bottom:8px; font-size:13px; }

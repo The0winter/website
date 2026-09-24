@@ -35,7 +35,7 @@ for (const width of [320, 390, 430, 1440]) test(`detail navigation fits at ${wid
       const link = actions.getByRole('link', {name});
       await expect(link).toHaveAttribute('href', '/');
       const box = (await link.boundingBox())!;
-      expect(box.width).toBeGreaterThanOrEqual(44);expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.width).toBeGreaterThanOrEqual(name === '返回精选' ? 30 : 44);expect(box.height).toBeGreaterThanOrEqual(44);
       await link.focus();await expect(link).toBeFocused();
     }
     await page.locator('.mobile-catalog').click();
@@ -69,6 +69,10 @@ for (const width of [320, 390, 430]) test(`detail search expands, dismisses and 
   const input = actions.getByRole('combobox', {name:'搜索书名或作者'});
   const logo = (await actions.locator('.book-home-logo').boundingBox())!;
   const arrow = (await actions.locator('.book-home-back svg path').boundingBox())!;
+  const gap = logo.x - arrow.x - arrow.width;
+  expect(gap).toBeGreaterThan(5);expect(gap).toBeLessThan(8);
+  const back = (await actions.locator('.book-home-back').boundingBox())!;
+  expect(logo.x).toBeGreaterThanOrEqual(back.x + back.width);
   expect(arrow.height).toBeLessThan(logo.height);
   expect(Math.abs(arrow.y + arrow.height / 2 - logo.y - logo.height / 2)).toBeLessThan(1);
   const icon = (await toggle.locator('svg').boundingBox())!;
