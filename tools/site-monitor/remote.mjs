@@ -1,5 +1,5 @@
 // Sent over SSH stdin. This worker issues read-only commands and never writes files.
-export async function remoteSnapshot(kind, request = {}) {
+export async function remoteSnapshot(kind, request = {}, readBusiness) {
   const fs = await import('node:fs/promises');
   const os = await import('node:os');
   const {execFile} = await import('node:child_process');
@@ -25,12 +25,13 @@ export async function remoteSnapshot(kind, request = {}) {
     try {const m=JSON.parse(await fs.readFile('/var/lib/test1-atlas-backup/latest.json','utf8'));backup={status:m.status,finishedAt:m.finishedAt,createdAt:m.createdAt,size:m.size??m.bytes};} catch {}
     return {sampledAt,cpu,cores:os.cpus().length,uptime:os.uptime(),load:os.loadavg(),memory:{total:mem.MemTotal,available:mem.MemAvailable,swapTotal:mem.SwapTotal,swapUsed:mem.SwapTotal-mem.SwapFree},network,disk:{total:stat.blocks*stat.bsize,available:stat.bavail*stat.bsize,free:stat.bfree*stat.bsize,inodes:stat.files,freeInodes:stat.ffree},services,api,backup,release:(await fs.realpath('/srv/test1/current')).split('/').pop()};
   }
-  if (kind === 'atlas') {
+  if (kind === 'atlas' || kind === 'business') {
     const mongoose=(await load('node_modules/mongoose/index.js')).default;
     const uri=process.env.DATABASE_URL||process.env.MONGO_URI;
     if(!uri?.startsWith('mongodb'))throw Error('DATABASE_NOT_MONGODB');
     const connection=await mongoose.createConnection(uri,{maxPoolSize:1,autoIndex:false,autoCreate:false,serverSelectionTimeoutMS:7000,connectTimeoutMS:7000,socketTimeoutMS:10000}).asPromise();
     try {
+      if(kind==='business')return await readBusiness(connection.db,request);
       const start=Date.now();await connection.db.command({ping:1});const pingMs=Date.now()-start;
       const stats=await connection.db.command({dbStats:1,scale:1});
       let cluster=null;try{const s=await connection.db.command({atlasSize:1});cluster={logicalBytes:s.atlasSize,dataBytes:s.totals?.dataSize,indexBytes:s.totals?.indexSize,databases:s.totals?.numDatabases};}catch{}

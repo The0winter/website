@@ -42,7 +42,7 @@ try {
   assert.ok(browser,'Default shortcut launcher did not start a browser');
   const page=(await browser.pages()).find(p=>p.url().startsWith('http://127.0.0.1:'));assert.ok(page,'Local monitor page missing');
   await page.waitForSelector('#page-title');
-  await page.waitForFunction(()=>document.querySelector('#content .metric-grid')!==null,{timeout:30000});
+  await page.waitForFunction(()=>document.querySelector('#content .resource-grid')!==null,{timeout:30000});
   const states=new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>{page.off('response',onResponse);reject(Error('Live sources did not become ready'));},70000);
     async function onResponse(response){

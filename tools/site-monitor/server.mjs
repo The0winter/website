@@ -7,6 +7,7 @@ import retention from '../storage-maintenance.cjs';
 import storage from './storage-policy.cjs';
 import {collectors,validateConfig,runRemote} from './collectors.mjs';
 import {MonitorSession} from './session.mjs';
+import {validateCredentials} from './analytics.mjs';
 
 // Directory file URLs retain a trailing separator; retention requires a
 // normalized root so its descendant check does not compare a double separator.
@@ -22,7 +23,7 @@ export async function createMonitor({root=projectRoot,collect,config:configInput
   root=path.resolve(root);
   let config;try{config=validateConfig(configInput??JSON.parse(fs.readFileSync(safeFile(root,storage.BASE+'/config.json'),'utf8')));}catch{config=validateConfig(configInput);}
   const token=crypto.randomBytes(32).toString('hex');
-  let session=new MonitorSession(collect||collectors(config)),inventory={running:false,buckets:[],error:null},scanController,scanPromise,closing=false;
+  let session=new MonitorSession(collect||collectors(config)),inventory={running:false,buckets:[],error:null},scanController,scanPromise,closing=false,updating=false;
   const tidy=(apply,reserveBytes=0)=>retention.maintain({root,scope:'site-monitor',apply,reserveBytes,processes:[]});
   function diskState(){const files=storage.reports(root);return {policy:storage.POLICY,bytes:files.reduce((n,f)=>n+f.bytes,0),files:files.sort((a,b)=>b.mtime-a.mtime),directory:path.join(root,storage.BASE,'reports')};}
   function snapshot(){return {...session.snapshot(),config:{...config},inventory:{...inventory,buckets:inventory.buckets.map(({cursor,...rest})=>rest)},storage:diskState()};}
@@ -68,13 +69,24 @@ export async function createMonitor({root=projectRoot,collect,config:configInput
         if(url.pathname==='/api/pause'){session.paused=Boolean(value.paused);json(res,200,{ok:true});return;}
         if(url.pathname==='/api/inventory'){void scan();json(res,202,{ok:true});return;}
         if(url.pathname==='/api/inventory/cancel'){if(inventory.running){inventory.error='盘点已取消；部分结果不代表总容量';scanController?.abort();}json(res,200,{ok:true});return;}
+        if(['/api/config','/api/range','/api/analytics/credentials'].includes(url.pathname)&&updating){json(res,409,{error:'正在更新设置，请稍后重试'});return;}
+        if(url.pathname==='/api/range'){
+          const next=validateConfig({...config,analyticsDays:value.days});updating=true;
+          try{atomic(root,storage.BASE+'/config.json',next);config=next;await session.reset(['analytics','business'],collect||collectors(config));json(res,200,{ok:true});}finally{updating=false;}return;
+        }
+        if(url.pathname==='/api/analytics/credentials'){
+          const credentials=validateCredentials(value.credentials);const next=validateConfig({...config,gaPropertyId:value.propertyId,gaCredentialsPath:safeFile(root,storage.BASE+'/google-credentials.json')});
+          if(!next.gaPropertyId)throw Error('请先填写谷歌资源 ID');updating=true;
+          try{atomic(root,storage.BASE+'/google-credentials.json',credentials);atomic(root,storage.BASE+'/config.json',next);config=next;await session.reset(['analytics','realtime'],collect||collectors(config));json(res,200,{ok:true});}finally{updating=false;}return;
+        }
         if(url.pathname==='/api/config'){
-          const next=validateConfig(value);scanController?.abort();await scanPromise;await session.close();
-          config=next;atomic(root,storage.BASE+'/config.json',config);inventory={running:false,buckets:[],error:null};session=new MonitorSession(collect||collectors(config));session.start();json(res,200,{ok:true});return;
+          const next=validateConfig({...config,...value});updating=true;
+          try{atomic(root,storage.BASE+'/config.json',next);scanController?.abort();await scanPromise;const paused=session.paused;await session.close();
+          config=next;inventory={running:false,buckets:[],error:null};session=new MonitorSession(collect||collectors(config));session.paused=paused;session.start();json(res,200,{ok:true});}finally{updating=false;}return;
         }
         if(url.pathname==='/api/export'){
           if(!['json','csv'].includes(value.format))throw Error('导出格式无效');
-          const captured=snapshot();delete captured.config.identity;delete captured.storage.files;delete captured.storage.directory;
+          const captured=snapshot();delete captured.config.identity;delete captured.config.gaCredentialsPath;delete captured.storage.files;delete captured.storage.directory;
           const data=value.format==='csv'?csv(captured):JSON.stringify(captured,null,2),bytes=Buffer.byteLength(data);
           if(bytes>storage.POLICY.maxReportBytes)throw Error('报告超过 16 MB 上限，请导出 CSV');
           tidy(true,bytes);
@@ -86,14 +98,14 @@ export async function createMonitor({root=projectRoot,collect,config:configInput
         if(url.pathname==='/api/close'){json(res,200,{ok:true});setImmediate(onClose);return;}
         json(res,404,{error:'接口不存在'});return;
       }
-      const assets={'/':'index.html','/app.js':'app.js','/app.css':'app.css','/vendor/bootstrap.min.css':'vendor/bootstrap.min.css','/icon.svg':'icon.svg'};
+      const assets={'/':'index.html','/app.js':'app.js','/health.mjs':'health.mjs','/app.css':'app.css','/vendor/bootstrap.min.css':'vendor/bootstrap.min.css','/icon.svg':'icon.svg'};
       if(req.method!=='GET'||!assets[url.pathname]){res.writeHead(404);res.end();return;}
-      const file=assets[url.pathname];res.setHeader('Content-Type',file.endsWith('.css')?'text/css':file.endsWith('.js')?'text/javascript':file.endsWith('.svg')?'image/svg+xml':'text/html; charset=utf-8');res.end(fs.readFileSync(path.join(webRoot,file)));
+      const file=assets[url.pathname];res.setHeader('Content-Type',file.endsWith('.css')?'text/css':/\.m?js$/.test(file)?'text/javascript':file.endsWith('.svg')?'image/svg+xml':'text/html; charset=utf-8');res.end(fs.readFileSync(path.join(webRoot,file)));
     }catch(error){json(res,400,{error:/^ENOENT/.test(error.message)?'文件不存在':error.message});}
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   if(start)session.start();
   const cleanTimer=setInterval(()=>{try{tidy(true);}catch{}},3600000);cleanTimer.unref();
   const baseUrl=`http://127.0.0.1:${server.address().port}`;
-  return {server,token,baseUrl,url:baseUrl+'/#'+token,snapshot,session,get config(){return config;},async close(){if(closing)return;closing=true;clearInterval(cleanTimer);scanController?.abort();await Promise.allSettled([session.close(),scanPromise]);server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}};
+  return {server,token,baseUrl,url:baseUrl+'/#'+token,snapshot,get session(){return session;},get config(){return config;},async close(){if(closing)return;closing=true;clearInterval(cleanTimer);scanController?.abort();await Promise.allSettled([session.close(),scanPromise]);server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}};
 }

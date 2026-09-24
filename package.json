@@ -8,7 +8,7 @@
     "monitor:shortcut": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/site-monitor/create-shortcut.ps1",
     "monitor:clean": "node tools/storage-maintenance.cjs --site-monitor --apply",
     "monitor:clean:plan": "node tools/storage-maintenance.cjs --site-monitor",
-    "test:monitor": "node tools/local-run.cjs node --require ./tools/test-env.cjs --test tools/site-monitor/tests/monitor.test.mjs",
+    "test:monitor": "node tools/local-run.cjs node --require ./tools/test-env.cjs --test tools/site-monitor/tests/monitor.test.mjs tools/site-monitor/tests/analytics.test.mjs tools/site-monitor/tests/business.test.mjs",
     "dev": "node tools/local-run.cjs web dev",
     "build": "node tools/local-run.cjs web build",
     "start": "node tools/local-run.cjs web start",

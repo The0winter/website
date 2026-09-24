@@ -1,15 +1,16 @@
-export const intervals={server:15000,atlas:60000,r2:300000,site:60000};
+export const intervals={server:15000,atlas:60000,r2:300000,site:60000,business:900000,analytics:900000,realtime:60000};
+const empty=()=>({data:null,history:[],status:'pending',error:null,busy:false,lastAttempt:null,lastSuccess:null,nextDue:0});
 export class MonitorSession {
   constructor(collect, {clock=Date.now,maxPoints=1440}={}) {
     this.collect=collect;this.clock=clock;this.maxPoints=maxPoints;this.startedAt=clock();this.closed=false;this.paused=false;
-    this.modules=Object.fromEntries(Object.keys(intervals).map(key=>[key,{data:null,history:[],status:'pending',error:null,busy:false,lastAttempt:null,lastSuccess:null,nextDue:0}]));
+    this.modules=Object.fromEntries(Object.keys(collect).map(key=>[key,empty()]));
     this.inflight=new Map();
   }
   start(){this.refresh();this.timer=setInterval(()=>this.tick(),1000);this.timer.unref();}
-  tick(){if(this.closed||this.paused)return;for(const key of Object.keys(intervals))if(this.modules[key].nextDue<=this.clock())void this.refresh(key);}
+  tick(){if(this.closed||this.paused)return;for(const key of Object.keys(this.modules))if(this.modules[key].nextDue<=this.clock())void this.refresh(key);}
   refresh(key){
     if(this.closed)return Promise.resolve();
-    if(!key)return Promise.all(Object.keys(intervals).map(name=>this.refresh(name)));
+    if(!key)return Promise.all(Object.keys(this.modules).map(name=>this.refresh(name)));
     if(!this.modules[key])throw Error('未知模块');
     if(this.inflight.has(key))return this.inflight.get(key).promise;
     const state=this.modules[key],controller=new AbortController();state.busy=true;state.lastAttempt=this.clock();
@@ -33,6 +34,7 @@ export class MonitorSession {
       .finally(()=>{state.busy=false;state.nextDue=this.clock()+intervals[key];this.inflight.delete(key);});
     this.inflight.set(key,{controller,promise});return promise;
   }
-  snapshot(){const now=this.clock();return {version:1,startedAt:this.startedAt,now,paused:this.paused,maxPoints:this.maxPoints,modules:Object.fromEntries(Object.entries(this.modules).map(([k,v])=>[k,{...v,interval:intervals[k],stale:v.lastSuccess!==null&&now-v.lastSuccess>intervals[k]*2}]))};}
+  async reset(keys,collect){for(const key of keys)this.inflight.get(key)?.controller.abort();await Promise.allSettled(keys.map(key=>this.inflight.get(key)?.promise));if(this.closed)return;for(const key of keys){this.collect[key]=collect[key];this.modules[key]=empty();}await Promise.all(keys.map(key=>this.refresh(key)));}
+  snapshot(){const now=this.clock();return {version:2,startedAt:this.startedAt,now,paused:this.paused,maxPoints:this.maxPoints,modules:Object.fromEntries(Object.entries(this.modules).map(([k,v])=>[k,{...v,interval:intervals[k],stale:v.lastSuccess!==null&&now-v.lastSuccess>intervals[k]*2}]))};}
   async close(){this.closed=true;clearInterval(this.timer);for(const x of this.inflight.values())x.controller.abort();await Promise.allSettled([...this.inflight.values()].map(x=>x.promise));}
 }
