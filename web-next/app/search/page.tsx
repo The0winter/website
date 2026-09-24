@@ -1,13 +1,14 @@
 'use client';
 import CoverImage from '@/components/BookCover';
 
-import {Suspense, useEffect, useState, type FormEvent} from 'react';
+import {Suspense, useEffect, useLayoutEffect, useState, type FormEvent} from 'react';
 import {useSearchParams, useRouter} from 'next/navigation';
 import Link from 'next/link';
 import {ArrowLeft, ArrowRight, Search, BookOpen, UserRound, X, RotateCcw} from 'lucide-react';
 import BookLink from '@/components/BookLink';
 import {safeFetch} from '@/lib/request';
 import type {Book} from '@/lib/api';
+import {navigateDetailSearch, syncDetailSearchSource} from '@/lib/book-navigation';
 import './search.css';
 
 const pageSize = 20;
@@ -19,7 +20,8 @@ function SearchForm({query}: {query: string}) {
   function submit(event: FormEvent) {
     event.preventDefault();
     const next = draft.trim();
-    router.push(next ? searchHref(next) : '/search');
+    const href = next ? searchHref(next) : '/search';
+    if (!navigateDetailSearch(href)) router.push(href);
   }
   return <form className="search-form" role="search" autoComplete="off" onSubmit={submit}>
     <Search size={20} aria-hidden="true"/>
@@ -48,6 +50,7 @@ function SearchContent() {
   const router = useRouter();
   const query = (params.get('q') || '').trim();
   const rawPage = params.get('page') || '1';
+  useLayoutEffect(syncDetailSearchSource, [query, rawPage]);
   const page = /^\d+$/.test(rawPage) ? Math.max(1, Math.min(100000, Number(rawPage))) : 1;
   const [retry, setRetry] = useState(0);
   const key = JSON.stringify([query, page, retry]);
@@ -100,9 +103,9 @@ function SearchContent() {
         })}
       </div>}
       {!loading && !error && (hasNext || page > 1) && <nav className="search-pagination" aria-label="搜索结果分页">
-        <button disabled={page === 1} onClick={() => router.push(searchHref(query, page - 1))}><ArrowLeft size={16}/>上一页</button>
+        <button disabled={page === 1} onClick={() => {const href = searchHref(query, page - 1); if (!navigateDetailSearch(href)) router.push(href);}}><ArrowLeft size={16}/>上一页</button>
         <span aria-current="page">第 {page} 页{pages !== null && ` / 共 ${pages} 页`}</span>
-        <button disabled={!hasNext} onClick={() => router.push(searchHref(query, page + 1))}>下一页<ArrowRight size={16}/></button>
+        <button disabled={!hasNext} onClick={() => {const href = searchHref(query, page + 1); if (!navigateDetailSearch(href)) router.push(href);}}>下一页<ArrowRight size={16}/></button>
       </nav>}
     </section>}
   </div></div>;

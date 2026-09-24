@@ -69,8 +69,8 @@ for (const width of [320, 390, 430]) test(`detail search expands, dismisses and 
   const input = actions.getByRole('combobox', {name:'搜索书名或作者'});
   const logo = (await actions.locator('.book-home-logo').boundingBox())!;
   const arrow = (await actions.locator('.book-home-back svg path').boundingBox())!;
-  expect(Math.abs(arrow.y - logo.y)).toBeLessThanOrEqual(2);
-  expect(Math.abs(arrow.y + arrow.height - logo.y - logo.height)).toBeLessThanOrEqual(2);
+  expect(arrow.height).toBeLessThan(logo.height);
+  expect(Math.abs(arrow.y + arrow.height / 2 - logo.y - logo.height / 2)).toBeLessThan(1);
   const icon = (await toggle.locator('svg').boundingBox())!;
   expect(Math.abs(icon.y + icon.height / 2 - logo.y - logo.height / 2)).toBeLessThan(1);
   expect(width - icon.x - icon.width).toBeLessThanOrEqual(16);
@@ -156,7 +156,7 @@ for (const source of ['/?view=category', '/search?q=导航']) for (const name of
     });
     await page.goto(base + source);
     await expect.poll(() => page.evaluate(() => Boolean(history.state?.mobileRoot))).toBe(true);
-    await page.locator(source.startsWith('/search') ? '.search-book' : '.mh-browse .mh-book').first().click();
+    await page.locator(source.startsWith('/search') ? 'a.search-book' : '.mh-browse a.mh-book').first().click();
     await expect(page.locator('.book-detail')).toBeVisible({timeout:15000});
     await page.getByRole('navigation', {name:'详情页导航'}).getByRole('link', {name}).click();
     await expect(page).toHaveURL(`${base}/`);

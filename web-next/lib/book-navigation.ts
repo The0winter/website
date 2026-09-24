@@ -5,7 +5,8 @@ import {installReaderFullscreenBack} from './reader-fullscreen';
 
 type Route = {kind: 'home' | 'author' | 'library' | 'ranking' | 'detail' | 'reader'; href: string; bookId?: string};
 type RankingView = {activeRank: string; category: string};
-type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; milestones?: boolean; search?: boolean; restoreSession?: string; homeBrowse?: boolean; homeShortcutVisit?: boolean; libraryReturn?: string; rankingView?: RankingView; authorSource?: {href: string; flow: string}};
+type SourceVisit = {href: string; flow: string};
+type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; milestones?: boolean; search?: boolean; restoreSession?: string; homeBrowse?: boolean; homeShortcutVisit?: boolean; libraryReturn?: string; rankingView?: RankingView; authorSource?: SourceVisit; detailSource?: SourceVisit};
 type Router = {push: (href: string) => void; replace: (href: string) => void};
 const listeners = new Set<() => void>();
 let router: Router | undefined;
@@ -15,6 +16,7 @@ let currentPath = '';
 let pending: Entry | undefined;
 let overlayClosing = false;
 let catalogSelection: (() => void) | undefined;
+let detailSearchSource: SourceVisit | undefined;
 let documentSession: string | undefined;
 const session = () => documentSession ??= crypto.randomUUID();
 
@@ -56,6 +58,7 @@ function mark(entry: Entry) {
   entry = {...entry, restoreSession: entry.kind === 'reader' ? undefined : session()};
   const state = {...window.history.state};
   delete state.readerBook; delete state.readerReturn; delete state.catalogOpen;
+  delete state.detailSearchSource;
   state.homeBrowse = entry.kind === 'home' && Boolean(entry.homeBrowse);
   // Preserve Next's route tree when only annotating the current history slot.
   window.history.replaceState({...state, bookNavigation: entry}, '', entry.href);
@@ -66,6 +69,7 @@ function mark(entry: Entry) {
 export function syncBookRoute(path: string) {
   const search = new URLSearchParams(location.search).toString();
   if (path !== location.pathname + (search ? `?${search}` : '')) return;
+  if (location.pathname !== '/search') detailSearchSource = undefined;
   const route = routeFor(path);
   const previous = current;
   const previousPath = currentPath;
@@ -116,10 +120,12 @@ export function syncBookRoute(path: string) {
 function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, traversing = false, restore = false) {
   if (!router) return;
   if (currentChapterEntry()?.href !== entry.href) cancelChapterEntry();
-  pending = entry;
+  // A restored source can already be rendered when Back cancels a slow entry;
+  // its pathname effect will not run again to clear a pending request.
+  pending = restore ? undefined : entry;
   // Keep the rendered source until a click finishes; a pop has already moved
   // to its destination and must use that entry for subsequent Back actions.
-  if (traversing) current = entry;
+  if (traversing) {current = entry; if (restore) notify();}
   window.dispatchEvent(new Event('book-navigation-leave'));
   if (currentChapterEntry()?.href === entry.href) {
     cancelBookTransition();
@@ -147,6 +153,12 @@ function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, t
       window.history.pushState({...window.history.state, bookNavigation: entry}, '', entry.href);
       current = entry;
       router!.replace(entry.href);
+    } else if (!traversing && entry.kind === 'detail' && entry.detailSource) {
+      // Keep the actual source book below a search destination, even while loading.
+      // A full results page occupies the same slot that its selected book replaces.
+      window.history[replace ? 'replaceState' : 'pushState']({...window.history.state, bookNavigation: entry}, '', entry.href);
+      current = entry;
+      router!.replace(entry.href);
     } else if (!replace && (entry.kind === 'detail' || entry.kind === 'author')) {
       // Reserve the visit before requesting it so Back from its loader
       // lands on the source, even before the destination route is available.
@@ -161,17 +173,20 @@ function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, t
 }
 
 function onPopState(event: PopStateEvent) {
+  detailSearchSource = location.pathname === '/search' ? event.state?.detailSearchSource : undefined;
   const from = current;
   const target = stored(event.state);
   if (!from || !router) { cancelBookTransition(); return; }
-  // Author pages start their own list flow, but retain the actual source visit
-  // for animated Back/Forward, including cancellation during route loading.
-  const authorBack = from.kind === 'author' && from.authorSource?.flow === target?.flow && from.authorSource?.href === target?.href;
-  const authorForward = target?.kind === 'author' && target.authorSource?.flow === from.flow && target.authorSource?.href === from.href;
-  if (target && (authorBack || authorForward)) {
+  // Authors and books opened by detail search retain their source visit across
+  // Back/Forward, reloads and cancellation while the destination is loading.
+  const fromSource = from.kind === 'author' ? from.authorSource : from.kind === 'detail' ? from.detailSource : undefined;
+  const targetSource = target?.kind === 'author' ? target.authorSource : target?.kind === 'detail' ? target.detailSource : undefined;
+  const sourceBack = fromSource?.flow === target?.flow && fromSource?.href === target?.href;
+  const sourceForward = targetSource?.flow === from.flow && targetSource?.href === from.href;
+  if (target && (sourceBack || sourceForward)) {
     const restore = target.restoreSession === session() && Boolean(event.state?.__NA);
     if (!restore) event.stopImmediatePropagation();
-    navigate(target, authorForward ? 'enter' : 'exit', true, true, restore);
+    navigate(target, sourceForward ? 'enter' : 'exit', true, true, restore);
     return;
   }
   if (mobile() && target && (featuredHome(from) && homeShortcut(target) || homeShortcut(from) && featuredHome(target))) {
@@ -256,6 +271,15 @@ export function navigateBookLink(href: string) {
     if (current.homeBrowse || current.homeShortcutVisit) window.history.back();
     else navigate(entryFor(target), 'exit', true);
     return true;
+  }
+  if (target.kind === 'detail') {
+    const source = current?.kind === 'detail' && current.bookId !== target.bookId
+      ? {href: current.href, flow: current.flow}
+      : location.pathname === '/search' ? detailSearchSource ?? window.history.state?.detailSearchSource as SourceVisit | undefined : undefined;
+    if (source && routeFor(source.href)?.kind === 'detail') {
+      navigate({...entryFor(target), detailSource: source}, 'enter', location.pathname === '/search');
+      return true;
+    }
   }
   // Search and other pages use the same detail loader while keeping
   // their existing canonical history handling in syncBookRoute.
@@ -342,6 +366,26 @@ export function closeBookSearch(afterClose?: () => void) {
   window.history.back();
 }
 export const bookSearchOpen = (bookId: string) => Boolean(current?.search && current.bookId === bookId);
+export const bookDetailReturnHref = (bookId: string) => current?.kind === 'detail' && current.bookId === bookId && current.detailSource?.href || '/';
+export function syncDetailSearchSource() {
+  if (location.pathname !== '/search') return;
+  detailSearchSource ??= window.history.state?.detailSearchSource;
+  if (detailSearchSource) window.history.replaceState({...window.history.state, detailSearchSource}, '', location.href);
+}
+export function navigateDetailSearch(href: string) {
+  if (!router) return false;
+  if (!/^\/search(?:\?|$)/.test(href)) return navigateBookLink(href);
+  const source = current?.kind === 'detail' ? {href: current.href, flow: current.flow}
+    : location.pathname === '/search' ? detailSearchSource : undefined;
+  if (!source) return false;
+  // Scope the return origin to this results visit, including reloads. Generic
+  // searches elsewhere on the site keep their existing navigation behavior.
+  detailSearchSource = source;
+  window.history[location.pathname === '/search' ? 'replaceState' : 'pushState']({...window.history.state, detailSearchSource: source}, '', href);
+  current = undefined; notify();
+  router.replace(href);
+  return true;
+}
 export const bookCatalogOpen = (bookId: string) => Boolean(current?.catalog && current.bookId === bookId);
 export const serverCatalogClosed = () => false;
 export const readerReturnHref = (bookId: string) => current?.kind === 'reader' && current.bookId === bookId && current.libraryReturn || `/book/${bookId}`;

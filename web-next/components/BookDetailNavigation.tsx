@@ -6,7 +6,7 @@ import Image from 'next/image';
 import {useRouter} from 'next/navigation';
 import {ChevronLeft, Search, X} from 'lucide-react';
 import BookSearch from './BookSearch';
-import {bookSearchOpen, closeBookSearch, navigateBookLink, openBookSearch, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
+import {bookDetailReturnHref, bookSearchOpen, closeBookSearch, navigateDetailSearch, openBookSearch, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 
 export default function BookDetailNavigation({bookId}: {bookId: string}) {
   const router = useRouter();
@@ -14,6 +14,7 @@ export default function BookDetailNavigation({bookId}: {bookId: string}) {
   const search = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const open = useSyncExternalStore(subscribeBookNavigation, () => bookSearchOpen(bookId), serverCatalogClosed);
+  const returnHref = useSyncExternalStore(subscribeBookNavigation, () => bookDetailReturnHref(bookId), () => '/');
 
   useEffect(() => {
     if (!open) return;
@@ -43,7 +44,10 @@ export default function BookDetailNavigation({bookId}: {bookId: string}) {
   }, [open]);
 
   return <nav className="book-home-actions" aria-label="详情页导航">
-    <Link href="/" prefetch={false} aria-label="返回精选" className="book-home-back"><ChevronLeft size={44} strokeWidth={1.1} aria-hidden="true"/></Link>
+    <Link href={returnHref} prefetch={false} aria-label={returnHref === '/' ? '返回精选' : '返回上一本书'} className="book-home-back"
+      onNavigate={event => {if (returnHref !== '/') {event.preventDefault(); window.history.back();}}}>
+      <ChevronLeft size={36} strokeWidth={1.35} aria-hidden="true"/>
+    </Link>
     <Link href="/" prefetch={false} aria-label="精选主页" className="book-home-link" inert={open}>
       <Image src="/icon.png" alt="九天小说" width={24} height={24} sizes="24px" loading="eager" className="book-home-logo"/>
     </Link>
@@ -51,12 +55,12 @@ export default function BookDetailNavigation({bookId}: {bookId: string}) {
       <div id={searchId} className="book-detail-search-input" inert={!open}>
         {open && <BookSearch autoFocus navigate={href => closeBookSearch(() => {
           if (href === location.pathname + location.search) return;
-          if (!navigateBookLink(href)) router.push(href);
+          if (!navigateDetailSearch(href)) router.push(href);
         })}/>}
       </div>
       <button ref={toggle} type="button" className="book-detail-search-toggle" aria-label={open ? '收起搜索' : '搜索书籍'}
         aria-expanded={open} aria-controls={searchId} onClick={() => open ? closeBookSearch() : openBookSearch(bookId)}>
-        {open ? <X size={26} strokeWidth={1.4} aria-hidden="true"/> : <Search size={30} strokeWidth={1.4} aria-hidden="true"/>}
+        {open ? <X size={26} strokeWidth={1.4} aria-hidden="true"/> : <Search size={28} strokeWidth={1.5} aria-hidden="true"/>}
       </button>
     </div>
   </nav>;

@@ -131,7 +131,8 @@
   .book-home-actions>a,.book-detail-search-toggle { display:flex; align-items:center; justify-content:center; flex-shrink:0; width:44px; height:44px; border-radius:8px; color:inherit; -webkit-tap-highlight-color:transparent; }
   /* Fade the complete icon once so adjoining strokes cannot accumulate opacity. */
   .book-home-actions>a>svg,.book-detail-search-toggle>svg { flex-shrink:0; opacity:.6; }
-  .book-home-logo { flex-shrink:0; width:24px; height:24px; object-fit:contain; }
+  .book-home-back>svg { transform:translateX(-2px); }
+  .book-home-logo { flex-shrink:0; width:24px; height:24px; object-fit:contain; transform:translateX(-4px); }
   .book-home-actions>a:active,.book-detail-search-toggle:active { background:#ffffff1f; }
   .book-home-actions>a:focus-visible,.book-detail-search-toggle:focus-visible { outline:2px solid currentColor; outline-offset:-3px; }
   .book-home-link { transition:opacity 160ms ease; }
