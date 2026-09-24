@@ -81,6 +81,8 @@ async function search(page:Page, index:number, results = false) {
     // Query changes and refresh must retain the same source book.
     await page.getByRole('searchbox').fill(books[index].title.slice(0, -1));
     await page.getByRole('searchbox').press('Enter');
+    await expect(page.getByRole('region', {name:'搜索结果'})).toHaveAttribute('aria-busy', 'false');
+    await page.getByRole('searchbox').press('Enter');
     await page.reload();
     await page.locator(`a.search-book[href="/book/${books[index].id}"]`).click();
   } else {

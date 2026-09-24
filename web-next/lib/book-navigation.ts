@@ -378,6 +378,7 @@ export function navigateDetailSearch(href: string) {
   const source = current?.kind === 'detail' ? {href: current.href, flow: current.flow}
     : location.pathname === '/search' ? detailSearchSource : undefined;
   if (!source) return false;
+  if (location.pathname + location.search === href) return true;
   // Scope the return origin to this results visit, including reloads. Generic
   // searches elsewhere on the site keep their existing navigation behavior.
   detailSearchSource = source;
