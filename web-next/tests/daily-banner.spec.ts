@@ -1,6 +1,59 @@
 import {test, expect, type Page} from '@playwright/test';
 const base = process.env.FEATURED_BASE || 'http://127.0.0.1:3000';
 test.use({hasTouch: true});
+
+for (const width of [320, 390, 767]) test(`first banner stays visible through delayed hydration and reload at ${width}px`, async ({page}, info) => {
+  await page.setViewportSize({width, height: 844});
+  await page.addInitScript(() => {
+    const samples: string[] = [];
+    (window as typeof window & {initialBannerFrames: string[]}).initialBannerFrames = samples;
+    function sample() {
+      const rail = document.querySelector('.mh-banner-track');
+      const bounds = rail?.getBoundingClientRect();
+      if (bounds?.width && bounds.height) {
+        const slide = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + 60)?.closest('.mh-banner');
+        if (slide) samples.push(slide.getAttribute('href')!);
+      }
+      requestAnimationFrame(sample);
+    }
+    requestAnimationFrame(sample);
+  });
+  let releaseScripts = () => {};
+  let scripts = Promise.resolve();
+  await page.route('**/_next/**', async route => {
+    if (route.request().resourceType() === 'script') await scripts;
+    await route.continue();
+  });
+  for (const navigation of ['load', 'reload']) {
+    scripts = new Promise<void>(resolve => {releaseScripts = resolve;});
+    try {
+      if (navigation === 'load') await page.goto(base, {waitUntil: 'commit'});
+      else await page.reload({waitUntil: 'commit'});
+      const rail = page.locator('.mh-banner-track');
+      const first = rail.locator('.mh-banner:not([data-banner-clone])').first();
+      await expect(rail).toBeVisible();
+      await expect(rail).toHaveCSS('overflow-x', 'auto');
+      const href = await first.getAttribute('href');
+      // Hold the scripts after SSR has painted, as on a slow phone/network.
+      await page.waitForTimeout(350);
+      await page.screenshot({path: info.outputPath(`verified-${navigation}-before-hydration.png`)});
+      const frames = () => page.evaluate(() => (window as typeof window & {initialBannerFrames: string[]}).initialBannerFrames);
+      expect(new Set(await frames())).toEqual(new Set([href]));
+      releaseScripts();
+      await expect.poll(() => rail.evaluate(el => Math.abs(el.scrollLeft - el.clientWidth))).toBeLessThan(2);
+      await expect(first).toHaveAttribute('aria-hidden', 'false');
+      await page.waitForTimeout(350);
+      expect(new Set(await frames())).toEqual(new Set([href]));
+      await page.screenshot({path: info.outputPath(`verified-${navigation}-after-hydration.png`)});
+      // Refresh after using the carousel too, not only from its initial slide.
+      await page.locator('.mh-banner-dots button').nth(2).click();
+      await expect.poll(() => rail.evaluate(el => Math.abs(el.scrollLeft - el.clientWidth * 3))).toBeLessThan(2);
+    } finally {
+      releaseScripts();
+    }
+  }
+});
+
 async function drag(page: Page, dx: number, dy = 0) {
   const bounds = (await page.locator('.mh-banner-track').boundingBox())!;
   const x = dx < 0 ? bounds.x + bounds.width - 35 : bounds.x + 35, y = bounds.y + 65;

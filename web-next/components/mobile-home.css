@@ -19,6 +19,7 @@
   .mh-banner-track::-webkit-scrollbar { display:none; }
   .mh-banner-track .mh-banner,.mh-banner-shell { height:148px; gap:16px; padding:18px 20px 26px; }
   .mh-banner-track .mh-banner { flex:0 0 100%; min-width:0; scroll-snap-align:start; scroll-snap-stop:always; border-radius:0; }
+  .mh-banner-track:not([data-banner-ready]) .mh-banner[data-banner-clone] { display:none; }
   .mh-banner-controls { position:absolute; bottom:2px; left:12px; right:12px; display:flex; align-items:center; justify-content:space-between; pointer-events:none; }
   .mh-banner-controls button { display:grid; place-items:center; width:32px; height:30px; color:#ffebc5; pointer-events:auto; border-radius:5px; }
   .mh-banner-dots { display:flex; gap:0; }

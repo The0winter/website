@@ -30,6 +30,9 @@ export default function MobileFeaturedBanner({books}: {books: Book[]}) {
     const rail = track.current;
     if (!rail || !count) return;
     let timeout: ReturnType<typeof setTimeout>;
+    // SSR shows the first real slide. Enable the loop copies and position the
+    // rail together before the hydrated frame can paint.
+    rail.dataset.bannerReady = 'true';
     let width = rail.clientWidth;
     rail.scrollTo({left: (activeIndex.current + offset) * width, behavior: 'instant'});
     const settle = () => {
