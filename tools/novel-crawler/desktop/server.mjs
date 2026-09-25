@@ -20,7 +20,7 @@ function visibleReport(report) {
   if (!report) return null;
   return {...Object.fromEntries(['title', 'author', 'description', 'descriptionStatus', 'status', 'statusDetection', 'jobId', 'mode', 'checkedAt', 'downloaded', 'expected', 'errors', 'warnings', 'structuralPass', 'completeAgainstSource', 'exportFile', 'summaryFile', 'reportFile', 'limitation', 'reusedExport', 'readingEdition', 'readingAdded', 'sourceExpected', 'sourceDownloaded', 'rawReportFile', 'continuation', 'switching', 'continuationAdded', 'originalCount', 'originalSourceUrl', 'automaticResolutions'].map(key => [key, report[key]])), failures: (report.failures || []).map(item => failureDetails(item, item))};
 }
-export async function createDesktop({stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads'), port = 0, sitesDirectory, loadSources = loadSites, open = openLocal, onFocus = () => {}, findBooks = searchBooks, prepareBook = resolveBook, uploadWorker = path.join(here, 'worker.mjs'), bookWorker = path.join(here, 'worker.mjs')} = {}) {
+export async function createDesktop({stateDir = defaultStateDir, outputDir = path.join(projectRoot, 'downloads'), port = 0, sitesDirectory, loadSources = loadSites, open = openLocal, onFocus, findBooks = searchBooks, prepareBook = resolveBook, uploadWorker = path.join(here, 'worker.mjs'), bookWorker = path.join(here, 'worker.mjs')} = {}) {
   const token = randomBytes(32).toString('hex');
   let worker, operation, operationClient, stopRequested = false, closing = false, selectedBook = null, candidates = [], lastProgress = 0;
   const resolvedSpecs = new Map();
@@ -234,7 +234,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         else return respond(404, {error: '队列操作不存在'});
         wakeQueue(); return respond(200, {ok: true});
       }
-      if (pathname === '/api/focus') { await onFocus(); return respond(200, {ok: true}); }
+      if (pathname === '/api/focus') return respond(200, {ok: true, focused: typeof onFocus === 'function' && await onFocus() === true});
       if (pathname === '/api/remember') return respond(200, rememberWebsite(stateDir, input.website));
       if (pathname === '/api/theme') return respond(200, rememberTheme(stateDir, input.theme));
       if (pathname === '/api/clear-login') {

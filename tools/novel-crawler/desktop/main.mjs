@@ -4,17 +4,13 @@ import puppeteer from 'puppeteer';
 import {defaultStateDir} from '../core.mjs';
 import {atomicWrite, readJson, withLock} from '../storage.mjs';
 import {createDesktop} from './server.mjs';
+import {focusExistingDesktop} from './instance.mjs';
 import retention from '../../storage-maintenance.cjs';
 
 const stateDir = defaultStateDir, instanceFile = path.join(stateDir, 'desktop-instance.json');
 await withLock(path.join(stateDir, 'desktop-launch.lock'), async () => {
   const previous = readJson(instanceFile);
-  if (previous?.port && previous.token) {
-    try {
-      const response = await fetch(`http://127.0.0.1:${previous.port}/api/focus`, {method: 'POST', headers: {'x-desktop-token': previous.token}, signal: AbortSignal.timeout(2000)});
-      if (response.ok) return;
-    } catch {}
-  }
+  if (await focusExistingDesktop(previous)) return;
   const executablePath = [process.env.NOVEL_CRAWLER_BROWSER, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe', puppeteer.executablePath()].filter(Boolean).find(file => fs.existsSync(file));
   if (!executablePath) throw Error('Chrome or Edge was not found. Install a browser or set NOVEL_CRAWLER_BROWSER.');
   retention.queueAutomatic();
@@ -27,7 +23,9 @@ await withLock(path.join(stateDir, 'desktop-launch.lock'), async () => {
         await cdp.send('Browser.setWindowBounds', {windowId, bounds: {windowState: 'normal'}});
         await page.bringToFront();
       } finally { await cdp.detach(); }
+      return true;
     }
+    return false;
   }});
   async function shutdown() {
     if (shuttingDown) return;
