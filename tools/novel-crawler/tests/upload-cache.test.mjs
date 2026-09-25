@@ -9,6 +9,7 @@ import {PassThrough} from 'node:stream';
 import {hash, atomicWrite} from '../storage.mjs';
 import {uploadLibrary} from '../desktop/upload.mjs';
 import {planLibrary} from '../desktop/library.mjs';
+import {continuationKey} from '../continuation.mjs';
 import {createVpsLibrarySession} from '../../../infra/library-sync-session.mjs';
 import {applyLibraryBatches} from '../../../infra/library-sync-vps.mjs';
 
@@ -58,6 +59,96 @@ test('1000 unchanged books take five header batches, zero chapter queries and ze
   assert.equal(remote.calls.length, 5); assert.ok(remote.calls.every(c => c.mode === 'headers' && c.identities.length === 200));
   assert.equal(exportReads, 0); assert.equal(remote.state.closed, 2);
   t.diagnostic(`warm 1000-book local run: ${new Date(result.finishedAt) - new Date(result.startedAt)} ms (simulated website)`);
+});
+
+test('completed books upload once, then skip all network calls and unchanged export reads', async t => {
+  const f = fixture(t), source = {...book(), status: '完结'}; f.save(source);
+  const remote = website([]), first = await uploadLibrary({...f, transport: remote.transport});
+  assert.equal(first.newBooks, 1); assert.equal(first.added, 2); assert.equal(first.completed, 0);
+  remote.calls.length = 0;
+  const read = fs.readFileSync; let exportReads = 0;
+  t.mock.method(fs, 'readFileSync', (file, ...args) => { if (path.dirname(String(file)) === f.outputDir) exportReads++; return read(file, ...args); });
+  const next = await uploadLibrary({...f, transport: remote.transport});
+  assert.equal(next.completed, 1); assert.equal(next.checked, 1); assert.equal(next.unchanged, 0); assert.equal(next.failed, 0);
+  assert.equal(remote.calls.length, 0); assert.equal(exportReads, 0);
+});
+
+test('header batches exclude completed books even when they appear after ongoing books', async t => {
+  const f = fixture(t), ongoing = book(0), complete = {...book(1), status: '完结'};
+  f.save(ongoing); f.save(complete); const remote = website([ongoing, complete]);
+  await uploadLibrary({...f, transport: remote.transport}); remote.calls.length = 0;
+  const next = await uploadLibrary({...f, transport: remote.transport});
+  assert.equal(next.completed, 1); assert.equal(next.unchanged, 1); assert.equal(remote.calls.length, 1);
+  assert.deepEqual(remote.calls[0].identities.map(b => b.sourceUrl), [ongoing.sourceUrl]);
+});
+
+test('completed-book additions and metadata edits still upload, and conflicting body edits still fail safely', async t => {
+  const f = fixture(t), source = {...book(), status: '完结'}; f.save(source); const remote = website([source]);
+  await uploadLibrary({...f, transport: remote.transport});
+  const expanded = {...source, chapters: [...source.chapters, chapter(3)]}; f.save(expanded);
+  const added = await uploadLibrary({...f, transport: remote.transport});
+  assert.equal(added.completed, 0); assert.equal(added.uploaded, 1); assert.equal(added.added, 1);
+  const edited = {...expanded, description: '补充简介'}; f.save(edited);
+  assert.equal((await uploadLibrary({...f, transport: remote.transport})).uploaded, 1);
+  assert.equal(remote.books.get(source.sourceUrl).description, edited.description);
+  assert.equal((await uploadLibrary({...f, transport: remote.transport})).completed, 1);
+  f.save({...edited, status: '连载'});
+  assert.equal((await uploadLibrary({...f, transport: remote.transport})).uploaded, 1);
+  f.save({...edited, chapters: [{...chapter(1), content: '另一个版本'}, chapter(2), chapter(3)]});
+  const conflict = await uploadLibrary({...f, transport: remote.transport});
+  assert.equal(conflict.failed, 1); assert.equal(conflict.completed, 0);
+  assert.equal(remote.books.get(source.sourceUrl).chapters[0].content, source.chapters[0].content);
+});
+
+test('completed skips honor legacy full verification, forceFull and corrupt receipt fallback', async t => {
+  const f = fixture(t), source = {...book(), status: '完结'}; f.save(source); const remote = website([source]);
+  await uploadLibrary({...f, transport: remote.transport});
+  const dir = path.join(f.stateDir, 'library-upload-cache', hash(path.resolve(f.outputDir)).slice(0, 20));
+  const file = path.join(dir, 'verified.json'), record = JSON.parse(fs.readFileSync(file));
+  for (const value of Object.values(record.value)) { delete value.completed; value.verifiedAt -= 31 * 86400000; }
+  record.hash = hash(record.value); atomicWrite(file, record); remote.calls.length = 0;
+  assert.equal((await uploadLibrary({...f, transport: remote.transport})).completed, 1);
+  assert.equal(remote.calls.length, 0);
+  const forced = await uploadLibrary({...f, transport: remote.transport, forceFull: true});
+  assert.equal(forced.completed, 0); assert.equal(forced.metrics.fullInspections, 1);
+  fs.writeFileSync(file, '{broken');
+  assert.equal((await uploadLibrary({...f, transport: remote.transport})).metrics.fullInspections, 1);
+});
+
+test('completed receipts still reject binding changes, incomplete editions and corrupt binding summaries', async t => {
+  for (const kind of ['continuation', 'reading']) {
+    const f = fixture(t), source = {...book(), status: '完结'};
+    f.save(source, 'original.json'); f.save(source, 'accepted.json');
+    const file = path.join(f.outputDir, 'accepted.json');
+    const dir = kind === 'continuation' ? path.join(f.stateDir, 'continuations', continuationKey(source)) : path.join(f.stateDir, 'jobs', 'a'.repeat(20));
+    const name = kind === 'continuation' ? 'binding.json' : 'reading-edition.json';
+    if (kind === 'reading') atomicWrite(path.join(dir, 'spec.json'), {...source, chapters: undefined});
+    const binding = {file: 'accepted.json', outputPath: file, source: {url: source.sourceUrl}, exportHash: hash(fs.readFileSync(file))};
+    atomicWrite(path.join(dir, name), {value: binding, hash: hash(binding)});
+    const remote = website([source]); assert.equal((await uploadLibrary({...f, transport: remote.transport})).unchanged, 1);
+    const read = fs.readFileSync; let reads = 0;
+    const spy = t.mock.method(fs, 'readFileSync', (file, ...args) => { if (String(file) === path.join(dir, name) || path.dirname(String(file)) === f.outputDir) reads++; return read(file, ...args); });
+    assert.equal((await uploadLibrary({...f, transport: remote.transport})).completed, 1); assert.equal(reads, 0); spy.mock.restore();
+    const cache = path.join(f.stateDir, 'library-upload-cache', hash(path.resolve(f.outputDir)).slice(0, 20), 'bindings.json');
+    fs.writeFileSync(cache, '{broken');
+    assert.equal((await uploadLibrary({...f, transport: remote.transport})).completed, 1);
+    atomicWrite(path.join(dir, name), {value: {...binding, exportHash: 'changed'}, hash: hash({...binding, exportHash: 'changed'})});
+    assert.equal((await uploadLibrary({...f, transport: remote.transport})).failed, 1);
+    atomicWrite(path.join(dir, name), {value: binding, hash: hash(binding)});
+    atomicWrite(path.join(dir, kind === 'continuation' ? 'pending.json' : 'reading-edition-pending.json'), {unfinished: true});
+    const pending = await uploadLibrary({...f, transport: remote.transport});
+    assert.equal(pending.failed, 1); assert.match(pending.items[0].message, /尚未完成/);
+  }
+});
+
+test('files changed or removed after planning cannot retain completed status or stop other uploads', async t => {
+  const f = fixture(t), complete = {...book(1), status: '完结'}, ongoing = book(2);
+  f.save(complete); f.save(ongoing); const remote = website([complete, ongoing]);
+  await uploadLibrary({...f, transport: remote.transport}); let changed = false;
+  const result = await uploadLibrary({...f, transport: remote.transport, onLibrary() {
+    if (!changed) { changed = true; fs.unlinkSync(path.join(f.outputDir, `${complete.title}.json`)); }
+  }});
+  assert.equal(result.completed, 0); assert.equal(result.failed, 1); assert.equal(result.unchanged, 1);
 });
 
 test('changed local books reuse a verified directory, fill middle holes and verify only uploaded numbers', async t => {

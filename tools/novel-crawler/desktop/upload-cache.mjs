@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {atomicWrite, hash, readJson} from '../storage.mjs';
+import {normalizeBookStatus} from '../adapters.mjs';
 
 const version = 2;
 // Force an occasional fresh directory check even after out-of-band maintenance.
@@ -24,7 +25,9 @@ const cacheDir = (stateDir, outputDir) => path.join(stateDir, 'library-upload-ca
 
 export function localUploadIndex({stateDir, outputDir, forceFull = false}) {
   const file = path.join(cacheDir(stateDir, outputDir), 'local-index.json');
+  const bindingFile = path.join(cacheDir(stateDir, outputDir), 'bindings.json');
   const previous = forceFull ? {} : read(file) || {}, next = Object.create(null);
+  const bindings = forceFull ? {} : read(bindingFile) || {}, nextBindings = Object.create(null);
   return {
     get(name, inspect) {
       const full = path.join(outputDir, name), fingerprint = fileFingerprint(full);
@@ -37,7 +40,18 @@ export function localUploadIndex({stateDir, outputDir, forceFull = false}) {
       next[name] = entry;
       return entry.item ? {...entry.item, fingerprint} : null;
     },
-    flush() { write(file, next); }
+    binding(full, inspect) {
+      const fingerprint = fileFingerprint(full);
+      let entry = Object.hasOwn(bindings, full) ? bindings[full] : null;
+      if (entry?.fingerprint !== fingerprint) {
+        const item = inspect();
+        if (fileFingerprint(full) !== fingerprint) throw Error('核对期间来源绑定被修改，请重新检查');
+        entry = {fingerprint, item};
+      }
+      nextBindings[full] = entry;
+      return entry.item;
+    },
+    flush() { write(file, next); if (Object.keys(nextBindings).length) write(bindingFile, nextBindings); }
   };
 }
 
@@ -46,6 +60,20 @@ export function uploadCheckpoints({stateDir, outputDir, forceFull = false}) {
   const records = read(index) || {};
   const keyFor = item => hash(item.file);
   return {
+    completed(item) {
+      const record = records[keyFor(item)];
+      if (forceFull || normalizeBookStatus(item.status) !== '完结' || !item.fingerprint || !record || record.fileHash !== item.hash ||
+          !record.token || !record.scope || !Number.isFinite(record.verifiedAt) || record.verifiedAt > Date.now()) return null;
+      // A completed-book receipt intentionally needs no fresh remote header.
+      // Old receipts are promoted only after their saved full inspection proves
+      // that the website also received the completed status.
+      if (record.completed !== true) {
+        const snapshot = this.remote(item, record);
+        if (!snapshot?.book || normalizeBookStatus(snapshot.book.status) !== '完结') return null;
+        record.completed = true; write(index, records);
+      }
+      return record;
+    },
     get(item, header) {
       const key = keyFor(item), record = records[key];
       if (forceFull || !record || !header?.token || !header.scope || record.token !== header.token || record.scope !== header.scope ||
@@ -61,7 +89,7 @@ export function uploadCheckpoints({stateDir, outputDir, forceFull = false}) {
       const key = keyFor(item);
       if (!write(path.join(dir, key + '.json'), remote)) return;
       records[key] = {fileHash: item.hash, token: remote.token, scope: remote.scope, bookId: remote.bookId,
-        verifiedAt, manifestHash: hash(remote)};
+        verifiedAt, manifestHash: hash(remote), completed: normalizeBookStatus(remote.book?.status) === '完结'};
       write(index, records);
     }
   };

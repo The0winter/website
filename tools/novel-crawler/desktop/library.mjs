@@ -9,6 +9,7 @@ import {browserProfile} from '../browser-session.mjs';
 import {applyVerifiedBookStatus, loadSites, specForBook} from './sources.mjs';
 import {createLibraryControl} from './library-control.mjs';
 import {localUploadIndex} from './upload-cache.mjs';
+import {normalizeBookStatus} from '../adapters.mjs';
 
 const entries = dir => fs.existsSync(dir) ? fs.readdirSync(dir, {withFileTypes: true}) : [];
 function sealed(file) {
@@ -19,10 +20,10 @@ function sealed(file) {
 
 // Inspect exports once, in the worker. Reports and mapping sidecars are not books.
 // An explicit continuation or reading-edition binding takes precedence over old exports.
-export function planLibrary({stateDir, outputDir, sites = loadSites().sites, forUpload = false, forceFull = false}) {
+export function planLibrary({stateDir, outputDir, sites = loadSites().sites, forUpload = false, forceFull = false, skipCompleted = false}) {
   stateDir = path.resolve(stateDir); outputDir = path.resolve(outputDir);
   const groups = new Map(), invalid = [], jobs = [];
-  const index = forUpload ? localUploadIndex({stateDir, outputDir, forceFull}) : null;
+  const index = forUpload || skipCompleted ? localUploadIndex({stateDir, outputDir, forceFull}) : null;
   for (const entry of entries(outputDir)) {
     if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
     const file = path.join(outputDir, entry.name);
@@ -40,7 +41,6 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
       groups.get(key).push(item);
     } catch (error) { invalid.push({file: entry.name, title: entry.name, state: 'blocked', message: `无法读取下载文件：${error.message}`}); }
   }
-  index?.flush();
   for (const entry of entries(path.join(stateDir, 'jobs'))) {
     if (!entry.isDirectory() || !/^[a-f0-9]{20}$/.test(entry.name)) continue;
     const dir = path.join(stateDir, 'jobs', entry.name);
@@ -52,14 +52,27 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
   // novels; the worker still rechecks the selected file before collecting.
   const inventory = [...groups.values()].flat();
   const inspection = {books: inventory, files: new Map(inventory.map(book => [path.join(outputDir, book.file), book])), jobs};
+  // Upload only needs the accepted edition identity, not the novel stored in
+  // its binding. Validate once, then invalidate this small summary on any edit.
+  const uploadBinding = file => index.binding(file, () => {
+    const value = sealed(file);
+    return Object.fromEntries(['file', 'outputPath', 'exportHash', 'source'].filter(key => value[key] !== undefined).map(key => [key, value[key]]));
+  });
   for (const [key, files] of groups) {
     let book = files[0];
+    // If every local edition is complete, no source or full binding needs to
+    // be opened. The metadata cache is invalidated by any file change.
+    if (skipCompleted && files.every(item => normalizeBookStatus(item.status) === '完结')) {
+      plans.push({...book, state: 'completed', message: '已完结，本轮跳过'});
+      continue;
+    }
     try {
       const related = jobs.filter(job => job.key === key);
       let binding, reading, readingRecord, rawJob;
       if (hasContinuation(book, stateDir)) {
         const dir = path.join(stateDir, 'continuations', key);
-        binding = fs.existsSync(path.join(dir, 'pending.json')) ? sealed(path.join(dir, 'pending.json')).next : sealed(path.join(dir, 'binding.json'));
+        if (forUpload && fs.existsSync(path.join(dir, 'pending.json'))) throw Error('上次换源更新尚未完成，请先继续更新以恢复');
+        binding = forUpload ? uploadBinding(path.join(dir, 'binding.json')) : fs.existsSync(path.join(dir, 'pending.json')) ? sealed(path.join(dir, 'pending.json')).next : sealed(path.join(dir, 'binding.json'));
         book = files.find(item => path.join(outputDir, item.file) === binding.outputPath);
         if (!book || binding.file !== book.file) throw Error('已绑定的续更文件被移走，请恢复原文件后再更新');
         book = {...book, url: binding.source?.url};
@@ -68,8 +81,8 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
         if (editions.length > 1) throw Error('有多个阅读版来源绑定，请先核对保留的版本');
         if (editions.length) {
           reading = editions[0];
-          readingRecord = readJson(path.join(reading.dir, 'reading-edition.json'));
-          if (!readingRecord?.value || readingRecord.hash !== hash(readingRecord.value)) throw Error('来源绑定记录损坏，请先核对；原文件保留');
+          readingRecord = forUpload ? {value: uploadBinding(path.join(reading.dir, 'reading-edition.json'))} : readJson(path.join(reading.dir, 'reading-edition.json'));
+          if (!readingRecord?.value || !forUpload && readingRecord.hash !== hash(readingRecord.value)) throw Error('来源绑定记录损坏，请先核对；原文件保留');
           const record = readingRecord.value;
           book = files.find(item => path.join(outputDir, item.file) === record.outputPath);
           if (!book) throw Error('已绑定的阅读版被移走，请恢复原文件后再更新');
@@ -82,6 +95,10 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
             rawJob = job;
           }
         }
+      }
+      if (skipCompleted && normalizeBookStatus(book.status) === '完结') {
+        plans.push({...book, state: 'completed', message: '已完结，本轮跳过'});
+        continue;
       }
       // Upload uses the accepted local edition, independent of today's website
       // selectors or availability. Never publish a half-committed edition.
@@ -133,13 +150,14 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
       plans.push({...files[0], ...(book || {}), state: 'blocked', message: error.message});
     }
   }
+  index?.flush();
   return [...plans, ...invalid];
 }
 
 export function librarySummary(items) {
   const count = state => items.filter(item => item.state === state).length;
-  const updated = count('updated'), unchanged = count('unchanged'), failed = count('failed'), skipped = count('skipped');
-  return {total: items.length, checked: updated + unchanged + failed + skipped, updated, unchanged, failed, skipped,
+  const updated = count('updated'), unchanged = count('unchanged'), failed = count('failed'), skipped = count('skipped'), completed = count('completed');
+  return {total: items.length, checked: updated + unchanged + failed + skipped + completed, updated, unchanged, failed, skipped, completed,
     added: items.reduce((sum, item) => sum + (item.added || 0), 0)};
 }
 const publicItem = ({file, title, author, url, count, state, message, added, failure, controlId}) => ({file, title, author, url, count, state, message, added, failure, controlId});
@@ -172,7 +190,7 @@ export async function updateLibrary({stateDir, outputDir, sites, shouldStop = ()
   if (![1, 2].includes(concurrency)) throw Error('书库更新同时处理的来源数只能为1或2');
   const startedAt = new Date().toISOString(), planningStarted = Date.now();
   sites ||= loadSites().sites;
-  const plans = planLibrary({stateDir, outputDir, sites}), planningMs = Date.now() - planningStarted;
+  const plans = planLibrary({stateDir, outputDir, sites, skipCompleted: true}), planningMs = Date.now() - planningStarted;
   let fatal, presentationKey, lastStatus, lastProgress, lastBatch = 0;
   const clients = new Map();
   const stopped = () => !!fatal || signal?.aborted || shouldStop();
@@ -260,7 +278,7 @@ export async function updateLibrary({stateDir, outputDir, sites, shouldStop = ()
       control.end(bookControl);
       item.status = null; publish();
   }
-  const lanes = sourceLanes(plans, sites), running = new Map();
+  const lanes = sourceLanes(plans.filter(item => item.state !== 'completed'), sites), running = new Map();
   try {
     while (!stopped()) {
       while (running.size < concurrency && !needsAttention() && !stopped()) {

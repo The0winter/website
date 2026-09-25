@@ -58,6 +58,48 @@ async function fixture(t) {
   return {options, state, site, spec, seed, legacy, base};
 }
 const request = (app, action, body = {}) => fetch(`${app.baseUrl}/api/${action}`, {method: 'POST', headers: {'x-desktop-token': app.token, 'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+
+test('bulk updates skip completed exports without clients, binding reads or repeated body reads', async t => {
+  const f = await fixture(t), file = f.legacy('alpha', {status: '完结'});
+  const originalBytes = fs.readFileSync(file);
+  const options = {...f.options, createClient() { assert.fail('completed book opened a source client'); }};
+  const result = await updateLibrary(options);
+  assert.equal(result.completed, 1); assert.equal(result.checked, 1); assert.equal(result.skipped, 0);
+  assert.equal(result.items[0].state, 'completed'); assert.equal(f.state.requests.length, 0);
+  const read = fs.readFileSync; let reads = 0;
+  const spy = t.mock.method(fs, 'readFileSync', (name, ...args) => {
+    if (String(name) === file || /(?:binding|reading-edition)\.json$/.test(String(name))) reads++;
+    return read(name, ...args);
+  });
+  assert.equal((await updateLibrary(options)).completed, 1); assert.equal(reads, 0);
+  spy.mock.restore(); assert.deepEqual(fs.readFileSync(file), originalBytes);
+  // A metadata change invalidates the cached status, even at the same size.
+  f.legacy('alpha', {status: '连载'});
+  const changed = planLibrary({...f.options, skipCompleted: true})[0];
+  assert.equal(changed.state, 'pending', changed.message);
+});
+
+test('completed books never enter a source lane while ongoing and unknown statuses still update', async t => {
+  const f = await fixture(t);
+  f.legacy('alpha', {status: '完结'}); f.legacy('beta', {status: '连载'}); f.legacy('gamma');
+  f.state.fail = 'alpha'; f.state.counts.beta = 4;
+  const result = await updateLibrary(f.options);
+  assert.equal(result.completed, 1); assert.equal(result.updated, 1); assert.equal(result.unchanged, 1);
+  assert.equal(result.added, 1); assert.equal(result.checked, 3); assert.equal(result.skipped, 0);
+  assert.ok(!f.state.requests.some(url => url.includes('/alpha')));
+  assert.ok(f.state.requests.some(url => url.includes('/beta')));
+  assert.ok(f.state.requests.some(url => url.includes('/gamma')));
+});
+
+test('bulk completion follows the accepted reading edition when local editions disagree', async t => {
+  const f = await fixture(t), rawFile = await f.seed('alpha'), source = readJson(rawFile);
+  const file = path.join(f.options.outputDir, 'accepted.json');
+  atomicWrite(file, {...source, status: '完结', chapters: source.chapters.map(c => ({...c, sourceChapterNumber: c.chapter_number, sourceChapterUrl: c.link}))});
+  await bindReadingEdition(f.spec('alpha'), file, f.options);
+  const plan = planLibrary({...f.options, skipCompleted: true});
+  assert.equal(plan.length, 1); assert.equal(plan[0].file, 'accepted.json'); assert.equal(plan[0].state, 'completed');
+});
+
 async function until(check) {
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) { if (await check()) return; await new Promise(resolve => setTimeout(resolve, 40)); }
@@ -352,6 +394,7 @@ test('queue detects edits after scanning and abort stops remaining books without
 
 test('desktop button runs the real worker, blocks duplicate work, survives refresh and supports stop/restart', async t => {
   const f = await fixture(t), file = await f.seed('alpha'); await f.seed('beta');
+  f.legacy('gamma', {status: '完结'});
   const config = {...f.options, loadSources: () => ({sites: [f.site], errors: []})};
   let app = await createDesktop(config);
   const executablePath = ['C:/Program Files/Google/Chrome/Application/chrome.exe', puppeteer.executablePath()].find(file => fs.existsSync(file));
@@ -384,6 +427,10 @@ test('desktop button runs the real worker, blocks duplicate work, survives refre
     assert.equal(readJson(file).chapters.length, 5);
     assert.equal(await page.$eval('#resume', el => el.hidden), true);
     assert.match(await page.$eval('#library-summary', el => el.textContent), /新增 2 章/);
+    assert.match(await page.$eval('#library-summary', el => el.textContent), /完结跳过 1 本/);
+    assert.match(await page.$eval('.library-row[data-state="completed"]', el => el.textContent), /完结跳过/);
+    assert.match(app.state().message, /1 本完结跳过/);
+    assert.ok(!f.state.requests.some(url => url.includes('/gamma')));
     await page.waitForFunction(() => document.querySelector('#progress-bar').getBoundingClientRect().width / document.querySelector('.progress-track').getBoundingClientRect().width > .995);
     const images = path.resolve('.novel-crawler/library-update-qa'); fs.mkdirSync(images, {recursive: true});
     for (const width of [1180, 800, 390, 320]) {

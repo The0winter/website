@@ -245,10 +245,11 @@ function renderLibrary(batch) {
   $('library-summary').hidden = !batch;
   $('library-results').hidden = !batch?.items.length;
   $('library-summary').textContent = batch ? upload ? `已处理 ${batch.checked} / ${batch.total} 本 · 新书 ${batch.newBooks} 本 · 新增 ${batch.added} 章 · 已同步 ${batch.unchanged} 本${batch.failed ? ` · 未完成 ${batch.failed} 本` : ''}` : `已处理 ${batch.checked} / ${batch.total} 本 · 更新 ${batch.updated} 本 · 最新 ${batch.unchanged} 本 · 新增 ${batch.added} 章${batch.active > 1 ? ` · 同时处理 ${batch.active} 本` : ''}${batch.skipped ? ` · 跳过 ${batch.skipped} 本` : ''}` : '';
+  if (batch?.completed) $('library-summary').textContent += ` · 完结跳过 ${batch.completed} 本`;
   const key = JSON.stringify(batch?.items);
   if (key === libraryKey) return;
   libraryKey = key;
-  const labels = {pending: '等待检查', blocked: '需先核对', running: '检查中', retrying: '自动重试', waiting: '等待处理', updated: '已更新', uploaded: '已上传', unchanged: upload ? '已同步' : '已是最新', failed: upload ? '上传未完成' : '更新失败', skipped: '已手动跳过', stopped: '已停止'};
+  const labels = {pending: '等待检查', blocked: '需先核对', running: '检查中', retrying: '自动重试', waiting: '等待处理', updated: '已更新', uploaded: '已上传', unchanged: upload ? '已同步' : '已是最新', failed: upload ? '上传未完成' : '更新失败', completed: '完结跳过', skipped: '已手动跳过', stopped: '已停止'};
   $('library-results').replaceChildren(...(batch?.items || []).map(item => {
     const row = document.createElement('div'); row.className = 'library-row'; row.dataset.state = item.state;
     const heading = document.createElement('div'); heading.className = 'library-row-heading';

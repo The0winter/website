@@ -267,7 +267,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
             completed = true;
             const batch = message.batch;
             update({batch, phase: stopRequested || message.stopped ? 'stopped' : message.paused ? 'paused' : 'complete', progress: null,
-              message: batch.total === 0 ? '下载目录里还没有可更新的书籍。' : `${batch.stopped ? '书库更新已停止' : '书库检查完成'}：${batch.updated} 本已更新，${batch.unchanged} 本已是最新，新增 ${batch.added} 章。${batch.skipped ? ` ${batch.skipped} 本手动跳过，原因见下方列表。` : ''}`});
+              message: batch.total === 0 ? '下载目录里还没有可更新的书籍。' : `${batch.stopped ? '书库更新已停止' : '书库检查完成'}：${batch.updated} 本已更新，${batch.unchanged} 本已是最新，新增 ${batch.added} 章。${batch.completed ? ` ${batch.completed} 本完结跳过。` : ''}${batch.skipped ? ` ${batch.skipped} 本手动跳过，原因见下方列表。` : ''}`});
           }
           if (message.type === 'error') { if (stopRequested) stoppedTask(); else update({phase: 'error', message: message.error, failure: message.failure || failureDetails(message)}); }
         });
@@ -295,7 +295,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
             completed = true;
             const batch = message.batch;
             update({batch, phase: stopRequested || batch.stopped ? 'stopped' : batch.failed ? 'partial' : 'complete',
-              message: batch.blockedReason || (batch.total === 0 ? '书库里还没有可上传的书籍。' : `${stopRequested || batch.stopped ? '上传已停止' : batch.failed ? '本轮上传结束' : '书库同步完成'}：新书 ${batch.newBooks} 本，新增 ${batch.added} 章，${batch.unchanged} 本已同步。${batch.failed ? ` ${batch.failed} 本未完成，原因见下方列表；再次点击可重试。` : ''}`)});
+              message: batch.blockedReason || (batch.total === 0 ? '书库里还没有可上传的书籍。' : `${stopRequested || batch.stopped ? '上传已停止' : batch.failed ? '本轮上传结束' : '书库同步完成'}：新书 ${batch.newBooks} 本，新增 ${batch.added} 章，${batch.unchanged} 本已同步。${batch.completed ? ` ${batch.completed} 本完结跳过。` : ''}${batch.failed ? ` ${batch.failed} 本未完成，原因见下方列表；再次点击可重试。` : ''}`)});
           }
           if (message.type === 'error') { completed = true; update({phase: stopRequested ? 'stopped' : 'partial', message: message.error}); }
         });

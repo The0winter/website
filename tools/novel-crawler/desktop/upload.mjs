@@ -60,9 +60,10 @@ export async function uploadLibrary({stateDir, outputDir, signal, shouldStop = (
   const startedAt = new Date().toISOString(), runId = 'upload-' + crypto.randomUUID();
   const stopped = () => !!signal?.aborted || shouldStop();
   const snapshot = () => ({kind: 'upload', startedAt, total: items.length, metrics: {...metrics},
-    checked: items.filter(item => ['uploaded', 'unchanged', 'failed'].includes(item.state)).length,
+    checked: items.filter(item => ['uploaded', 'unchanged', 'failed', 'completed'].includes(item.state)).length,
     uploaded: items.filter(item => item.state === 'uploaded').length, newBooks: items.filter(item => item.state === 'uploaded' && item.newBook).length,
     unchanged: items.filter(item => item.state === 'unchanged').length, failed: items.filter(item => item.state === 'failed').length,
+    completed: items.filter(item => item.state === 'completed').length,
     added: items.reduce((sum, item) => sum + (item.added || 0), 0),
     items: items.map(({file, title, author, url, state, message, added, newBook, bookId}) => ({file, title, author, url, state, message, added, newBook, bookId}))});
   // The desktop persists live progress. Write the per-run report once at the
@@ -74,10 +75,29 @@ export async function uploadLibrary({stateDir, outputDir, signal, shouldStop = (
     return result;
   };
   try {
+  // Classify all completed receipts before batching remote headers, so even a
+  // completed book later in the queue is excluded from network scans.
+  for (const item of items) {
+    if (stopped()) break;
+    if (item.state !== 'pending') continue;
+    try {
+      const receipt = checkpoints.completed(item);
+      if (receipt && fileFingerprint(path.resolve(outputDir, item.file)) === item.fingerprint) {
+        item.state = 'completed'; item.bookId = receipt.bookId;
+        item.message = '已完结且已同步，本地未变化，本轮跳过';
+      }
+    } catch { /* Report missing or changed files in the per-book error handler. */ }
+  }
   publish();
   for (const [index, item] of items.entries()) {
     if (index % 20 === 0) await new Promise(resolve => setImmediate(resolve));
     if (stopped()) break;
+    if (item.state === 'completed') {
+      try {
+        if (fileFingerprint(path.resolve(outputDir, item.file)) === item.fingerprint) continue;
+      } catch { /* A removed export also needs a fresh plan. */ }
+      item.state = 'blocked'; item.message = '排队期间文件被修改或移走，请再次上传重新检查';
+    }
     const blocked = item.state === 'blocked' ? item.message : null;
     item.state = 'running'; item.message = '正在核对网站已有书籍和章节…'; onPhase(item); publish();
     try {
