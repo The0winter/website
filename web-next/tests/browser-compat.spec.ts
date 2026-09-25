@@ -31,6 +31,10 @@ test.beforeEach(async({page})=>{
     });
   });
   await page.route('**/api/books/*/views',route=>route.fulfill({json:{success:true,counted:false}}));
+  // Both counters are excluded from verification. The observer treats 204 as
+  // disabled, preventing retries with the synthetic token during navigation.
+  await page.route('**/api/traffic/observe',route=>route.fulfill({status:204}));
+  await page.route('**/api/auth/csrf',route=>route.fulfill({json:{csrfToken:'browser-verification'}}));
 });
 
 test('detail, pagination, settings and scrolling survive mobile resize',async({page},info)=>{
@@ -79,7 +83,7 @@ for(const failure of ['absent','throws','no-finished','stalled'] as const){
       };
     },failure);
     await page.goto(base);
-    await page.locator(`.mobile-home a[href="/book/${book}"]:visible`).first().tap();
+    await page.locator(`.mobile-home a[href="/book/${book}"]:not([data-banner-clone]):visible`).first().tap();
     await expect(page).toHaveURL(detail);
     await expect(page.locator('html')).not.toHaveAttribute('data-book-transition',/.+/);
     await page.locator('.read-now:visible').tap();await ready(page);
