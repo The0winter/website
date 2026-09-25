@@ -10,11 +10,20 @@ import {createMonitor} from '../server.mjs';
 import {fixtureCollectors,workspace,removeWorkspace} from './fixture.mjs';
 import {assessHealth,capacityTone,growth} from '../health.mjs';
 import {MonitorSession} from '../session.mjs';
-import {calendarPeriods} from '../periods.mjs';
+import {calendarPeriods,includeToday} from '../periods.mjs';
 
 function report(dims,metrics,values){return {dimensionHeaders:dims.map(name=>({name})),metricHeaders:metrics.map(name=>({name})),rows:values.map(([d,m])=>({dimensionValues:d.map(value=>({value})),metricValues:m.map(value=>({value:String(value)}))})),metadata:{timeZone:'Asia/Shanghai'}};}
 function reports(){return [report(['dateRange'],['activeUsers','newUsers','screenPageViews','sessions'],[[['today'],[3,1,9,4]],[['previous'],[0,0,0,0]],[['current'],[12,4,80,21]]]),report(['date'],['activeUsers','newUsers','screenPageViews','sessions'],[[['20260923'],[9,2,20,10]],[['20260922'],[8,2,30,10]]]),report(['pagePath','pageTitle'],['screenPageViews'],[[['/','首页'],[50]]]),report(['sessionDefaultChannelGroup'],['sessions'],[[['Direct'],[15]]]),report(['deviceCategory'],['sessions'],[[['mobile'],[16]]])];}
 function activityReports(){return [report(['dateRange'],['activeUsers','newUsers'],[[['last1'],[9,2]],[['last7'],[12,4]],[['last30'],[28,10]]]),report(['date'],['activeUsers','newUsers'],[[['20260923'],[9,2]]]),report(['isoYearIsoWeek'],['activeUsers','newUsers'],[[['202638'],[12,4]]]),report(['yearMonth'],['activeUsers','newUsers'],[[['202608'],[28,10]]])];}
+
+test('日趋势追加同源今日累计，保持十四天且跨日不重复、不伪造未知值',()=>{
+  const history=calendarPeriods('2026-09-24','day',14).map(p=>({...p,activeUsers:8,newUsers:2}));
+  const today=includeToday(history,'2026-09-24',{activeUsers:21,newUsers:9});assert.equal(today.length,14);assert.equal(today[0].date,'2026-09-11');assert.equal(today.at(-1).date,'2026-09-24');assert.equal(today.at(-1).activeUsers,21);assert.equal(today.at(-1).newUsers,9);assert.ok(today.at(-1).partial);assert.match(today.at(-1).label,/今日累计/);assert.equal(history.at(-1).date,'2026-09-23');
+  const updated=includeToday(today,'2026-09-24',{activeUsers:22,newUsers:10});assert.equal(updated.length,14);assert.equal(updated.filter(p=>p.date==='2026-09-24').length,1);assert.equal(updated.at(-1).activeUsers,22);
+  const next=includeToday(calendarPeriods('2026-09-25','day',14),'2026-09-25',{activeUsers:0,newUsers:0});assert.equal(next.at(-1).activeUsers,0);assert.equal(next.filter(p=>p.partial).length,1);assert.equal(next.at(-2).date,'2026-09-24');
+  assert.equal(includeToday(history,'2026-09-24',{activeUsers:null}).at(-1).activeUsers,null);assert.deepEqual(includeToday([],undefined,undefined),[]);
+  assert.equal(dateInZone(Date.parse('2026-09-25T15:59:59Z'),'Asia/Shanghai'),'2026-09-25');assert.equal(dateInZone(Date.parse('2026-09-25T16:00:00Z'),'Asia/Shanghai'),'2026-09-26');
+});
 test('真实谷歌空实时响应保留未知，不显示成零或吞掉损坏响应',async()=>{
   const credentials={type:'authorized_user',client_id:'synthetic-client',client_secret:'synthetic-secret',refresh_token:'synthetic-refresh'};
   let payload={kind:'analyticsData#runRealtimeReport'};

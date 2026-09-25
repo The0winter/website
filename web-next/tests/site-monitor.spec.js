@@ -5,7 +5,7 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 
 let app,child;
-const projectRoot=process.cwd(),dir=path.join(projectRoot,'.runtime/task-artifacts/site-monitor-v5');
+const projectRoot=process.cwd(),dir=path.join(projectRoot,'.runtime/task-artifacts/site-monitor-v6');
 test.beforeAll(async()=>{fs.mkdirSync(dir,{recursive:true});child=spawn(process.execPath,['--require','./tools/test-env.cjs','tools/site-monitor/tests/browser-fixture.mjs'],{cwd:projectRoot,windowsHide:true,stdio:['pipe','pipe','pipe']});app=await new Promise((resolve,reject)=>{let output='';child.stdout.on('data',b=>{output+=b;if(output.includes('\n')){try{resolve(JSON.parse(output.trim()));}catch(error){reject(error);}}});child.on('error',reject);child.stderr.on('data',b=>reject(Error(String(b))));child.on('exit',code=>{if(code)reject(Error('Fixture failed: '+code));});});});
 test.afterAll(async()=>{if(child&&child.exitCode===null){const exited=once(child,'exit');child.stdin.end('close');await exited;}});
 
@@ -29,15 +29,18 @@ test('用户数据优先、正常状态收到底部、容量紧凑，日周月�
   expect(await page.locator('.compact-resource').first().evaluate(e=>e.getBoundingClientRect().height)).toBeLessThan(95);
   expect(await status.evaluate(e=>e.getBoundingClientRect().height)).toBeLessThan(90);
   await expect(trend).toHaveAttribute('data-total-points','14');
+  await expect(trend.locator('[data-partial="true"]')).toHaveCount(2);
+  await expect(trend.locator('tbody tr').last()).toHaveText('2026-09-24（今日累计，尚未结束）219');
   const svg=trend.getByRole('img',{name:'用户变化趋势'}),box=await svg.boundingBox();await page.mouse.move(box.x+box.width*.6,box.y+120);
   await expect(trend.getByRole('status')).toBeVisible();await expect(trend.getByRole('status')).toContainText('活跃用户');await expect(trend.getByRole('status')).toContainText('新增访客');
   await page.mouse.wheel(0,-240);await expect(trend).toHaveAttribute('data-visible-points','11');await expect(page.getByLabel('移动时间窗口')).toBeVisible();
-  await page.getByLabel('移动时间窗口').fill('0');await expect(trend.locator('.trend-range')).toContainText('2026-09-10');
+  await page.getByLabel('移动时间窗口').fill('0');await expect(trend.locator('.trend-range')).toContainText('2026-09-11');
   await trend.getByText('查看趋势数字',{exact:true}).click();await expect(trend.locator('details')).toHaveAttribute('open','');
   await page.evaluate(()=>fetch('/api/refresh',{method:'POST',headers:{'x-monitor-token':sessionStorage.getItem('monitor-token'),'Content-Type':'application/json'},body:JSON.stringify({module:'analytics'})}));await page.waitForTimeout(2200);await expect(trend).toHaveAttribute('data-visible-points','11');
   await expect(trend.locator('details')).toHaveAttribute('open','');await trend.getByText('查看趋势数字',{exact:true}).click();
   await trend.getByRole('img').focus();await page.keyboard.press('End');await expect(trend.getByRole('status')).toContainText('2026-09');
   await page.getByRole('button',{name:'显示全部',exact:true}).click();await expect(trend).toHaveAttribute('data-visible-points','14');
+  await trend.getByRole('img').focus();await page.keyboard.press('End');await expect(trend.getByRole('status')).toContainText('今日累计，尚未结束');await expect(trend.getByRole('status')).toContainText('21 人');
   await page.getByRole('button',{name:'周',exact:true}).click();await expect(trend).toHaveAttribute('data-total-points','8');
   await trend.getByRole('img').focus();await page.keyboard.press('End');await expect(trend.getByRole('status')).toContainText('2026-09-14 至 2026-09-20');
   await page.getByRole('button',{name:'月',exact:true}).click();await expect(trend).toHaveAttribute('data-total-points','6');
@@ -46,6 +49,7 @@ test('用户数据优先、正常状态收到底部、容量紧凑，日周月�
   await page.getByLabel('用户数据类型').selectOption('visitors');await page.getByRole('button',{name:'日',exact:true}).click();
   const allEnd=await trend.locator('tbody tr').last().textContent();
   await page.getByRole('button',{name:'中国',exact:true}).click();await expect(page.getByRole('article',{name:'日活',exact:true}).locator('.circle-value')).toHaveText('12');
+  await trend.getByRole('img').focus();await page.keyboard.press('End');await expect(trend.getByRole('status')).toContainText('12 人');await expect(trend.getByRole('status')).toContainText('今日累计');
   await expect(page.getByRole('article',{name:'周活',exact:true}).locator('.circle-value')).toHaveText('54');
   expect(await trend.locator('tbody tr').last().textContent()).not.toEqual(allEnd);
   await page.getByRole('button',{name:'其他国家',exact:true}).click();await expect(page.getByRole('article',{name:'日活',exact:true}).locator('.circle-value')).toHaveText('6');
@@ -63,7 +67,17 @@ test('地区失败不混入全站人数，缺少地区数据的数据源禁用�
   await page.goto(app.url);await page.getByRole('button',{name:'中国',exact:true}).click();
   await expect(page.getByText(/中国：地区查询暂不可用/)).toBeVisible();await expect(page.getByRole('article',{name:'日活',exact:true}).locator('.circle-value')).toHaveText('—');await expect(page.locator('#last-read')).toContainText('尚未取得');await expect(page.getByRole('img',{name:'用户变化趋势'})).toHaveCount(0);
   await page.getByLabel('用户数据类型').selectOption('raw');await expect(page.getByRole('button',{name:'中国',exact:true})).toBeDisabled();await expect(page.getByText('此图表数据未记录国家，暂不支持地区筛选。')).toBeVisible();await expect(page.getByRole('article',{name:'日活',exact:true}).locator('.circle-value')).toHaveText('4');
+  await expect(page.locator('#user-trend tbody tr').last()).toHaveText('2026-09-24（今日累计，尚未结束）42');
   await page.getByLabel('用户数据类型').selectOption('visitors');await expect(page.getByRole('button',{name:'全部',exact:true})).toHaveAttribute('aria-pressed','true');await expect(page.getByRole('article',{name:'日活',exact:true}).locator('.circle-value')).toHaveText('21');
+});
+
+test('自动读取更新今日点和圆形人数，新增注册也展示今日累计',async({page})=>{
+  let activeUsers=21;
+  await page.route('**/api/state',async route=>{const response=await route.fetch(),state=await response.json();state.modules.analytics.data.activity.rolling[1].activeUsers=activeUsers;await route.fulfill({response,json:state});});
+  await page.goto(app.url);const trend=page.locator('#user-trend');await trend.getByRole('img').focus();await page.keyboard.press('End');await expect(trend.getByRole('status')).toContainText('21 人');
+  activeUsers=26;await expect(page.locator('.daily-circle .circle-value')).toHaveText('26');await expect(trend.getByRole('status')).toContainText('26 人');await expect(trend.locator('[data-partial="true"]')).toHaveCount(2);
+  await page.getByLabel('用户数据类型').selectOption('registrations');await expect(trend.locator('tbody tr').last()).toHaveText('2026-09-24（今日累计，尚未结束）3');await expect(trend.locator('[data-partial="true"]')).toHaveCount(1);
+  await page.getByRole('button',{name:'周',exact:true}).click();await expect(trend.locator('[data-partial="true"]')).toHaveCount(0);
 });
 
 test('设置输入、容量盘点、保存和清理继续可用',async({page})=>{

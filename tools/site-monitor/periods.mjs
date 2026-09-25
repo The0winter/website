@@ -21,3 +21,12 @@ export function calendarPeriods(today,unit,count) {
   return result;
 }
 export const trendCounts={day:14,week:8,month:6};
+
+// Use the same successfully read values as the daily circle; don't query or sum them again.
+export function includeToday(points,today,values,count=trendCounts.day) {
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(today||'')||!values)return points;
+  return [...points.filter(p=>p.date<today).slice(-(count-1)),{
+    key:today.replaceAll('-',''),date:today,endDate:today,label:`${today}（今日累计，尚未结束）`,
+    activeUsers:values.activeUsers??null,newUsers:values.newUsers??null,partial:true,
+  }];
+}
