@@ -3,6 +3,8 @@ import {test, expect} from '@playwright/test';
 const base = process.env.DETAIL_BASE || 'http://127.0.0.1:3000';
 const book = process.env.DETAIL_BOOK || '000000000000000000000101';
 const detail = `${base}/book/${book}`;
+const qqUA = 'Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 (KHTML, like Gecko) Mobile Safari/537.36 MQQBrowser/19.8';
+test.use({hasTouch:true});
 
 test.beforeEach(async ({page}) => {
   await page.setViewportSize({width:390, height:844});
@@ -16,6 +18,89 @@ test.beforeEach(async ({page}) => {
   });
   await page.route('**/api/auth/session', route => route.fulfill({json:{user:null, profile:null}}));
   await page.route('**/api/books/*/views', route => route.fulfill({json:{success:true, counted:false}}));
+});
+
+test('QQ Browser without Web Share loads its bridge before the sharing gesture', async ({page}) => {
+  await page.addInitScript(ua => {
+    Object.defineProperty(navigator, 'userAgent', {value:ua});
+    Object.defineProperty(navigator, 'share', {value:undefined});
+  }, qqUA);
+  let loads = 0;
+  await page.route('https://jsapi.qq.com/get?api=app.share', async route => {
+    loads++;
+    await route.fulfill({contentType:'application/javascript',body:`window.browser={app:{share(data){window.qqShareData=data;window.qqShareActivated=navigator.userActivation.isActive;}}};`});
+  });
+  await page.goto(detail);await page.getByRole('button', {name:'分享书籍'}).click();
+  await expect(page.locator('.book-share-apps small')).toHaveText('打开 QQ 浏览器分享面板，选择应用');
+  await page.getByRole('button', {name:'分享到其他应用'}).tap();
+  const result = await page.evaluate(() => ({
+    data:(window as unknown as {qqShareData:Record<string,string>}).qqShareData,
+    activated:(window as unknown as {qqShareActivated:boolean}).qqShareActivated,
+  }));
+  expect(result.data.url).toBe(detail);
+  expect(result.data.title).toContain((await page.locator('.book-hero h1').innerText()).trim());
+  expect(result.activated).toBe(true);
+  expect(loads).toBe(1);
+  await expect(page.locator('.book-share-message')).toContainText('若未弹出分享面板');
+  await page.getByRole('button', {name:'关闭分享'}).click();
+  await expect(page.getByRole('dialog', {name:'分享这本书'})).not.toBeVisible();
+  await page.getByRole('button', {name:'分享书籍'}).click();
+  await expect(page.locator('.book-share-apps small')).toContainText('QQ 浏览器分享面板');
+  expect(loads).toBe(1);
+});
+
+for (const outcome of ['blocked', 'empty', 'timeout']) test(`QQ SDK ${outcome} offers working copy sharing`, async ({page}) => {
+  await page.addInitScript(ua => {
+    Object.defineProperty(navigator, 'userAgent', {value:ua});
+    Object.defineProperty(navigator, 'share', {value:undefined});
+  }, qqUA);
+  await page.route('https://jsapi.qq.com/get?api=app.share', route => {
+    if (outcome === 'blocked') return route.abort();
+    if (outcome === 'empty') return route.fulfill({status:204,body:''});
+    // Deliberately leave the request pending to exercise the bounded timeout.
+  });
+  await page.goto(detail);await page.getByRole('button', {name:'分享书籍'}).click();
+  const button = page.getByRole('button', {name:'复制后分享'});
+  await expect(button).toBeEnabled({timeout:8000});await button.click();
+  await expect(page.locator('.book-share-message')).toContainText('书名和链接已复制，请到微信、QQ');
+});
+
+test('QQ native rejection prepares its browser bridge for a new user gesture', async ({page}) => {
+  await page.addInitScript(ua => {
+    Object.defineProperty(navigator, 'userAgent', {value:ua});
+    navigator.share=async () => {throw new DOMException('Denied','NotAllowedError');};
+  }, qqUA);
+  await page.route('https://jsapi.qq.com/get?api=app.share', route => route.fulfill({contentType:'application/javascript',body:'window.browser={app:{share(data){window.qqShareData=data;}}};'}));
+  await page.goto(detail);await page.getByRole('button', {name:'分享书籍'}).click();
+  await page.getByRole('button', {name:'分享到其他应用'}).click();
+  await expect(page.locator('.book-share-message')).toHaveText('已切换到 QQ 浏览器分享，请再点一次');
+  expect(await page.evaluate(() => 'qqShareData' in window)).toBe(false);
+  await page.getByRole('button', {name:'分享到其他应用'}).click();
+  expect(await page.evaluate(() => (window as unknown as {qqShareData:{url:string}}).qqShareData.url)).toBe(detail);
+});
+
+for (const ua of ['Mozilla/5.0 Chrome/150.0', qqUA+' MicroMessenger/8.0', qqUA+' QQ/9.0']) test(`non QQ Browser context never loads the QQ SDK: ${ua.slice(-20)}`, async ({page}) => {
+  await page.addInitScript(ua => {
+    Object.defineProperty(navigator, 'userAgent', {value:ua});
+    Object.defineProperty(navigator, 'share', {value:undefined});
+  }, ua);
+  const requests:string[]=[];
+  page.on('request', request => {if(request.url().startsWith('https://jsapi.qq.com/')) requests.push(request.url());});
+  await page.goto(detail);await page.getByRole('button', {name:'分享书籍'}).click();
+  await page.getByRole('button', {name:'复制后分享'}).click();
+  await expect(page.locator('.book-share-message')).toContainText('书名和链接已复制');
+  expect(requests).toEqual([]);
+});
+
+for (const availability of ['missing','throws','false']) test(`canShare ${availability} does not break the share panel`, async ({page}) => {
+  await page.addInitScript(availability => {
+    Object.defineProperty(navigator, 'canShare', {value:availability === 'missing' ? undefined : () => {
+      if (availability === 'throws') throw new Error('Unsupported probe');
+      return false;
+    }});
+  }, availability);
+  await page.goto(detail);await page.getByRole('button', {name:'分享书籍'}).click();
+  await expect(page.getByRole('button', {name:availability==='false'?'复制后分享':'分享到其他应用'})).toBeEnabled();
 });
 
 for (const width of [320,390,430]) test(`sharing fits and copies the complete book title at ${width}px`, async ({page}, info) => {
@@ -86,8 +171,8 @@ test('unsupported sharing and blocked clipboard keep manual copying available', 
     document.execCommand=() => false;
   });
   await page.goto(detail);await page.getByRole('button', {name:'分享书籍'}).click();
-  await expect(page.getByRole('button', {name:'分享到其他应用'})).toBeDisabled();
-  await page.getByRole('button', {name:'复制',exact:true}).click();
+  await expect(page.getByRole('button', {name:'复制后分享'})).toBeEnabled();
+  await page.getByRole('button', {name:'复制后分享'}).click();
   await expect(page.getByRole('status').filter({hasText:'请长按上方文字'})).toBeVisible();
   const input=page.getByRole('textbox', {name:'书名和分享链接'});
   await expect(input).toBeFocused();
@@ -101,9 +186,9 @@ test('native cancellation stays quiet and share errors retain a copy option', as
   const status=page.locator('.book-share-message');await expect(status).toBeEmpty();
   await page.evaluate(() => {navigator.share=async () => {throw new DOMException('Denied','NotAllowedError');};});
   await page.getByRole('button', {name:'分享到其他应用'}).click();
-  await expect(status).toContainText('请复制上方书名和链接');
-  await page.getByRole('button', {name:'复制',exact:true}).click();
-  await expect(status).toHaveText('书名和链接已复制');
+  await expect(status).toContainText('请复制后分享');
+  await page.getByRole('button', {name:'复制后分享'}).click();
+  await expect(status).toContainText('书名和链接已复制，请到微信、QQ');
 });
 
 test('keyboard focus stays in the panel and reduced motion is respected', async ({page}) => {
