@@ -10,16 +10,17 @@ export function mountTrend(root,points,series,key) {
   const view=views.get(identity)||{start:0,count:points.length,index:null};
   views.set(identity,view);if(views.size>12)views.delete(views.keys().next().value);
   const min=Math.min(3,points.length),height=200,left=35,right=10,top=16,bottom=26;
-  let width=600,svg,tooltip,activeLine,resize;
+  let width=600,svg,readout,activeLine,resize;
   const visible=()=>points.slice(view.start,view.start+view.count);
   const x=i=>left+i/Math.max(1,view.count-1)*(width-left-right);
+  function updateReadout(index) {
+    const point=visible()[index];
+    readout.querySelector('strong').textContent=point.label||point.date;
+    readout.querySelectorAll('[data-value]').forEach((value,i)=>{value.textContent=number(point[series[i].key])+(valid(point[series[i].key])?' 人':'');});
+  }
   function show(index) {
     view.index=Math.max(0,Math.min(view.count-1,index));
-    const point=visible()[view.index];
-    tooltip.innerHTML=`<strong>${escape(point.label||point.date)}</strong>${series.map(s=>`<div><span><i style="background:${s.color}"></i>${escape(s.label)}</span><b>${number(point[s.key])}${valid(point[s.key])?' 人':''}</b></div>`).join('')}`;
-    tooltip.hidden=false;
-    const target=x(view.index)/width*svg.getBoundingClientRect().width;
-    tooltip.style.left=Math.max(0,Math.min(root.clientWidth-tooltip.offsetWidth,target+12))+'px';
+    updateReadout(view.index);
     activeLine.setAttribute('x1',x(view.index));activeLine.setAttribute('x2',x(view.index));activeLine.removeAttribute('hidden');
   }
   function zoom(factor,anchor=.5) {
@@ -46,21 +47,22 @@ export function mountTrend(root,points,series,key) {
     for(const i of [...new Set([0,Math.floor((data.length-1)/2),data.length-1])])markup+=`<text x="${x(i)}" y="${height-6}" text-anchor="${i===0?'start':i===data.length-1?'end':'middle'}">${escape(data[i].partial?'今日':key.includes('month')?data[i].date.slice(0,7):data[i].date.slice(5))}</text>`;
     markup+=`<line class="trend-cursor" hidden x1="0" x2="0" y1="${top}" y2="${height-bottom}" stroke="var(--muted)" stroke-dasharray="4 3"/></svg>`;
     root.dataset.visiblePoints=String(view.count);root.dataset.totalPoints=String(points.length);
-    root.innerHTML=`<div class="legend">${series.map(s=>`<span><i style="background:${s.color}"></i>${escape(s.label)}</span>`).join('')}<span>单位：人</span></div><div class="trend-plot">${markup}<div class="trend-tooltip" role="status" hidden></div></div>
+    root.innerHTML=`<div class="trend-readout" role="status"><strong></strong><div class="trend-values legend" style="--trend-series:${series.length}">${series.map(s=>`<div><span><i style="background:${s.color}"></i>${escape(s.label)}</span><b data-value></b></div>`).join('')}</div></div><div class="trend-plot">${markup}</div>
       <div class="trend-controls"><span class="trend-range">${escape(data[0].date)} — ${escape(data.at(-1).endDate||data.at(-1).date)}</span><div class="actions"><button class="btn small" data-control="out" aria-label="缩小趋势图" ${view.count===points.length?'disabled':''}>−</button><button class="btn small" data-control="in" aria-label="放大趋势图" ${view.count===min?'disabled':''}>＋</button><button class="btn small" data-control="reset" ${view.count===points.length?'disabled':''}>显示全部</button></div></div>
       ${view.count<points.length?`<label class="trend-pan">移动时间窗口<input type="range" data-control="pan" aria-label="移动时间窗口" min="0" max="${points.length-view.count}" value="${view.start}"></label>`:''}
       <details class="chart-data" data-detail="用户变化趋势数字" ${expanded?'open':''}><summary>查看趋势数字</summary><div class="table-wrap"><table><thead><tr><th>时间</th>${series.map(s=>`<th>${escape(s.label)}</th>`).join('')}</tr></thead><tbody>${data.map(p=>`<tr><td>${escape(p.label||p.date)}</td>${series.map(s=>`<td>${number(p[s.key])}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>`;
-    svg=root.querySelector('svg');tooltip=root.querySelector('.trend-tooltip');activeLine=root.querySelector('.trend-cursor');
+    svg=root.querySelector('svg');readout=root.querySelector('.trend-readout');activeLine=root.querySelector('.trend-cursor');
     if(focused)root.querySelector(`[data-control="${focused}"]`)?.focus({preventScroll:true});
-    if(view.index!==null)show(view.index);
+    if(view.index!==null)show(view.index);else updateReadout(view.count-1);
   }
   const pointer=event=>{if(!event.target.closest('svg'))return;const box=svg.getBoundingClientRect();show(Math.round(((event.clientX-box.left)/box.width*width-left)/(width-left-right)*Math.max(1,view.count-1)));};
   const wheel=event=>{if(!event.target.closest('svg'))return;const box=svg.getBoundingClientRect();const anchor=Math.max(0,Math.min(1,((event.clientX-box.left)/box.width*width-left)/(width-left-right)));if(zoom(event.deltaY<0?.75:1.35,anchor))event.preventDefault();};
   const click=event=>{const action=event.target.closest('[data-control]')?.dataset.control;if(action==='in')zoom(.65);if(action==='out')zoom(1.6);if(action==='reset'){view.start=0;view.count=points.length;view.index=null;draw();}};
   const input=event=>{if(event.target.dataset.control==='pan'){view.start=Number(event.target.value);view.index=null;draw();}};
   const keydown=event=>{if(event.target!==svg)return;if(['ArrowLeft','ArrowRight','Home','End','+','=','-','Escape'].includes(event.key))event.preventDefault();if(event.key==='ArrowLeft')show((view.index??1)-1);if(event.key==='ArrowRight')show((view.index??-1)+1);if(event.key==='Home')show(0);if(event.key==='End')show(view.count-1);if(['+','='].includes(event.key))zoom(.65);if(event.key==='-')zoom(1.6);if(event.key==='Escape')hide();};
-  function hide(){view.index=null;tooltip.hidden=true;activeLine.setAttribute('hidden','');}
-  root.addEventListener('pointermove',pointer);root.addEventListener('pointerdown',pointer);root.addEventListener('pointerleave',hide);root.addEventListener('wheel',wheel,{passive:false});root.addEventListener('click',click);root.addEventListener('change',input);root.addEventListener('keydown',keydown);
+  function hide(){view.index=null;updateReadout(view.count-1);activeLine.setAttribute('hidden','');}
+  const leave=event=>{if(event.pointerType!=='touch')hide();};
+  root.addEventListener('pointermove',pointer);root.addEventListener('pointerdown',pointer);root.addEventListener('pointerleave',leave);root.addEventListener('wheel',wheel,{passive:false});root.addEventListener('click',click);root.addEventListener('change',input);root.addEventListener('keydown',keydown);
   draw();resize=new ResizeObserver(()=>{if(Math.abs(width-Math.max(180,root.clientWidth))>1)draw();});resize.observe(root);
-  return ()=>{resize.disconnect();root.removeEventListener('pointermove',pointer);root.removeEventListener('pointerdown',pointer);root.removeEventListener('pointerleave',hide);root.removeEventListener('wheel',wheel);root.removeEventListener('click',click);root.removeEventListener('change',input);root.removeEventListener('keydown',keydown);};
+  return ()=>{resize.disconnect();root.removeEventListener('pointermove',pointer);root.removeEventListener('pointerdown',pointer);root.removeEventListener('pointerleave',leave);root.removeEventListener('wheel',wheel);root.removeEventListener('click',click);root.removeEventListener('change',input);root.removeEventListener('keydown',keydown);};
 }
