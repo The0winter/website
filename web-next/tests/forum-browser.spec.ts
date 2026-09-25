@@ -73,7 +73,7 @@ test('desktop and narrow mobile keep working tabs and readable lists',async({pag
     const panel=page.locator('.forum-feed-panel[aria-hidden=false]');
     await expect(panel.locator('article').first()).toBeInViewport();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
-    await page.screenshot({path:info.outputPath(`verified-forum-${width}.png`)});
+    await page.screenshot({path:info.outputPath(`verified-forum-${width}.png`),animations:'disabled'});
     await page.getByRole('button',{name:'推荐',exact:true}).tap();
     await expect(panel.locator('article').first()).toBeInViewport();
   }

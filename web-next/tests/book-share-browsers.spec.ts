@@ -20,6 +20,7 @@ type TestWindow = typeof window & {browserCalls:Calls};
 test.use({hasTouch:true});
 
 test.beforeEach(async ({page}) => {
+  await page.route('**/api/traffic/observe',route=>route.fulfill({status:204}));
   await page.setViewportSize({width:390,height:844});
   await page.addInitScript(() => {
     const calls:Calls = {shares:[],active:[],copied:[],bridges:[]};
