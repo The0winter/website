@@ -3,6 +3,7 @@ import {createContext,useContext,useEffect,useState,type ReactNode} from 'react'
 import {authApi,type Profile,type AuthUser} from '@/lib/api';
 import {setForumUser} from '@/lib/forum-cache';
 import {setLibraryUser} from '@/lib/library-cache';
+import {startSessionActivity} from '@/lib/session-activity';
 interface AuthContextType {
  user:AuthUser|null;profile:Profile|null;loading:boolean;adminMode:boolean;
  setUser:(user:AuthUser|null)=>void;
@@ -20,6 +21,13 @@ export function AuthProvider({children}:{children:ReactNode}) {
   authApi.getSession().then(session=>{if(!active)return;if(session.user&&session.profile){setLibraryUser(session.user.id);setForumUser(session.user.id);setUser(session.user);setProfile(session.profile);localStorage.setItem('novelhub_user',session.user.id);}else {setLibraryUser(null);setForumUser(null);localStorage.removeItem('novelhub_user');}}).catch(()=>{if(active){setLibraryUser(null);setForumUser(null);setUser(null);setProfile(null);}}).finally(()=>{if(active)setLoading(false);});
   return()=>{active=false;};
  },[]);
+ useEffect(()=>{
+  if(!user?.id)return;
+  return startSessionActivity(user.id,authApi.renewActivity,()=>{
+   setLibraryUser(null);setForumUser(null);setUser(null);setProfile(null);
+   localStorage.removeItem('novelhub_user');
+  });
+ },[user?.id]);
  const signUp:AuthContextType['signUp']=async(email,password,username,role,code)=>{try{const response=await authApi.signUp(email,password,username,role,code);accept(response.user,response.profile);return {error:null};}catch(e){return {error:e instanceof Error?e:new Error('注册失败')};}};
  const signIn:AuthContextType['signIn']=async(email,password)=>{try{const response=await authApi.signIn(email,password);accept(response.user,response.profile);return {error:null,user:response.user};}catch(e){return {error:e instanceof Error?e:new Error('登录失败')};}};
  const logout=async()=>{await authApi.logout();setLibraryUser(null);setForumUser(null);setUser(null);setProfile(null);for(const key of ['token','user','novelhub_user'])localStorage.removeItem(key);};

@@ -149,7 +149,9 @@ const authLimiter = rateLimit({
   message: {error:'操作太频繁'},
   // keyGenerator: getClientIp, 删掉这行
 });
-app.use('/api/auth/', (req,res,next) => ['GET','HEAD','OPTIONS'].includes(req.method) ? next() : authLimiter(req,res,next));
+// Activity is already throttled per session and by the general API limiter;
+// it must not consume the login/password attempt budget on a shared network.
+app.use('/api/auth/', (req,res,next) => ['GET','HEAD','OPTIONS'].includes(req.method) || (req.method==='POST' && req.path==='/activity') ? next() : authLimiter(req,res,next));
 
 // ================= 3. 数据库连接 =================
 

@@ -270,6 +270,12 @@ export const usersApi = {
 };
 
 export const authApi = {
+  renewActivity: async (): Promise<boolean> => {
+    const response = await fetch(API_BASE_URL + '/auth/activity', {method:'POST', cache:'no-store'});
+    if (response.status === 401) return false;
+    if (!response.ok) throw new Error('账户服务暂不可用');
+    return true;
+  },
   logout: () => apiCall('/auth/logout', { method: 'POST' }),
   signUp: async (email: string, password: string, username: string, role: 'reader', code: string): Promise<AuthResponse> => {
     return apiCall<AuthResponse>('/auth/signup', {

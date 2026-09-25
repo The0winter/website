@@ -61,6 +61,10 @@ export function authRoutes(app,auth,config) {
     res.json({user:{...publicUser(current),email:current.email},profile:publicUser(current)});
   }));
   app.get('/api/auth/session',auth.authenticate,(req,res) => { res.set('Cache-Control','no-store'); res.json({user:{...publicUser(req.account),email:req.account.email},profile:publicUser(req.account)}); });
+  app.post('/api/auth/activity',auth.authenticate,asyncRoute(async(req,res) => {
+    res.set('Cache-Control','private, no-store');
+    res.json(await auth.renew(req,res));
+  }));
   app.post('/api/auth/logout',auth.authenticate,asyncRoute(async(req,res) => { await Session.deleteOne({_id:req.sessionId}); auth.clear(res); res.json({success:true}); }));
   app.post('/api/auth/change-password',auth.authenticate,asyncRoute(async(req,res) => {
     const {oldPassword,newPassword} = req.body;
