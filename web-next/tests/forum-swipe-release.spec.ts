@@ -1,5 +1,6 @@
 import '../../tools/test-env.cjs';
-import {test, expect, type Page, type CDPSession} from '@playwright/test';
+import {test, expect} from './fixtures/without-analytics';
+import type {Page, CDPSession} from '@playwright/test';
 
 const base = process.env.MOBILE_SECTIONS_BASE || 'http://127.0.0.1:3000';
 test.use({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true});
@@ -17,6 +18,8 @@ async function forum(page: Page) {
 }
 
 test.beforeEach(async ({page}) => {
+  await page.route('**/api/traffic/observe',route=>route.fulfill({status:204}));
+  await page.addInitScript(()=>document.addEventListener('DOMContentLoaded',()=>{const style=document.createElement('style');style.textContent='nextjs-portal{display:none!important}';document.head.append(style);}));
   await page.route('**/api/auth/session', route => route.fulfill({json: {user: null, profile: null}}));
   await page.route('**/api/forum/posts*', route => route.fulfill({json: []}));
   await page.goto(base + '/');

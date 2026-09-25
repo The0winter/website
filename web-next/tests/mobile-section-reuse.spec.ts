@@ -1,4 +1,5 @@
-import {test, expect, type Page, type BrowserContext} from '@playwright/test';
+import {test, expect} from './fixtures/without-analytics';
+import type {Page, BrowserContext} from '@playwright/test';
 
 const base = process.env.MOBILE_SECTIONS_BASE || 'http://127.0.0.1:3000';
 test.use({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true});
@@ -6,7 +7,9 @@ const user = {id: '000000000000000000000001', username: '缓存验证', role: 'r
 const entry = {bookId: '1', book: {id: '1', title: '提前准备的书架', author: '测试作者', cover_image: '/test-cover.svg'}};
 const post = {id: '1', title: '已经读过的论坛列表', votes: 1, comments: 0};
 async function setup(page: Page) {
+  await page.route('**/api/traffic/observe',route=>route.fulfill({status:204}));
   await page.addInitScript(() => {
+    document.addEventListener('DOMContentLoaded',()=>{const style=document.createElement('style');style.textContent='nextjs-portal{display:none!important}';document.head.append(style);});
     Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}});
     const attach = Element.prototype.attachShadow;
     Element.prototype.attachShadow = function(init) {
@@ -14,6 +17,7 @@ async function setup(page: Page) {
     };
   });
   await page.route('**/api/auth/session', route => route.fulfill({json: {user, profile: user}}));
+  await page.route('**/api/auth/activity',route=>route.fulfill({json:{active:true}}));
   await page.route('**/api/users/*/library?*', route => route.fulfill({json: [entry]}));
   await page.route('**/api/forum/posts*', route => route.fulfill({json: [post]}));
   await page.route('**/test-cover.svg', route => route.fulfill({contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="160"><rect width="120" height="160" fill="tan"/></svg>'}));
@@ -76,13 +80,13 @@ test('loaded home and forum reuse routes, lists and previews across visits and t
   expect(homeRequests).toHaveLength(0);
   await tap(page, 'forum'); await idle(page);
   await expect(page.locator('.forum-page article h2').first()).toHaveText(post.title);
-  expect(forumRequests).toHaveLength(3);
+  expect(forumRequests).toHaveLength(1);
   await tap(page, 'home'); await idle(page);
   await page.setViewportSize({width: 390, height: 790});
   await tap(page, 'forum');
   expect(await paneText(page)).toContain(post.title);
   await idle(page);
-  expect(forumRequests).toHaveLength(3);
+  expect(forumRequests).toHaveLength(1);
   expect(homeRequests).toHaveLength(0);
 });
 

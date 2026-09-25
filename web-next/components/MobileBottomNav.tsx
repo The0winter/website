@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { setMobileSectionPreviewUser } from '@/lib/mobile-section-navigation';
 import { warmMobileSectionStyles } from '@/lib/mobile-section-snapshot';
+import {loadForum} from '@/lib/forum-cache';
 import { Gem, Library, MessageCircle } from 'lucide-react';
 import AccountLink from './AccountLink';
 import Link from './PrefetchLink';
@@ -19,7 +20,7 @@ export default function MobileBottomNav({ onHomeSelect }: { onHomeSelect?: () =>
   return <nav className="mh-bottom" aria-label="移动端主导航">
     <AccountLink data-section="library" href="/library" aria-current={pathname === '/library' ? 'page' : undefined}><Library/><span>书架</span></AccountLink>
     <Link data-section="home" href="/" aria-current={pathname === '/' ? 'page' : undefined} onClick={onHomeSelect}><Gem/><span>精选</span></Link>
-    <Link data-section="forum" href="/forum" aria-current={pathname.startsWith('/forum') ? 'page' : undefined}><MessageCircle/><span>论坛</span></Link>
+    <Link data-section="forum" href="/forum" onTouchStart={()=>loadForum()} onFocus={()=>loadForum()} aria-current={pathname.startsWith('/forum') ? 'page' : undefined}><MessageCircle/><span>论坛</span></Link>
     <MobileWriterLaunch/>
   </nav>;
 }

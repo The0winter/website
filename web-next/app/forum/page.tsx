@@ -54,15 +54,19 @@ export default function ForumPage() {
   const [activeTab, setActiveTab] = useState<FeedTab>('recommend');
   
   const {user, loading: authLoading} = useAuth();
-  const {posts: postsCache, loading: loadingState} = useSyncExternalStore(subscribeForum, getForumSnapshot, serverForumSnapshot);
+  const {posts: postsCache, loading: loadingState, errors} = useSyncExternalStore(subscribeForum, getForumSnapshot, serverForumSnapshot);
 
   // ====== 滑动轮播专属状态 ======
   const activeIndex = TABS.findIndex(t => t.id === activeTab);
   // Gesture decisions must be synchronous: a quick release can arrive before
   // React renders the direction/offset updates from the last touchmove.
   const gesture = useRef<{id: number; x: number; y: number; dx: number; direction: 'h' | 'v' | null; index: number} | null>(null);
-  const [dragOffset, setDragOffset] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
+  const track = useRef<HTMLDivElement>(null);
+  const moveTrack = (offset: number, dragging: boolean) => {
+    if (!track.current) return;
+    track.current.style.setProperty('--forum-drag', `${offset}px`);
+    track.current.toggleAttribute('data-dragging', dragging);
+  };
   const suppressSwipeClick = useRef(false);
   const feed = useRef<HTMLDivElement>(null);
   const horizontalSwipe = useRef(false);
@@ -75,7 +79,7 @@ export default function ForumPage() {
     return () => host?.removeEventListener('touchmove', move);
   }, []);
 
-  useEffect(() => {if (!authLoading) loadForum();}, [authLoading, user?.id]);
+  useEffect(() => {if (!authLoading) loadForum(activeTab);}, [authLoading, user?.id, activeTab]);
 
   // ====== 移动端滑动事件处理 ======
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -84,8 +88,6 @@ export default function ForumPage() {
     if (e.touches.length !== 1 || (e.target as Element).closest('button, input, select, textarea, [contenteditable], .mh-bottom, .mh-topbar, .forum-publish, dialog')) return;
     const touch = e.touches[0];
     gesture.current = {id: touch.identifier, x: touch.clientX, y: touch.clientY, dx: 0, direction: null, index: activeIndex};
-    setIsDragging(true);
-    setDragOffset(0);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -120,7 +122,7 @@ export default function ForumPage() {
         newOffset = diffX * 0.3;
       }
       if (diffX <= 0 && sectionDrag.current) {sectionDrag.current.cancel(); sectionDrag.current = undefined;}
-      setDragOffset(newOffset);
+      moveTrack(newOffset, true);
     }
   };
 
@@ -129,8 +131,7 @@ export default function ForumPage() {
     sectionDrag.current = undefined;
     gesture.current = null;
     horizontalSwipe.current = false;
-    setIsDragging(false);
-    setDragOffset(0);
+    moveTrack(0, false);
     drag?.release(false);
   };
 
@@ -144,8 +145,7 @@ export default function ForumPage() {
     sectionDrag.current = undefined;
     gesture.current = null;
     horizontalSwipe.current = false;
-    setIsDragging(false);
-    setDragOffset(0);
+    moveTrack(0, false);
 
     const threshold = sectionSwipeThreshold(window.innerWidth);
     if (drag) {
@@ -263,23 +263,19 @@ return (
       {/* 移动端内容连续铺满页面；桌面端保留双栏卡片布局。 */}
       <div className="max-w-[1040px] mx-auto px-0 md:px-4 mt-0 md:mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px] gap-5 md:gap-6">
         
-        {/* ================= 移动端独享：跟手轮播容器 ================= */}
-        <div className="forum-mobile-feed md:hidden w-full relative overflow-hidden" style={{ touchAction: 'pan-y pinch-zoom' }}>
+        {/* A single feed tree: mobile slides between panels; desktop shows the selected panel. */}
+        <div className="forum-mobile-feed w-full relative overflow-hidden" style={{ touchAction: 'pan-y pinch-zoom' }}>
           <div 
-            className={`flex w-full ${isDragging ? '' : 'transition-transform duration-300 ease-out'}`}
-            style={{ transform: `translateX(calc(-${activeIndex * 100}% + ${dragOffset}px))` }}
+            ref={track} className="forum-feed-track"
+            style={{ transform: `translateX(calc(-${activeIndex * 100}% + var(--forum-drag, 0px)))` }}
           >
             {TABS.map(tab => (
-              <div key={tab.id} className="w-full shrink-0" inert={tab.id!==activeTab} aria-hidden={tab.id!==activeTab}>
-                {tab.id === 'hot' ? renderHotList(tab.id) : <ForumPostList posts={postsCache[tab.id]} loading={loadingState[tab.id]}/>}
+              <div key={tab.id} className="forum-feed-panel w-full shrink-0" inert={tab.id!==activeTab} aria-hidden={tab.id!==activeTab}>
+                {errors[tab.id] && <div className="forum-feed-error" role="status">{errors[tab.id]}<button onClick={()=>loadForum(tab.id)}>重新加载</button></div>}
+                {(tab.id === activeTab || postsCache[tab.id]) && (!errors[tab.id] || postsCache[tab.id]) && (tab.id === 'hot' ? renderHotList(tab.id) : <ForumPostList posts={postsCache[tab.id]} loading={loadingState[tab.id]}/>)}
               </div>
             ))}
           </div>
-        </div>
-
-{/* ================= PC端独享：传统单页直出，不参与任何滑动逻辑 ================= */}
-        <div className="hidden md:block w-full">
-          {activeTab === 'hot' ? renderHotList(activeTab) : <ForumPostList posts={postsCache[activeTab]} loading={loadingState[activeTab]}/>}
         </div>
 
         <aside className="hidden md:flex flex-col gap-6">

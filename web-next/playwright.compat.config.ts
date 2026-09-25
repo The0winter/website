@@ -13,6 +13,7 @@ export default defineConfig({
     {name:'Edge',use:{browserName:'chromium',channel:'msedge'}},
     {name:'UC-contract',use:{browserName:'chromium',channel:'chrome',userAgent:'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120.0.0.0 UCBrowser/17.0.0.0 Mobile Safari/537.36'}},
     {name:'QQ-contract',use:{browserName:'chromium',channel:'chrome',userAgent:'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120.0.0.0 MQQBrowser/19.0 Mobile Safari/537.36'}},
+    {name:'Quark-contract',use:{browserName:'chromium',channel:'chrome',userAgent:'Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/150.0.0.0 Mobile Safari/537.36 Quark/8.0'}},
     {name:'Android-fallback',use:{browserName:'chromium',channel:'chrome',userAgent:'Mozilla/5.0 (Linux; Android 8.0) AppleWebKit/537.36 Version/4.0 Mobile Safari/537.36'}},
   ],
 });

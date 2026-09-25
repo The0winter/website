@@ -3,6 +3,7 @@
 import {sectionSwipeThreshold, SECTION_TURN_DURATION, SECTION_TURN_EASING} from './section-swipe';
 import {captureMobileSection, captureMobileSectionShell} from './mobile-section-snapshot';
 import {mobileHomeScroll, rememberMobileHomeScroll} from './mobile-home-position';
+import {animateElement, type BrowserAnimation} from './browser-animation';
 
 type Section = 'library' | 'home' | 'forum';
 export type MobileSectionDrag = {update: (dx: number) => void; release: (commit: boolean) => void; cancel: () => void};
@@ -54,7 +55,7 @@ function createTransition(href: string, dragging = false, sourceHref = location.
   const direction = to > from ? 1 : -1;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const key = `${previewUser}:${width}:${top}:${root.className}:${getComputedStyle(root).getPropertyValue('--home-background')}`;
-  const animations: Animation[] = [];
+  const animations: BrowserAnimation[] = [];
   let frame = 0, cancelled = false, committed = false, returning = false, motionDone = false, offset = 0;
   rememberMobileHomeScroll();
   const sourceScroll = previous && from === 1 ? mobileHomeScroll() : scrollY;
@@ -148,7 +149,10 @@ function createTransition(href: string, dragging = false, sourceHref = location.
   };
   const observer = new MutationObserver(check);
   const animate = (element: HTMLElement, x: number, destination: number, duration: number) => {
-    animations.push(element.animate([{transform: `translate3d(${reduced ? 0 : x}px,0,0)`}, {transform: `translate3d(${reduced ? 0 : destination}px,0,0)`}],
+    // Preserve the destination when animation is unavailable or the watchdog
+    // has to cancel a stalled effect.
+    position(element, destination);
+    animations.push(animateElement(element, [{transform: `translate3d(${reduced ? 0 : x}px,0,0)`}, {transform: `translate3d(${reduced ? 0 : destination}px,0,0)`}],
       {duration, easing: SECTION_TURN_EASING, fill: 'forwards'}));
   };
   const commit = () => {

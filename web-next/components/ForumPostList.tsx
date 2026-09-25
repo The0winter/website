@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import {memo} from 'react';
 import {ThumbsUp, MessageCircle} from 'lucide-react';
 import type {ForumPost} from '@/lib/api';
 
@@ -18,7 +19,7 @@ function formatCount(value: number) {
   return String(value);
 }
 
-export default function ForumPostList({posts: tabPosts = [], loading: isTabLoading}: {posts?: ForumPost[]; loading: boolean}) {
+function ForumPostList({posts: tabPosts = [], loading: isTabLoading}: {posts?: ForumPost[]; loading: boolean}) {
 
     return (
       <div className={`overflow-hidden md:rounded-2xl md:border ${currentTheme.border} ${currentTheme.card} w-full min-h-[50vh]`}>
@@ -58,7 +59,7 @@ export default function ForumPostList({posts: tabPosts = [], loading: isTabLoadi
               <div className="mt-3 flex items-center gap-2">
                 <div className={`w-7 h-7 rounded-full overflow-hidden flex items-center justify-center bg-[var(--home-soft)]`}>
                   {topReply?.author?.avatar ? (
-                    <img src={topReply.author.avatar} alt="avatar" className="w-full h-full object-cover" />
+                    <img src={topReply.author.avatar} alt="avatar" loading="lazy" decoding="async" width={28} height={28} className="w-full h-full object-cover" />
                   ) : (
                     <span className={`text-[11px] font-semibold ${currentTheme.textSub}`}>
                       {authorName.slice(0, 1)}
@@ -94,3 +95,4 @@ export default function ForumPostList({posts: tabPosts = [], loading: isTabLoadi
       </div>
     );
   }
+export default memo(ForumPostList);

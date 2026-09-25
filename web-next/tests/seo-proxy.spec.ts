@@ -40,3 +40,16 @@ test('malformed IDs are 404; SPA navigation and compose page need no extra looku
   expect((await proxy(new NextRequest('https://jiutianxiaoshuo.com/forum/create'))).headers.get('x-middleware-next')).toBe('1');
   expect((await proxy(new NextRequest(`https://jiutianxiaoshuo.com/book/${book}`))).status).toBe(503);
 });
+
+test('answer documents validate the selected reply against its parent question',async()=>{
+  let exists=false;
+  globalThis.fetch=async input=>{
+    expect(String(input)).toBe(`http://127.0.0.1:5000/api/forum/posts/${book}/replies?target=${chapter}`);
+    return Response.json(exists?[{id:chapter}]:[]);
+  };
+  const url=`https://jiutianxiaoshuo.com/forum/${chapter}?fromQuestion=${book}`;
+  expect((await proxy(new NextRequest(url))).status).toBe(404);
+  exists=true;
+  expect((await proxy(new NextRequest(url))).headers.get('x-middleware-next')).toBe('1');
+  for(const query of ['invalid',`${book}&fromQuestion=${book}`])expect((await proxy(new NextRequest(`https://jiutianxiaoshuo.com/forum/${chapter}?fromQuestion=${query}`))).status).toBe(404);
+});

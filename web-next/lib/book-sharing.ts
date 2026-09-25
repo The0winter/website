@@ -30,7 +30,7 @@ export function webShareData(data: BookShareData, linkOnly = false): ShareData |
 
 function ucPlatform() {
   const ua = navigator.userAgent;
-  if (!/UCBrowser\//i.test(ua) || embeddedBrowser(ua)) return null;
+  if (!/UCBrowser\//i.test(ua) || /Quark\//i.test(ua) || embeddedBrowser(ua)) return null;
   if (/Android/i.test(ua)) return 'android';
   if (/iPhone|iPad|iPod/i.test(ua) || /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1) return 'ios';
   return null;
@@ -59,6 +59,7 @@ export function shareWithUC(data: {title: string; url: string}) {
 export function browserShareHint() {
   const ua = navigator.userAgent;
   if (embeddedBrowser(ua)) return '也可打开当前应用菜单，选择“分享”';
+  if (/Quark\//i.test(ua)) return '也可打开夸克浏览器菜单，选择“分享”';
   if (/UCBrowser\//i.test(ua)) return '也可打开 UC 浏览器菜单，选择“分享”';
   if (/MiuiBrowser\//i.test(ua)) return '也可打开小米浏览器菜单，选择“分享”';
   if (/MQQBrowser\//i.test(ua)) return '也可打开 QQ 浏览器菜单，选择“分享”';

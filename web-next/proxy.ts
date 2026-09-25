@@ -19,11 +19,18 @@ export async function proxy(request: NextRequest) {
   if (!match) return NextResponse.next();
   const [, kind, question, id, chapter] = match;
   if (!/^[a-f0-9]{24}$/i.test(id) || (chapter && !/^[a-f0-9]{24}$/i.test(chapter)) || (question && kind !== 'forum') || (chapter && kind !== 'book')) return unavailable(404);
-  const endpoint = kind === 'book' ? chapter ? `/books/${id}/catalog?anchor=${chapter}&limit=1` : `/books/${id}` : kind === 'author' ? `/authors/${id}` : `/forum/posts/${id}`;
+  const parent = kind === 'forum' && !question ? request.nextUrl.searchParams.get('fromQuestion') : null;
+  const answerParent = parent && parent !== 'undefined' ? parent : null;
+  if (answerParent && (!/^[a-f0-9]{24}$/i.test(answerParent) || request.nextUrl.searchParams.getAll('fromQuestion').length !== 1)) return unavailable(404);
+  const endpoint = kind === 'book' ? chapter ? `/books/${id}/catalog?anchor=${chapter}&limit=1` : `/books/${id}` : kind === 'author' ? `/authors/${id}` : answerParent ? `/forum/posts/${answerParent}/replies?target=${id}` : `/forum/posts/${id}`;
   try {
     const response = await safeFetch(getApiBaseUrl() + endpoint, {cache: 'no-store'});
     if (response.status === 404) return unavailable(404);
     if (!response.ok) return unavailable(503);
+    if (answerParent) {
+      const replies = await response.json();
+      if (!Array.isArray(replies) || !replies.some((reply: {id: string}) => reply.id?.toLowerCase() === id.toLowerCase())) return unavailable(404);
+    }
     if (chapter) {
       const catalog = await response.json();
       if (catalog.activeIndex === null || !catalog.rows?.some((row: {id: string}) => row.id.toLowerCase() === chapter.toLowerCase())) return unavailable(404);

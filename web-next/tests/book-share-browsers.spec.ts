@@ -10,6 +10,8 @@ const browsers = [
   {name:'Safari',ua:ios,hint:'Safari 工具栏或菜单'},
   {name:'小米',ua:`${android} XiaoMi/MiuiBrowser/20.0`,hint:'小米浏览器菜单'},
   {name:'UC',ua:`${android} UCBrowser/18.0`,hint:'UC 浏览器菜单'},
+  {name:'夸克安卓',ua:`${android} Quark/8.0`,hint:'夸克浏览器菜单'},
+  {name:'夸克苹果',ua:`${ios} Quark/8.0`,hint:'夸克浏览器菜单'},
   {name:'Chrome',ua:android,hint:'Chrome 菜单'},
   {name:'Edge',ua:`${android} EdgA/150.0`,hint:'Edge 菜单'},
 ];
@@ -66,6 +68,19 @@ for (const browser of browsers) {
     expect(await page.evaluate(() => (window as TestWindow).browserCalls.copied[0])).toContain(detail);
   });
 }
+
+test('Quark with UC tokens never assumes a UC bridge is supported',async({page})=>{
+  await page.addInitScript(ua=>{
+    Object.defineProperty(navigator,'userAgent',{value:ua});
+    Object.defineProperty(navigator,'share',{value:undefined});
+    Object.assign(window,{ucweb:{startRequest:(...args:unknown[])=>{(window as TestWindow).browserCalls.bridges.push(args);}}});
+  },`${android} UCBrowser/18.0 Quark/8.0`);
+  await page.goto(detail);await page.getByRole('button',{name:'分享书籍'}).tap();
+  await expect(page.locator('.book-share-apps small')).toContainText('夸克浏览器菜单');
+  await page.getByRole('button',{name:'复制后分享'}).tap();
+  expect(await page.evaluate(()=>(window as TestWindow).browserCalls.bridges)).toEqual([]);
+  expect(await page.evaluate(()=>(window as TestWindow).browserCalls.copied[0])).toContain(detail);
+});
 
 for (const method of ['android','ios-modern','ios-legacy']) test(`UC ${method}: browser bridge opens a chooser with this book`, async ({page}) => {
   await page.addInitScript(({ua,method}) => {
