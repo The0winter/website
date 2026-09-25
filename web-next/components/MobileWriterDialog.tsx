@@ -144,8 +144,10 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
       element.removeEventListener('close', nativeClose);
       unlockScroll();
       if (element.open) element.close();
-      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
-      else document.querySelector<HTMLButtonElement>('.mobile-home .mh-create')?.focus({preventScroll: true});
+      // A restored, lazily loaded dialog can mount while focus is still on the
+      // document body. Return to its visible launcher in that case.
+      if (previousFocus?.isConnected && previousFocus !== document.body && previousFocus !== document.documentElement && !element.contains(previousFocus)) previousFocus.focus({ preventScroll: true });
+      else Array.from(document.querySelectorAll<HTMLButtonElement>('.mh-create')).find(button => button.getClientRects().length > 0)?.focus({preventScroll: true});
     };
   }, [finishOpening]);
 

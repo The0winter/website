@@ -2,7 +2,14 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { PenTool } from 'lucide-react';
-import WriterDialog from './MobileWriterDialog';
+import dynamic from 'next/dynamic';
+
+// The editor and its styles are only needed after opening the creation center.
+// Keeping them out of the root bundle reduces every page's first download.
+const WriterDialog = dynamic(() => import('./MobileWriterDialog'), {
+  ssr: false,
+  loading: () => <div role="status" className="fixed bottom-24 right-4 z-[100] rounded-xl bg-white px-4 py-3 text-sm text-gray-700 shadow-lg dark:bg-gray-900 dark:text-gray-200">正在打开创作中心…</div>,
+});
 
 const WriterContext = createContext({open: false, launch: () => {}});
 

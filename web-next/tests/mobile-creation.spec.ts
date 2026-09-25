@@ -141,6 +141,7 @@ test('opening uses a radial reveal and Back/Forward, Escape and focus restore co
     document.addEventListener('animationstart', capture);
   });
   await launch(page).click(); await expect(modal(page)).toBeVisible();
+  await expect.poll(() => page.evaluate(() => Boolean((window as Window & {writerRevealFrame?: unknown}).writerRevealFrame))).toBe(true);
   const reveal = await page.evaluate(() => (window as Window & { writerRevealFrame?: { transform: string; clip: string; width: number } }).writerRevealFrame!);
   expect(reveal.transform).toMatch(/^matrix\(/); expect(reveal.clip).toBe('none');
   expect(reveal.width).toBeLessThan(Math.hypot(390, 844));
@@ -196,6 +197,7 @@ for (const width of [320, 390]) for (const action of ['新建作品', '作品数
     await page.goto(base);
     const initialLength = await page.evaluate(() => history.length);
     await launch(page).click();
+    await expect(modal(page)).toBeVisible();
     const marker = await page.evaluate(() => history.state.mobileWriter);
     await modal(page).getByRole('link', { name: new RegExp(action) }).click();
     await expect(page.getByRole('dialog', { name: action, exact: true })).toBeVisible();
