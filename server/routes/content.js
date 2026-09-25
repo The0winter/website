@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import {readChapterBody,chapterResponse} from '../services/chapter-storage.js';
 import Book from '../models/Book.js';
+import {ensureBookStatistics} from '../services/initial-book-statistics.js';
 import Chapter from '../models/Chapter.js';
 import Bookmark from '../models/Bookmark.js';
 import {recordBookMilestones} from '../services/book-milestones.js';
@@ -51,6 +52,7 @@ export function contentRoutes(app,auth) {
         if(!asset)fail(400,'封面必须来自本人上传');
       }
       [book]=await Book.create([{...req.body,author:req.account.username,author_id:req.user.id}],{session});
+      await ensureBookStatistics(book,{session});
       await Operation.updateOne({_id:operationId},{$set:{hash,resultId:book._id,expiresAt:new Date(Date.now()+7*86400000)}},{session,upsert:true});
     });
     res.status(201).json(jsonDoc(book));
@@ -67,6 +69,7 @@ export function contentRoutes(app,auth) {
         if(!asset)fail(400,'封面必须来自本人上传');
       }
       Object.assign(book,req.body);result=await book.save({session});
+      await ensureBookStatistics(result,{session});
       if(previousCover!==book.cover_image)retiredCover=await retireUnreferencedCover(previousCover,session);
     });
     const coverCleanup=await finishCoverRetirement(retiredCover,{storage:app.locals.coverStorage});
@@ -78,7 +81,7 @@ export function contentRoutes(app,auth) {
   }));
   app.post('/api/books/:id/restore',auth.authenticate,asyncRoute(async(req,res)=>{
     if(req.user.role!=='admin')fail(403,'需要管理员');
-    await mongoose.connection.transaction(async session=>{const book=await lockBook(req.params.id,req.user,session,{includeDeleted:true});book.deletedAt=null;await book.save({session});});
+    await mongoose.connection.transaction(async session=>{const book=await lockBook(req.params.id,req.user,session,{includeDeleted:true});book.deletedAt=null;await book.save({session});await ensureBookStatistics(book,{session});});
     res.json({success:true});
   }));
   app.post('/api/chapters',auth.authenticate,asyncRoute(async(req,res)=>{

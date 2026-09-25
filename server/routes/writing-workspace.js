@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Book from '../models/Book.js';
+import {ensureBookStatistics} from '../services/initial-book-statistics.js';
 import Chapter from '../models/Chapter.js';
 import ChapterDraft from '../models/ChapterDraft.js';
 import Manuscript from '../models/Manuscript.js';
@@ -184,6 +185,7 @@ export function writingWorkspaceRoutes(app, auth) {
         manuscript.revision++; manuscript.savedHash = undefined;
         await manuscript.save({session});
       } else book = await lockBook(book._id, req.user, session);
+      await ensureBookStatistics(book,{session});
       let chapter;
       if (body.targetChapterId) {
         chapter = await Chapter.findOne({_id: body.targetChapterId, bookId: book._id, deletedAt: null}).session(session);

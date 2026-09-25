@@ -6,6 +6,8 @@ const bookSchema = new mongoose.Schema({
     runId: {type: String, required: true},
     source: String,
     qidianRank: Number,
+    baselineProfile: {type:String, enum:['middle','upper-middle']},
+    baselinePolicyVersion: Number,
     views: {type: Number, min: 0, required: true},
     favorites: {type: Number, min: 0, required: true},
     rating: {type: Number, min: 0, max: 5, required: true},

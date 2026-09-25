@@ -116,9 +116,9 @@ test('keyboard focus stays in the panel and reduced motion is respected', async 
   await page.keyboard.press('Escape');await expect(page.getByRole('button', {name:'分享书籍'})).toBeFocused();
 });
 
-test('rating count excludes baseline samples and sharing does not overlap search', async ({page}) => {
+test('rating count includes every score in the average and sharing does not overlap search', async ({page}) => {
   await page.route('**/api/books/*/reviews?*', route => route.fulfill({json:[],headers:{'X-Total-Count':'2','X-Book-Rating':'4.3','X-Rating-Summary':JSON.stringify({readerCount:12,baselineCount:500})}}));
-  await page.goto(detail);await expect(page.locator('.book-mobile-stats dt').last()).toHaveText('12人评分');
+  await page.goto(detail);await expect(page.locator('.book-mobile-stats dt').last()).toHaveText('512份评分');
   await page.getByRole('button', {name:'搜索书籍'}).click();
   await expect(page.locator('.book-detail-search input')).toBeFocused();
   await page.getByRole('button', {name:'分享书籍'}).click();

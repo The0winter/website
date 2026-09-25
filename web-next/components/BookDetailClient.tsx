@@ -69,7 +69,7 @@ interface Book {
   rating?: number;       
   numReviews?: number;   
   numRatings?: number;
-  ratingSummary?: {readerCount: number; baselineCount: number};
+  ratingSummary?: {count?: number; readerCount: number; baselineCount: number};
   statisticsSeed?: {rating: number; ratingWeight: number; ratingSample?: {votes: number[]}};
   lastUpdated?: string; 
   views?: number;
@@ -370,6 +370,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   const displayRating = formatRating(book.rating);
   const baselineRatingCount = book.ratingSummary?.baselineCount ?? book.statisticsSeed?.ratingSample?.votes.length ?? book.statisticsSeed?.ratingWeight ?? 0;
   const readerRatingCount = book.ratingSummary?.readerCount ?? book.numRatings ?? 0;
+  const ratingCount = book.ratingSummary?.count ?? baselineRatingCount + readerRatingCount;
   const ratingOrigin = baselineRatingCount ? '基础评分为初始化样本，不代表真实读者；书友评分按实际提交人数计算。' : '评分来自读者实际提交，每人每书计一次。';
   const compactCount = new Intl.NumberFormat('zh-CN', {notation: 'compact', maximumFractionDigits: 1});
   const mobileWordCount = totalWords === null ? null : Math.floor(totalWords >= 10000 ? totalWords / 10000 : totalWords);
@@ -468,7 +469,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
               {/* 电脑端评分栏 */}
               <div className="hidden md:block w-[280px] border-l border-gray-100 pl-6 pt-2">
                  <div className="flex items-end space-x-2 mb-2">
-                    <span className="text-gray-500 text-xs">{baselineRatingCount ? '综合评分' : '书友评分'}</span>
+                    <span className="text-gray-500 text-xs" title={ratingOrigin}>{ratingCount.toLocaleString('zh-CN')}份评分</span>
                  </div>
                  <div className="book-desktop-rating flex items-center gap-2 mb-2" aria-label={`${baselineRatingCount ? '综合评分' : '书友评分'}：${ratingLabel(book.rating)}`}>
                     <Star className="w-6 h-6 fill-yellow-400 text-yellow-400 shrink-0" aria-hidden="true" />
@@ -496,7 +497,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                     <dd className="book-stat-count"><span className="book-stat-value">{viewCount}</span>{viewUnit && <small>{viewUnit}</small>}</dd>
                   </div>
                   <div>
-                    <dt>{readerRatingCount.toLocaleString('zh-CN')}人评分</dt>
+                    <dt title={ratingOrigin}>{ratingCount.toLocaleString('zh-CN')}份评分</dt>
                     <dd className="book-mobile-rating" data-rated={displayRating !== '暂无评分'} title={ratingOrigin} aria-label={`${baselineRatingCount ? '综合评分' : '书友评分'}：${ratingLabel(book.rating)}`}>
                       <Star size={15} aria-hidden="true" />
                       <strong className="book-stat-value">{displayRating}</strong>

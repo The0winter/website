@@ -1,4 +1,5 @@
 import Author from '../models/Author.js';
+import {ensureBookStatistics} from '../services/initial-book-statistics.js';
 import {importMetadata} from '../services/import-metadata.js';
 import {claimImportedCover,retireUnreferencedCover} from '../services/media-reference.js';
 import {finishCoverRetirement} from '../services/cover-retention.js';
@@ -55,6 +56,7 @@ export function importRoutes(app) {
         const profile=await Author.findOneAndUpdate({sourceKey:author.sourceKey},{$setOnInsert:author},{upsert:true,new:true,session});
         Object.assign(book,metadata,{author:profile.name,author_profile_id:profile._id});
         await book.save({session});
+        await ensureBookStatistics(book,{session});
         if(previousCover!==book.cover_image)retiredCover=await retireUnreferencedCover(previousCover,session);
       }
       let inserted=0,unchanged=0,enriched=0;

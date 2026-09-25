@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Author from '../models/Author.js';
 import Book from '../models/Book.js';
+import {ensureBookStatistics} from '../services/initial-book-statistics.js';
 import Chapter from '../models/Chapter.js';
 import {asyncRoute} from '../security.js';
 import {fail, validateChapter, lockBook} from '../services/content.js';
@@ -72,6 +73,7 @@ export function libraryImportRoutes(app) {
       const profile = await Author.findOneAndUpdate({sourceKey: author.sourceKey}, {$setOnInsert: author}, {upsert: true, new: true, session});
       Object.assign(book, metadata, {author: profile.name, author_profile_id: profile._id});
       await book.save({session});
+      await ensureBookStatistics(book,{session});
       const inserts = current.missing.map(chapter => {
         const preparedChapter = bodies.get(chapter.chapter_number);
         if (!preparedChapter) fail(409, '核对期间网站章节发生变化，请重新上传');

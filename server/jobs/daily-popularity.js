@@ -16,7 +16,8 @@ export function dailyPopularityViews(book, day) {
   if (!validDay(day)) throw Error('Invalid popularity day');
   const rank = book.statisticsSeed?.qidianRank;
   const ranked = Number.isInteger(rank) && rank >= 1 && rank <= 500;
-  const base = ranked ? 1 - ((rank - 1) / 499) ** 0.38 : 0.58 + random(book, 'unranked', 'base') * 0.16;
+  const floor = book.statisticsSeed?.baselineProfile === 'middle' ? 0.42 : 0.58;
+  const base = ranked ? 1 - ((rank - 1) / 499) ** 0.38 : floor + random(book, 'unranked', 'base') * 0.16;
   // The previous initialization varied by only a few percent. A daily draw
   // now contributes 30% of the range, while overall rank remains the main weight.
   const heat = ranked ? base * 0.70 + random(book, day, 'views') * 0.30

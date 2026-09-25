@@ -75,6 +75,7 @@ test('chapter workspace preserves cloud drafts, ownership, quota and publication
       assert.equal(await Book.countDocuments(), 1); assert.equal(await Chapter.countDocuments(), 1);
       assert.equal(await WriterPublication.countDocuments(), 1);
       const book = await Book.findById(bookId); assert.equal(book.title, '山海来信'); assert.equal(book.visibility, 'public');
+      assert.equal(book.statisticsSeed.baselineProfile, 'middle'); assert(book.views > 0 && book.statisticsSeed.favorites > 0 && book.statisticsSeed.ratingSample.votes.length > 0);
       const updated = await owner(`/api/writer/workspace/b_${bookId}`);
       assert.equal(updated.data.work.reference, `m_${key}`);
       assert.deepEqual(updated.data.cloudDrafts.map(row => row.id), ['manuscript-0']);
