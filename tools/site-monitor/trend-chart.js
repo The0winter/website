@@ -35,16 +35,16 @@ export function mountTrend(root,points,series,key) {
     const max=Math.max(4,Math.ceil(Math.max(0,...data.flatMap(p=>series.map(s=>valid(p[s.key])?p[s.key]:0)))/4)*4);
     const y=v=>top+(1-v/max)*(height-top-bottom);
     let markup=`<svg class="trend-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="用户变化趋势" tabindex="0" data-control="plot"><title>用户变化趋势。左右方向键查看读数，加减键缩放。</title>`;
-    for(let i=0;i<=4;i++){const value=max*i/4;markup+=`<line x1="${left}" y1="${y(value)}" x2="${width-right}" y2="${y(value)}" stroke="#e3ebe7" stroke-dasharray="3 5"/><text x="${left-8}" y="${y(value)+4}" text-anchor="end">${number(value)}</text>`;}
+    for(let i=0;i<=4;i++){const value=max*i/4;markup+=`<line x1="${left}" y1="${y(value)}" x2="${width-right}" y2="${y(value)}" stroke="var(--line)" stroke-dasharray="3 5"/><text x="${left-8}" y="${y(value)+4}" text-anchor="end">${number(value)}</text>`;}
     for(const s of series){let gap=true,path='';for(const [i,p]of data.entries()){if(!valid(p[s.key])){gap=true;continue;}path+=`${gap||p.partial?'M':'L'}${x(i)},${y(p[s.key])} `;gap=false;}
       markup+=`<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round"/>`;
       for(const [i,p]of data.entries())if(valid(p[s.key])){
         if(p.partial&&i>0&&valid(data[i-1][s.key]))markup+=`<path d="M${x(i-1)},${y(data[i-1][s.key])} L${x(i)},${y(p[s.key])}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-dasharray="5 4"/>`;
-        markup+=`<circle cx="${x(i)}" cy="${y(p[s.key])}" r="${p.partial?4:data.length>35?2:3}" fill="${p.partial?'#fff':s.color}" ${p.partial?`stroke="${s.color}" stroke-width="2" data-partial="true"`:''}/>`;
+        markup+=`<circle cx="${x(i)}" cy="${y(p[s.key])}" r="${p.partial?4:data.length>35?2:3}" fill="${p.partial?'var(--surface)':s.color}" ${p.partial?`stroke="${s.color}" stroke-width="2" data-partial="true"`:''}/>`;
       }
     }
     for(const i of [...new Set([0,Math.floor((data.length-1)/2),data.length-1])])markup+=`<text x="${x(i)}" y="${height-6}" text-anchor="${i===0?'start':i===data.length-1?'end':'middle'}">${escape(data[i].partial?'今日':key.includes('month')?data[i].date.slice(0,7):data[i].date.slice(5))}</text>`;
-    markup+=`<line class="trend-cursor" hidden x1="0" x2="0" y1="${top}" y2="${height-bottom}" stroke="#6e897c" stroke-dasharray="4 3"/></svg>`;
+    markup+=`<line class="trend-cursor" hidden x1="0" x2="0" y1="${top}" y2="${height-bottom}" stroke="var(--muted)" stroke-dasharray="4 3"/></svg>`;
     root.dataset.visiblePoints=String(view.count);root.dataset.totalPoints=String(points.length);
     root.innerHTML=`<div class="legend">${series.map(s=>`<span><i style="background:${s.color}"></i>${escape(s.label)}</span>`).join('')}<span>单位：人</span></div><div class="trend-plot">${markup}<div class="trend-tooltip" role="status" hidden></div></div>
       <div class="trend-controls"><span class="trend-range">${escape(data[0].date)} — ${escape(data.at(-1).endDate||data.at(-1).date)}</span><div class="actions"><button class="btn small" data-control="out" aria-label="缩小趋势图" ${view.count===points.length?'disabled':''}>−</button><button class="btn small" data-control="in" aria-label="放大趋势图" ${view.count===min?'disabled':''}>＋</button><button class="btn small" data-control="reset" ${view.count===points.length?'disabled':''}>显示全部</button></div></div>
