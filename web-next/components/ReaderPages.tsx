@@ -9,6 +9,7 @@ import {cachedReaderCounts,loadReaderCounts,rememberReaderCounts} from '@/lib/re
 import {fillReaderPreview,fitReaderColumnHeight,readerChapterTitle,readerColumnLayout} from '@/lib/reader-layout';
 import {useStoredState} from '@/lib/useStoredState';
 import {readerPaperPosition} from '@/lib/reader-paper';
+import {observeReaderSize} from '@/lib/reader-viewport';
 import {readerFullscreenPending, serverFullscreenSnapshot, subscribeReaderFullscreen} from '@/lib/reader-fullscreen';
 import {useAuth} from '@/contexts/AuthContext';
 import type {Book,Chapter} from '@/lib/api';
@@ -144,9 +145,9 @@ export default function ReaderPages(props:ReaderPageProps) {
       setLayout(old=>old.width===width && old.height===height && old.total===total?old:{width,height,total});setPage(next);
     };
     const schedule=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(measure);};
-    measure();const observer=new ResizeObserver(schedule);observer.observe(viewport);
-    void document.fonts.ready.then(schedule);
-    return()=>{active=false;observer.disconnect();cancelAnimationFrame(frame);};
+    measure();const stopObserving=observeReaderSize(viewport,schedule);
+    void document.fonts?.ready.then(schedule);
+    return()=>{active=false;stopObserving();cancelAnimationFrame(frame);};
   },[paragraphs,counts,fontFamily,fontSize,lineHeight,paragraphGap,saveKey,scrolling,turnMode,chapter.id,cancelTurn,columns,textWindow,hydrated,fullscreenPending]);
 
   useEffect(()=>{

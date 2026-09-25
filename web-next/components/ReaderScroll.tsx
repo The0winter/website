@@ -1,4 +1,5 @@
 'use client';
+import {observeReaderSize} from '@/lib/reader-viewport';
 
 import {memo,useCallback,useEffect,useEffectEvent,useLayoutEffect,useMemo,useRef,useState,type CSSProperties} from 'react';
 import {Highlighter,MessageCircle} from 'lucide-react';
@@ -150,8 +151,8 @@ export default function ReaderScroll(props:ReaderPageProps){
   useLayoutEffect(()=>{
     const view=viewport.current;if(!view)return;
     // Keep this observer attached across chapter changes so it cannot interrupt momentum.
-    const observer=new ResizeObserver(()=>resize());observer.observe(view);
-    return()=>observer.disconnect();
+    const stopObserving=observeReaderSize(view,resize);
+    return()=>stopObserving();
   },[]);
   // A cached chapter window can remount before restoration. Its initial zero
   // must not overwrite the saved position while adjacent chapters are attached.

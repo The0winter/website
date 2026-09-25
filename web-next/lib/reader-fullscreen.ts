@@ -1,4 +1,6 @@
 import {freezeBookPage} from './book-transition';
+import {animateElement} from './browser-animation';
+import {exitFullscreen, fullscreenElement, fullscreenSupported, listenFullscreenChange, requestFullscreen} from './browser-fullscreen';
 
 const listeners = new Set<() => void>();
 let owned = false;
@@ -6,8 +8,8 @@ let readers = 0;
 let pending: Promise<void> | null = null;
 let releaseViewport: (() => void) | null = null;
 const notify = () => listeners.forEach(listener => listener());
-export const readerFullscreenSupported = () => Boolean(document.fullscreenEnabled && document.documentElement.requestFullscreen);
-export const readerFullscreenActive = () => document.fullscreenElement === document.documentElement;
+export const readerFullscreenSupported = fullscreenSupported;
+export const readerFullscreenActive = () => fullscreenElement() === document.documentElement;
 export const readerFullscreenPending = () => Boolean(pending);
 export const serverFullscreenSnapshot = () => false;
 export const isReaderPath = (path: string) => /^\/book\/[^/?#]+\/[^/?#]+$/.test(path);
@@ -19,8 +21,8 @@ export function readerFullscreenPreferred() {
 
 export function subscribeReaderFullscreen(listener: () => void) {
   listeners.add(listener);
-  document.addEventListener('fullscreenchange', listener);
-  return () => {listeners.delete(listener); document.removeEventListener('fullscreenchange', listener);};
+  const stop = listenFullscreenChange(listener);
+  return () => {listeners.delete(listener); stop();};
 }
 
 // Android Back exits native fullscreen without traversing page history. Bridge
@@ -36,7 +38,7 @@ export function installReaderFullscreenBack(onBack: () => void) {
     if (active) cancel();
     if (active || !wasActive || !owned) return;
     owned = false;
-    if (document.fullscreenElement || !foreground() || !matchMedia('(max-width: 1023px)').matches || !isReaderPath(location.pathname)) return;
+    if (fullscreenElement() || !foreground() || !matchMedia('(max-width: 1023px)').matches || !isReaderPath(location.pathname)) return;
     const href = location.href;
     const exit = ++generation;
     // A history traversal or backgrounding can also end fullscreen. Give those
@@ -46,7 +48,7 @@ export function installReaderFullscreenBack(onBack: () => void) {
     });
   };
   const onVisibility = () => {if (document.hidden) cancel();};
-  document.addEventListener('fullscreenchange', onChange);
+  const stop = listenFullscreenChange(onChange);
   document.addEventListener('visibilitychange', onVisibility);
   window.addEventListener('popstate', cancel, true);
   window.addEventListener('book-navigation-leave', cancel);
@@ -54,7 +56,7 @@ export function installReaderFullscreenBack(onBack: () => void) {
   window.addEventListener('blur', cancel);
   return () => {
     cancel();
-    document.removeEventListener('fullscreenchange', onChange);
+    stop();
     document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('popstate', cancel, true);
     window.removeEventListener('book-navigation-leave', cancel);
@@ -88,7 +90,7 @@ function prepareFullscreenViewport() {
   const onExit = () => {if (!readerFullscreenActive()) releaseViewport?.();};
   releaseViewport = () => {
     observer.disconnect();
-    document.removeEventListener('fullscreenchange', onExit);
+    stop();
     releaseViewport = null;
     // The reader owns its cover viewport once mounted. A pending entry can
     // already have a reader URL while still displaying the source details.
@@ -101,7 +103,7 @@ function prepareFullscreenViewport() {
       }
     }
   };
-  document.addEventListener('fullscreenchange', onExit);
+  const stop = listenFullscreenChange(onExit);
 }
 
 // Follow real viewport changes, without adding a fixed pause after the native
@@ -112,7 +114,7 @@ function settleViewport() {
     const finish = () => {cancelAnimationFrame(frame); clearTimeout(deadline); resolve();};
     const deadline = window.setTimeout(finish, 1000);
     const sample = () => {
-      const viewport = visualViewport;
+      const viewport = window.visualViewport;
       const size = `${innerWidth}/${innerHeight}/${viewport?.width}/${viewport?.height}/${viewport?.offsetTop}`;
       stableFrames = size === previous ? stableFrames + 1 : 0;
       previous = size;
@@ -131,10 +133,10 @@ export function requestReaderFullscreen(): Promise<void> {
   let native: Promise<void>;
   try {
     // Entry waits only for its paper transition, while activation is still live.
-    native = document.documentElement.requestFullscreen({navigationUI: 'hide'});
+    native = requestFullscreen();
   } catch (error) {owned = false; releaseViewport?.(); return Promise.reject(error);}
   const request = native.then(async () => {
-    if (!owned) {if (readerFullscreenActive()) await document.exitFullscreen(); return;}
+    if (!owned) {if (readerFullscreenActive()) await exitFullscreen(); return;}
     await settleViewport();
   }).catch(error => {
     owned = false;
@@ -157,7 +159,7 @@ export async function releaseReaderFullscreen() {
   releaseViewport?.();
   if (!owned) return;
   owned = false;
-  if (readerFullscreenActive()) await document.exitFullscreen().catch(() => {});
+  if (readerFullscreenActive()) await exitFullscreen().catch(() => {});
 }
 
 export function retainReaderFullscreen() {
@@ -177,7 +179,7 @@ export async function withReaderFullscreenCover(action: () => Promise<void>) {
   finally {
     if (cover) {
       if (source?.isConnected && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        await cover.animate([{opacity: 1}, {opacity: 0}], {duration: 160, easing: 'ease-out', fill: 'forwards'}).finished.catch(() => {});
+        await animateElement(cover, [{opacity: 1}, {opacity: 0}], {duration: 160, easing: 'ease-out', fill: 'forwards'}).finished.catch(() => {});
       }
       cover.remove();
     }
@@ -188,7 +190,7 @@ export async function exitReaderFullscreen() {
   const wasOwned = owned;
   // Set this before the native event, including when called from settings.
   owned = false;
-  try {await document.exitFullscreen();}
+  try {await exitFullscreen();}
   catch (error) {owned = wasOwned && readerFullscreenActive(); throw error;}
   await settleViewport();
 }

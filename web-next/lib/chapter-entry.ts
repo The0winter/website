@@ -1,3 +1,4 @@
+import {animateElement} from './browser-animation';
 import {flushSync} from 'react-dom';
 import {mobileReaderCream, readerPaperPosition} from './reader-paper';
 import {freezeBookPage} from './book-transition';
@@ -23,7 +24,7 @@ export function beginChapterEntry(href: string, title: string, position: 'start'
   const mobileDetail = innerWidth < 768 && location.pathname === href.slice(0, href.lastIndexOf('/'));
   const mobileEntry = mobileDetail || innerWidth < 768 && location.pathname === '/library';
   const catalog = mobileDetail ? document.querySelector<HTMLElement>('.book-catalog-overlay[data-open=true]') : null;
-  const motion = mobileEntry && !matchMedia('(prefers-reduced-motion: reduce)').matches ? catalog ? 'catalog' : 'enter' : 'none';
+  const motion = typeof Element.prototype.animate === 'function' && mobileEntry && !matchMedia('(prefers-reduced-motion: reduce)').matches ? catalog ? 'catalog' : 'enter' : 'none';
   // Retain only the visible catalog when it slides out; retain the source page
   // beneath an incoming loader. Both snapshots survive a cached route swap.
   const snapshot = motion === 'none' ? null : catalog
@@ -83,7 +84,7 @@ export function beginChapterEntry(href: string, title: string, position: 'start'
   };
   if (snapshot) {
     const moving = motion === 'catalog' ? snapshot : document.querySelector<HTMLElement>('.chapter-loading-page')!;
-    const animation = moving.animate(motion === 'catalog'
+    const animation = animateElement(moving, motion === 'catalog'
       ? [{transform: 'translateX(0)'}, {transform: 'translateX(calc(100vw + 24px))'}]
       : [{transform: 'translateX(100%)'}, {transform: 'translateX(0)'}],
     {duration: 400, easing: 'cubic-bezier(.22,.7,.25,1)', fill: 'forwards'});

@@ -2,6 +2,7 @@
 
 import {useCallback,useLayoutEffect,useRef} from 'react';
 import {flushSync} from 'react-dom';
+import {animateElement, type BrowserAnimation} from '@/lib/browser-animation';
 import {readerColumnGap} from '@/lib/reader-layout';
 import {readerPaperPosition} from '@/lib/reader-paper';
 
@@ -11,7 +12,7 @@ type Options={
   mode:ReaderTurnMode;
   onCommit:(page:number)=>void;
 };
-type Motion={target:number;direction:number;extent:number;axis:'X'|'Y';moving:HTMLElement;offset:number;settling:boolean;animation?:Animation;complete?:()=>void};
+type Motion={target:number;direction:number;extent:number;axis:'X'|'Y';moving:HTMLElement;offset:number;settling:boolean;animation?:BrowserAnimation;complete?:()=>void};
 
 // Only the active page is interactive. A short-lived, inert copy supplies the
 // adjacent sheet during a turn; no duplicate chapter trees remain after it.
@@ -87,7 +88,7 @@ export function useReaderPageTurn({mode,onCommit}:Options) {
     const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if(reduced || remaining<1 || !current.moving.animate){complete();return;}
     const end=current.direction>0?(commit?-current.extent:0):(commit?0:-current.extent);
-    current.animation=current.moving.animate([
+    current.animation=animateElement(current.moving,[
       {transform:current.moving.style.transform},
       {transform:`translate${current.axis}(${end}px)`},
     ],{duration:Math.max(120,Math.min(READER_TURN_DURATION_MS,READER_TURN_DURATION_MS*remaining/current.extent)),easing:'cubic-bezier(.22,.68,.22,1)',fill:'forwards'});

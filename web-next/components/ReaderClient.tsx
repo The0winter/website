@@ -4,7 +4,7 @@ import {chapterPageTitle} from '@/lib/seo';
 import {mobileReaderCream, readerPaperImage} from '@/lib/reader-paper';
  
 
-import { useEffect, useCallback, useState, useRef, useSyncExternalStore } from 'react';
+import { useLayoutEffect, useEffect, useCallback, useState, useRef, useSyncExternalStore } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import Link from './PrefetchLink';
 import { currentPrefetchPolicy, serverPrefetchPolicy, subscribePrefetchPolicy } from '@/lib/book-prefetch';
@@ -26,6 +26,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 import ReaderPages from './ReaderPages';
 import ReaderScroll from './ReaderScroll';
+import {installReaderViewport} from '@/lib/reader-viewport';
 import {useReaderFullscreen} from './useReaderFullscreen';
 import type {ReaderTurnMode} from './useReaderPageTurn';
 
@@ -80,6 +81,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const pathname=usePathname();
   //const searchParams = useSearchParams();
   const router = useRouter();
+  useLayoutEffect(installReaderViewport, []);
   const isDesktop = useIsDesktop(); 
   
   const bookId = params.id as string;

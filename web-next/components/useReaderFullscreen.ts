@@ -2,6 +2,7 @@
 
 import {useEffect, useRef, useState, useSyncExternalStore} from 'react';
 import {exitReaderFullscreen, readerFullscreenActive, readerFullscreenPending, readerFullscreenPreferenceKey, readerFullscreenPreferred, readerFullscreenSupported, requestReaderFullscreen, retainReaderFullscreen, serverFullscreenSnapshot, subscribeReaderFullscreen, withReaderFullscreenCover} from '@/lib/reader-fullscreen';
+import {listenFullscreenChange} from '@/lib/browser-fullscreen';
 import {useStoredState} from '@/lib/useStoredState';
 
 let hintDismissedForSession = false;
@@ -29,9 +30,10 @@ export function useReaderFullscreen(onEntered: () => void, entryPending: boolean
     const release = retainReaderFullscreen();
     // A reload/direct URL has no user activation. Use the first normal reading
     // tap, without swallowing it or reopening fullscreen after an explicit exit.
+    let stopChange = () => {};
     const stop = () => {
       document.removeEventListener('click', firstTap, true);
-      document.removeEventListener('fullscreenchange', stop);
+      stopChange();
     };
     const firstTap = (event: MouseEvent) => {
       const target = event.target as Element | null;
@@ -41,7 +43,7 @@ export function useReaderFullscreen(onEntered: () => void, entryPending: boolean
     };
     if (matchMedia('(max-width: 1023px)').matches && readerFullscreenSupported() && !readerFullscreenActive()) {
       document.addEventListener('click', firstTap, true);
-      document.addEventListener('fullscreenchange', stop);
+      stopChange = listenFullscreenChange(stop);
     }
     return () => {
       mounted.current = false;

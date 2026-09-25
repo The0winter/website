@@ -1,3 +1,4 @@
+import {animateElement, type BrowserAnimation} from './browser-animation';
 import {getImageProps} from 'next/image';
 
 type Direction = 'enter' | 'exit';
@@ -164,13 +165,13 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
     if (!controller.signal.aborted) root.dataset.bookTransitionPhase = 'animating';
   };
   let incoming: HTMLElement | undefined;
-  let animation: Animation | undefined;
+  let animation: BrowserAnimation | undefined;
   skip = () => { animation?.cancel(); incoming?.remove(); loading?.panel.remove(); snapshot.remove(); };
   // Only the loading page slides in. Loading and motion run together, with no
   // minimum display timer or second animation when the details are ready.
   if (loading && !reduced) {
     loading.panel.dataset.motion = 'enter';
-    animation = loading.panel.animate(
+    animation = animateElement(loading.panel,
       [{transform: 'translateX(100%)'}, {transform: 'translateX(0)'}],
       {duration: 400, easing: 'cubic-bezier(.22,.7,.25,1)', fill: 'forwards'},
     );
@@ -180,7 +181,7 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
       incoming = direction === 'enter' ? freezeBookPage() : undefined;
       const moving = incoming ?? snapshot;
       moving.dataset.motion = direction;
-      animation = moving.animate(direction === 'exit'
+      animation = animateElement(moving, direction === 'exit'
         ? [{transform: 'translateX(0)'}, {transform: 'translateX(100%)'}]
         : [{transform: 'translateX(100%)'}, {transform: 'translateX(0)'}],
       {duration, easing: 'cubic-bezier(.22,.7,.25,1)', fill: 'forwards'});

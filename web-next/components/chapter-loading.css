@@ -24,3 +24,6 @@ html:fullscreen,html:fullscreen::backdrop { background-color:var(--reader-fullsc
   .chapter-loading-page[data-fullscreen-entry=true] { transition:none; }
 }
 @media(min-width:1024px) { .chapter-loading-page { background:var(--entry-desk); } }
+
+/* Keep prefixed fullscreen on the same reading paper as the standard API. */
+html:-webkit-full-screen { background-color:var(--reader-fullscreen-paper,var(--background)); }

@@ -64,7 +64,7 @@ export function browserShareHint() {
   if (/MQQBrowser\//i.test(ua)) return '也可打开 QQ 浏览器菜单，选择“分享”';
   if (/Edg(?:A|iOS)?\//i.test(ua)) return '也可打开 Edge 菜单，选择“分享”';
   if (/Chrome\/|CriOS\//i.test(ua)) return '也可打开 Chrome 菜单，选择“分享”';
-  if (/Safari\//i.test(ua) && !/FxiOS\//i.test(ua)) return '也可使用 Safari 工具栏或菜单中的分享按钮';
+  if (/Safari\//i.test(ua) && /iPhone|iPad|iPod|Macintosh/i.test(ua) && !/Android|FxiOS\//i.test(ua)) return '也可使用 Safari 工具栏或菜单中的分享按钮';
   return '也可打开浏览器菜单，选择“分享”';
 }
 

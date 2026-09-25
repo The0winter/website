@@ -97,7 +97,7 @@ test('request rejection is recoverable and unsupported browsers explain the sett
   await choose(page, true);
   await expect(page.locator('.reader-navigation-error')).toHaveCount(0);
   await page.reload(); await ready(page);
-  await page.evaluate(() => {Object.defineProperty(document, 'fullscreenEnabled', {value: false, configurable: true}); document.dispatchEvent(new Event('fullscreenchange'));});
+  await page.evaluate(() => {Object.defineProperty(document, 'fullscreenEnabled', {value: false, configurable: true}); Object.defineProperty(document, 'webkitFullscreenEnabled', {value: false, configurable: true}); document.dispatchEvent(new Event('fullscreenchange'));});
   await openSettings(page);
   await expect(setting(page)).toContainText('当前浏览器暂不支持全屏');
   await expect(setting(page).getByRole('button', {name: '是', exact: true})).toBeDisabled();
