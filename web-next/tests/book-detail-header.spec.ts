@@ -70,14 +70,15 @@ for (const width of [320, 390, 430]) test(`detail search expands, dismisses and 
   const logo = (await actions.locator('.book-home-logo').boundingBox())!;
   const arrow = (await actions.locator('.book-home-back svg path').boundingBox())!;
   const gap = logo.x - arrow.x - arrow.width;
-  expect(gap).toBeGreaterThan(5);expect(gap).toBeLessThan(8);
+  expect(gap).toBeGreaterThan(10);expect(gap).toBeLessThan(12);
   const back = (await actions.locator('.book-home-back').boundingBox())!;
   expect(logo.x).toBeGreaterThanOrEqual(back.x + back.width);
   expect(arrow.height).toBeLessThan(logo.height);
   expect(Math.abs(arrow.y + arrow.height / 2 - logo.y - logo.height / 2)).toBeLessThan(1);
   const icon = (await toggle.locator('svg').boundingBox())!;
   expect(Math.abs(icon.y + icon.height / 2 - logo.y - logo.height / 2)).toBeLessThan(1);
-  expect(width - icon.x - icon.width).toBeLessThanOrEqual(16);
+  expect(width - icon.x - icon.width).toBeGreaterThanOrEqual(44);
+  expect(width - icon.x - icon.width).toBeLessThanOrEqual(60);
   for (const dismiss of ['outside', 'page-back', 'native-back', 'escape', 'toggle']) {
     await toggle.click();
     await expect(input).toBeFocused();

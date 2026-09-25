@@ -6,9 +6,10 @@ import Image from 'next/image';
 import {useRouter} from 'next/navigation';
 import {ChevronLeft, Search, X} from 'lucide-react';
 import BookSearch from './BookSearch';
+import BookShare from './BookShare';
 import {bookDetailReturnHref, bookSearchOpen, closeBookSearch, navigateDetailSearch, openBookSearch, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 
-export default function BookDetailNavigation({bookId}: {bookId: string}) {
+export default function BookDetailNavigation({bookId, title}: {bookId: string; title: string}) {
   const router = useRouter();
   const searchId = useId();
   const search = useRef<HTMLDivElement>(null);
@@ -63,5 +64,6 @@ export default function BookDetailNavigation({bookId}: {bookId: string}) {
         {open ? <X size={26} strokeWidth={1.4} aria-hidden="true"/> : <Search size={28} strokeWidth={1.5} aria-hidden="true"/>}
       </button>
     </div>
+    <BookShare bookId={bookId} title={title}/>
   </nav>;
 }

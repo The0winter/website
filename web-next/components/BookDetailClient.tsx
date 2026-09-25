@@ -369,6 +369,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   };
   const displayRating = formatRating(book.rating);
   const baselineRatingCount = book.ratingSummary?.baselineCount ?? book.statisticsSeed?.ratingSample?.votes.length ?? book.statisticsSeed?.ratingWeight ?? 0;
+  const readerRatingCount = book.ratingSummary?.readerCount ?? book.numRatings ?? 0;
   const ratingOrigin = baselineRatingCount ? '基础评分为初始化样本，不代表真实读者；书友评分按实际提交人数计算。' : '评分来自读者实际提交，每人每书计一次。';
   const compactCount = new Intl.NumberFormat('zh-CN', {notation: 'compact', maximumFractionDigits: 1});
   const mobileWordCount = totalWords === null ? null : Math.floor(totalWords >= 10000 ? totalWords / 10000 : totalWords);
@@ -386,7 +387,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
       {/* ⚠️ 修改2：将 space-y 替换为 flex flex-col 和 gap，以便利用 order 属性实现手机端模块换位 */}
       <div className="book-layout max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 md:py-8 flex flex-col gap-3 md:gap-6">
-        <BookDetailNavigation bookId={book.id}/>
+        <BookDetailNavigation bookId={book.id} title={book.title}/>
         
         {/* === 第一部分：书籍核心信息 === */}
         <div className="book-hero bg-white rounded-lg shadow-sm p-4 md:p-8 order-1">
@@ -495,7 +496,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                     <dd className="book-stat-count"><span className="book-stat-value">{viewCount}</span>{viewUnit && <small>{viewUnit}</small>}</dd>
                   </div>
                   <div>
-                    <dt>{baselineRatingCount ? '综合评分' : '评分'}</dt>
+                    <dt>{readerRatingCount.toLocaleString('zh-CN')}人评分</dt>
                     <dd className="book-mobile-rating" data-rated={displayRating !== '暂无评分'} title={ratingOrigin} aria-label={`${baselineRatingCount ? '综合评分' : '书友评分'}：${ratingLabel(book.rating)}`}>
                       <Star size={15} aria-hidden="true" />
                       <strong className="book-stat-value">{displayRating}</strong>

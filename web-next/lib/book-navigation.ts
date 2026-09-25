@@ -6,7 +6,7 @@ import {installReaderFullscreenBack} from './reader-fullscreen';
 type Route = {kind: 'home' | 'author' | 'library' | 'ranking' | 'detail' | 'reader'; href: string; bookId?: string};
 type RankingView = {activeRank: string; category: string};
 type SourceVisit = {href: string; flow: string};
-type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; milestones?: boolean; search?: boolean; restoreSession?: string; homeBrowse?: boolean; homeShortcutVisit?: boolean; libraryReturn?: string; rankingView?: RankingView; authorSource?: SourceVisit; detailSource?: SourceVisit};
+type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; milestones?: boolean; search?: boolean; share?: boolean; restoreSession?: string; homeBrowse?: boolean; homeShortcutVisit?: boolean; libraryReturn?: string; rankingView?: RankingView; authorSource?: SourceVisit; detailSource?: SourceVisit};
 type Router = {push: (href: string) => void; replace: (href: string) => void};
 const listeners = new Set<() => void>();
 let router: Router | undefined;
@@ -20,7 +20,7 @@ let detailSearchSource: SourceVisit | undefined;
 let documentSession: string | undefined;
 const session = () => documentSession ??= crypto.randomUUID();
 
-const overlay = (entry?: Entry) => entry?.catalog ? 'catalog' : entry?.settings ? 'settings' : entry?.milestones ? 'milestones' : entry?.search ? 'search' : undefined;
+const overlay = (entry?: Entry) => entry?.catalog ? 'catalog' : entry?.settings ? 'settings' : entry?.milestones ? 'milestones' : entry?.search ? 'search' : entry?.share ? 'share' : undefined;
 const isList = (route?: Route): route is Route & {kind: 'home' | 'author' | 'library' | 'ranking'} => route?.kind === 'home' || route?.kind === 'author' || route?.kind === 'library' || route?.kind === 'ranking';
 const mobile = () => window.matchMedia('(max-width: 767px)').matches;
 function homeShortcut(route?: Route) {
@@ -215,7 +215,7 @@ function onPopState(event: PopStateEvent) {
     event.stopImmediatePropagation();
     // A reader chapter can replace the slot underneath a closed catalog.
     // Forward should reopen that catalog on the current chapter as well.
-    current = {...from, catalog: target.catalog, settings: target.settings, milestones: target.milestones, search: target.search, level: from.level + 1};
+    current = {...from, catalog: target.catalog, settings: target.settings, milestones: target.milestones, search: target.search, share: target.share, level: from.level + 1};
     window.history.replaceState({bookNavigation: current}, '', current.href);
     notify(); return;
   }
@@ -366,6 +366,16 @@ export function closeBookSearch(afterClose?: () => void) {
   window.history.back();
 }
 export const bookSearchOpen = (bookId: string) => Boolean(current?.search && current.bookId === bookId);
+export function openBookShare(bookId: string) {
+  if (!mobile() || current?.kind !== 'detail' || current.bookId !== bookId || overlay(current) || pending || currentChapterEntry()) return;
+  const entry = {...current, share: true, level: current.level + 1};
+  window.history.pushState({...window.history.state, bookNavigation: entry}, '', entry.href);
+  current = entry; notify();
+}
+export function closeBookShare() {
+  if (current?.share && !overlayClosing) {overlayClosing = true; window.history.back();}
+}
+export const bookShareOpen = (bookId: string) => Boolean(current?.share && current.bookId === bookId);
 export const bookDetailReturnHref = (bookId: string) => current?.kind === 'detail' && current.bookId === bookId && current.detailSource?.href || '/';
 export function syncDetailSearchSource() {
   if (location.pathname !== '/search') return;
