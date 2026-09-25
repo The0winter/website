@@ -5,7 +5,7 @@ import base from './playwright.config';
 // OS share sheet; book-share.spec.ts tests the native/QQ contracts with stubs.
 export default defineConfig({
   ...base,
-  testMatch: /book-share(?:-real)?\.spec\.ts/,
+  testMatch: /book-share(?:-real|-browsers)?\.spec\.ts/,
   use: {...base.use, channel:undefined},
   projects: [
     {name:'Chrome', use:{browserName:'chromium',channel:'chrome',hasTouch:true}},

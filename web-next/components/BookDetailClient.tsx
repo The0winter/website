@@ -469,7 +469,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
               {/* 电脑端评分栏 */}
               <div className="hidden md:block w-[280px] border-l border-gray-100 pl-6 pt-2">
                  <div className="flex items-end space-x-2 mb-2">
-                    <span className="text-gray-500 text-xs" title={ratingOrigin}>{ratingCount.toLocaleString('zh-CN')}份评分</span>
+                    <span className="text-gray-500 text-xs" title={ratingOrigin}>{ratingCount.toLocaleString('zh-CN')}人评分</span>
                  </div>
                  <div className="book-desktop-rating flex items-center gap-2 mb-2" aria-label={`${baselineRatingCount ? '综合评分' : '书友评分'}：${ratingLabel(book.rating)}`}>
                     <Star className="w-6 h-6 fill-yellow-400 text-yellow-400 shrink-0" aria-hidden="true" />
@@ -497,7 +497,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                     <dd className="book-stat-count"><span className="book-stat-value">{viewCount}</span>{viewUnit && <small>{viewUnit}</small>}</dd>
                   </div>
                   <div>
-                    <dt title={ratingOrigin}>{ratingCount.toLocaleString('zh-CN')}份评分</dt>
+                    <dt title={ratingOrigin}>{ratingCount.toLocaleString('zh-CN')}人评分</dt>
                     <dd className="book-mobile-rating" data-rated={displayRating !== '暂无评分'} title={ratingOrigin} aria-label={`${baselineRatingCount ? '综合评分' : '书友评分'}：${ratingLabel(book.rating)}`}>
                       <Star size={15} aria-hidden="true" />
                       <strong className="book-stat-value">{displayRating}</strong>

@@ -3,7 +3,7 @@
 import {useEffect, useId, useRef, useState, useSyncExternalStore} from 'react';
 import {Check, ChevronRight, Copy, Share2, X} from 'lucide-react';
 import {bookShareOpen, closeBookShare, openBookShare, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
-import {hasQQShare, isAndroidQQBrowser, prepareQQShare, shareWithQQ, supportsWebShare} from '@/lib/book-sharing';
+import {browserShareHint, hasQQShare, hasUCShare, isAndroidQQBrowser, prepareQQShare, shareWithQQ, shareWithUC, webShareData} from '@/lib/book-sharing';
 
 export default function BookShare({bookId, title}: {bookId: string; title: string}) {
   const id = useId();
@@ -13,9 +13,11 @@ export default function BookShare({bookId, title}: {bookId: string; title: strin
   const active = useRef(false);
   const copying = useRef(false);
   const sharing = useRef(false);
+  const linkOnly = useRef(false);
   const open = useSyncExternalStore(subscribeBookNavigation, () => bookShareOpen(bookId), serverCatalogClosed);
   const [content, setContent] = useState('');
-  const [shareMode, setShareMode] = useState<'native' | 'qq' | 'loading' | 'copy'>('loading');
+  const [shareMode, setShareMode] = useState<'native' | 'qq' | 'uc' | 'loading' | 'copy'>('loading');
+  const [shareHint, setShareHint] = useState('也可打开浏览器菜单，选择“分享”');
   const [message, setMessage] = useState('');
   const [copied, setCopied] = useState(false);
   const [manual, setManual] = useState(false);
@@ -50,8 +52,11 @@ export default function BookShare({bookId, title}: {bookId: string; title: strin
       const url = new URL(`/book/${encodeURIComponent(bookId)}`, location.origin).href;
       setContent(`${shareTitle} ${url}`);
       const data = {title: shareTitle, text: shareTitle, url};
-      if (supportsWebShare(data)) setShareMode('native');
+      linkOnly.current = false;
+      setShareHint(browserShareHint());
+      if (webShareData(data)) setShareMode('native');
       else if (hasQQShare()) setShareMode('qq');
+      else if (hasUCShare()) setShareMode('uc');
       else if (isAndroidQQBrowser()) {
         setShareMode('loading');
         void prepareQQShare().then(ready => {if (!disposed) setShareMode(ready ? 'qq' : 'copy');});
@@ -81,12 +86,13 @@ export default function BookShare({bookId, title}: {bookId: string; title: strin
     try {await navigator.clipboard.writeText(content); success = true;} catch {
       // Keep copying available in embedded browsers that reject Clipboard API.
       input.current?.focus(); input.current?.select();
+      input.current?.setSelectionRange(0, content.length);
       try {success = document.execCommand('copy');} catch { /* Offer manual selection below. */ }
     } finally {copying.current = false;}
     if (!active.current) return;
     setCopied(success); setManual(!success);
     setMessage(success ? (forSharing ? '书名和链接已复制，请到微信、QQ 等应用中粘贴发送' : '书名和链接已复制') : '请长按上方文字，全选后复制');
-    if (!success) {input.current?.focus(); input.current?.select();}
+    if (!success) {input.current?.focus(); input.current?.select(); input.current?.setSelectionRange(0, content.length);}
   }
 
   async function share() {
@@ -94,24 +100,39 @@ export default function BookShare({bookId, title}: {bookId: string; title: strin
     if (shareMode === 'loading') {setMessage('正在准备分享，请稍后再点一次，也可复制上方链接'); return;}
     if (sharing.current) return;
     sharing.current = true; setBusy(true); setMessage('');
+    let nativeData: ShareData | null = null;
     try {
       const data = {title:shareTitle, text:shareTitle, url:new URL(`/book/${encodeURIComponent(bookId)}`, location.origin).href};
       if (shareMode === 'qq') {
         shareWithQQ(data);
-        setMessage('若未弹出分享面板，请用浏览器菜单中的“分享”，或复制上方链接');
-      } else await navigator.share(data);
+      } else if (shareMode === 'uc') {
+        shareWithUC(data);
+      } else {
+        nativeData = webShareData(data, linkOnly.current);
+        if (!nativeData) throw new Error('Web Share unavailable');
+        // No SDK loading, clipboard request or other await before this call.
+        await navigator.share(nativeData);
+      }
+      if (active.current) setMessage(`若未弹出分享面板，${shareHint}，或复制上方链接`);
     } catch (error) {
-      const cancelled = typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError';
-      if (active.current && !cancelled) {
-        if (shareMode === 'native' && isAndroidQQBrowser()) {
+      const errorName = typeof error === 'object' && error !== null && 'name' in error ? error.name : '';
+      if (active.current && errorName !== 'AbortError') {
+        if (shareMode === 'native' && errorName === 'TypeError' && (nativeData?.text || nativeData?.title)) {
+          // Retrying within this catch could reuse an already consumed gesture.
+          linkOnly.current = true;
+          setMessage('已改用仅链接分享，请再点一次“分享到其他应用”');
+        } else if (shareMode === 'native' && hasUCShare()) {
+          setShareMode('uc');
+          setMessage('已切换到 UC 浏览器分享，请再点一次');
+        } else if (shareMode === 'native' && isAndroidQQBrowser()) {
           setShareMode('loading');
           const ready = await prepareQQShare();
           if (!active.current) return;
           setShareMode(ready ? 'qq' : 'copy');
-          setMessage(ready ? '已切换到 QQ 浏览器分享，请再点一次' : '暂时无法打开分享，请复制后分享，或使用浏览器菜单中的“分享”');
+          setMessage(ready ? '已切换到 QQ 浏览器分享，请再点一次' : `暂时无法打开分享，请复制后分享；${shareHint}`);
         } else {
           setShareMode('copy');
-          setMessage('暂时无法打开分享，请复制后分享，或使用浏览器菜单中的“分享”');
+          setMessage(`暂时无法打开分享，请复制后分享；${shareHint}`);
         }
       }
     } finally {sharing.current = false; setBusy(false);}
@@ -130,7 +151,7 @@ export default function BookShare({bookId, title}: {bookId: string; title: strin
       </div>
       <button type="button" className="book-share-apps" disabled={busy} onClick={() => void share()}>
         <span className="book-share-app-icon"><Share2 size={21} aria-hidden="true"/></span>
-        <span><strong>{shareMode === 'copy' ? '复制后分享' : '分享到其他应用'}</strong><small>{shareMode === 'native' ? '打开手机分享面板，选择应用' : shareMode === 'qq' ? '打开 QQ 浏览器分享面板，选择应用' : shareMode === 'loading' ? '正在准备分享，也可复制链接' : '复制书名和链接，粘贴到微信、QQ 等应用'}</small></span>
+        <span><strong>{shareMode === 'copy' ? '复制后分享' : '分享到其他应用'}</strong><small>{shareMode === 'native' ? '打开手机分享面板，选择应用' : shareMode === 'qq' ? '打开 QQ 浏览器分享面板，选择应用' : shareMode === 'uc' ? '打开 UC 浏览器分享面板，选择应用' : shareMode === 'loading' ? '正在准备分享，也可复制链接' : `复制后粘贴到应用；${shareHint}`}</small></span>
         <ChevronRight size={18} aria-hidden="true"/>
       </button>
       <p className="book-share-message" role="status">{message}</p>
