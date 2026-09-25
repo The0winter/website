@@ -40,7 +40,6 @@ export default function ReaderPages(props:ReaderPageProps) {
   const paragraphs=useMemo(()=>readerParagraphs(chapter.content,chapter.title,chapter.chapter_number),[chapter.content,chapter.title,chapter.chapter_number]);
   const [marks,setMarks]=useStoredState<string[]>(`reader-paragraph-marks:${user?.id || 'guest'}:${chapter.id}`,[],value=>Array.isArray(value)&&value.length<=10000&&value.every(key=>typeof key==='string'&&/^[a-f0-9]{16}-\d+$/.test(key)));
   const [counts,setCounts]=useState<Record<string,number>>(()=>cachedReaderCounts(chapter.id) || {});
-  const [countError,setCountError]=useState(false);
   const [page,setPage]=useState(0);
   const [layout,setLayout]=useState({width:0,height:0,total:1});
   const [menu,setMenu]=useState<{paragraph:Paragraph;x:number;y:number}|null>(null);
@@ -93,13 +92,14 @@ export default function ReaderPages(props:ReaderPageProps) {
       if(document.hidden)return;
       try {
         const value=await loadReaderCounts(chapter.id,force);
-        if(active){setCounts(value);setCountError(false);}
-      } catch {if(active)setCountError(true);}
+        if(active)setCounts(value);
+      } catch { /* Background counts are optional; keep reading and cached badges. */ }
     }
-    const update=()=>{void refresh(true);};
-    void refresh();const timer=window.setInterval(update,60000);
+    const update=()=>{void refresh();};
+    void refresh();const timer=window.setInterval(()=>{void refresh(true);},60000);
     window.addEventListener('focus',update);
-    return()=>{active=false;window.clearInterval(timer);window.removeEventListener('focus',update);};
+    window.addEventListener('online',update);
+    return()=>{active=false;window.clearInterval(timer);window.removeEventListener('focus',update);window.removeEventListener('online',update);};
   },[chapter.id]);
 
   useLayoutEffect(()=>{
@@ -380,7 +380,7 @@ export default function ReaderPages(props:ReaderPageProps) {
       </div>
       <div ref={measureHost} className="reader-measure-host" aria-hidden="true" inert/>
       {props.navigating && <div className="reader-notice" role="status">正在加载章节…</div>}
-      {(notice || countError) && <div className="reader-notice" role="status">{notice || '段评暂不可用，正文可继续阅读'}</div>}
+      {notice && <div className="reader-notice" role="status">{notice}</div>}
     </section>
     {menu && <div className="paragraph-menu-backdrop" onPointerDown={()=>{suppressGestureClick.current=false;}} onClick={()=>{if(!suppressGestureClick.current)setMenu(null);}}><div ref={menuRef} role="menu" aria-label="段落操作" className="paragraph-menu" style={{left:menu.x,top:menu.y}} onClick={event=>event.stopPropagation()}><button role="menuitem" onClick={()=>{setDiscussion(menu.paragraph);setMenu(null);}}><MessageCircle size={16}/>评论</button><button role="menuitem" onClick={toggleMark}><Highlighter size={16}/>{marks.includes(menu.paragraph.key)?'取消标记':'标记'}</button></div></div>}
     {discussion && <ParagraphComments key={discussion.key} chapterId={chapter.id} paragraph={discussion} onClose={closeDiscussion} onCount={countChanged}/>}

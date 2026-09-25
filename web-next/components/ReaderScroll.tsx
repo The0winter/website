@@ -30,8 +30,8 @@ const ScrollChapter=memo(function ScrollChapter({chapter,user,selected,updates,o
   useEffect(()=>{
     let active=true;
     const refresh=()=>{void loadReaderCounts(chapter.id).then(value=>{if(active)setCounts(value);}).catch(()=>{});};
-    refresh();window.addEventListener('focus',refresh);
-    return()=>{active=false;window.removeEventListener('focus',refresh);};
+    refresh();window.addEventListener('focus',refresh);window.addEventListener('online',refresh);
+    return()=>{active=false;window.removeEventListener('focus',refresh);window.removeEventListener('online',refresh);};
   },[chapter.id]);
   const visibleCounts={...counts,...updates};
   return <article className="reader-scroll-chapter reader-columns" data-scroll-chapter={chapter.id} aria-label={readerChapterTitle(chapter)}>

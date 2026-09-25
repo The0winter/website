@@ -56,11 +56,14 @@ export default function ParagraphComments({chapterId,paragraph,onClose,onCount}:
     async function load() {
       setLoading(true);setError('');
       try {
-        const response=await safeFetch(`${endpoint}?page=${page}`,{signal:controller.signal,cache:'no-store'});
-        const data=await response.json();
-        if (!response.ok) throw Error(data.error || '评论加载失败');
+        const response=await safeFetch(`${endpoint}?page=${page}`,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(10000)]),cache:'no-store'});
+        const data=await response.json().catch(()=>null);
+        if (!response.ok) throw Error(typeof data?.error==='string' ? data.error : '段评暂不可用，请稍后重试');
+        if (!Array.isArray(data?.items) || !Number.isSafeInteger(data?.total) || data.total<0) throw Error('段评暂不可用，请稍后重试');
         if (!controller.signal.aborted) {setItems(data.items);setTotal(data.total);countCallback.current(paragraph.key,data.total);}
-      } catch (error) {if (!controller.signal.aborted) setError(error instanceof Error ? error.message : '评论加载失败');}
+      } catch (error) {
+        if (!controller.signal.aborted) setError(error instanceof Error && error.name==='TimeoutError' ? '段评加载超时，请重试' : error instanceof Error && error.name==='Error' ? error.message : '段评暂不可用，请稍后重试');
+      }
       finally {if (!controller.signal.aborted) setLoading(false);}
     }
     void load();

@@ -46,7 +46,10 @@ export async function loadReaderCounts(id:string,refresh=false):Promise<Counts>{
   const request=(async()=>{
     const response=await safeFetch(`/api/chapters/${encodeURIComponent(id)}/paragraph-comments`,{cache:'no-store'});
     if(!response.ok)throw Error('段评暂不可用');
-    const data=await response.json();rememberReaderCounts(id,data.counts);return data.counts as Counts;
+    const data=await response.json();
+    const counts=data?.counts;
+    if(!counts || typeof counts!=='object' || Array.isArray(counts) || !Object.values(counts).every(value=>Number.isSafeInteger(value) && (value as number)>=0))throw Error('段评数据暂不可用');
+    rememberReaderCounts(id,counts);return counts as Counts;
   })();
   pendingCounts.set(id,request);
   try{return await request;}finally{pendingCounts.delete(id);}
