@@ -11,6 +11,8 @@ test('real browser capabilities, copying and mobile layout', async ({page, conte
   await page.route('**/api/books/*/views', route => route.fulfill({json:{success:true,counted:false}}));
   const errors:string[]=[];page.on('pageerror', error => errors.push(error.message));
   await page.goto(`${base}/book/${book}`);
+  // Next's streaming response can briefly include a hidden duplicate heading.
+  await expect(page.locator('.book-hero h1')).toHaveCount(1);
   const title = (await page.locator('.book-hero h1').innerText()).trim();
   await page.getByRole('button', {name:'分享书籍'}).tap();
   const capabilities = await page.evaluate(() => {
