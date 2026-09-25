@@ -56,6 +56,27 @@ export function activityRequests(today,region='all') {
     ...Object.entries(trendCounts).map(([unit,count])=>{const periods=calendarPeriods(today,unit,count),dimension=activityDimensions[unit];return {...base,dateRanges:[{startDate:periods[0].date,endDate:periods.at(-1).endDate}],dimensions:fields([dimension]),orderBys:[{dimension:{dimensionName:dimension}}],limit:'400'};}),
   ];
 }
+const cityPeriods={day:1,week:7,month:30};
+export function cityRequests(today) {
+  return Object.values(cityPeriods).map(days=>({
+    dateRanges:[{startDate:shiftDate(today,1-days),endDate:today}],
+    dimensions:fields(['cityId','city','region','countryId']),metrics:fields(['activeUsers']),
+    dimensionFilter:{notExpression:{filter:{fieldName:'city',inListFilter:{values:['','(not set)','(other)'],caseSensitive:false}}}},
+    orderBys:[{metric:{metricName:'activeUsers'},desc:true},{dimension:{dimensionName:'city'}},{dimension:{dimensionName:'cityId'}}],limit:'10',returnPropertyQuota:true,
+  }));
+}
+export function normalizeCities(reports,today,timeZone) {
+  if(!Array.isArray(reports)||reports.length!==3)throw Error('谷歌城市报表不完整，请重试');
+  return Object.fromEntries(Object.entries(cityPeriods).map(([unit,days],i)=>{
+    const report=reports[i];
+    if(report.metadata?.timeZone!==timeZone||!report.metricHeaders?.some(h=>h.name==='activeUsers')||['cityId','city','region','countryId'].some(name=>!report.dimensionHeaders?.some(h=>h.name===name)))throw Error('谷歌城市报表口径不一致，请重试');
+    const cities=rows(report).filter(r=>r.city.trim()&&!['(not set)','(other)'].includes(r.city.trim().toLowerCase())&&r.activeUsers>0)
+      .map(r=>({id:r.cityId,name:r.city,region:r.region,country:r.countryId,activeUsers:r.activeUsers}))
+      .sort((a,b)=>b.activeUsers-a.activeUsers||a.name.localeCompare(b.name)||a.id.localeCompare(b.id)).slice(0,10);
+    const notices=[report.metadata?.subjectToThresholding?'部分城市数据受谷歌隐私阈值限制':null,report.metadata?.dataLossFromOtherRow?'部分城市被谷歌合并，排名可能不完整':null,report.metadata?.samplingMetadatas?.length?'城市排名包含抽样数据':null].filter(Boolean);
+    return [unit,{startDate:shiftDate(today,1-days),endDate:today,cities,notices}];
+  }));
+}
 export function normalizeActivity(reports,today,timeZone) {
   if(!Array.isArray(reports)||reports.length!==4)throw Error('谷歌活跃报表不完整，请重试');
   for(const report of reports) {
@@ -136,12 +157,13 @@ export function googleCollectors(config,{fetchImpl=fetch,readFile=fs.readFile,cl
       const activity=await run('batchRunReports',{requests:activityRequests(data.todayDate)},signal);
       data.activity=normalizeActivity(activity.reports,data.todayDate,data.timeZone);
       data.notices=[...new Set([...data.notices,...data.activity.notices])];
-      const regions=await Promise.allSettled(['china','other'].map(async region=>{
-        const report=await run('batchRunReports',{requests:activityRequests(data.todayDate,region)},signal);
-        return {status:'connected',sampledAt:new Date(clock()).toISOString(),activity:normalizeActivity(report.reports,data.todayDate,data.timeZone)};
-      }));
+      const [china,cities]=await Promise.allSettled([
+        (async()=>{const report=await run('batchRunReports',{requests:activityRequests(data.todayDate,'china')},signal);return {status:'connected',sampledAt:new Date(clock()).toISOString(),activity:normalizeActivity(report.reports,data.todayDate,data.timeZone)};})(),
+        (async()=>{const report=await run('batchRunReports',{requests:cityRequests(data.todayDate)},signal);return {status:'connected',sampledAt:new Date(clock()).toISOString(),periods:normalizeCities(report.reports,data.todayDate,data.timeZone)};})(),
+      ]);
       if(signal.aborted)throw signal.reason||Error('统计读取已取消');
-      data.regions=Object.fromEntries(['china','other'].map((region,i)=>[region,regions[i].status==='fulfilled'?regions[i].value:{status:'error',error:regions[i].reason.message}]));
+      const resultOrError=result=>result.status==='fulfilled'?result.value:{status:'error',error:result.reason.message};
+      data.regions={china:resultOrError(china)};data.cities=resultOrError(cities);
       return data;
     },
     realtime:async signal=>{

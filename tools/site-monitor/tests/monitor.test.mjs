@@ -10,6 +10,16 @@ import {createMonitor,projectRoot} from '../server.mjs';
 import retention from '../../storage-maintenance.cjs';
 import storage from '../storage-policy.cjs';
 import {workspace,removeWorkspace,fixtureCollectors} from './fixture.mjs';
+import {crossesBox,placeTooltip} from '../tooltip-layout.mjs';
+
+test('提示框避让整条线段和孤立点，包含斜线穿框、水平线及垂直线',()=>{
+  const box={x:100,y:100,width:100,height:70};
+  assert.ok(crossesBox({x:0,y:0},{x:300,y:300},box));assert.ok(crossesBox({x:0,y:130},{x:300,y:130},box));assert.ok(crossesBox({x:150,y:0},{x:150,y:300},box));assert.ok(crossesBox({x:140,y:140},{x:140,y:140},box));assert.equal(crossesBox({x:0,y:20},{x:300,y:20},box),false);
+  for(const width of [320,700,1440]){
+    const plot={x:20,y:180,width:width-40,height:200},segments=Array.from({length:13},(_,i)=>[{x:20+i*(width-40)/13,y:i%2?180:380},{x:20+(i+1)*(width-40)/13,y:i%2?380:180}]);
+    for(const [anchor] of segments){const placed=placeTooltip({anchor,plot,width:210,height:90,viewport:{width,height:650},segments});assert.ok(placed.x>=0&&placed.x+placed.width<=width);assert.ok(placed.y>=0&&placed.y+placed.height<=650);assert.ok(segments.every(([a,b])=>!crossesBox(a,b,placed)));}
+  }
+});
 
 test('正式入口的默认项目根目录可通过路径保护',()=>{
   assert.equal(projectRoot,path.resolve(projectRoot));

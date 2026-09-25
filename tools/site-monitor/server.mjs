@@ -98,7 +98,7 @@ export async function createMonitor({root=projectRoot,collect,config:configInput
         if(url.pathname==='/api/close'){json(res,200,{ok:true});setImmediate(onClose);return;}
         json(res,404,{error:'接口不存在'});return;
       }
-      const assets={'/':'index.html','/app.js':'app.js','/health.mjs':'health.mjs','/periods.mjs':'periods.mjs','/trend-chart.js':'trend-chart.js','/app.css':'app.css','/vendor/bootstrap.min.css':'vendor/bootstrap.min.css','/icon.svg':'icon.svg'};
+      const assets={'/':'index.html','/app.js':'app.js','/health.mjs':'health.mjs','/periods.mjs':'periods.mjs','/trend-chart.js':'trend-chart.js','/tooltip-layout.mjs':'tooltip-layout.mjs','/app.css':'app.css','/vendor/bootstrap.min.css':'vendor/bootstrap.min.css','/icon.svg':'icon.svg'};
       if(req.method!=='GET'||!assets[url.pathname]){res.writeHead(404);res.end();return;}
       const file=assets[url.pathname];res.setHeader('Content-Type',file.endsWith('.css')?'text/css':/\.m?js$/.test(file)?'text/javascript':file.endsWith('.svg')?'image/svg+xml':'text/html; charset=utf-8');res.end(fs.readFileSync(path.join(webRoot,file)));
     }catch(error){json(res,400,{error:/^ENOENT/.test(error.message)?'文件不存在':error.message});}
