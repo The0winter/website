@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
+import {calendarPeriods,trendCounts} from './periods.mjs';
 
 const tokenUrl='https://oauth2.googleapis.com/token';
 const scope='https://www.googleapis.com/auth/analytics.readonly';
@@ -37,6 +38,30 @@ function rows(report) {
 }
 export function dateInZone(now,timeZone){return new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now));}
 export function shiftDate(day,offset){return new Date(Date.parse(day+'T00:00:00Z')+offset*86400000).toISOString().slice(0,10);}
+const activityMetrics=['activeUsers','newUsers'];
+const activityDimensions={day:'date',week:'isoYearIsoWeek',month:'yearMonth'};
+export function activityRequests(today) {
+  const base={metrics:fields(activityMetrics),returnPropertyQuota:true};
+  return [
+    {...base,dateRanges:[1,7,30].map(days=>({startDate:shiftDate(today,-days),endDate:shiftDate(today,-1),name:`last${days}`}))},
+    ...Object.entries(trendCounts).map(([unit,count])=>{const periods=calendarPeriods(today,unit,count),dimension=activityDimensions[unit];return {...base,dateRanges:[{startDate:periods[0].date,endDate:periods.at(-1).endDate}],dimensions:fields([dimension]),orderBys:[{dimension:{dimensionName:dimension}}],limit:'400'};}),
+  ];
+}
+export function normalizeActivity(reports,today,timeZone) {
+  if(!Array.isArray(reports)||reports.length!==4)throw Error('谷歌活跃报表不完整，请重试');
+  for(const report of reports) {
+    if(report.metadata?.timeZone!==timeZone||activityMetrics.some(name=>!report.metricHeaders?.some(h=>h.name===name)))throw Error('谷歌活跃报表口径不一致，请重试');
+  }
+  const notices=[...new Set(reports.flatMap(report=>[report.metadata?.subjectToThresholding?'谷歌对部分数据应用了隐私阈值':null,report.metadata?.dataLossFromOtherRow?'部分细分数据被谷歌合并到其他项':null,report.metadata?.samplingMetadatas?.length?'本报表包含抽样数据':null]).filter(Boolean))];
+  const absent=report=>Object.fromEntries(activityMetrics.map(key=>[key,report.metadata?.subjectToThresholding||report.metadata?.dataLossFromOtherRow||report.metadata?.samplingMetadatas?.length?null:0]));
+  const summary=rows(reports[0]);
+  return {endDate:shiftDate(today,-1),notices,
+    rolling:Object.fromEntries([1,7,30].map(days=>[days,summary.find(r=>r.dateRange===`last${days}`)||absent(reports[0])])),
+    trends:Object.fromEntries(Object.entries(trendCounts).map(([unit,count],i)=>{
+      const report=reports[i+1],byKey=new Map(rows(report).map(row=>[row[activityDimensions[unit]],row]));
+      return [unit,calendarPeriods(today,unit,count).map(period=>({...absent(report),...byKey.get(period.key),...period}))];
+    }))};
+}
 export function normalizeReports(reports,days,now=Date.now()) {
   if(!Array.isArray(reports)||reports.length!==5)throw Error('谷歌返回的报表不完整，请重试');
   const [summary,daily,pages,channels,devices]=reports.map(rows);
@@ -95,7 +120,20 @@ export function googleCollectors(config,{fetchImpl=fetch,readFile=fs.readFile,cl
   }
   const unavailable=()=>!config.gaPropertyId||!config.gaCredentialsPath?{status:'unconfigured',sampledAt:new Date(clock()).toISOString()}:null;
   return {
-    analytics:async signal=>{const missing=unavailable();if(missing)return missing;const result=await run('batchRunReports',{requests:reportRequests(config.analyticsDays)},signal);return normalizeReports(result.reports,config.analyticsDays,clock());},
-    realtime:async signal=>{const missing=unavailable();if(missing)return missing;const result=await run('runRealtimeReport',{metrics:fields(['activeUsers']),minuteRanges:[{startMinutesAgo:29,endMinutesAgo:0}]},signal);return {status:'connected',sampledAt:new Date(clock()).toISOString(),activeUsers:rows(result)[0]?.activeUsers??0};},
+    analytics:async signal=>{
+      const missing=unavailable();if(missing)return missing;
+      const result=await run('batchRunReports',{requests:reportRequests(config.analyticsDays)},signal);
+      const data=normalizeReports(result.reports,config.analyticsDays,clock());
+      const activity=await run('batchRunReports',{requests:activityRequests(data.todayDate)},signal);
+      data.activity=normalizeActivity(activity.reports,data.todayDate,data.timeZone);
+      data.notices=[...new Set([...data.notices,...data.activity.notices])];
+      return data;
+    },
+    realtime:async signal=>{
+      const missing=unavailable();if(missing)return missing;
+      const result=await run('runRealtimeReport',{metrics:fields(['activeUsers']),minuteRanges:[{startMinutesAgo:29,endMinutesAgo:0}]},signal);
+      if(result.kind==='analyticsData#runRealtimeReport'&&!result.metricHeaders&&!result.rows?.length&&!result.rowCount)return {status:'connected',sampledAt:new Date(clock()).toISOString(),activeUsers:null,notice:'谷歌本次未返回实时人数，等待下次刷新；暂不显示为 0。'};
+      return {status:'connected',sampledAt:new Date(clock()).toISOString(),activeUsers:rows(result)[0]?.activeUsers??0};
+    },
   };
 }

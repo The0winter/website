@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {launch} from '../main.mjs';
 import {projectRoot} from '../server.mjs';
 import {workspace,removeWorkspace} from './fixture.mjs';
-const root=workspace(),directory=path.join(projectRoot,'.runtime/task-artifacts/site-monitor-v2');
+const root=workspace(),directory=path.join(projectRoot,'.runtime/task-artifacts/site-monitor-v3');
 fs.mkdirSync(directory,{recursive:true});
 let running;
 try {
@@ -27,7 +27,7 @@ try {
   await new Promise(r=>setTimeout(r,2300));
   await page.screenshot({path:path.join(directory,'final-live-overview.png'),fullPage:true});
   await page.locator('.nav-item[data-page="resources"]').click();assert.equal(await page.$eval('#page-title',e=>e.textContent),'还有多少余量');await page.screenshot({path:path.join(directory,'final-live-server.png'),fullPage:true});
-  await page.locator('.nav-item[data-page="audience"]').click();await page.waitForSelector('.metric-grid');assert.equal(await page.$eval('#page-title',e=>e.textContent),'有多少人在读，喜欢读什么');await page.screenshot({path:path.join(directory,'final-live-audience.png'),fullPage:true});
+  await page.locator('.nav-item[data-page="audience"]').click();await page.waitForSelector('.range-strip');assert.equal(await page.$eval('#page-title',e=>e.textContent),'访问来源与热门内容');await page.screenshot({path:path.join(directory,'final-live-audience.png'),fullPage:true});
   await page.locator('.nav-item[data-page="storage"]').click();assert.equal(await page.$eval('#page-title',e=>e.textContent),'小说和封面是否可用');await page.screenshot({path:path.join(directory,'final-live-r2.png'),fullPage:true});
   assert.deepEqual(errors,[]);
   const state=app.snapshot(),summary={verifiedAt:new Date().toISOString(),modules:Object.fromEntries(Object.entries(state.modules).map(([k,v])=>[k,{status:v.data?.status||v.status,points:v.history.length}])),checks:state.modules.site.data.checks,business:{totalUsers:state.modules.business.data.totalUsers,reads:state.modules.business.data.current.reads,excludedBaseline:state.modules.business.data.excludedBaseline},atlasBytes:state.modules.atlas.data.cluster?.logicalBytes,r2:state.inventory.buckets.map(({id,bytes,objects,complete})=>({id,bytes,objects,complete}))};

@@ -4,20 +4,39 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import {googleCollectors,normalizeReports,reportRequests,dateInZone,validateCredentials} from '../analytics.mjs';
+import {googleCollectors,normalizeReports,reportRequests,activityRequests,normalizeActivity,dateInZone,validateCredentials} from '../analytics.mjs';
 import {collectSite,validateConfig} from '../collectors.mjs';
 import {createMonitor} from '../server.mjs';
 import {fixtureCollectors,workspace,removeWorkspace} from './fixture.mjs';
 import {assessHealth,capacityTone,growth} from '../health.mjs';
 import {MonitorSession} from '../session.mjs';
+import {calendarPeriods} from '../periods.mjs';
 
 function report(dims,metrics,values){return {dimensionHeaders:dims.map(name=>({name})),metricHeaders:metrics.map(name=>({name})),rows:values.map(([d,m])=>({dimensionValues:d.map(value=>({value})),metricValues:m.map(value=>({value:String(value)}))})),metadata:{timeZone:'Asia/Shanghai'}};}
 function reports(){return [report(['dateRange'],['activeUsers','newUsers','screenPageViews','sessions'],[[['today'],[3,1,9,4]],[['previous'],[0,0,0,0]],[['current'],[12,4,80,21]]]),report(['date'],['activeUsers','newUsers','screenPageViews','sessions'],[[['20260923'],[9,2,20,10]],[['20260922'],[8,2,30,10]]]),report(['pagePath','pageTitle'],['screenPageViews'],[[['/','首页'],[50]]]),report(['sessionDefaultChannelGroup'],['sessions'],[[['Direct'],[15]]]),report(['deviceCategory'],['sessions'],[[['mobile'],[16]]])];}
+function activityReports(){return [report(['dateRange'],['activeUsers','newUsers'],[[['last1'],[9,2]],[['last7'],[12,4]],[['last30'],[28,10]]]),report(['date'],['activeUsers','newUsers'],[[['20260923'],[9,2]]]),report(['isoYearIsoWeek'],['activeUsers','newUsers'],[[['202638'],[12,4]]]),report(['yearMonth'],['activeUsers','newUsers'],[[['202608'],[28,10]]])];}
+test('真实谷歌空实时响应保留未知，不显示成零或吞掉损坏响应',async()=>{
+  const credentials={type:'authorized_user',client_id:'synthetic-client',client_secret:'synthetic-secret',refresh_token:'synthetic-refresh'};
+  let payload={kind:'analyticsData#runRealtimeReport'};
+  const collect=googleCollectors({gaPropertyId:'123',gaCredentialsPath:'/synthetic'},{readFile:async()=>JSON.stringify(credentials),fetchImpl:async url=>Response.json(url.includes('oauth2')?{access_token:'synthetic',expires_in:3600}:payload)}),signal=new AbortController().signal;
+  const empty=await collect.realtime(signal);assert.equal(empty.activeUsers,null);assert.match(empty.notice,/未返回实时人数/);
+  payload={};await assert.rejects(collect.realtime(signal),/报表不完整/);
+  payload=report([],['activeUsers'],[[[],[0]]]);assert.equal((await collect.realtime(signal)).activeUsers,0);
+});
+test('日周月直接查询周期去重；跨年 ISO 周与闰年月份正确，隐私缺口不补零',()=>{
+  const query=activityRequests('2026-09-24');assert.equal(query.length,4);assert.deepEqual(query[0].dateRanges.map(r=>r.startDate),['2026-09-23','2026-09-17','2026-08-25']);
+  assert.equal(query[2].dimensions[0].name,'isoYearIsoWeek');assert.equal(query[2].dateRanges[0].endDate,'2026-09-20');assert.equal(query[3].dateRanges[0].startDate,'2025-09-01');assert.equal(query[3].dateRanges[0].endDate,'2026-08-31');
+  const value=normalizeActivity(activityReports(),'2026-09-24','Asia/Shanghai');assert.equal(value.rolling[7].activeUsers,12);assert.equal(value.trends.week.at(-1).activeUsers,12);assert.equal(value.trends.month.at(-1).activeUsers,28);assert.equal(value.trends.day.length,90);
+  assert.equal(calendarPeriods('2021-01-05','week',1)[0].key,'202053');assert.equal(calendarPeriods('2024-03-10','month',1)[0].endDate,'2024-02-29');assert.equal(calendarPeriods('2026-09-21','week',1)[0].endDate,'2026-09-20');
+  const raw=activityReports();raw[2].metadata.subjectToThresholding=true;const limited=normalizeActivity(raw,'2026-09-24','Asia/Shanghai');assert.equal(limited.trends.week[0].activeUsers,null);assert.equal(limited.trends.day[0].activeUsers,0);assert.match(limited.notices[0],/隐私/);
+  raw[1].metadata.timeZone='UTC';assert.throws(()=>normalizeActivity(raw,'2026-09-24','Asia/Shanghai'),/口径/);
+});
+
 test('谷歌报表按整个周期去重，日期补齐，保留元数据和零基期',()=>{const data=normalizeReports(reports(),7,Date.parse('2026-09-23T17:00:00Z'));assert.equal(data.todayDate,'2026-09-24');assert.equal(data.current.activeUsers,12);assert.equal(data.daily.length,7);assert.equal(data.daily[0].activeUsers,0);assert.equal(data.daily.at(-1).activeUsers,9);assert.equal(data.today.screenPageViews,9);assert.equal(growth(12,0).direction,'new');assert.equal(growth(0,0).direction,'flat');assert.equal(growth(null,5),null);const raw=reports();raw[2].metadata.subjectToThresholding=true;assert.match(normalizeReports(raw,7).notices[0],/隐私/);assert.throws(()=>normalizeReports([],7));});
 test('报表只有五个批量查询、完整周期比较，不用日人数相加',()=>{const q=reportRequests(30);assert.equal(q.length,5);assert.deepEqual(q[0].dateRanges.map(r=>[r.startDate,r.endDate]),[['30daysAgo','yesterday'],['60daysAgo','31daysAgo'],['today','today']]);assert.equal(q[2].dimensions[0].name,'pagePath');assert.equal(q[2].limit,'10');assert.throws(()=>reportRequests(8));assert.equal(dateInZone(Date.parse('2026-09-24T01:00:00Z'),'America/Los_Angeles'),'2026-09-23');});
 test('服务账号仅请求只读权限，忽略文件内任意 token_uri，缓存授权且不泄露密钥',async()=>{
   const {privateKey,publicKey}=crypto.generateKeyPairSync('rsa',{modulusLength:2048}),credentials={type:'service_account',client_email:'test@synthetic.iam.gserviceaccount.com',private_key:privateKey.export({format:'pem',type:'pkcs8'}),token_uri:'https://evil.test'};
-  const calls=[],fetchImpl=async(url,options)=>{calls.push(url);if(url.includes('oauth2')){const assertion=options.body.get('assertion'),parts=assertion.split('.'),payload=JSON.parse(Buffer.from(parts[1],'base64url'));assert.equal(payload.scope,'https://www.googleapis.com/auth/analytics.readonly');assert.equal(payload.aud,'https://oauth2.googleapis.com/token');assert.ok(crypto.verify('RSA-SHA256',Buffer.from(parts.slice(0,2).join('.')),publicKey,Buffer.from(parts[2],'base64url')));return Response.json({access_token:'synthetic-secret-token',expires_in:3600});}return Response.json(url.endsWith(':batchRunReports')?{reports:reports()}:report([],['activeUsers'],[[[],[0]]]));};
+  const calls=[],fetchImpl=async(url,options)=>{calls.push(url);if(url.includes('oauth2')){const assertion=options.body.get('assertion'),parts=assertion.split('.'),payload=JSON.parse(Buffer.from(parts[1],'base64url'));assert.equal(payload.scope,'https://www.googleapis.com/auth/analytics.readonly');assert.equal(payload.aud,'https://oauth2.googleapis.com/token');assert.ok(crypto.verify('RSA-SHA256',Buffer.from(parts.slice(0,2).join('.')),publicKey,Buffer.from(parts[2],'base64url')));return Response.json({access_token:'synthetic-secret-token',expires_in:3600});}return Response.json(url.endsWith(':batchRunReports')?{reports:JSON.parse(options.body).requests.length===4?activityReports():reports()}:report([],['activeUsers'],[[[],[0]]]));};
   const collect=googleCollectors({gaPropertyId:'123',gaCredentialsPath:'/synthetic.json',analyticsDays:7},{fetchImpl,readFile:async()=>JSON.stringify(credentials)}),signal=new AbortController().signal;
   const result=await collect.analytics(signal),realtime=await collect.realtime(signal);assert.equal(result.current.activeUsers,12);assert.equal(realtime.activeUsers,0);assert.equal(calls.filter(x=>x.includes('oauth2')).length,1);assert.ok(!calls.some(x=>x.includes('evil')));assert.ok(!JSON.stringify(result).includes('secret'));assert.throws(()=>validateCredentials({type:'service_account',private_key:'bad'}));
 });

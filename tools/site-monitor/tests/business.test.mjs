@@ -17,6 +17,6 @@ test('业务统计用北京时间，剔除展示基数，按现存账号重建�
   const before=await db.collection('readdailies').find().toArray();
   const data=await readBusiness(db,{days:7},now);
   assert.equal(data.startDate,'2026-09-17');assert.equal(data.endDate,'2026-09-23');assert.equal(data.totalUsers,5);assert.equal(data.todayNewUsers,1);assert.equal(data.unknownRegistrationDates,1);assert.equal(data.current.newUsers,1);assert.equal(data.previous.newUsers,1);
-  assert.equal(data.current.reads,17);assert.equal(data.previous.reads,15);assert.equal(data.excludedBaseline,1010);assert.equal(data.daily.length,7);assert.equal(data.topBooks.length,1);assert.equal(data.topBooks[0].views,9);assert.equal(data.bookmarks[0].count,2);assert.equal(data.bookmarks.length,1);
+  assert.equal(data.current.reads,17);assert.equal(data.previous.reads,15);assert.equal(data.excludedBaseline,1010);assert.equal(data.daily.length,7);assert.equal(data.todayDate,'2026-09-24');assert.equal(data.registrationHistory.find(r=>r.date==='2026-08-01').newUsers,1);assert.equal(data.topBooks.length,1);assert.equal(data.topBooks[0].views,9);assert.equal(data.bookmarks[0].count,2);assert.equal(data.bookmarks.length,1);
   assert.ok(!JSON.stringify(data).includes('never-return-this'));assert.ok(!JSON.stringify(data).includes('user_id'));assert.deepEqual(await db.collection('readdailies').find().toArray(),before);
 });
