@@ -5,7 +5,7 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 
 let app,child;
-const projectRoot=process.cwd(),dir=path.join(projectRoot,'.runtime/task-artifacts/site-monitor-v9');
+const projectRoot=process.cwd(),dir=path.join(projectRoot,'.runtime/task-artifacts/site-monitor-v10');
 test.beforeAll(async()=>{fs.mkdirSync(dir,{recursive:true});child=spawn(process.execPath,['--require','./tools/test-env.cjs','tools/site-monitor/tests/browser-fixture.mjs'],{cwd:projectRoot,windowsHide:true,stdio:['pipe','pipe','pipe']});app=await new Promise((resolve,reject)=>{let output='';child.stdout.on('data',b=>{output+=b;if(output.includes('\n')){try{resolve(JSON.parse(output.trim()));}catch(error){reject(error);}}});child.on('error',reject);child.stderr.on('data',b=>reject(Error(String(b))));child.on('exit',code=>{if(code)reject(Error('Fixture failed: '+code));});});});
 test.afterAll(async()=>{if(child&&child.exitCode===null){const exited=once(child,'exit');child.stdin.end('close');await exited;}});
 
@@ -28,7 +28,7 @@ test('用户数据优先、正常状态收到底部、容量紧凑，日周月�
   const errors=[];page.on('pageerror',error=>errors.push(error.message));await page.goto(app.url);
   await expect(page.getByRole('heading',{name:'运行概况',exact:true})).toBeVisible();
   await expect(page.locator('.topbar,.eyebrow,#page-description,#pause,#refresh,.trend-hint')).toHaveCount(0);
-  await expect(page.getByText('今天活跃',{exact:true})).toHaveCount(0);
+  await expect(page.getByText('今天活跃',{exact:true})).toHaveCount(0);await expect(page.locator('.usage-metric strong')).toHaveText('1 分 24 秒');await expect(page.locator('.usage-metric')).toHaveAttribute('title',/前台使用总时长.*会话数/);
   await expect(page.getByText(/日活为今日，周\/月活含今天|上栏为全站近况/)).toHaveCount(0);
   await expect(page.getByRole('article',{name:'日活',exact:true}).locator('.circle-value')).toHaveText('21');
   await expect(page.getByRole('article',{name:'日活',exact:true}).locator('.circle-new')).toHaveText('新用户 9');
@@ -98,14 +98,23 @@ test('触屏选点后保留浮框，Escape 关闭且不挤动曲线',async({brow
 test('城市前十在原卡片内滚动，日周月切换并保留自动刷新时的滚动位置',async({page})=>{
   await page.goto(app.url);const card=page.locator('.panel:has(#user-trend)'),before=await card.boundingBox();
   await page.getByRole('button',{name:'城市分布',exact:true}).click();const list=page.getByRole('region',{name:'活跃用户最多的十个城市'});
-  await expect(list.locator('li')).toHaveCount(10);await expect(list.locator('li').first()).toContainText('Shanghai');await expect(list.locator('li').first().locator('strong')).toHaveText('10');await expect(page.locator('#user-trend svg')).toHaveCount(0);await expect(page.locator('.daily-circle .circle-value')).toHaveText('21');
+  await expect(list.locator('li')).toHaveCount(10);await expect(list.locator('li').first()).toContainText('Shanghai');await expect(list.locator('li').first().locator('strong')).toHaveText('10');await expect(list.locator('li').first().locator('.city-duration')).toHaveText('平均使用 1 分 24 秒 / 次');await expect(page.locator('#user-trend svg')).toHaveCount(0);await expect(page.locator('.daily-circle .circle-value')).toHaveText('21');
   expect((await card.boundingBox()).height).toBeLessThanOrEqual(before.height+1);expect(await list.evaluate(e=>e.scrollHeight>e.clientHeight)).toBe(true);
-  await list.hover();await page.mouse.wheel(0,500);await expect.poll(()=>list.evaluate(e=>e.scrollTop)).toBeGreaterThan(0);await expect(list.locator('li').last()).toBeInViewport();
+  await list.hover();await page.mouse.wheel(0,await list.evaluate(e=>e.scrollHeight));await expect.poll(()=>list.evaluate(e=>e.scrollTop)).toBeGreaterThan(0);await expect(list.locator('li').last()).toBeInViewport();
   const scrolled=await list.evaluate(e=>e.scrollTop);await page.evaluate(()=>fetch('/api/refresh',{method:'POST',headers:{'x-monitor-token':sessionStorage.getItem('monitor-token'),'Content-Type':'application/json'},body:JSON.stringify({module:'analytics'})}));await page.waitForTimeout(2200);expect(await list.evaluate(e=>e.scrollTop)).toBe(scrolled);
   await page.getByRole('button',{name:'周',exact:true}).click();await expect(list.locator('li').first().locator('strong')).toHaveText('70');await expect(page.locator('.city-caption')).toContainText('近 7 天');expect(await list.evaluate(e=>e.scrollTop)).toBe(0);
   await page.getByRole('button',{name:'月',exact:true}).click();await expect(list.locator('li').first().locator('strong')).toHaveText('300');await page.screenshot({path:path.join(dir,'verified-desktop-cities-fixture.png'),fullPage:true});
   for(const width of [390,320]){await page.setViewportSize({width,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await list.focus();await page.keyboard.press('End');await expect(list.locator('li').last()).toBeInViewport();await page.screenshot({path:path.join(dir,`verified-cities-${width}-fixture.png`),fullPage:true});}
   await page.getByRole('button',{name:'全部',exact:true}).click();await expect(page.getByRole('img',{name:'用户变化趋势'})).toBeVisible();await expect(page.locator('.city-scroll')).toHaveCount(0);
+});
+
+test('使用时长为零时显示零，缺失或没有访问时显示未知',async({page})=>{
+  let seconds=0,sessions=4;
+  await page.route('**/api/state',async route=>{const response=await route.fetch(),state=await response.json();Object.assign(state.modules.analytics.data.today,{userEngagementDuration:seconds,sessions});Object.assign(state.modules.analytics.data.cities.periods.day.cities[0],{userEngagementDuration:seconds,sessions});await route.fulfill({response,json:state});});
+  await page.goto(app.url);await expect(page.locator('.usage-metric strong')).toHaveText('0 秒');await page.getByRole('button',{name:'城市分布',exact:true}).click();await expect(page.locator('.city-duration').first()).toHaveText('平均使用 0 秒 / 次');
+  seconds=null;await expect(page.locator('.usage-metric strong')).toHaveText('—');await expect(page.locator('.city-duration').first()).toHaveText('平均使用 — / 次');
+  seconds=734;sessions=24;await expect(page.locator('.usage-metric strong')).toHaveText('31 秒');await expect(page.locator('.city-duration').first()).toHaveText('平均使用 31 秒 / 次');
+  sessions=0;await expect(page.locator('.usage-metric strong')).toHaveText('—');
 });
 
 test('城市查询失败或为空时不伪造排名，其他统计仍可查看',async({page})=>{

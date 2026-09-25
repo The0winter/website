@@ -11,17 +11,26 @@ import {fixtureCollectors,workspace,removeWorkspace} from './fixture.mjs';
 import {assessHealth,capacityTone,growth} from '../health.mjs';
 import {MonitorSession} from '../session.mjs';
 import {calendarPeriods,includeToday} from '../periods.mjs';
+import {averageUsage,usageDuration} from '../engagement.mjs';
+
+test('平均使用按总前台时长除以会话数；零时长与缺失数据有区别',()=>{
+  assert.equal(averageUsage({userEngagementDuration:734,sessions:24}),734/24);
+  assert.equal(usageDuration(734/24),'31 秒');assert.equal(usageDuration(84),'1 分 24 秒');assert.equal(usageDuration(3600),'1 小时 0 分');assert.equal(usageDuration(.3),'不足 1 秒');
+  assert.equal(averageUsage({userEngagementDuration:0,sessions:9}),0);assert.equal(usageDuration(0),'0 秒');
+  for(const row of [undefined,{}, {userEngagementDuration:null,sessions:9},{userEngagementDuration:3,sessions:0},{userEngagementDuration:NaN,sessions:1},{userEngagementDuration:-1,sessions:3}])assert.equal(usageDuration(averageUsage(row)),'—');
+  assert.ok(reportRequests()[0].metrics.some(m=>m.name==='userEngagementDuration'));
+});
 
 function report(dims,metrics,values){return {dimensionHeaders:dims.map(name=>({name})),metricHeaders:metrics.map(name=>({name})),rows:values.map(([d,m])=>({dimensionValues:d.map(value=>({value})),metricValues:m.map(value=>({value:String(value)}))})),metadata:{timeZone:'Asia/Shanghai'}};}
 function reports(){return [report(['dateRange'],['activeUsers','newUsers','screenPageViews','sessions'],[[['today'],[3,1,9,4]],[['previous'],[0,0,0,0]],[['current'],[12,4,80,21]]]),report(['date'],['activeUsers','newUsers','screenPageViews','sessions'],[[['20260923'],[9,2,20,10]],[['20260922'],[8,2,30,10]]]),report(['pagePath','pageTitle'],['screenPageViews'],[[['/','首页'],[50]]]),report(['sessionDefaultChannelGroup'],['sessions'],[[['Direct'],[15]]]),report(['deviceCategory'],['sessions'],[[['mobile'],[16]]])];}
 function activityReports(){return [report(['dateRange'],['activeUsers','newUsers'],[[['last1'],[9,2]],[['last7'],[12,4]],[['last30'],[28,10]]]),report(['date'],['activeUsers','newUsers'],[[['20260923'],[9,2]]]),report(['isoYearIsoWeek'],['activeUsers','newUsers'],[[['202638'],[12,4]]]),report(['yearMonth'],['activeUsers','newUsers'],[[['202608'],[28,10]]])];}
-function cityReports(){return [1,7,30].map(days=>report(['cityId','city','region','countryId'],['activeUsers'],Array.from({length:10},(_,i)=>[[String(i),'City '+i,'Region','CN'],[(10-i)*days]])));}
+function cityReports(){return [1,7,30].map(days=>report(['cityId','city','region','countryId'],['activeUsers','sessions','userEngagementDuration'],Array.from({length:10},(_,i)=>[[String(i),'City '+i,'Region','CN'],[(10-i)*days,(10-i)*days*2,(10-i)*days*2*84]])));}
 
 test('城市前十按当天和近七/三十天直接去重查询，不累加日人数，缺失地区不冒充城市',()=>{
   const requests=cityRequests('2026-01-01');assert.equal(requests.length,3);assert.deepEqual(requests.map(r=>r.dateRanges[0].startDate),['2026-01-01','2025-12-26','2025-12-03']);
-  for(const request of requests){assert.equal(request.dateRanges[0].endDate,'2026-01-01');assert.equal(request.limit,'10');assert.equal(request.orderBys[0].metric.metricName,'activeUsers');assert.equal(request.orderBys[0].desc,true);assert.deepEqual(request.metrics,[{name:'activeUsers'}]);assert.ok(request.dimensions.some(d=>d.name==='cityId'));assert.ok(request.dimensionFilter.notExpression.filter.inListFilter.values.includes('(not set)'));}
-  const raw=cityReports();raw[0].rows.reverse();raw[0].rows.push({dimensionValues:['unknown','(not set)','',''].map(value=>({value})),metricValues:[{value:'900'}]});
-  const data=normalizeCities(raw,'2026-01-01','Asia/Shanghai');assert.equal(data.day.cities.length,10);assert.equal(data.day.cities[0].name,'City 0');assert.equal(data.day.cities[0].activeUsers,10);assert.equal(data.week.cities[0].activeUsers,70);assert.equal(data.month.cities[0].activeUsers,300);
+  for(const request of requests){assert.equal(request.dateRanges[0].endDate,'2026-01-01');assert.equal(request.limit,'10');assert.equal(request.orderBys[0].metric.metricName,'activeUsers');assert.equal(request.orderBys[0].desc,true);assert.deepEqual(request.metrics,[{name:'activeUsers'},{name:'sessions'},{name:'userEngagementDuration'}]);assert.ok(request.dimensions.some(d=>d.name==='cityId'));assert.ok(request.dimensionFilter.notExpression.filter.inListFilter.values.includes('(not set)'));}
+  const raw=cityReports();raw[0].rows.reverse();raw[0].rows.push({dimensionValues:['unknown','(not set)','',''].map(value=>({value})),metricValues:[{value:'900'},{value:'900'},{value:'0'}]});
+  const data=normalizeCities(raw,'2026-01-01','Asia/Shanghai');assert.equal(data.day.cities.length,10);assert.equal(data.day.cities[0].name,'City 0');assert.equal(data.day.cities[0].activeUsers,10);assert.equal(data.week.cities[0].activeUsers,70);assert.equal(data.week.cities[0].sessions,140);assert.equal(data.week.cities[0].userEngagementDuration,11760);assert.equal(data.month.cities[0].activeUsers,300);
   raw[1].rows=[];raw[1].metadata.subjectToThresholding=true;const limited=normalizeCities(raw,'2026-01-01','Asia/Shanghai');assert.deepEqual(limited.week.cities,[]);assert.match(limited.week.notices[0],/隐私/);
   raw[2].metadata.timeZone='UTC';assert.throws(()=>normalizeCities(raw,'2026-01-01','Asia/Shanghai'),/口径/);assert.throws(()=>normalizeCities([],'2026-01-01','Asia/Shanghai'),/不完整/);
 });

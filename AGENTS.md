@@ -32,6 +32,11 @@
 - 测试、隔离开发和基准验证的临时文件统一放在项目内的 `.runtime/test-tmp/`。新增测试入口先加载 `tools/test-env.cjs`；临时验证命令使用 `node --require ./tools/test-env.cjs ...`，让数据库、浏览器及子进程继承项目内的 TEMP/TMP/TMPDIR。
 - 浏览器测试使用 `npm run test:browser`，在 Playwright 加载前设置编译缓存目录。临时数据继续按各自测试的生命周期清理，不写入 Git，也不修改 Windows 全局临时目录。
 
+## 线上浏览器验收的统计隔离
+
+- 线上浏览器验收必须在首次导航前屏蔽 Google Analytics 脚本及上报，避免独立浏览器上下文和设备模拟被计为新访客。Playwright 测试优先使用 `web-next/tests/fixtures/without-analytics.ts` 的 `test`；另建上下文时调用其中的 `blockAnalytics(context)`。Puppeteer 等工具同样拦截谷歌统计域名；仅拦截本站阅读次数接口不能隔离 GA。
+- 此规则只隔离我们主动发起的验收流量，不修改真实用户浏览器，不按城市或短停留批量删除历史统计。历史真人与测试访问无法逐个归因时，报告限制，不强行把标识数合并为自然人数。
+
 ## 本地容量与清理
 
 - 新任务使用固定的日常构建目录；额外 `NEXT_DIST_DIR` 仅用于隔离验证。构建、测试优先使用根目录 npm 入口，它们会运行本地清理并登记活动保护；直接测试仍须加载 `tools/test-env.cjs`。

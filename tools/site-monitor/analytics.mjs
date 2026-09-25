@@ -4,7 +4,7 @@ import {calendarPeriods,trendCounts} from './periods.mjs';
 
 const tokenUrl='https://oauth2.googleapis.com/token';
 const scope='https://www.googleapis.com/auth/analytics.readonly';
-const metrics=['activeUsers','newUsers','screenPageViews','sessions'];
+const metrics=['activeUsers','newUsers','screenPageViews','sessions','userEngagementDuration'];
 const fields=names=>names.map(name=>({name}));
 
 export function validateCredentials(value) {
@@ -60,7 +60,7 @@ const cityPeriods={day:1,week:7,month:30};
 export function cityRequests(today) {
   return Object.values(cityPeriods).map(days=>({
     dateRanges:[{startDate:shiftDate(today,1-days),endDate:today}],
-    dimensions:fields(['cityId','city','region','countryId']),metrics:fields(['activeUsers']),
+    dimensions:fields(['cityId','city','region','countryId']),metrics:fields(['activeUsers','sessions','userEngagementDuration']),
     dimensionFilter:{notExpression:{filter:{fieldName:'city',inListFilter:{values:['','(not set)','(other)'],caseSensitive:false}}}},
     orderBys:[{metric:{metricName:'activeUsers'},desc:true},{dimension:{dimensionName:'city'}},{dimension:{dimensionName:'cityId'}}],limit:'10',returnPropertyQuota:true,
   }));
@@ -69,9 +69,9 @@ export function normalizeCities(reports,today,timeZone) {
   if(!Array.isArray(reports)||reports.length!==3)throw Error('谷歌城市报表不完整，请重试');
   return Object.fromEntries(Object.entries(cityPeriods).map(([unit,days],i)=>{
     const report=reports[i];
-    if(report.metadata?.timeZone!==timeZone||!report.metricHeaders?.some(h=>h.name==='activeUsers')||['cityId','city','region','countryId'].some(name=>!report.dimensionHeaders?.some(h=>h.name===name)))throw Error('谷歌城市报表口径不一致，请重试');
+    if(report.metadata?.timeZone!==timeZone||['activeUsers','sessions','userEngagementDuration'].some(name=>!report.metricHeaders?.some(h=>h.name===name))||['cityId','city','region','countryId'].some(name=>!report.dimensionHeaders?.some(h=>h.name===name)))throw Error('谷歌城市报表口径不一致，请重试');
     const cities=rows(report).filter(r=>r.city.trim()&&!['(not set)','(other)'].includes(r.city.trim().toLowerCase())&&r.activeUsers>0)
-      .map(r=>({id:r.cityId,name:r.city,region:r.region,country:r.countryId,activeUsers:r.activeUsers}))
+      .map(r=>({id:r.cityId,name:r.city,region:r.region,country:r.countryId,activeUsers:r.activeUsers,sessions:r.sessions,userEngagementDuration:r.userEngagementDuration}))
       .sort((a,b)=>b.activeUsers-a.activeUsers||a.name.localeCompare(b.name)||a.id.localeCompare(b.id)).slice(0,10);
     const notices=[report.metadata?.subjectToThresholding?'部分城市数据受谷歌隐私阈值限制':null,report.metadata?.dataLossFromOtherRow?'部分城市被谷歌合并，排名可能不完整':null,report.metadata?.samplingMetadatas?.length?'城市排名包含抽样数据':null].filter(Boolean);
     return [unit,{startDate:shiftDate(today,1-days),endDate:today,cities,notices}];

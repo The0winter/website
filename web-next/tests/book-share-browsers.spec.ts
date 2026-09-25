@@ -1,4 +1,4 @@
-import {test, expect} from '@playwright/test';
+import {test, expect} from './fixtures/without-analytics';
 
 const base = process.env.DETAIL_BASE || 'http://127.0.0.1:3000';
 const detail = `${base}/book/${process.env.DETAIL_BOOK || '000000000000000000000101'}`;
