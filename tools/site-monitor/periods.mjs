@@ -20,4 +20,4 @@ export function calendarPeriods(today,unit,count) {
   }
   return result;
 }
-export const trendCounts={day:90,week:26,month:12};
+export const trendCounts={day:14,week:8,month:6};

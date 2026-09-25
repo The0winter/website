@@ -13,6 +13,7 @@ import { mediaRoutes } from './routes/media.js';
 import { security, safeHtml, publicUser } from './security.js';
 import { authRoutes } from './routes/auth.js';
 import Session from './models/Session.js';
+import {trafficObservationRoutes} from './routes/traffic-observation.js';
 ﻿import { readConfig } from './config.js'; 
 import express from 'express';
 import mongoose from 'mongoose';
@@ -109,6 +110,7 @@ app.use((req,res,next) => {
 app.use('/api',(req,res,next)=>config.writeMode==='readonly'&&!['GET','HEAD','OPTIONS'].includes(req.method)?res.status(503).json({error:'当前维护中，暂不接受写入'}):next());
 // Only the dedicated batch importer needs multi-megabyte JSON; ordinary writes stay bounded.
 app.use('/api/admin/upload-book',express.json({limit:'10mb'}));
+app.use('/api/traffic/observe',express.json({limit:'4kb'}));
 app.use(express.json({ limit: '256kb' }));
 app.use(express.urlencoded({ limit: '256kb', extended: false, parameterLimit:100 }));
 app.use(mongoSanitize());
@@ -156,6 +158,7 @@ app.use('/api/auth/', (req,res,next) => ['GET','HEAD','OPTIONS'].includes(req.me
 const normalizeRole = (role) => (role === 'writer' ? 'reader' : role);
 
 const auth = security(app, config);
+trafficObservationRoutes(app,config);
 const authMiddleware = auth.authenticate;
 authRoutes(app,auth,config);
 mediaRoutes(app,auth);

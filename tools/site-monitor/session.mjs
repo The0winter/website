@@ -1,4 +1,4 @@
-export const intervals={server:15000,atlas:60000,r2:300000,site:60000,business:900000,analytics:900000,realtime:60000};
+export const intervals={server:15000,atlas:60000,r2:300000,site:60000,business:900000,analytics:900000,realtime:60000,traffic:300000};
 const empty=()=>({data:null,history:[],status:'pending',error:null,busy:false,lastAttempt:null,lastSuccess:null,nextDue:0});
 export class MonitorSession {
   constructor(collect, {clock=Date.now,maxPoints=1440}={}) {

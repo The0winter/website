@@ -25,8 +25,8 @@ test('真实谷歌空实时响应保留未知，不显示成零或吞掉损坏�
 });
 test('日周月直接查询周期去重；跨年 ISO 周与闰年月份正确，隐私缺口不补零',()=>{
   const query=activityRequests('2026-09-24');assert.equal(query.length,4);assert.deepEqual(query[0].dateRanges.map(r=>r.startDate),['2026-09-23','2026-09-17','2026-08-25']);
-  assert.equal(query[2].dimensions[0].name,'isoYearIsoWeek');assert.equal(query[2].dateRanges[0].endDate,'2026-09-20');assert.equal(query[3].dateRanges[0].startDate,'2025-09-01');assert.equal(query[3].dateRanges[0].endDate,'2026-08-31');
-  const value=normalizeActivity(activityReports(),'2026-09-24','Asia/Shanghai');assert.equal(value.rolling[7].activeUsers,12);assert.equal(value.trends.week.at(-1).activeUsers,12);assert.equal(value.trends.month.at(-1).activeUsers,28);assert.equal(value.trends.day.length,90);
+  assert.equal(query[2].dimensions[0].name,'isoYearIsoWeek');assert.equal(query[2].dateRanges[0].endDate,'2026-09-20');assert.equal(query[3].dateRanges[0].startDate,'2026-03-01');assert.equal(query[3].dateRanges[0].endDate,'2026-08-31');
+  const value=normalizeActivity(activityReports(),'2026-09-24','Asia/Shanghai');assert.equal(value.rolling[7].activeUsers,12);assert.equal(value.trends.week.at(-1).activeUsers,12);assert.equal(value.trends.month.at(-1).activeUsers,28);assert.equal(value.trends.day.length,14);
   assert.equal(calendarPeriods('2021-01-05','week',1)[0].key,'202053');assert.equal(calendarPeriods('2024-03-10','month',1)[0].endDate,'2024-02-29');assert.equal(calendarPeriods('2026-09-21','week',1)[0].endDate,'2026-09-20');
   const raw=activityReports();raw[2].metadata.subjectToThresholding=true;const limited=normalizeActivity(raw,'2026-09-24','Asia/Shanghai');assert.equal(limited.trends.week[0].activeUsers,null);assert.equal(limited.trends.day[0].activeUsers,0);assert.match(limited.notices[0],/隐私/);
   raw[1].metadata.timeZone='UTC';assert.throws(()=>normalizeActivity(raw,'2026-09-24','Asia/Shanghai'),/口径/);

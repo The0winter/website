@@ -12,6 +12,7 @@ import LoginNavigation from "@/components/LoginNavigation";
 import LibraryPrefetch from "@/components/LibraryPrefetch";
 import {MobileWriterProvider} from "@/components/MobileWriterLaunch";
 import { Suspense } from 'react';
+import Script from 'next/script';
 
 import { GoogleAnalytics } from '@next/third-parties/google';
 import {siteDescription, siteOrigin, siteTitle} from '@/lib/seo';
@@ -76,6 +77,7 @@ export default function RootLayout({
           </ReadingSettingsProvider>
         </AuthProvider>
         {process.env.NEXT_PUBLIC_ANALYTICS_ENABLED === 'enabled' && /^G-[A-Z0-9]+$/.test(process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID || '') && <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID!} />}
+        {process.env.NEXT_PUBLIC_ANALYTICS_ENABLED === 'enabled' && <Script src="/traffic-observer.js" type="module" strategy="afterInteractive" />}
       </body>
     </html>
   );

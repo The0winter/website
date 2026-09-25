@@ -29,5 +29,7 @@ export function readConfig(env = process.env) {
   const writeMode=env.WRITE_MODE||(mode==='production'?'readonly':'readwrite');if(!['readonly','readwrite'].includes(writeMode))throw new Error('Invalid WRITE_MODE');
   const port = Number(env.PORT || 5000);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid PORT');
-  return { mode, uri, origins, port, host: env.HOST || '127.0.0.1', jwtSecret: env.JWT_SECRET, trustProxy, writeMode };
+  const trafficMode=env.TRAFFIC_ANALYTICS||(mode==='production'?'observe':'off');
+  if(!['off','observe'].includes(trafficMode))throw new Error('Invalid TRAFFIC_ANALYTICS');
+  return { mode, uri, origins, port, host: env.HOST || '127.0.0.1', jwtSecret: env.JWT_SECRET, trustProxy, writeMode, trafficMode };
 }

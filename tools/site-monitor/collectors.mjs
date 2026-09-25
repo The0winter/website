@@ -5,6 +5,7 @@ import {spawn} from 'node:child_process';
 import {remoteSnapshot} from './remote.mjs';
 import {googleCollectors} from './analytics.mjs';
 import {readBusiness} from './business.mjs';
+import {readTraffic} from './traffic.mjs';
 
 export const defaults = {host:'ubuntu@51.79.242.0',identity:path.join(os.homedir(),'.ssh','ovh_website_ed25519'),site:'https://jiutianxiaoshuo.com',atlasLimitMiB:null,gaPropertyId:'',gaCredentialsPath:process.env.GOOGLE_APPLICATION_CREDENTIALS||'',analyticsDays:30};
 export function validateConfig(input={}) {
@@ -23,9 +24,9 @@ export function validateConfig(input={}) {
   return Object.fromEntries(['host','identity','site','atlasLimitMiB','gaPropertyId','gaCredentialsPath','analyticsDays'].map(k=>[k,value[k]]));
 }
 export function runRemote(kind,config,signal,request={}) {
-  if(!['server','atlas','r2','inventory','business'].includes(kind))return Promise.reject(Error('未知采集类型'));
+  if(!['server','atlas','r2','inventory','business','traffic'].includes(kind))return Promise.reject(Error('未知采集类型'));
   if(!fs.existsSync(config.identity))return Promise.reject(Error('找不到 SSH 密钥，请在连接设置中检查路径'));
-  const script=`const timeout=setTimeout(()=>process.exit(2),25000);try{console.log(JSON.stringify(await (${remoteSnapshot.toString()})(${JSON.stringify(kind)},${JSON.stringify(request)},(${readBusiness.toString()}))))}catch{console.log(JSON.stringify({error:'REMOTE_READ_FAILED'}));process.exitCode=1}finally{clearTimeout(timeout)}`;
+  const script=`const timeout=setTimeout(()=>process.exit(2),25000);try{console.log(JSON.stringify(await (${remoteSnapshot.toString()})(${JSON.stringify(kind)},${JSON.stringify(request)},(${readBusiness.toString()}),(${readTraffic.toString()}))))}catch{console.log(JSON.stringify({error:'REMOTE_READ_FAILED'}));process.exitCode=1}finally{clearTimeout(timeout)}`;
   return new Promise((resolve,reject)=>{
     const child=spawn('ssh',['-i',config.identity,'-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=8','-o','ServerAliveInterval=5','-o','ServerAliveCountMax=1',config.host,'sudo -n /opt/node-v22.23.2-linux-x64/bin/node --env-file=/etc/test1/api.env --input-type=module'],{windowsHide:true,stdio:['pipe','pipe','pipe']});
     let output='',stderr='',done=false;
@@ -66,4 +67,4 @@ export async function collectSite(config,signal,{fetchImpl=fetch}={}) {
   }else checks.push({id:'catalog',label:'章节目录',status:'skipped',error:'书籍列表未通过'},{id:'chapter',label:'章节正文',status:'skipped',error:'书籍列表未通过'});
   return {sampledAt,status:checks[0].status==='ok'?200:null,latencyMs:checks[0].latencyMs,url:config.site,checks};
 }
-export function collectors(config) {return {...Object.fromEntries(['server','atlas','r2','site','business'].map(kind=>[kind,signal=>kind==='site'?collectSite(config,signal):runRemote(kind,config,signal,kind==='business'?{days:config.analyticsDays}:{})])),...googleCollectors(config)};}
+export function collectors(config) {return {...Object.fromEntries(['server','atlas','r2','site','business','traffic'].map(kind=>[kind,signal=>kind==='site'?collectSite(config,signal):runRemote(kind,config,signal,kind==='business'?{days:config.analyticsDays}:{})])),...googleCollectors(config)};}

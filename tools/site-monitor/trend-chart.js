@@ -9,7 +9,7 @@ export function mountTrend(root,points,series,key) {
   const identity=key+':'+points[0].date+':'+points.at(-1).date;
   const view=views.get(identity)||{start:0,count:points.length,index:null};
   views.set(identity,view);if(views.size>12)views.delete(views.keys().next().value);
-  const min=Math.min(3,points.length),height=260,left=48,right=18,top=20,bottom=32;
+  const min=Math.min(3,points.length),height=200,left=35,right=10,top=16,bottom=26;
   let width=600,svg,tooltip,activeLine,resize;
   const visible=()=>points.slice(view.start,view.start+view.count);
   const x=i=>left+i/Math.max(1,view.count-1)*(width-left-right);
@@ -31,7 +31,7 @@ export function mountTrend(root,points,series,key) {
   function draw() {
     const focused=root.contains(document.activeElement)?document.activeElement.dataset.control:null;
     const expanded=root.querySelector('details')?.open||false;
-    width=Math.max(280,root.clientWidth);const data=visible();
+    width=Math.max(180,root.clientWidth);const data=visible();
     const max=Math.max(4,Math.ceil(Math.max(0,...data.flatMap(p=>series.map(s=>valid(p[s.key])?p[s.key]:0)))/4)*4);
     const y=v=>top+(1-v/max)*(height-top-bottom);
     let markup=`<svg class="trend-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="用户变化趋势" tabindex="0" data-control="plot"><title>用户变化趋势。左右方向键查看读数，加减键缩放。</title>`;
@@ -58,6 +58,6 @@ export function mountTrend(root,points,series,key) {
   const keydown=event=>{if(event.target!==svg)return;if(['ArrowLeft','ArrowRight','Home','End','+','=','-','Escape'].includes(event.key))event.preventDefault();if(event.key==='ArrowLeft')show((view.index??1)-1);if(event.key==='ArrowRight')show((view.index??-1)+1);if(event.key==='Home')show(0);if(event.key==='End')show(view.count-1);if(['+','='].includes(event.key))zoom(.65);if(event.key==='-')zoom(1.6);if(event.key==='Escape')hide();};
   function hide(){view.index=null;tooltip.hidden=true;activeLine.setAttribute('hidden','');}
   root.addEventListener('pointermove',pointer);root.addEventListener('pointerdown',pointer);root.addEventListener('pointerleave',hide);root.addEventListener('wheel',wheel,{passive:false});root.addEventListener('click',click);root.addEventListener('change',input);root.addEventListener('keydown',keydown);
-  draw();resize=new ResizeObserver(()=>{if(Math.abs(width-Math.max(280,root.clientWidth))>1)draw();});resize.observe(root);
+  draw();resize=new ResizeObserver(()=>{if(Math.abs(width-Math.max(180,root.clientWidth))>1)draw();});resize.observe(root);
   return ()=>{resize.disconnect();root.removeEventListener('pointermove',pointer);root.removeEventListener('pointerdown',pointer);root.removeEventListener('pointerleave',hide);root.removeEventListener('wheel',wheel);root.removeEventListener('click',click);root.removeEventListener('change',input);root.removeEventListener('keydown',keydown);};
 }
