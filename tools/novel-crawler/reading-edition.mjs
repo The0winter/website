@@ -173,16 +173,27 @@ export function recordReadingCatalogCorrection(dir, spec, extraction, outputDir,
 
 // Only a complete, explicitly reviewed new three-chapter window can retain a
 // source numbering defect. Independent consecutive titles prove the order.
-export function recordReadingNumberingReview(dir, spec, extraction, outputDir, {exportHash,links,hashes,reference,reason}) {
+export function recordReadingNumberingReview(dir, spec, extraction, outputDir, {exportHash,links,hashes,reference,reason,boundary}) {
   const state=loadReadingEdition(dir,spec,extraction,outputDir);
   if (!state || state.exportHash!==exportHash || !Array.isArray(links) || links.length!==3 || new Set(links).size!==3 || !Array.isArray(hashes) || hashes.length!==3 || !reference || typeof reason!=='string' || !reason.trim()) throw Error('编号核对需要原书哈希、相邻三项完整正文、独立目录及理由');
   const catalog=readJson(path.join(dir,'catalog.json')),positions=links.map(link=>catalog.findIndex(c=>c.link===link));
-  if (!positions.every((p,i)=>p>=state.sources.length&&p===positions[0]+i)) throw Error('只能核对尚未收录的相邻三项，不能跳过缺章或修改旧映射');
+  const last = state.book.chapters.at(-1);
+  const boundaryWindow = boundary !== undefined;
+  if (boundaryWindow) {
+    // The only accepted historical entry is the exact final, retained source
+    // chapter. Pin the whole old book through exportHash and its final object;
+    // a gap, notice or omitted source tail cannot be used as this anchor.
+    verifyReadingSources(dir, state, catalog);
+    if (!boundary || boundary.chapterHash !== hash(last) || last?.sourceChapterNumber !== state.sources.length ||
+        last.link !== links[0] || positions[0] !== state.sources.length - 1 ||
+        !positions.every((p,i)=>p===positions[0]+i)) throw Error('边界编号核对必须包含原书末章及紧随其后的两个新章');
+  } else if (!positions.every((p,i)=>p>=state.sources.length&&p===positions[0]+i)) throw Error('只能核对尚未收录的相邻三项，不能跳过缺章或修改旧映射');
   const chapters=positions.map((p,i)=>{const c=rawChapter(dir,catalog[p]);if(hash(c.content)!==hashes[i]||normalizedTitle(c.title)!==normalizedTitle(catalog[p].title)||c.content.trim().length<100)throw Error('完整正文哈希或目录标题不匹配');return c;});
   checkNewIssues(qualityReport(positions.map(p=>catalog[p]),chapters,[],'probe'));
   const numbers=chapters.map(c=>readingChapterNumber(c.title));
   const anomalies=[1,2].filter(i=>numbers[i]!==numbers[i-1]+1);
   if (!numbers.every(Number.isSafeInteger)||anomalies.length!==1) throw Error('仅核对相邻三项中的一个来源编号错误');
+  if (boundaryWindow && (anomalies[0] !== 1 || hash(last.content) !== hashes[0] || normalizedTitle(last.title) !== normalizedTitle(chapters[0].title))) throw Error('边界核对只能验收旧末章之后的编号错误，旧题与完整正文必须一致');
   const url=httpUrl(reference.url),raw=fs.readFileSync(reference.bodyFile),text=normalizedTitle(load(raw.toString('utf8')).text());
   const titles=reference.chapters,identities=Array.isArray(titles)&&titles.map(title=>chapterIdentity(String(title).replace(/^([0-9]+)[、.]\s*/u,'第$1章 ')));
   if (new URL(url).hostname===new URL(spec.sourceUrl).hostname||!raw.length||raw.length>2_000_000||hash(raw)!==reference.hash||
@@ -190,7 +201,7 @@ export function recordReadingNumberingReview(dir, spec, extraction, outputDir, {
       !identities.every((id,i)=>id&&Number.isSafeInteger(id.number)&&(!i||id.number===identities[i-1].number+1)&&id.name===chapterIdentity(chapters[i].title)?.name&&text.includes(normalizedTitle(titles[i])))) throw Error('独立目录未证明同书同作者的三个标题连续');
   const window=chapters.map(numberingFingerprint),evidenceFile=path.join(dir,'reading-numbering-evidence',reference.hash+'.bin');
   atomicWrite(evidenceFile,raw);
-  const decision={key:hash(window),window,anomalyIndex:anomalies[0],reason:reason.trim(),reference:{url,hash:reference.hash,chapters:titles},reviewedAt:new Date().toISOString()};
+  const decision={key:hash(window),window,anomalyIndex:anomalies[0],...(boundaryWindow ? {boundary:{exportHash,chapterHash:hash(last),sourcePosition:state.sources.length}} : {}),reason:reason.trim(),reference:{url,hash:reference.hash,chapters:titles},reviewedAt:new Date().toISOString()};
   atomicWrite(stateFile(dir),seal({...state,numberingReviews:[...(state.numberingReviews||[]).filter(r=>r.window[1].link!==links[1]),decision]}));
   return decision;
 }

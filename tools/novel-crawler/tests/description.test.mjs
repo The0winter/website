@@ -25,6 +25,7 @@ test('all configured desktop sources extract full paragraphs, excluding controls
     sjks88: '<meta name="description" content="第一段。&#10;第二段。">',
     bixiange: '<div class="descInfo"><p>第一段。</p><p>第二段。</p></div><aside>推广说明</aside>',
     shubenshu: '<div id="intro"><p>第一段。</p><p>第二段。</p></div><aside>推广说明</aside>',
+    diyibanzhu: '<div class="book-intro"><div class="bd"><p>第一段。</p><p>第二段。</p></div></div><aside>推广说明</aside>',
   };
   for (const site of loadSites().sites) {
     for (const metadata of [site.book.metadata, site.spec.metadata]) {
