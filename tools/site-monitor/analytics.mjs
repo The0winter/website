@@ -40,10 +40,19 @@ export function dateInZone(now,timeZone){return new Intl.DateTimeFormat('en-CA',
 export function shiftDate(day,offset){return new Date(Date.parse(day+'T00:00:00Z')+offset*86400000).toISOString().slice(0,10);}
 const activityMetrics=['activeUsers','newUsers'];
 const activityDimensions={day:'date',week:'isoYearIsoWeek',month:'yearMonth'};
-export function activityRequests(today) {
-  const base={metrics:fields(activityMetrics),returnPropertyQuota:true};
+export function regionFilter(region='all') {
+  if(region==='all')return undefined;
+  const china={filter:{fieldName:'countryId',stringFilter:{matchType:'EXACT',value:'CN'}}};
+  if(region==='china')return china;
+  // Unknown geography is not a known foreign country. Never subtract CN from totals:
+  // the same person may have visits in both regions and needs period-level deduplication.
+  if(region==='other')return {andGroup:{expressions:[{notExpression:china},{filter:{fieldName:'countryId',stringFilter:{matchType:'FULL_REGEXP',value:'[A-Z]{2}',caseSensitive:true}}}]}};
+  throw Error('统计地区无效');
+}
+export function activityRequests(today,region='all') {
+  const filter=regionFilter(region),base={metrics:fields(activityMetrics),returnPropertyQuota:true,...(filter?{dimensionFilter:filter}:{})};
   return [
-    {...base,dateRanges:[1,7,30].map(days=>({startDate:shiftDate(today,-days),endDate:shiftDate(today,-1),name:`last${days}`}))},
+    {...base,dateRanges:[1,7,30].map(days=>({startDate:shiftDate(today,1-days),endDate:today,name:`last${days}`}))},
     ...Object.entries(trendCounts).map(([unit,count])=>{const periods=calendarPeriods(today,unit,count),dimension=activityDimensions[unit];return {...base,dateRanges:[{startDate:periods[0].date,endDate:periods.at(-1).endDate}],dimensions:fields([dimension]),orderBys:[{dimension:{dimensionName:dimension}}],limit:'400'};}),
   ];
 }
@@ -55,7 +64,7 @@ export function normalizeActivity(reports,today,timeZone) {
   const notices=[...new Set(reports.flatMap(report=>[report.metadata?.subjectToThresholding?'谷歌对部分数据应用了隐私阈值':null,report.metadata?.dataLossFromOtherRow?'部分细分数据被谷歌合并到其他项':null,report.metadata?.samplingMetadatas?.length?'本报表包含抽样数据':null]).filter(Boolean))];
   const absent=report=>Object.fromEntries(activityMetrics.map(key=>[key,report.metadata?.subjectToThresholding||report.metadata?.dataLossFromOtherRow||report.metadata?.samplingMetadatas?.length?null:0]));
   const summary=rows(reports[0]);
-  return {endDate:shiftDate(today,-1),notices,
+  return {endDate:shiftDate(today,-1),rollingEndDate:today,notices,
     rolling:Object.fromEntries([1,7,30].map(days=>[days,summary.find(r=>r.dateRange===`last${days}`)||absent(reports[0])])),
     trends:Object.fromEntries(Object.entries(trendCounts).map(([unit,count],i)=>{
       const report=reports[i+1],byKey=new Map(rows(report).map(row=>[row[activityDimensions[unit]],row]));
@@ -127,6 +136,12 @@ export function googleCollectors(config,{fetchImpl=fetch,readFile=fs.readFile,cl
       const activity=await run('batchRunReports',{requests:activityRequests(data.todayDate)},signal);
       data.activity=normalizeActivity(activity.reports,data.todayDate,data.timeZone);
       data.notices=[...new Set([...data.notices,...data.activity.notices])];
+      const regions=await Promise.allSettled(['china','other'].map(async region=>{
+        const report=await run('batchRunReports',{requests:activityRequests(data.todayDate,region)},signal);
+        return {status:'connected',sampledAt:new Date(clock()).toISOString(),activity:normalizeActivity(report.reports,data.todayDate,data.timeZone)};
+      }));
+      if(signal.aborted)throw signal.reason||Error('统计读取已取消');
+      data.regions=Object.fromEntries(['china','other'].map((region,i)=>[region,regions[i].status==='fulfilled'?regions[i].value:{status:'error',error:regions[i].reason.message}]));
       return data;
     },
     realtime:async signal=>{

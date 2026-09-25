@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import {googleCollectors,normalizeReports,reportRequests,activityRequests,normalizeActivity,dateInZone,validateCredentials} from '../analytics.mjs';
+import {googleCollectors,normalizeReports,reportRequests,activityRequests,normalizeActivity,dateInZone,validateCredentials,regionFilter} from '../analytics.mjs';
 import {collectSite,validateConfig} from '../collectors.mjs';
 import {createMonitor} from '../server.mjs';
 import {fixtureCollectors,workspace,removeWorkspace} from './fixture.mjs';
@@ -24,12 +24,37 @@ test('真实谷歌空实时响应保留未知，不显示成零或吞掉损坏�
   payload=report([],['activeUsers'],[[[],[0]]]);assert.equal((await collect.realtime(signal)).activeUsers,0);
 });
 test('日周月直接查询周期去重；跨年 ISO 周与闰年月份正确，隐私缺口不补零',()=>{
-  const query=activityRequests('2026-09-24');assert.equal(query.length,4);assert.deepEqual(query[0].dateRanges.map(r=>r.startDate),['2026-09-23','2026-09-17','2026-08-25']);
+  const query=activityRequests('2026-09-24');assert.equal(query.length,4);assert.deepEqual(query[0].dateRanges.map(r=>r.startDate),['2026-09-24','2026-09-18','2026-08-26']);
   assert.equal(query[2].dimensions[0].name,'isoYearIsoWeek');assert.equal(query[2].dateRanges[0].endDate,'2026-09-20');assert.equal(query[3].dateRanges[0].startDate,'2026-03-01');assert.equal(query[3].dateRanges[0].endDate,'2026-08-31');
+  assert.ok(query[0].dateRanges.every(range=>range.endDate==='2026-09-24'));
   const value=normalizeActivity(activityReports(),'2026-09-24','Asia/Shanghai');assert.equal(value.rolling[7].activeUsers,12);assert.equal(value.trends.week.at(-1).activeUsers,12);assert.equal(value.trends.month.at(-1).activeUsers,28);assert.equal(value.trends.day.length,14);
   assert.equal(calendarPeriods('2021-01-05','week',1)[0].key,'202053');assert.equal(calendarPeriods('2024-03-10','month',1)[0].endDate,'2024-02-29');assert.equal(calendarPeriods('2026-09-21','week',1)[0].endDate,'2026-09-20');
   const raw=activityReports();raw[2].metadata.subjectToThresholding=true;const limited=normalizeActivity(raw,'2026-09-24','Asia/Shanghai');assert.equal(limited.trends.week[0].activeUsers,null);assert.equal(limited.trends.day[0].activeUsers,0);assert.match(limited.notices[0],/隐私/);
   raw[1].metadata.timeZone='UTC';assert.throws(()=>normalizeActivity(raw,'2026-09-24','Asia/Shanghai'),/口径/);
+});
+
+test('中国和其他国家直接过滤后按周期去重；未知地区不冒充其他国家',()=>{
+  assert.equal(regionFilter('all'),undefined);assert.throws(()=>regionFilter('unknown'));
+  const china=regionFilter('china');assert.deepEqual(china.filter,{fieldName:'countryId',stringFilter:{matchType:'EXACT',value:'CN'}});
+  const other=regionFilter('other');assert.deepEqual(other.andGroup.expressions[0].notExpression,china);
+  const known=other.andGroup.expressions[1].filter.stringFilter;assert.equal(known.matchType,'FULL_REGEXP');
+  for(const value of ['','(not set)','(other)','ZZZ'])assert.equal(new RegExp('^'+known.value+'$').test(value),false);
+  assert.equal(new RegExp('^'+known.value+'$').test('US'),true);
+  for(const request of activityRequests('2026-01-01','other'))assert.deepEqual(request.dimensionFilter,other);
+  const ranges=activityRequests('2026-01-01','china')[0].dateRanges;assert.deepEqual(ranges.map(r=>r.startDate),['2026-01-01','2025-12-26','2025-12-03']);assert.ok(ranges.every(r=>r.endDate==='2026-01-01'));
+});
+
+test('地区报表失败独立显示错误，成功地区保留独立人数且不回退到全部人数',async()=>{
+  const calls=[],credentials={type:'authorized_user',client_id:'synthetic-client',client_secret:'synthetic-secret',refresh_token:'synthetic-refresh'};
+  const collect=googleCollectors({gaPropertyId:'123',gaCredentialsPath:'/synthetic',analyticsDays:7},{clock:()=>Date.parse('2026-09-24T02:00:00Z'),readFile:async()=>JSON.stringify(credentials),fetchImpl:async(url,options)=>{
+    if(url.includes('oauth2'))return Response.json({access_token:'synthetic',expires_in:3600});
+    const requests=JSON.parse(options.body).requests;calls.push(requests);
+    if(requests.length===5)return Response.json({reports:reports()});
+    if(requests[0].dimensionFilter?.andGroup)return Response.json({error:{}},{status:429});
+    const data=activityReports();if(requests[0].dimensionFilter)data[0].rows[1].metricValues[0].value='7';
+    return Response.json({reports:data});
+  }});
+  const data=await collect.analytics(new AbortController().signal);assert.equal(data.activity.rolling[7].activeUsers,12);assert.equal(data.regions.china.activity.rolling[7].activeUsers,7);assert.equal(data.regions.china.status,'connected');assert.ok(data.regions.china.sampledAt);assert.equal(data.regions.other.status,'error');assert.match(data.regions.other.error,/额度/);assert.equal(data.regions.other.activity,undefined);assert.equal(calls.length,4);
 });
 
 test('谷歌报表按整个周期去重，日期补齐，保留元数据和零基期',()=>{const data=normalizeReports(reports(),7,Date.parse('2026-09-23T17:00:00Z'));assert.equal(data.todayDate,'2026-09-24');assert.equal(data.current.activeUsers,12);assert.equal(data.daily.length,7);assert.equal(data.daily[0].activeUsers,0);assert.equal(data.daily.at(-1).activeUsers,9);assert.equal(data.today.screenPageViews,9);assert.equal(growth(12,0).direction,'new');assert.equal(growth(0,0).direction,'flat');assert.equal(growth(null,5),null);const raw=reports();raw[2].metadata.subjectToThresholding=true;assert.match(normalizeReports(raw,7).notices[0],/隐私/);assert.throws(()=>normalizeReports([],7));});
