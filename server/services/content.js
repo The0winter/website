@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import {recordBookUpdate} from './book-update-time.js';
 import mongoose from 'mongoose';
 import Book from '../models/Book.js';
 import Chapter from '../models/Chapter.js';
@@ -51,6 +52,7 @@ export async function createChapter(actor,bookId,body) {
     }
     await chargeQuota(actor,data.content.length,session);
     [result]=await Chapter.create([{...data,bookId}],{session});
+    await recordBookUpdate(bookId,session);
   });
   return result;
 }

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import {recordBookUpdate} from './book-update-time.js';
 import Chapter from '../models/Chapter.js';
 import Book from '../models/Book.js';
 import ChapterDraft from '../models/ChapterDraft.js';
@@ -41,7 +42,7 @@ export async function trashChapter(actor, id, {restore = false, now = new Date()
     await lockBook(chapter.bookId, actor, session);
     if (restore) {
       if (chapter.deletedAt && chapter.trashUntil && chapter.trashUntil <= now) fail(410, '已超过七天恢复期限');
-      if (chapter.deletedAt) {chapter.deletedAt = null; chapter.trashUntil = undefined; await chapter.save({session});}
+      if (chapter.deletedAt) {chapter.deletedAt = null; chapter.trashUntil = undefined; await chapter.save({session}); await recordBookUpdate(chapter.bookId, session, now);}
     } else if (!chapter.deletedAt) {
       chapter.deletedAt = now; chapter.trashUntil = trashDeadline(now); await chapter.save({session});
     }

@@ -93,7 +93,10 @@ test('chapter workspace preserves cloud drafts, ownership, quota and publication
       const result2 = await owner(path + '/publish', 'POST', {id: 'new-draft', title: '超出额度', content: '正文', number: 10});
       assert.equal(result2.status, 429); assert.equal(await Chapter.countDocuments(), 1); assert.equal(await WriterPublication.countDocuments(), 1);
       await User.updateOne({_id: user.id}, {$set: {daily_upload_words: used}});
+      const oldUpdate = new Date('2020-01-01');
+      await Book.updateOne({_id: bookId}, {$set: {lastUpdated: oldUpdate}}, {timestamps: false});
       assert.equal((await owner(path + '/publish', 'POST', {id: 'new-draft', title: '新章', content: '完整新正文', number: 10})).status, 200);
+      assert.ok(+(await Book.findById(bookId)).lastUpdated > +oldUpdate);
       const catalog = await owner(path); assert.equal(catalog.data.maxNumber, 10);
       assert.deepEqual(catalog.data.published.map(row => row.number), [10, 2]);
       assert.equal((await other(`/api/writer/workspace/b_${bookId}`)).status, 404);
@@ -110,7 +113,16 @@ test('chapter workspace preserves cloud drafts, ownership, quota and publication
       assert.equal((await admin(url + '?search=' + encodeURIComponent('.*'))).data.total, 0);
       const chapter = await Chapter.findById(firstId);
       const payload = {id: 'admin-edit', title: chapter.title, content: '管理员校对后的正文', number: 2, targetChapterId: firstId, baseUpdatedAt: chapter.updatedAt.toISOString()};
+      const oldUpdate = new Date('2020-01-01');
+      await Book.updateOne({_id: bookId}, {$set: {lastUpdated: oldUpdate}}, {timestamps: false});
       assert.equal((await admin(url + '/publish', 'POST', payload)).status, 200);
+      const publishedAt = +(await Book.findById(bookId)).lastUpdated;
+      assert.ok(publishedAt > +oldUpdate);
+      assert.equal((await admin(url + '/publish', 'POST', payload)).status, 200);
+      assert.equal(+(await Book.findById(bookId)).lastUpdated, publishedAt);
+      const saved = await Chapter.findById(firstId);
+      assert.equal((await admin(url + '/publish', 'POST', {...payload, id: 'unchanged-edit', baseUpdatedAt: saved.updatedAt.toISOString()})).status, 200);
+      assert.equal(+(await Book.findById(bookId)).lastUpdated, publishedAt);
       assert.equal((await Book.findById(bookId)).author_id.toString(), user.id);
       assert.equal(await storage.readChapter(await Chapter.findById(firstId)), payload.content);
       assert.equal((await admin(url + '/publish', 'POST', {...payload, id: 'stale-admin-edit'})).status, 409);

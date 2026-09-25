@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import {recordBookUpdate} from '../services/book-update-time.js';
 import Author from '../models/Author.js';
 import Book from '../models/Book.js';
 import {ensureBookStatistics} from '../services/initial-book-statistics.js';
@@ -81,7 +82,10 @@ export function libraryImportRoutes(app) {
       });
       // insertMany bypasses save hooks: R2 references are already written and
       // verified above. Schema validation and the unique chapter index remain.
-      if (inserts.length) await Chapter.insertMany(inserts, {session, ordered: true});
+      if (inserts.length) {
+        await Chapter.insertMany(inserts, {session, ordered: true});
+        await recordBookUpdate(book._id, session);
+      }
       result = {bookId: String(book._id), inserted: inserts.length, unchanged: chapters.length - inserts.length, enriched: 0,
         previousToken, token: libraryRevision(book)};
     });

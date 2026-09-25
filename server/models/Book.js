@@ -68,14 +68,14 @@ const bookSchema = new mongoose.Schema({
   },
   numRatings: {type: Number, default: 0, min: 0},
 
-  // --- 爬虫专用字段 (已保留) ---
+  // Source identity and last successful chapter publication/edit time.
   sourceUrl: { type: String },
   lastUpdated: { type: Date, default: Date.now }
 }, {
   timestamps: true
 });
 
-for (const key of ['views','weekly_views','daily_views','monthly_views','updatedAt','createdAt','rating']) bookSchema.index({deletedAt:1,[key]:-1,_id:1});
+for (const key of ['views','weekly_views','daily_views','monthly_views','updatedAt','lastUpdated','createdAt','rating']) bookSchema.index({deletedAt:1,[key]:-1,_id:1});
 bookSchema.index({author_id:1,deletedAt:1});
 bookSchema.index({author_profile_id:1,deletedAt:1});
 bookSchema.index({sourceUrl:1},{unique:true,partialFilterExpression:{importManaged:true}});

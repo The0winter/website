@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import {recordBookUpdate} from '../services/book-update-time.js';
 import {readChapterBody,chapterResponse} from '../services/chapter-storage.js';
 import Book from '../models/Book.js';
 import {ensureBookStatistics} from '../services/initial-book-statistics.js';
@@ -96,8 +97,10 @@ export function contentRoutes(app,auth) {
       await lockBook(chapter.bookId,req.user,session);
       const currentContent=await readChapterBody(chapter);
       const data=validateChapter({...chapter.toObject(),content:currentContent,...req.body});
+      const changed=data.title!==chapter.title || data.content!==currentContent || data.chapter_number!==chapter.chapter_number;
       if(data.content!==currentContent)await chargeQuota(req.user,data.content.length,session);
       Object.assign(chapter,data);chapter.contentKey=undefined;chapter.contentSha256=undefined;result=await chapter.save({session});
+      if(changed)await recordBookUpdate(chapter.bookId,session);
     });res.json(await chapterResponse(result));
   }));
   app.delete('/api/chapters/:id',auth.authenticate,asyncRoute(async(req,res)=>{

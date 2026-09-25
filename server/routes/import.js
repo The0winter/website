@@ -1,4 +1,5 @@
 import Author from '../models/Author.js';
+import {recordBookUpdate} from '../services/book-update-time.js';
 import {ensureBookStatistics} from '../services/initial-book-statistics.js';
 import {importMetadata} from '../services/import-metadata.js';
 import {claimImportedCover,retireUnreferencedCover} from '../services/media-reference.js';
@@ -68,6 +69,7 @@ export function importRoutes(app) {
         }
         else {inserted++;if(!data.dryRun)await Chapter.create([{...chapter,bookId:book._id}],{session});}
       }
+      if(inserted && !data.dryRun)await recordBookUpdate(book._id,session);
       result={dryRun:!!data.dryRun,bookId:String(book._id),authorId:book.author_profile_id?String(book.author_profile_id):null,inserted,unchanged,enriched};
     });
     const coverCleanup=await finishCoverRetirement(retiredCover,{storage:app.locals.coverStorage});

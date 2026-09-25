@@ -47,7 +47,7 @@ export function libraryRoutes(app, auth) {
     const entries = await model.find(filter).select('_id bookId lastVisitedAt lastReadAt chapterId').maxTimeMS(3000).lean();
     const ids = entries.map(row => row.bookId);
     const [books, visits] = ids.length ? await Promise.all([
-      Book.find({_id: {$in: ids}}).select('_id title author cover_image status category lastUpdated updatedAt deletedAt visibility').maxTimeMS(3000).lean(),
+      Book.find({_id: {$in: ids}}).select('_id title author cover_image status category lastUpdated deletedAt visibility').maxTimeMS(3000).lean(),
       history ? entries : ReadingHistory.find({userId, bookId: {$in: ids}}).select('bookId lastVisitedAt lastReadAt chapterId').maxTimeMS(3000).lean(),
     ]) : [[], []];
     const booksById = new Map(books.map(book => [String(book._id), book]));
@@ -55,8 +55,8 @@ export function libraryRoutes(app, auth) {
     const total = entries.length;
     const rows = entries.map(entry => {
       const book = booksById.get(String(entry.bookId)), visit = visitsByBook.get(String(entry.bookId));
-      // Views change updatedAt; prefer the content publication date.
-      const updated = +new Date(book?.lastUpdated ?? book?.updatedAt ?? 0);
+      // Only a recorded chapter update participates in publication sorting.
+      const updated = +new Date(book?.lastUpdated ?? 0);
       const read = +new Date(visit?.lastReadAt ?? (history ? visit?.lastVisitedAt : undefined) ?? 0);
       return {...entry, book, history: visit, updated, read, score: sort === 'read' ? read : sort === 'updated' ? updated : Math.max(read, updated)};
     }).sort((a, b) => b.score - a.score || b.read - a.read || b.updated - a.updated || String(b._id).localeCompare(String(a._id))).slice(skip, skip + limit);
@@ -78,7 +78,7 @@ export function libraryRoutes(app, auth) {
     const progressById = new Map(progress.map(row => [String(row._id), row.title]));
     res.set('Cache-Control', 'no-store').set('X-Total-Count', String(total)).json(rows.map(row => ({
       bookId: String(row.bookId),
-      book: row.book && !row.book.deletedAt && row.book.visibility !== 'private' ? {id: String(row.book._id), title: row.book.title, author: row.book.author, cover_image: row.book.cover_image, status: row.book.status, category: row.book.category, lastUpdated: row.book.lastUpdated || row.book.updatedAt} : null,
+      book: row.book && !row.book.deletedAt && row.book.visibility !== 'private' ? {id: String(row.book._id), title: row.book.title, author: row.book.author, cover_image: row.book.cover_image, status: row.book.status, category: row.book.category, lastUpdated: row.book.lastUpdated} : null,
       lastReadAt: row.history?.lastReadAt,
       lastVisitedAt: row.history?.lastVisitedAt,
       chapterId: progressById.has(String(row.history?.chapterId)) ? String(row.history.chapterId) : null,

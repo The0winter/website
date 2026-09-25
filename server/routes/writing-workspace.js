@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import {recordBookUpdate} from '../services/book-update-time.js';
+import {chapterBodyMatches} from '../services/chapter-storage.js';
 import Book from '../models/Book.js';
 import {ensureBookStatistics} from '../services/initial-book-statistics.js';
 import Chapter from '../models/Chapter.js';
@@ -186,7 +188,7 @@ export function writingWorkspaceRoutes(app, auth) {
         await manuscript.save({session});
       } else book = await lockBook(book._id, req.user, session);
       await ensureBookStatistics(book,{session});
-      let chapter;
+      let chapter, changed = true;
       if (body.targetChapterId) {
         chapter = await Chapter.findOne({_id: body.targetChapterId, bookId: book._id, deletedAt: null}).session(session);
         if (!chapter || chapter.chapter_number !== body.number) fail(409, '原章节已删除或编号发生变化');
@@ -198,6 +200,7 @@ export function writingWorkspaceRoutes(app, auth) {
           if (contentHash({title: chapter.title, content, number: chapter.chapter_number}) !== body.legacyBaseHash)
             fail(409, '旧草稿对应的原章节已更新，请核对已发布正文后再修改');
         }
+        changed = chapter.title !== data.title || !chapterBodyMatches(chapter, data.content);
         Object.assign(chapter, data, storedBody);
         chapter.set('content', undefined);
         await chapter.save({session});
@@ -206,6 +209,7 @@ export function writingWorkspaceRoutes(app, auth) {
         const source = /^manuscript-\d+$/.test(body.id) && manuscript?.chapters[Number(body.id.slice(11))];
         [chapter] = await Chapter.create([{...data, ...storedBody, content: undefined, bookId: book._id, ...(source ? {volume_title: source.volumeTitle, volume_number: source.volumeNumber} : {})}], {session});
       }
+      if (changed) await recordBookUpdate(book._id, session);
       await chargeQuota(req.user, 0, session);
       if (draft.contentKey) await WriterBlob.updateOne({_id: draft.contentKey}, {$set: {retireAt: new Date(Date.now() + 300000)}}, {session});
       draft.published = true; draft.revision++; draft.contentKey = undefined; draft.contentSha256 = undefined;

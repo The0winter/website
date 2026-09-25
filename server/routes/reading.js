@@ -58,7 +58,7 @@ export function readingRoutes(app,auth) {
     else if(orderBy==='featured_daily')({rows: books, total} = await dailyFeaturedBooks(filter,(page-1)*limit,limit));
     else if(Object.hasOwn(rankingViewFields,orderBy))({rows: books, total} = await rankedBooks(filter,orderBy,order,(page-1)*limit,limit));
     else if(orderBy==='composite')books=await Book.aggregate([{$match:filter},{$addFields:{score:{$add:[{$multiply:[{$ifNull:['$rating',0]},60]},{$multiply:[{$ifNull:['$weekly_views',0]},0.4]}]}}},{$sort:{score:order==='asc'?1:-1,_id:1}},{$skip:(page-1)*limit},{$limit:limit},{$unset:'score'}]).option({maxTimeMS:3000});
-    else books=await Book.find(filter).sort({[orderBy]:order==='asc'?1:-1,_id:1}).skip((page-1)*limit).limit(limit).populate('author_id','username').maxTimeMS(3000).lean();
+    else books=await Book.find(filter).sort({[orderBy==='updatedAt'?'lastUpdated':orderBy]:order==='asc'?1:-1,_id:1}).skip((page-1)*limit).limit(limit).populate('author_id','username').maxTimeMS(3000).lean();
     res.set('X-Total-Count',String(total ?? await Book.countDocuments(filter).maxTimeMS(3000)));
     res.json(books.map(formatted));
   }));
