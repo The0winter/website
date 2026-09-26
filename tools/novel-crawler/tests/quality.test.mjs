@@ -46,3 +46,20 @@ test('normal text, a few quoted markers, and one unusual repeated character are 
     assert.equal(mojibakeEvidence(content), null);
   }
 });
+
+test('empty-content and reader-upgrade placeholders fail collection quality without changing source text', () => {
+  for (const content of ['暂无内容', '暂 无 内 容。', '请升级到新版本查看本章！']) {
+    const chapter = item(1, content), before = structuredClone(chapter);
+    const report = qualityReport([chapter], [chapter]);
+    assert.equal(report.structuralPass, false);
+    assert.ok(report.issues.some(issue => issue.code === 'placeholder' && issue.chapter === 1));
+    assert.deepEqual(chapter, before);
+  }
+});
+
+test('ordinary narrative mentioning placeholder messages stays intact', () => {
+  for (const content of ['屏幕上显示“暂无内容”，他关掉了页面。', '请升级到新版本查看本章是网站显示的提示，并非本章正文。', '暂无内容，但明天会补充地图说明。']) {
+    const chapter = item(1, content);
+    assert.equal(qualityReport([chapter], [chapter]).issues.some(issue => issue.code === 'placeholder'), false);
+  }
+});

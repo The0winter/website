@@ -50,7 +50,7 @@ export function mojibakeEvidence(text) {
 export function placeholderEvidence(text) {
   const value = String(text || '').replace(/\s/gu, '');
   if (value.length > 500) return false;
-  return /^(?:请到手机端QQAPP查看本章|出于版权保护[，,]?本章暂不支持网页(?:阅读)?|内容还在处理中[，,]请稍后重试)(?:[。.!！]|（还有耶）)*$/iu.test(value);
+  return /^(?:请到手机端QQAPP查看本章|请升级到新版本查看本章|暂无内容|出于版权保护[，,]?本章暂不支持网页(?:阅读)?|内容还在处理中[，,]请稍后重试)(?:[。.!！]|（还有耶）)*$/iu.test(value);
 }
 
 function shingles(text) {
