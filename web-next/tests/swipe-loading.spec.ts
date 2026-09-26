@@ -58,7 +58,7 @@ for (const width of [320,390]) test(`${width}px short deliberate swipes switch o
 for(const width of [390,1440]) test(`${width}px book loading uses the site logo and dots cycle 0 to 3 without shifting the label`,async ({page},info) => {
   await page.setViewportSize({width,height:844});
   await page.goto(base+'/');
-  const link=page.locator(width<768?'.mobile-home a[href^="/book/"]:visible':'.desktop-home a[href^="/book/"]').first();
+  const link=page.locator(width<768?'.mobile-home a[href^="/book/"]:not([aria-hidden="true"]):visible':'.desktop-home a[href^="/book/"]').first();
   // Loading must reuse a small optimized logo, even when the full-size original is unavailable.
   await page.route('**/icon.png',route=>route.abort());
   const href=await link.getAttribute('href');

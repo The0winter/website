@@ -5,8 +5,8 @@ const base = process.env.COMPAT_BASE || 'http://127.0.0.1:3000';
 const book = process.env.COMPAT_BOOK || '000000000000000000000101';
 const detail = `${base}/book/${book}`;
 
-test.beforeEach(async ({page}, info) => {
-  await page.addInitScript(legacy => {
+test.beforeEach(async ({context}, info) => {
+  await context.addInitScript(legacy => {
     if (legacy) {
       for (const key of ['any', 'timeout']) Object.defineProperty(AbortSignal, key, {value: undefined, configurable: true});
       Object.defineProperty(AbortSignal.prototype, 'throwIfAborted', {value: undefined, configurable: true});
@@ -14,9 +14,9 @@ test.beforeEach(async ({page}, info) => {
     Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}});
     localStorage.setItem('has-seen-reading-hint', 'true');
   }, info.project.name === 'Quark-capabilities');
-  await page.route('**/traffic-observer.js', route => route.abort());
-  await page.route('**/api/traffic/observe', route => route.fulfill({status: 204}));
-  await page.route('**/api/books/*/views', route => route.fulfill({json: {counted: false}}));
+  await context.route('**/traffic-observer.js', route => route.abort());
+  await context.route('**/api/traffic/observe', route => route.fulfill({status: 204}));
+  await context.route('**/api/books/*/views', route => route.fulfill({json: {counted: false}}));
 });
 
 async function singleLine(text: Locator) {
@@ -51,18 +51,23 @@ test('catalog loads, retries and opens chapters without recent AbortSignal metho
   await expect(sheet.getByRole('alert')).toHaveCount(0);
   await page.screenshot({path: info.outputPath('verified-catalog.png')});
   await sheet.locator('.book-catalog-chapter').first().click();
-  await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
+  // Allow the request deadline and rendering when the public chapter is cold.
+  await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true', {timeout: 20000});
   await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
 test('book and chapter loading messages keep the Chrome single-line layout', async ({page}, info) => {
   await page.goto(base);
+  // Carousel clones have layout boxes but are deliberately hidden from users.
+  const link = page.locator('.mobile-home a[href^="/book/"]:not([aria-hidden="true"]):visible').first();
+  await link.focus();
+  const href = await link.getAttribute('href');
   let release!: () => void;
   const gate = new Promise<void>(resolve => {release = resolve;});
-  await page.route(`**/book/${book}?_rsc=*`, async route => {await gate; await route.continue();});
+  await page.route(`**${href}?_rsc=*`, async route => {await gate; await route.continue();});
   try {
-    await page.locator(`.mobile-home a[href="/book/${book}"]:visible`).first().click();
+    await link.click();
     await expect.poll(() => page.locator('.book-navigation-loading').evaluate(element => Math.round(element.getBoundingClientRect().x))).toBe(0);
     await singleLine(page.locator('.book-navigation-loading .loading-text'));
     await page.screenshot({path: info.outputPath('verified-book-loading.png')});
@@ -81,20 +86,25 @@ test('book and chapter loading messages keep the Chrome single-line layout', asy
   await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
 });
 
-test('account, writer and review loading use the same single-line text', async ({page}, info) => {
+test('account, writer and review loading use the same single-line text', async ({context}, info) => {
   let release!: () => void;
   const gate = new Promise<void>(resolve => {release = resolve;});
-  await page.route('**/api/auth/session', async route => {await gate; await route.continue();});
-  await page.route(`**/api/books/${book}/reviews?*`, async route => {await gate; await route.continue();});
+  await context.route('**/api/auth/session', async route => {await gate; await route.continue();});
+  await context.route(`**/api/books/${book}/reviews?*`, async route => {await gate; await route.continue();});
   try {
     for (const [path, selector] of [['/profile', '.account-loading'], ['/writer', '.writer-page'], [`/book/${book}`, '.book-review-loading']]) {
-      await page.goto(base + path);
-      for (const width of [320, 390]) {
-        await page.setViewportSize({width, height: 844});
-        await singleLine(page.locator(`${selector} .loading-text`).first());
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      }
-      await page.screenshot({path: info.outputPath(`verified-${selector.slice(1)}.png`)});
+      // Each stalled session belongs to its own page; leaving it must not race
+      // an unauthenticated redirect against the next loading-state check.
+      const page = await context.newPage();
+      try {
+        await page.goto(base + path);
+        for (const width of [320, 390]) {
+          await page.setViewportSize({width, height: 844});
+          await singleLine(page.locator(`${selector} .loading-text`).first());
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        }
+        await page.screenshot({path: info.outputPath(`verified-${selector.slice(1)}.png`)});
+      } finally {await page.close();}
     }
   } finally {release();}
 });
