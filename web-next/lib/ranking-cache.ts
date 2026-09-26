@@ -32,7 +32,7 @@ function fetchPage(query: RankingQuery, current: Record) {
   current.controller = controller;
   current.snapshot = {...current.snapshot, loadingMore: Boolean(previous), moreError: false};
   const valid = () => !controller.signal.aborted && records.get(query.visit) === current;
-  const params = new URLSearchParams({orderBy: query.orderBy, limit: String(rankingPageSize), page: String(page)});
+  const params = new URLSearchParams({orderBy: query.orderBy, limit: String(rankingPageSize), page: String(page), fields: 'ranking'});
   if (query.category !== '全部') params.set('category', query.category);
   current.pending = (async () => {
     try {

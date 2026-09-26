@@ -1,6 +1,6 @@
 import {cancelBookTransition, transitionBookPage} from './book-transition';
 import {cancelChapterEntry, currentChapterEntry} from './chapter-entry';
-import {installRankingCache, trackRankingReading} from './ranking-cache';
+import {installRankingCache, loadRanking, trackRankingReading} from './ranking-cache';
 import {installReaderFullscreenBack} from './reader-fullscreen';
 
 type Route = {kind: 'home' | 'author' | 'library' | 'ranking' | 'detail' | 'reader'; href: string; bookId?: string};
@@ -127,6 +127,13 @@ function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, t
   // to its destination and must use that entry for subsequent Back actions.
   if (traversing) {current = entry; if (restore) notify();}
   window.dispatchEvent(new Event('book-navigation-leave'));
+  if (entry.kind === 'ranking') {
+    const view = entry.rankingView ?? {activeRank: 'day', category: '全部'};
+    // Fetch on the accepted navigation, alongside the route/chunk request.
+    // The mounted page reuses this same visit and in-flight promise.
+    void loadRanking({visit: entry.flow, category: view.category,
+      orderBy: view.activeRank === 'views' ? 'views' : `rank_${view.activeRank}`});
+  }
   if (currentChapterEntry()?.href === entry.href) {
     cancelBookTransition();
     // Reserve the reader visit immediately so Back during its incoming loader

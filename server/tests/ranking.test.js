@@ -39,11 +39,13 @@ test('rankings combine real period views and ratings before pagination; browsing
     if(transport)transport.query = async sql => {queries.push(sql); return query(sql);};
     const ordered = [quality, popular, unrated, quiet].map(b => String(b._id));
     for (const orderBy of ['rank_day', 'rank_week', 'rank_month', 'rank_total']) {
+      const beforeQueries = queries.length;
       const result = await get({orderBy, category: '玄幻', limit: '100'});
       assert.equal(result.status, 200); assert.equal(result.count, '4');
       assert.deepEqual(result.books.map(b => b.id), ordered);
       assert.deepEqual(result.books.map(b => b.rankingScore), [92, 84, 76, 20.8]);
       assert.ok(result.books.every(b => !('rankingMaxViews' in b)));
+      if (transport) assert.equal(queries.slice(beforeQueries).filter(sql => sql !== 'SELECT 1 AS ok').length, 1, 'rank, count and return only the requested page in one data read (apart from readiness ping)');
       const first = await get({orderBy, category: '玄幻', limit: '2'});
       const second = await get({orderBy, category: '玄幻', limit: '2', page: '2'});
       assert.deepEqual([...first.books, ...second.books], result.books);
@@ -54,11 +56,24 @@ test('rankings combine real period views and ratings before pagination; browsing
     if(transport) {
     const periodQueries = queries.filter(sql => sql.includes('FROM "readdailies"'));
     assert.ok(periodQueries.length > 0);
-    assert.ok(periodQueries.every(sql => sql.includes('SUM(') && sql.includes('GROUP BY') && sql.includes(today) && sql.includes(String(popular._id))), 'aggregate only selected books and dates in the database');
+    assert.ok(periodQueries.every(sql => sql.includes('SUM(') && sql.includes('GROUP BY') && sql.includes(today) && sql.includes('IN (SELECT id FROM selected_books)')), 'aggregate only selected books and dates in the database');
+    const beforeOverlap = queries.length;
+    const overlapping = await Promise.all(Array.from({length: 3}, () => rankedBooks({category: '玄幻', deletedAt: null, visibility: {$ne: 'private'}}, 'rank_total', 'desc', 0, 2)));
+    assert.equal(queries.length - beforeOverlap, 1, 'overlapping identical rankings share one read');
+    assert.ok(overlapping.every(result => result.rows.map(book => String(book._id)).join() === ordered.slice(0, 2).join()));
     transport.query = query;
     }
     assert.deepEqual(browsing.books.map(b => b.id), [popular, unrated, quality, quiet].map(b => String(b._id)));
     assert.ok(browsing.books.every(b => !('rankingScore' in b)));
+    const compact = await get({orderBy: 'rank_total', category: '玄幻', fields: 'ranking'});
+    assert.deepEqual(compact.books.map(row => row.id), ordered);
+    assert.ok(compact.books.every(row => 'title' in row && 'rankingScore' in row && !('createdAt' in row) && !('statisticsSeed' in row)));
+    const emptyPage = await get({orderBy: 'rank_total', category: '玄幻', page: '50'});
+    assert.equal(emptyPage.count, '4'); assert.deepEqual(emptyPage.books, []);
+    assert.deepEqual((await get({orderBy: 'rank_total', category: '玄幻', q: 'Similar'})).books.map(row => row.id), [String(quality._id)], 'regex search keeps exact fallback filtering');
+    const privateBook = await Book.create({title: 'Private outlier', category: '玄幻', visibility: 'private', views: 99999999, rating: 5});
+    assert.equal((await get({orderBy: 'rank_total', category: '玄幻'})).count, '4');
+    await Book.deleteOne({_id: privateBook._id});
     assert.equal((await get({orderBy: 'rank_total'})).books[0].id, String(other._id));
     // Each period uses its own counter, including calendar reset to zero.
     await daily.updateOne({bookId: quiet._id}, {$set: {views: 2000}});

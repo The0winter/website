@@ -24,6 +24,7 @@ const receiptSchema=new mongoose.Schema({_id:String,bookId:mongoose.Schema.Types
 const Receipt=mongoose.models.ReadReceipt||mongoose.model('ReadReceipt',receiptSchema);
 const integer=(value,fallback,max)=>{const n=value===undefined?fallback:Number(value);if(!Number.isSafeInteger(n)||n<1||n>max)fail(400,'分页参数无效');return n;};
 const formatted=doc=>({...doc,id:String(doc._id)});
+const rankingFields = ['_id', 'title', 'author', 'cover_image', 'category', 'description', 'rating', 'views', 'rankingViews', 'rankingScore'];
 export function readingRoutes(app,auth) {
   libraryRoutes(app,auth);
   paragraphCommentRoutes(app,auth);
@@ -60,7 +61,10 @@ export function readingRoutes(app,auth) {
     else if(orderBy==='composite')books=await Book.aggregate([{$match:filter},{$addFields:{score:{$add:[{$multiply:[{$ifNull:['$rating',0]},60]},{$multiply:[{$ifNull:['$weekly_views',0]},0.4]}]}}},{$sort:{score:order==='asc'?1:-1,_id:1}},{$skip:(page-1)*limit},{$limit:limit},{$unset:'score'}]).option({maxTimeMS:3000});
     else books=await Book.find(filter).sort({[orderBy==='updatedAt'?'lastUpdated':orderBy]:order==='asc'?1:-1,_id:1}).skip((page-1)*limit).limit(limit).populate('author_id','username').maxTimeMS(3000).lean();
     res.set('X-Total-Count',String(total ?? await Book.countDocuments(filter).maxTimeMS(3000)));
-    res.json(books.map(formatted));
+    // Ranking cards do not need import provenance, milestone history, or the
+    // editorial statistics audit embedded in each full book document.
+    res.json(books.map(book => formatted(req.query.fields === 'ranking'
+      ? Object.fromEntries(rankingFields.filter(key => key in book).map(key => [key, book[key]])) : book)));
   }));
   app.get('/api/books/sitemap-pool',asyncRoute(async(req,res)=>{
     const page=integer(req.query.page,1,100000);
