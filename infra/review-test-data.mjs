@@ -33,7 +33,9 @@ export function validatePlan(input) {
 
 export async function manageReviewTestData(input,{mode='preview',writeAudit}={}) {
   const plan=validatePlan(input);
-  if (!['preview','apply','cleanup'].includes(mode)) throw Error('Invalid mode');
+  if (!['preview','apply','cleanup','replace'].includes(mode)) throw Error('Invalid mode');
+  const previous=mode==='replace'?validatePlan({...input,drafts:input.previousDrafts}):plan;
+  if(mode==='replace' && plan.rows.some(row=>!previous.rows.some(old=>old.userId===row.userId && old.username===row.username))) throw Error('Replacement must retain existing test identities');
   const previewBook=await Book.findOne({_id:plan.bookId,deletedAt:null,visibility:{$ne:'private'}}).lean();
   if (!previewBook || previewBook.title!==plan.title || (previewBook.author||'')!==plan.author) throw Error('Book identity changed');
   if (mode==='preview') return {...plan,mode,count:plan.rows.length};
@@ -45,25 +47,37 @@ export async function manageReviewTestData(input,{mode='preview',writeAudit}={})
     const book=await Book.findOneAndUpdate({_id:plan.bookId,title:plan.title,author:plan.author,deletedAt:null,visibility:{$ne:'private'}},
       {$inc:{milestoneVersion:1}},{new:true,session,timestamps:false});
     if (!book) throw Error('Book changed since preview');
-    const users=await User.find({$or:[{_id:{$in:plan.rows.map(row=>row.userId)}},{testBatch:plan.batch}]}).select('+testBatch').session(session).lean();
-    const reviews=await Review.find({$or:[{_id:{$in:plan.rows.map(row=>row.reviewId)}},{testBatch:plan.batch}]}).select('+testBatch').session(session).lean();
+    const users=await User.find({$or:[{_id:{$in:previous.rows.map(row=>row.userId)}},{testBatch:plan.batch}]}).select('_id username isTestAccount created_at +testBatch').session(session).lean();
+    const reviews=await Review.find({$or:[{_id:{$in:previous.rows.map(row=>row.reviewId)}},{testBatch:plan.batch}]}).select('+testBatch +likedBy +dislikedBy').session(session).lean();
+    const matches=target=>users.length===target.rows.length && reviews.length===target.rows.length && target.rows.every(row=>{
+      const user=users.find(user=>String(user._id)===row.userId),review=reviews.find(review=>String(review._id)===row.reviewId);
+      return user?.isTestAccount && user.testBatch===plan.batch && user.username===row.username && review?.isTestData && review.testBatch===plan.batch
+        && String(review.book)===plan.bookId && String(review.user)===row.userId && review.content===row.content && review.rating===row.rating;
+    });
+    const alreadyReplaced=mode==='replace' && matches(plan);
+    if(mode==='replace' && !alreadyReplaced && !matches(previous))throw Error('Test records changed; preserve data for inspection');
     if (users.length || reviews.length) {
-      if (users.length!==plan.rows.length || reviews.length!==plan.rows.length) throw Error('Partial or conflicting batch; preserve data for inspection');
-      for(const row of plan.rows) {
-        const user=users.find(user=>String(user._id)===row.userId), review=reviews.find(review=>String(review._id)===row.reviewId);
-        if (!user?.isTestAccount || user.testBatch!==plan.batch || user.username!==row.username
-          || !review?.isTestData || review.testBatch!==plan.batch || String(review.book)!==plan.bookId || String(review.user)!==row.userId
-          || review.content!==row.content || review.rating!==row.rating) throw Error('Test records changed; preserve data for inspection');
-      }
+      if(mode!=='replace' && !matches(plan))throw Error('Test records changed; preserve data for inspection');
     }
     const before={rating:book.rating,numRatings:book.numRatings,numReviews:book.numReviews};
-    await writeAudit({phase:'prepared',mode,batch:plan.batch,bookId:plan.bookId,before,rows:plan.rows});
+    await writeAudit({phase:'prepared',mode,batch:plan.batch,bookId:plan.bookId,before,rows:plan.rows,...(mode==='replace'?{previousReviews:reviews,previousUsers:users}:{})});
     let changed=false;
     if(mode==='apply' && !users.length) {
       for(const row of plan.rows) {
         await User.create([{_id:row.userId,username:row.username,email:`${row.userId}@review-test.invalid`,password,
           role:'reader',isTestAccount:true,testBatch:plan.batch,profileTheme:row.profileTheme}],{session});
         await Review.create([{_id:row.reviewId,book:book._id,user:row.userId,rating:row.rating,content:row.content,isTestData:true,testBatch:plan.batch}],{session});
+      }
+      changed=true;
+    }
+    if(mode==='replace' && !alreadyReplaced) {
+      const removed=previous.rows.filter(old=>!plan.rows.some(row=>row.userId===old.userId));
+      const extra=await Review.countDocuments({user:{$in:removed.map(row=>row.userId)},testBatch:{$ne:plan.batch}}).session(session);
+      if(extra)throw Error('Test account has unrelated reviews; preserve it for inspection');
+      for(const row of plan.rows)await Review.updateOne({_id:row.reviewId,book:book._id,isTestData:true,testBatch:plan.batch},{$set:{content:row.content,rating:row.rating}},{session,runValidators:true});
+      if(removed.length){
+        await Review.deleteMany({_id:{$in:removed.map(row=>row.reviewId)},book:book._id,isTestData:true,testBatch:plan.batch},{session});
+        await User.deleteMany({_id:{$in:removed.map(row=>row.userId)},isTestAccount:true,testBatch:plan.batch},{session});
       }
       changed=true;
     }
@@ -86,7 +100,7 @@ export async function manageReviewTestData(input,{mode='preview',writeAudit}={})
 
 export async function main(args) {
   const [filename,auditDirectory,flag]=args;
-  if(!filename || !auditDirectory || args.length>3 || (flag && !['--apply','--cleanup'].includes(flag))) throw Error('Usage: node infra/review-test-data.mjs PLAN_JSON AUDIT_DIRECTORY [--apply|--cleanup]');
+  if(!filename || !auditDirectory || args.length>3 || (flag && !['--apply','--cleanup','--replace'].includes(flag))) throw Error('Usage: node infra/review-test-data.mjs PLAN_JSON AUDIT_DIRECTORY [--apply|--cleanup|--replace]');
   if(flag && process.env.WRITE_MODE!=='readwrite') throw Error('Writable target required');
   const input=JSON.parse(await fs.readFile(filename,'utf8'));
   validatePlan(input);
@@ -94,7 +108,7 @@ export async function main(args) {
   await connectDatabase();
   const audit=await fs.open(path.join(auditDirectory,input.batch+'.jsonl'),'a',0o600);
   try {
-    const result=await manageReviewTestData(input,{mode:flag==='--apply'?'apply':flag==='--cleanup'?'cleanup':'preview',
+    const result=await manageReviewTestData(input,{mode:flag==='--apply'?'apply':flag==='--cleanup'?'cleanup':flag==='--replace'?'replace':'preview',
       writeAudit:async row=>{await audit.write(JSON.stringify(row)+'\n');await audit.sync();}});
     await fs.writeFile(path.join(auditDirectory,input.batch+'-'+result.mode+'.json'),JSON.stringify(result,null,2),{mode:0o600});
     console.log(JSON.stringify(result.mode==='preview'?{mode:result.mode,batch:result.batch,bookId:result.bookId,count:result.count}:result));

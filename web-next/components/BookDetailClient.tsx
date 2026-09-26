@@ -1,7 +1,8 @@
 'use client';
 import {LoadingLogo, LoadingText} from './BrandLoading';
 import BookCover from '@/components/BookCover';
-import UserAvatar from './UserAvatar';
+import BookReviewList, {type Review} from './BookReviewList';
+import BookReviewSheet from './BookReviewSheet';
 import { safeFetch as fetch, requestSignal, type CatalogPage } from '@/lib/request';
 
 
@@ -16,13 +17,12 @@ import {BookMilestoneEntry, BookMilestoneSheet, useBookMilestones, type Mileston
 import {useBookCatalog} from '@/lib/useBookCatalog';
 import {formatChapterTitle} from '@/lib/catalog-title';
 import {formatRating, ratingLabel} from '@/lib/rating';
-import {compactCountParts, formatCompactCount} from '@/lib/compact-count';
-import {useReviewReactions} from '@/lib/useReviewReactions';
+import {compactCountParts} from '@/lib/compact-count';
 import {beginChapterEntry} from '@/lib/chapter-entry';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
 import {openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, Heart, HeartCrack, X, ChevronRight, ChevronDown, ChevronUp, PenLine } from 'lucide-react';
+import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, X, ChevronRight, ChevronDown, ChevronUp, PenLine } from 'lucide-react';
 import BookArticles from './BookArticles';
 import './book-detail.css';
 import { useAuth } from '@/contexts/AuthContext';
@@ -83,20 +83,6 @@ interface Chapter {
   chapter_number: number;
   published_at?: string;
   content?: string;
-}
-
-interface Review {
-  _id: string;
-  isTestData?: boolean;
-  rating: number;
-  content: string;
-  user: {
-    _id: string;
-    id?: string;
-    username: string;
-    avatar?: string;
-  };
-  createdAt: string;
 }
 
 interface BookDetailClientProps {
@@ -191,13 +177,15 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
   // --- 评论相关状态 ---
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [reviewPage,setReviewPage]=useState(1);
+  const [reviewCursor,setReviewCursor]=useState<string|null>(null);
+  const [reviewSheetOpen,setReviewSheetOpen]=useState(false);
+  const [reactionRefresh,setReactionRefresh]=useState(0);
   const [reviewTotal,setReviewTotal]=useState(book.numReviews ?? 0);
   const [reviewRefresh,setReviewRefresh]=useState(0);
   const [reviewResult,setReviewResult]=useState<{key:string;error:string}|null>(null);
   const [personalResult,setPersonalResult]=useState<{key:string;review:Review|null;error:string}|null>(null);
   const userId = user?.id || user?._id || '';
-  const reviewKey = `${book.id}/${reviewPage}/${reviewRefresh}`;
+  const reviewKey = `${book.id}/${reviewRefresh}`;
   const personalKey = `${book.id}/${userId}/${reviewRefresh}`;
   const reviewsLoading = reviewResult?.key !== reviewKey;
   const reviewError = reviewsLoading ? '' : reviewResult.error;
@@ -242,7 +230,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
     const controller=new AbortController();
     async function load(){
       try{
-        const response=await fetch(`/api/books/${book.id}/reviews?page=${reviewPage}&limit=20`,{cache:'no-store',signal:requestSignal(controller.signal)});
+        const response=await fetch(`/api/books/${book.id}/reviews?limit=2`,{cache:'no-store',signal:requestSignal(controller.signal)});
         if(!response.ok)throw new Error('评论加载失败，请重试');
         const rows:Review[]=await response.json();
         if(!controller.signal.aborted){
@@ -252,13 +240,14 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
           const summary=JSON.parse(response.headers.get('X-Rating-Summary') || 'null') as Book['ratingSummary'] | null;
           const ratings=Object.values(distribution).reduce((sum,count)=>sum+count,0);
           const rating=savedRating!==null&&Number.isFinite(Number(savedRating))?Number(savedRating):ratings?Object.entries(distribution).reduce((sum,[score,count])=>sum+Number(score)*count,0)/ratings:0;
-          setReviews(rows);setReviewTotal(total);setReviewResult({key:reviewKey,error:''});
+          setReviews(rows.slice(0,2));setReviewCursor(response.headers.get('X-Next-Cursor')||null);setReviewTotal(total);setReviewResult({key:reviewKey,error:''});
           setBookData(previous=>({...previous,book:{...previous.book,rating,ratingSummary:summary || undefined,numRatings:summary?.readerCount ?? total,numReviews:total}}));
         }
       }catch{if(!controller.signal.aborted)setReviewResult({key:reviewKey,error:'评论加载失败，请重试'});}
     }
-    void load();return()=>controller.abort();
-  },[book.id,reviewPage,reviewKey]);
+    const start=window.setTimeout(()=>void load(),0);
+    return()=>{clearTimeout(start);controller.abort();};
+  },[book.id,reviewKey]);
   // Public comments do not wait for sign-in or the reader's own review.
   useEffect(()=>{
     if(!userId)return;
@@ -279,7 +268,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
     const others = reviews.filter(r => r._id !== myReview._id);
     return [myReview, ...others];
   }, [reviews, myReview]);
-  const feedback = useReviewReactions(book.id, sortedReviews.map(review => review._id).join(','), user?.id || user?._id || '');
+
 
   // --- 操作：收藏 ---
   const handleToggleBookmark = async () => {
@@ -533,7 +522,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             </div>
             {communityTab === 'articles' && <div id="articles-panel" role="tabpanel" aria-labelledby="articles-tab"><BookArticles bookId={book.id} /></div>}
             <div id="reviews-panel" role="tabpanel" aria-labelledby="reviews-tab" aria-busy={reviewsLoading} hidden={communityTab !== 'reviews'}>
-            {!reviewsLoading && sortedReviews.some(review => review.isTestData) && <p className="book-review-test-notice">本页包含用于功能调试的 AI 测试评论，测试评分不计入本书评分。</p>}
+            {!reviewsLoading && sortedReviews.slice(0,2).some(review => review.isTestData) && <p className="book-review-test-notice">含 AI 测试评论，测试评分不计入本书评分。</p>}
             
             {/* 评论表单 */}
             {showReviewForm && (
@@ -546,63 +535,13 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
             {reviewError&&<p className="book-review-error" role="alert">{reviewError} <button onClick={()=>setReviewRefresh(value=>value+1)}>重试</button></p>}
             {personalError&&<p className="book-review-error" role="alert">{personalError} <button onClick={()=>setReviewRefresh(value=>value+1)}>重试</button></p>}
-            {feedback.error && <p className="book-review-error" role="alert">{feedback.error} <button onClick={feedback.retry}>重试</button></p>}
-            <nav hidden={reviewTotal <= 20} aria-label="评价分页" className="flex gap-4 justify-center my-4"><button disabled={reviewsLoading || reviewPage===1} onClick={()=>setReviewPage(reviewPage-1)}>上一页</button><span>第 {reviewPage} 页</span><button disabled={reviewsLoading || reviewPage*20>=reviewTotal} onClick={()=>setReviewPage(reviewPage+1)}>下一页</button></nav>
-            {/* 评论列表 */}
-            <div className="book-review-list">
-                {reviewsLoading ? <p className="book-review-loading" role="status"><LoadingText>正在加载评论</LoadingText></p> : reviewError ? null : sortedReviews.length === 0 ? (
-                    <div className="text-gray-500 text-sm text-center py-4">还没有文字评论，可以先评分，也可以写下读后感。</div>
-                ) : (
-                    sortedReviews.map((review) => {
-                        const userId = user?.id || user?._id;
-                        const isMyReview = userId && (review.user._id === userId || review.user.id === userId);
-                        const reviewerId = review.user?._id || review.user?.id || '';
-                        const profileHref = /^[a-f0-9]{24}$/i.test(reviewerId) ? `/user/${reviewerId}` : null;
-                        if (isMyReview && showReviewForm) return null;
-
-                        return (
-                            <article key={review._id} className="book-review">
-                                <div className="book-review-row">
-                                    <div className="book-review-avatar-wrap">
-                                        {profileHref ? <Link href={profileHref} className="book-review-profile-link" aria-label={`查看${review.user.username}的主页`}><UserAvatar user={review.user} className="book-review-avatar"/></Link>
-                                          : <UserAvatar user={review.user || {username:'书友'}} className="book-review-avatar"/>}
-                                    </div>
-                                    <div className="book-review-body flex-1">
-                                        <div className="book-review-heading">
-                                            {profileHref ? <Link className="book-review-name" href={profileHref} title={review.user.username}>{review.user.username} {isMyReview && '(我)'}</Link> : <span className="book-review-name" title={review.user?.username || '书友'}>
-                                                {review.user?.username || '书友'} {isMyReview && '(我)'}
-                                            </span>}
-                                            <div className="book-review-meta">
-                                            <StarRating rating={review.rating} size={4} />
-                                            </div>
-                                        </div>
-                                        <p className="book-review-content">{review.content}</p>
-                                        <footer className="book-review-footer">
-                                            {review.isTestData && <span className="book-review-test-badge">测试数据</span>}
-                                            <time dateTime={review.createdAt} title={review.createdAt.slice(0, 10)}>{review.createdAt.slice(0, 4) === String(new Date().getFullYear()) ? review.createdAt.slice(5, 10) : review.createdAt.slice(0, 10)}</time>
-                                            <div className="book-review-reactions" role="group" aria-label="评论反馈">
-                                                {(['like', 'dislike'] as const).map(choice => {
-                                                    const label = choice === 'like' ? '喜欢' : '不喜欢';
-                                                    const row = feedback.rows[review._id];
-                                                    const count = (choice === 'like' ? row?.likes : row?.dislikes) || 0;
-                                                    const active = row?.reaction === choice;
-                                                    const Icon = choice === 'like' ? Heart : HeartCrack;
-                                                    return <button key={choice} type="button" aria-label={`${label}，${count} 人`} title={active ? `取消${label}` : label}
-                                                        aria-pressed={active} disabled={feedback.busy(review._id) || (!!user && !row)}
-                                                        onClick={() => {if (!user) router.push('/login'); else void feedback.react(review._id, active ? null : choice);}}>
-                                                        <Icon size={18} aria-hidden="true"/>
-                                                        {count > 0 && <span aria-hidden="true">{formatCompactCount(count)}</span>}
-                                                    </button>;
-                                                })}
-                                            </div>
-                                        </footer>
-                                    </div>
-                                </div>
-                            </article>
-                        );
-                    })
-                )}
-            </div>
+            {reviewsLoading ? <p className="book-review-loading" role="status"><LoadingText>正在加载评论</LoadingText></p> : reviewError ? null : sortedReviews.length === 0 ? (
+              <div className="text-gray-500 text-sm text-center py-4">还没有文字评论，可以先评分，也可以写下读后感。</div>
+            ) : <BookReviewList key={reactionRefresh} bookId={book.id} reviews={sortedReviews.filter(review => !(showReviewForm && (review.user._id === userId || review.user.id === userId))).slice(0,2)} userId={userId} compact/>}
+            {reviewTotal>0 && <button className="book-review-view-all" aria-haspopup="dialog" onClick={()=>setReviewSheetOpen(true)}>查看全部评论<ChevronRight size={16}/></button>}
+            {reviewSheetOpen && <BookReviewSheet key={`${book.id}/${reviewRefresh}`} bookId={book.id} title={book.title} userId={userId} preview={reviewsLoading||reviewError?[]:reviews} cursor={reviewsLoading||reviewError?'':reviewCursor} total={reviewTotal}
+              onClose={()=>{setReviewSheetOpen(false);setReactionRefresh(value=>value+1);}}
+              onWrite={()=>{setReviewSheetOpen(false);setReactionRefresh(value=>value+1);openReviewForm();}}/>}
             </div>
         </div>
 

@@ -7,13 +7,14 @@ export type ReviewReaction = 'like' | 'dislike' | null;
 type Feedback = {id:string; likes:number; dislikes:number; reaction:ReviewReaction};
 
 export function useReviewReactions(bookId:string, ids:string, userId:string) {
-  const key = `${bookId}/${userId}/${ids}`;
+  const key = `${bookId}/${userId}`;
   const currentKey = useRef(key);
   const [refresh, setRefresh] = useState(0);
   const [state, setState] = useState<{key:string; rows:Record<string,Feedback>}>({key:'', rows:{}});
   const [error, setError] = useState<{key:string; message:string} | null>(null);
   const [pending, setPending] = useState<Record<string,boolean>>({});
   const inFlight = useRef(new Set<string>());
+  const cache = useRef<{key:string; rows:Record<string,Feedback>; refresh:number}>({key:'',rows:{},refresh:-1});
 
   useEffect(() => {
     currentKey.current = key;
@@ -21,11 +22,21 @@ export function useReviewReactions(bookId:string, ids:string, userId:string) {
     const controller = new AbortController();
     async function load() {
       try {
-        const response = await safeFetch(`/api/books/${bookId}/review-reactions?ids=${encodeURIComponent(ids)}`, {signal:controller.signal, cache:'no-store'});
-        if (!response.ok) throw Error('评论反馈暂不可用');
-        const rows:Feedback[] = await response.json();
-        if (controller.signal.aborted) return;
-        setState({key, rows:Object.fromEntries(rows.map(row => [row.id, row]))});
+        if(cache.current.key!==key)cache.current={key,rows:{},refresh:-1};
+        const reload=cache.current.refresh!==refresh;
+        cache.current.refresh=refresh;
+        const wanted=[...new Set(ids.split(',').filter(Boolean))].filter(id=>reload||!cache.current.rows[id]);
+        // Each API request remains bounded as an infinite list grows. Already
+        // displayed feedback is retained when another comment batch arrives.
+        for(let offset=0;offset<wanted.length;offset+=20) {
+          const chunk=wanted.slice(offset,offset+20);
+          const response = await safeFetch(`/api/books/${bookId}/review-reactions?ids=${encodeURIComponent(chunk.join(','))}`, {signal:controller.signal, cache:'no-store'});
+          if (!response.ok) throw Error('评论反馈暂不可用');
+          const rows:Feedback[] = await response.json();
+          if (controller.signal.aborted) return;
+          cache.current.rows={...cache.current.rows,...Object.fromEntries(rows.map(row=>[row.id,row]))};
+          setState({key,rows:cache.current.rows});
+        }
         setError(null);
       } catch {
         if (!controller.signal.aborted) setError({key, message:'评论反馈加载失败，请重试'});
@@ -47,7 +58,8 @@ export function useReviewReactions(bookId:string, ids:string, userId:string) {
       const data = await response.json();
       if (!response.ok) throw Error(data.error || '反馈保存失败，请重试');
       if (currentKey.current !== key) return;
-      setState(previous => ({key, rows:{...(previous.key === key ? previous.rows : {}), [id]:data}}));
+      cache.current.rows={...cache.current.rows,[id]:data};
+      setState({key,rows:cache.current.rows});
       setError(null);
     } catch (error) {
       if (currentKey.current === key) setError({key, message:error instanceof Error ? error.message : '反馈保存失败，请重试'});

@@ -1,4 +1,5 @@
-import {test,expect,type Page} from '@playwright/test';
+import {test,expect} from './fixtures/without-analytics';
+import type {Page} from '@playwright/test';
 
 const base=process.env.REVIEW_BASE || 'http://127.0.0.1:3000';
 const book=process.env.REVIEW_BOOK || '000000000000000000000101';
@@ -102,19 +103,20 @@ for(const width of [320,1440])test(`empty comments appear only after a successfu
   }finally{response.release();}
 });
 
-test('changing comment pages shows progress without displaying stale comments',async({page})=>{
+test('opening all comments retains the preview while the next batch loads',async({page})=>{
   await setup(page);await page.setViewportSize({width:390,height:844});
   const next=gate();
   await page.route(`**/api/books/${book}/reviews?*`,async route=>{
-    const second=new URL(route.request().url()).searchParams.get('page')==='2';
+    const second=Boolean(new URL(route.request().url()).searchParams.get('cursor'));
     if(second)await next.promise;
-    await route.fulfill({json:[{...review,content:second?'第二页评论':'第一页评论'}],headers:{'X-Total-Count':'21','X-Review-Distribution':'{"4":21}'}});
+    await route.fulfill({json:[{...review,_id:second?'second':review._id,content:second?'后续评论':'预览评论'}],headers:{'X-Total-Count':'2','X-Next-Cursor':second?'':'next','X-Review-Distribution':'{"4":2}'}});
   });
   try{
-    await page.goto(`${base}/book/${book}`);await expect(page.getByText('第一页评论',{exact:true})).toBeVisible();
-    await page.getByRole('navigation',{name:'评价分页'}).getByRole('button',{name:'下一页'}).click();
-    await expect(page.getByRole('status').filter({hasText:'正在加载评论'})).toBeVisible();
-    await expect(page.getByText('第一页评论',{exact:true})).toHaveCount(0);
-    next.release();await expect(page.getByText('第二页评论',{exact:true})).toBeVisible();
+    await page.goto(`${base}/book/${book}`);await expect(page.getByText('预览评论',{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'查看全部评论',exact:true}).click();
+    const sheet=page.getByRole('dialog',{name:'全部评论'});
+    await expect(sheet.getByRole('status').filter({hasText:'正在加载评论'})).toBeVisible();
+    await expect(sheet.getByText('预览评论',{exact:true})).toBeVisible();
+    next.release();await expect(sheet.getByText('后续评论',{exact:true})).toBeVisible();
   }finally{next.release();}
 });

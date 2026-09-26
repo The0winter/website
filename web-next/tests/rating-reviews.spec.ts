@@ -1,4 +1,4 @@
-import {test, expect} from '@playwright/test';
+import {test, expect} from './fixtures/without-analytics';
 
 const base = process.env.REVIEW_BASE || 'http://127.0.0.1:3000';
 const book = process.env.REVIEW_BOOK || '000000000000000000000101';
@@ -93,6 +93,7 @@ for (const width of [320, 390, 1440]) test(`rating without text counts one reade
     const request = route.request(), url = new URL(request.url());
     if (url.pathname === '/api/auth/session') return route.fulfill({json: {user: reader, profile: reader}});
     if (url.pathname === '/api/auth/csrf') return route.fulfill({json: {csrfToken: 'rating-fixture'}});
+    if (url.pathname === '/api/auth/activity') return route.fulfill({json:{expiresAt:new Date(Date.now()+86400000).toISOString()}});
     if (url.pathname.endsWith('/check')) return route.fulfill({json: {isBookmarked: false}});
     if (url.pathname === `/api/books/${book}/reviews/mine`) return route.fulfill({json: mine});
     if (url.pathname === `/api/books/${book}/reviews`) {
