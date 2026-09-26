@@ -1,3 +1,6 @@
+import {requestSignal, throwIfAborted} from './request-signal';
+export {requestSignal} from './request-signal';
+
 // All browser mutations use the same-origin HttpOnly session and signed CSRF token.
 export async function safeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const method = (init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
@@ -13,7 +16,7 @@ export async function safeFetch(input: RequestInfo | URL, init?: RequestInit): P
     const { csrfToken } = await response.json();
     headers.set('x-csrf-token', csrfToken);
   }
-  const response = await globalThis.fetch(input, { ...init, headers, credentials: 'same-origin', signal: init?.signal || AbortSignal.timeout(15000) });
+  const response = await globalThis.fetch(input, { ...init, headers, credentials: 'same-origin', signal: init?.signal || requestSignal() });
   if (typeof window !== 'undefined' && response.ok && !['GET','HEAD','OPTIONS'].includes(method)) {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, window.location.origin);
     const libraryWrite = /^\/api\/users\/([^/]+)\/(bookmarks|history)(?:\/|$)/.exec(url.pathname);
@@ -61,7 +64,7 @@ function readCatalogPage<T>(url: string, page: number): Promise<CatalogPage<T>> 
 }
 
 export async function catalogPages<T>(url: string, options: CatalogOptions<T> = {}): Promise<T[]> {
-  options.signal?.throwIfAborted();
+  throwIfAborted(options.signal);
   let first = options.initialPage;
   if (first && first.pageSize && first.pageSize !== catalogPageSize) {
     options.onProgress?.(first.rows, first.total);
@@ -71,7 +74,7 @@ export async function catalogPages<T>(url: string, options: CatalogOptions<T> = 
     first = undefined;
   }
   first ??= await readCatalogPage<T>(url, 1);
-  options.signal?.throwIfAborted();
+  throwIfAborted(options.signal);
   const pages: T[][] = [first.rows];
   let result = [...first.rows];
   options.onProgress?.(result, first.total);
@@ -80,9 +83,9 @@ export async function catalogPages<T>(url: string, options: CatalogOptions<T> = 
   // Older endpoints without a count still work, with progressive serial loading.
   if (first.total === null) {
     for (let page = 2; ; page++) {
-      options.signal?.throwIfAborted();
+      throwIfAborted(options.signal);
       const { rows } = await readCatalogPage<T>(url, page);
-      options.signal?.throwIfAborted();
+      throwIfAborted(options.signal);
       result = [...result, ...rows];
       options.onProgress?.(result, null);
       if (rows.length < catalogPageSize) return result;
@@ -95,11 +98,11 @@ export async function catalogPages<T>(url: string, options: CatalogOptions<T> = 
   let failed = false;
   const worker = async () => {
     while (!failed && nextPage <= lastPage) {
-      options.signal?.throwIfAborted();
+      throwIfAborted(options.signal);
       const page = nextPage++;
       try {
         const { rows } = await readCatalogPage<T>(url, page);
-        options.signal?.throwIfAborted();
+        throwIfAborted(options.signal);
         if (failed) return;
         pages[page - 1] = rows;
         const previous = contiguousPages;

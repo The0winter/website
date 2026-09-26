@@ -1,4 +1,4 @@
-import {safeFetch} from './request';
+import {safeFetch, requestSignal} from './request';
 import {buildCatalogVolumes} from '../../shared/catalog-volumes.mjs';
 
 export type CatalogChapter = {id: string; title: string; chapter_number: number; volume_title?: string; volume_number?: number};
@@ -79,7 +79,7 @@ export class BookCatalog {
     this.validation = controller; this.validationFailed = false;
     let valid = false;
     try {
-      const response = await safeFetch(`/api/books/${this.bookId}/catalog/version`, {cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)])});
+      const response = await safeFetch(`/api/books/${this.bookId}/catalog/version`, {cache: 'no-store', signal: requestSignal(controller.signal)});
       if (controller.signal.aborted || epoch !== this.epoch) return;
       if (!response.ok) {
         if (response.status === 404) this.reset(undefined, false);
@@ -152,7 +152,7 @@ export class BookCatalog {
       const params = new URLSearchParams({offset: String(job.offset), limit: String(job.limit)});
       if (job.anchor) params.set('anchor', job.anchor);
       if (this.snapshot.version !== undefined) params.set('version', this.snapshot.version);
-      const response = await safeFetch(`/api/books/${this.bookId}/catalog?${params}`, {cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)])});
+      const response = await safeFetch(`/api/books/${this.bookId}/catalog?${params}`, {cache: 'no-store', signal: requestSignal(controller.signal)});
       if (epoch !== this.epoch || controller.signal.aborted) return;
       if (response.status === 409) {
         const {version} = await response.json();

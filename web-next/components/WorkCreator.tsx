@@ -2,7 +2,7 @@
 
 import {useEffect, useRef, useState} from 'react';
 import {ImagePlus, Loader2, X} from 'lucide-react';
-import {safeFetch} from '@/lib/request';
+import {safeFetch, requestSignal} from '@/lib/request';
 import type {Book} from '@/lib/api';
 import BookCover from './BookCover';
 import './work-creator.css';
@@ -70,7 +70,7 @@ export default function WorkCreator({draftKey, work, embedded, onClose, onComple
       if(cover) {
         if(uploaded.current?.file!==cover) {
           const body=new FormData();body.append('file',cover);
-          const result=await readResult(await safeFetch('/api/upload/cover?purpose=book',{method:'POST',body,signal:AbortSignal.timeout(90000)}));
+          const result=await readResult(await safeFetch('/api/upload/cover?purpose=book',{method:'POST',body,signal:requestSignal(undefined,90000)}));
           uploaded.current={file:cover,url:result.url};
         }
         image=uploaded.current!.url;
@@ -82,7 +82,7 @@ export default function WorkCreator({draftKey, work, embedded, onClose, onComple
         const body=new FormData();
         // Chapter content stays on the server; metadata edits cannot replace it.
         body.append('manuscript',JSON.stringify({revision,title,description,cover_image:image,action:'draft'}));
-        await readResult(await safeFetch('/api/manuscripts/'+(work?.manuscriptKey || draftKey),{method:'PUT',body,signal:AbortSignal.timeout(90000)}));
+        await readResult(await safeFetch('/api/manuscripts/'+(work?.manuscriptKey || draftKey),{method:'PUT',body,signal:requestSignal(undefined,90000)}));
       }
       if(form.current){form.current.dataset.dirty='false';form.current.dataset.busy='false';}
       setDirty(false);

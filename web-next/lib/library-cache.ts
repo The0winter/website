@@ -1,5 +1,5 @@
 import type {Book} from './api';
-import {safeFetch} from './request';
+import {safeFetch, requestSignal} from './request';
 
 export type LibraryTab = 'shelf' | 'history';
 export type LibrarySort = 'combined' | 'read' | 'updated';
@@ -55,7 +55,7 @@ export function loadLibrary(query: LibraryQuery, force = false): Promise<void> {
     try {
       const params = new URLSearchParams({tab: query.tab, sort: query.sort, page: String(query.page), limit: '20'});
       const response = await safeFetch('/api/users/' + encodeURIComponent(query.userId) + '/library?' + params, {
-        cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
+        cache: 'no-store', signal: requestSignal(controller.signal),
       });
       if (response.status === 401 || response.status === 403) {
         if (valid()) current.snapshot = {...empty, error: '登录已失效，请重新登录'};

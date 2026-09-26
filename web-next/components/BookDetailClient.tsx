@@ -2,7 +2,7 @@
 import {LoadingLogo, LoadingText} from './BrandLoading';
 import BookCover from '@/components/BookCover';
 import UserAvatar from './UserAvatar';
-import { safeFetch as fetch, type CatalogPage } from '@/lib/request';
+import { safeFetch as fetch, requestSignal, type CatalogPage } from '@/lib/request';
 
 
 import { useState, useEffect, useMemo, useRef, useSyncExternalStore, useId } from 'react';
@@ -239,7 +239,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
     const controller=new AbortController();
     async function load(){
       try{
-        const response=await fetch(`/api/books/${book.id}/reviews?page=${reviewPage}&limit=20`,{cache:'no-store',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(15000)])});
+        const response=await fetch(`/api/books/${book.id}/reviews?page=${reviewPage}&limit=20`,{cache:'no-store',signal:requestSignal(controller.signal)});
         if(!response.ok)throw new Error('评论加载失败，请重试');
         const rows:Review[]=await response.json();
         if(!controller.signal.aborted){
@@ -262,7 +262,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
     const controller=new AbortController();
     async function load(){
       try{
-        const response=await fetch(`/api/books/${book.id}/reviews/mine`,{cache:'no-store',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(15000)])});
+        const response=await fetch(`/api/books/${book.id}/reviews/mine`,{cache:'no-store',signal:requestSignal(controller.signal)});
         if(!response.ok)throw new Error('个人书评读取失败');
         const review:Review|null=await response.json();
         if(!controller.signal.aborted)setPersonalResult({key:personalKey,review,error:''});

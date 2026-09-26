@@ -3,7 +3,7 @@
 import {useEffect, useRef, useState} from 'react';
 import Link from 'next/link';
 import {X, MessageCircle} from 'lucide-react';
-import {safeFetch} from '@/lib/request';
+import {safeFetch, requestSignal} from '@/lib/request';
 import {useAuth} from '@/contexts/AuthContext';
 
 type Comment = {id:string; content:string; createdAt:string; user:{id:string; username:string; avatar:string}|null};
@@ -56,7 +56,7 @@ export default function ParagraphComments({chapterId,paragraph,onClose,onCount}:
     async function load() {
       setLoading(true);setError('');
       try {
-        const response=await safeFetch(`${endpoint}?page=${page}`,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(10000)]),cache:'no-store'});
+        const response=await safeFetch(`${endpoint}?page=${page}`,{signal:requestSignal(controller.signal,10000),cache:'no-store'});
         const data=await response.json().catch(()=>null);
         if (!response.ok) throw Error(typeof data?.error==='string' ? data.error : '段评暂不可用，请稍后重试');
         if (!Array.isArray(data?.items) || !Number.isSafeInteger(data?.total) || data.total<0) throw Error('段评暂不可用，请稍后重试');

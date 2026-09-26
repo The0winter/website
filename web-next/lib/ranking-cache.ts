@@ -1,5 +1,5 @@
 import type {Book} from './api';
-import {safeFetch} from './request';
+import {safeFetch, requestSignal} from './request';
 
 export type RankingQuery = {visit: string; orderBy: string; category: string};
 type Snapshot = {books: Book[] | null; error: boolean; loadingMore: boolean; moreError: boolean; hasMore: boolean; fetchMs: number};
@@ -36,7 +36,7 @@ function fetchPage(query: RankingQuery, current: Record) {
   if (query.category !== '全部') params.set('category', query.category);
   current.pending = (async () => {
     try {
-      const response = await safeFetch(`/api/books?${params}`, {signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)])});
+      const response = await safeFetch(`/api/books?${params}`, {signal: requestSignal(controller.signal)});
       if (!response.ok) throw new Error('Ranking unavailable');
       const books: Book[] = await response.json();
       if (!Array.isArray(books)) throw new Error('Invalid ranking');
