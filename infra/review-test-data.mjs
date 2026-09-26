@@ -45,7 +45,7 @@ export async function manageReviewTestData(input,{mode='preview',writeAudit}={})
   const plan=validatePlan(input);
   if (!['preview','apply','cleanup','replace'].includes(mode)) throw Error('Invalid mode');
   const previous=mode==='replace'?validatePlan({...input,drafts:input.previousDrafts}):plan;
-  if(mode==='replace' && plan.rows.some(row=>!previous.rows.some(old=>old.userId===row.userId && old.username===row.username))) throw Error('Replacement must retain existing test identities');
+  if(mode==='replace' && plan.rows.some(row=>!previous.rows.some(old=>old.userId===row.userId && old.reviewId===row.reviewId))) throw Error('Replacement must retain existing test identities');
   const previewBook=await Book.findOne({_id:plan.bookId,deletedAt:null,visibility:{$ne:'private'}}).lean();
   if (!previewBook || previewBook.title!==plan.title || (previewBook.author||'')!==plan.author) throw Error('Book identity changed');
   if (mode==='preview') return {...plan,mode,count:plan.rows.length};
@@ -70,6 +70,10 @@ export async function manageReviewTestData(input,{mode='preview',writeAudit}={})
     if (users.length || reviews.length) {
       if(mode!=='replace' && !matches(plan))throw Error('Test records changed; preserve data for inspection');
     }
+    // Display names may change; stable account IDs, review ownership and test flags must not.
+    if(mode==='replace' && !alreadyReplaced)for(const row of plan.rows){
+      if(await User.exists({username:row.username,_id:{$ne:row.userId}}).session(session))throw Error('Test display name is already in use');
+    }
     const before={rating:book.rating,numRatings:book.numRatings,numReviews:book.numReviews};
     await writeAudit({phase:'prepared',mode,batch:plan.batch,bookId:plan.bookId,before,rows:plan.rows,...(mode==='replace'?{previousReviews:reviews,previousUsers:users}:{})});
     let changed=false;
@@ -85,7 +89,14 @@ export async function manageReviewTestData(input,{mode='preview',writeAudit}={})
       const removed=previous.rows.filter(old=>!plan.rows.some(row=>row.userId===old.userId));
       const extra=await Review.countDocuments({user:{$in:removed.map(row=>row.userId)},testBatch:{$ne:plan.batch}}).session(session);
       if(extra)throw Error('Test account has unrelated reviews; preserve it for inspection');
-      for(const row of plan.rows)await Review.updateOne({_id:row.reviewId,book:book._id,isTestData:true,testBatch:plan.batch},{$set:{content:row.content,rating:row.rating,...(row.sourceExcerpt?{sourceExcerpt:row.sourceExcerpt}:{})},...(!row.sourceExcerpt?{$unset:{sourceExcerpt:1}}:{})},{session,runValidators:true});
+      for(const row of plan.rows){
+        const old=previous.rows.find(old=>old.userId===row.userId);
+        if(old.username!==row.username){
+          const renamed=await User.updateOne({_id:row.userId,username:old.username,isTestAccount:true,testBatch:plan.batch},{$set:{username:row.username}},{session,runValidators:true});
+          if(renamed.matchedCount!==1)throw Error('Test account changed during rename');
+        }
+        await Review.updateOne({_id:row.reviewId,book:book._id,isTestData:true,testBatch:plan.batch},{$set:{content:row.content,rating:row.rating,...(row.sourceExcerpt?{sourceExcerpt:row.sourceExcerpt}:{})},...(!row.sourceExcerpt?{$unset:{sourceExcerpt:1}}:{})},{session,runValidators:true});
+      }
       if(removed.length){
         await Review.deleteMany({_id:{$in:removed.map(row=>row.reviewId)},book:book._id,isTestData:true,testBatch:plan.batch},{session});
         await User.deleteMany({_id:{$in:removed.map(row=>row.userId)},isTestAccount:true,testBatch:plan.batch},{session});

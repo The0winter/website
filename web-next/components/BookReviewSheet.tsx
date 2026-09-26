@@ -11,6 +11,7 @@ import BookReviewComposer from './BookReviewComposer';
 
 type Props={bookId:string;userId:string;preview:Review[];cursor:string|null;total:number;onClose:()=>void;personalReview:Review|null;personalLoading:boolean;personalError:string;onRetryPersonal:()=>void;onSaved:()=>void};
 export default function BookReviewSheet(props:Props) {
+  const {onClose}=props;
   const dialog=useRef<HTMLDialogElement>(null),body=useRef<HTMLDivElement>(null);
   const [rows,setRows]=useState(props.preview),[total,setTotal]=useState(props.total);
   const [cursor,setCursor]=useState(props.cursor),[loading,setLoading]=useState(false),[error,setError]=useState('');
@@ -18,6 +19,26 @@ export default function BookReviewSheet(props:Props) {
   const request=useRef<AbortController|null>(null);
   const failed=useRef(false);
   const replaceNext=useRef(false);
+  const [closing,setClosing]=useState(false);
+  const closeStarted=useRef(false),closeFinished=useRef(false);
+  const finishClose=useCallback(()=>{
+    if(closeFinished.current)return;
+    closeFinished.current=true;onClose();
+  },[onClose]);
+  const requestClose=()=>{
+    if(closeStarted.current)return;
+    closeStarted.current=true;
+    if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){finishClose();return;}
+    // Closing during the entrance animation should continue from its current position.
+    if(dialog.current)dialog.current.style.setProperty('--review-close-start',getComputedStyle(dialog.current).transform);
+    setClosing(true);
+  };
+  useEffect(()=>{
+    if(!closing)return;
+    // Keep the modal and scroll lock until the exit finishes, even if animationend is lost.
+    const timer=window.setTimeout(finishClose,320);
+    return()=>clearTimeout(timer);
+  },[closing,finishClose]);
   const [showDuplicates,setShowDuplicates]=useState(false);
   const unique=useMemo(()=>{
     const seen=new Set<string>();
@@ -64,10 +85,11 @@ export default function BookReviewSheet(props:Props) {
     const start=window.setTimeout(()=>void load(),0);
     return()=>{clearTimeout(start);request.current?.abort();request.current=null;viewport?.removeEventListener('resize',fitKeyboard);viewport?.removeEventListener('scroll',fitKeyboard);element.close();unlock();if(opener?.isConnected)opener.focus({preventScroll:true});};
   },[load]);
-  return createPortal(<dialog ref={dialog} className="book-review-sheet book-community" aria-label="全部评论" onCancel={event=>{event.preventDefault();props.onClose();}}
-    onClick={event=>{if(event.target===event.currentTarget){const r=event.currentTarget.getBoundingClientRect();if(event.clientY<r.top||event.clientX<r.left||event.clientX>r.right)props.onClose();}}}>
+  return createPortal(<dialog ref={dialog} className="book-review-sheet book-community" aria-label="全部评论" data-closing={closing || undefined} onCancel={event=>{event.preventDefault();requestClose();}}
+    onAnimationEnd={event=>{if(closing&&event.target===event.currentTarget&&event.animationName==='book-review-slide-down')finishClose();}}
+    onClick={event=>{if(event.target===event.currentTarget){const r=event.currentTarget.getBoundingClientRect();if(event.clientY<r.top||event.clientX<r.left||event.clientX>r.right)requestClose();}}}>
     <div className="book-review-sheet-handle" aria-hidden="true"/>
-    <header className="book-review-sheet-header"><h2>全部评论 <small>{total}</small></h2><button className="book-review-sheet-close" aria-label="关闭全部评论" onClick={props.onClose}><X size={22}/></button></header>
+    <header className="book-review-sheet-header"><h2>全部评论 <small>{total}</small></h2><button className="book-review-sheet-close" aria-label="关闭全部评论" onClick={requestClose}><X size={22}/></button></header>
     <div ref={body} className="book-review-sheet-body" aria-busy={loading} onScroll={()=>{const el=body.current;if(el&&el.scrollTop>0&&el.scrollHeight-el.clientHeight-el.scrollTop<120&&!error)void load();}}>
       <BookReviewList bookId={props.bookId} reviews={showDuplicates?rows:unique} userId={props.userId}/>
       {duplicateCount>0&&<button className="book-review-duplicates" aria-expanded={showDuplicates} onClick={()=>setShowDuplicates(value=>!value)}>{showDuplicates?'收起重复评论':`已折叠重复评论（${duplicateCount} 条） · 展开`}</button>}

@@ -1,25 +1,31 @@
+import Link from 'next/link';
+import {ChevronLeft} from 'lucide-react';
+import './loading.css';
+
 export default function LoadingBook() {
-  return <div role="status" aria-label="正在打开书籍" aria-busy="true" className="min-h-screen bg-white px-4 py-6 md:py-10">
-    <span className="sr-only">正在打开书籍…</span>
-    <div aria-hidden="true" className="mx-auto max-w-7xl space-y-6 motion-safe:animate-pulse">
-      <div className="flex gap-5 rounded-xl bg-white p-5 md:gap-8 md:p-8">
-        <div className="h-36 w-24 shrink-0 rounded-lg bg-gray-200 md:h-60 md:w-40" />
-        <div className="flex-1 space-y-4 py-2">
-          <div className="h-7 w-3/4 rounded bg-gray-200" />
-          <div className="h-4 w-1/3 rounded bg-gray-100" />
-          <div className="h-4 w-2/3 rounded bg-gray-100" />
-          <div className="mt-6 h-10 w-32 rounded-lg bg-blue-100" />
+  return <div className="book-loading" aria-busy="true">
+    <span role="status" className="sr-only">正在打开书籍…</span>
+    <div className="book-loading-inner">
+      <section className="book-loading-hero">
+        <nav className="book-loading-nav" aria-label="书籍导航">
+          <Link href="/" aria-label="返回首页"><ChevronLeft size={24}/></Link>
+          <span aria-hidden="true" className="book-loading-line"/>
+        </nav>
+        <div className="book-loading-summary" aria-hidden="true">
+          <div className="book-loading-cover"/>
+          <div className="book-loading-info"><div className="book-loading-line book-loading-title"/><div className="book-loading-line"/><div className="book-loading-line book-loading-short"/></div>
         </div>
+      </section>
+      <div aria-hidden="true" className="book-loading-intro">
+        <div className="book-loading-stats">{[0,1,2].map(key=><div key={key}><div className="book-loading-line"/><div className="book-loading-line book-loading-short"/></div>)}</div>
+        <div className="book-loading-paragraph"><div className="book-loading-line"/><div className="book-loading-line"/><div className="book-loading-line book-loading-short"/></div>
       </div>
-      <div className="space-y-4 rounded-xl bg-white p-5 md:p-8">
-        <div className="h-5 w-24 rounded bg-gray-200" />
-        <div className="h-4 w-full rounded bg-gray-100" />
-        <div className="h-4 w-4/5 rounded bg-gray-100" />
-      </div>
-      <div className="space-y-5 rounded-xl bg-white p-5 md:p-8">
-        <div className="h-5 w-24 rounded bg-gray-200" />
-        {Array.from({ length: 5 }, (_, index) => <div key={index} className="h-4 w-3/4 rounded bg-gray-100" />)}
+      <div aria-hidden="true" className="book-loading-catalog"><div className="book-loading-line"/><div className="book-loading-line"/></div>
+      <div aria-hidden="true" className="book-loading-reviews">
+        <div className="book-loading-line book-loading-title"/>
+        {[0,1].map(key=><div className="book-loading-review" key={key}><div className="book-loading-avatar"/><div className="book-loading-paragraph"><div className="book-loading-line book-loading-short"/><div className="book-loading-line"/><div className="book-loading-line"/></div></div>)}
       </div>
     </div>
+    <div aria-hidden="true" className="book-loading-actions"><div className="book-loading-line"/><div className="book-loading-line"/></div>
   </div>;
 }
