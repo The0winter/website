@@ -89,11 +89,13 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
           if (!book) throw Error('已绑定的阅读版被移走，请恢复原文件后再更新');
           book = {...book, url: reading.spec.sourceUrl};
         } else if (files.length > 1) throw Error('有多个同名同作者的下载版本，请先选择保留的版本再更新');
-        for (const job of related) {
-          const record = readJson(path.join(job.dir, 'export.json'));
-          if (record?.path === path.join(outputDir, book.file)) {
-            if (record.hash !== book.hash) throw Error('导出文件已被修改，请先核对；原文件保留');
-            rawJob = job;
+        if (!reading) {
+          for (const job of related) {
+            const record = readJson(path.join(job.dir, 'export.json'));
+            if (record?.path === path.join(outputDir, book.file)) {
+              if (record.hash !== book.hash) throw Error('导出文件已被修改，请先核对；原文件保留');
+              rawJob = job;
+            }
           }
         }
       }

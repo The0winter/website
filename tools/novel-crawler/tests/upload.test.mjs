@@ -146,6 +146,22 @@ test('upload selection follows bound editions without requiring a source adapter
   assert.match(planLibrary({...f, forUpload: true})[0].message, /尚未完成/);
 });
 
+test('accepted reading edition may replace its raw export at the same path', t => {
+  const f = fixture(t), source = book('同路径阅读版');
+  f.save('book.json', source);
+  const file = path.join(f.outputDir, 'book.json');
+  const originalHash = hash(fs.readFileSync(file));
+  const dir = path.join(f.stateDir, 'jobs', 'a'.repeat(20));
+  atomicWrite(path.join(dir, 'spec.json'), {title: source.title, author: source.author, sourceUrl: source.sourceUrl});
+  atomicWrite(path.join(dir, 'export.json'), {path: file, hash: originalHash});
+  f.save('book.json', {...source, chapters: source.chapters.map(chapter => ({...chapter, sourceChapterNumber: chapter.chapter_number}))});
+  const binding = {file: 'book.json', outputPath: file, exportHash: hash(fs.readFileSync(file))};
+  atomicWrite(path.join(dir, 'reading-edition.json'), {value: binding, hash: hash(binding)});
+  assert.equal(planLibrary({...f, forUpload: true})[0].state, 'pending');
+  f.save('book.json', {...source, description: '未审核的外部修改'});
+  assert.match(planLibrary({...f, forUpload: true})[0].message, /已绑定的阅读版被修改/);
+});
+
 test('library uploads new books and only new chapters, isolates conflicts, persists results and repeat runs do no writes', async t => {
   const f = fixture(t), existing = book('旧书', 2), conflict = book('冲突书', 2), fresh = book('新书', 2);
   f.save('old.json', book('旧书', 4)); f.save('new.json', fresh); f.save('conflict.json', {...conflict, chapters: [{...chapter(1), content: '不同正文'}, chapter(2)]}); f.save('report.json', {errors: []});
