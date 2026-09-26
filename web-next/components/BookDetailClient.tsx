@@ -522,7 +522,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             </div>
             {communityTab === 'articles' && <div id="articles-panel" role="tabpanel" aria-labelledby="articles-tab"><BookArticles bookId={book.id} /></div>}
             <div id="reviews-panel" role="tabpanel" aria-labelledby="reviews-tab" aria-busy={reviewsLoading} hidden={communityTab !== 'reviews'}>
-            {!reviewsLoading && sortedReviews.slice(0,2).some(review => review.isTestData) && <p className="book-review-test-notice">含 AI 测试评论，测试评分不计入本书评分。</p>}
+            {!reviewsLoading && sortedReviews.slice(0,2).some(review => review.isTestData) && <p className="book-review-test-notice">含测试账号导入的内容，不计入本书评分；站外摘录已注明出处。</p>}
             
             {/* 评论表单 */}
             {showReviewForm && (
@@ -539,9 +539,10 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
               <div className="text-gray-500 text-sm text-center py-4">还没有文字评论，可以先评分，也可以写下读后感。</div>
             ) : <BookReviewList key={reactionRefresh} bookId={book.id} reviews={sortedReviews.filter(review => !(showReviewForm && (review.user._id === userId || review.user.id === userId))).slice(0,2)} userId={userId} compact/>}
             {reviewTotal>0 && <button className="book-review-view-all" aria-haspopup="dialog" onClick={()=>setReviewSheetOpen(true)}>查看全部评论<ChevronRight size={16}/></button>}
-            {reviewSheetOpen && <BookReviewSheet key={`${book.id}/${reviewRefresh}`} bookId={book.id} title={book.title} userId={userId} preview={reviewsLoading||reviewError?[]:reviews} cursor={reviewsLoading||reviewError?'':reviewCursor} total={reviewTotal}
+            {reviewSheetOpen && <BookReviewSheet key={book.id} bookId={book.id} title={book.title} userId={userId} preview={reviewsLoading||reviewError?[]:reviews} cursor={reviewsLoading||reviewError?'':reviewCursor} total={reviewTotal}
               onClose={()=>{setReviewSheetOpen(false);setReactionRefresh(value=>value+1);}}
-              onWrite={()=>{setReviewSheetOpen(false);setReactionRefresh(value=>value+1);openReviewForm();}}/>}
+              personalReview={myReview} personalLoading={authLoading||personalLoading} personalError={personalError} onRetryPersonal={()=>setReviewRefresh(value=>value+1)}
+              onSaved={()=>{setReviewRefresh(value=>value+1);setReactionRefresh(value=>value+1);setShowReviewForm(false);}}/>}
             </div>
         </div>
 

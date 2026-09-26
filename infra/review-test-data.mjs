@@ -25,8 +25,18 @@ export function validatePlan(input) {
     const username=draft.displayName.trim()+'（测试）', content='【测试】'+draft.content.trim();
     if (username.length>40 || names.has(username) || Array.from(content).length>140) throw Error('Duplicate name or oversized test draft');
     names.add(username);
+    let sourceExcerpt;
+    if(draft.sourceExcerpt){
+      const source=draft.sourceExcerpt;
+      if(typeof source.platform!=='string'||!source.platform.trim()||source.platform.length>40||typeof source.author!=='string'||!source.author.trim()||source.author.length>80
+        ||typeof source.url!=='string'||source.url.length>2000||!/^https:\/\//.test(source.url))throw Error('Invalid excerpt source');
+      const url=new URL(source.url);
+      if(url.username||url.password)throw Error('Invalid excerpt source');
+      if(source.publishedAt!==undefined&&(typeof source.publishedAt!=='string'||source.publishedAt.length>40))throw Error('Invalid excerpt date');
+      sourceExcerpt={platform:source.platform,author:source.author,url:source.url,...(source.publishedAt?{publishedAt:source.publishedAt}:{})};
+    }
     return {userId:idFor(input.batch,'user:'+draft.id),reviewId:idFor(input.batch,'review:'+draft.id),username,content,rating:draft.rating,
-      profileTheme:['apricot','sage','mist','rose'][index%4]};
+      sourceExcerpt,profileTheme:['apricot','sage','mist','rose'][index%4]};
   });
   return {batch:input.batch,bookId:input.bookId,title:input.title,author:input.author,rows};
 }
@@ -52,7 +62,8 @@ export async function manageReviewTestData(input,{mode='preview',writeAudit}={})
     const matches=target=>users.length===target.rows.length && reviews.length===target.rows.length && target.rows.every(row=>{
       const user=users.find(user=>String(user._id)===row.userId),review=reviews.find(review=>String(review._id)===row.reviewId);
       return user?.isTestAccount && user.testBatch===plan.batch && user.username===row.username && review?.isTestData && review.testBatch===plan.batch
-        && String(review.book)===plan.bookId && String(review.user)===row.userId && review.content===row.content && review.rating===row.rating;
+        && String(review.book)===plan.bookId && String(review.user)===row.userId && review.content===row.content && review.rating===row.rating
+        && ['platform','author','url','publishedAt'].every(key=>(review.sourceExcerpt?.[key]||'')===(row.sourceExcerpt?.[key]||''));
     });
     const alreadyReplaced=mode==='replace' && matches(plan);
     if(mode==='replace' && !alreadyReplaced && !matches(previous))throw Error('Test records changed; preserve data for inspection');
@@ -66,7 +77,7 @@ export async function manageReviewTestData(input,{mode='preview',writeAudit}={})
       for(const row of plan.rows) {
         await User.create([{_id:row.userId,username:row.username,email:`${row.userId}@review-test.invalid`,password,
           role:'reader',isTestAccount:true,testBatch:plan.batch,profileTheme:row.profileTheme}],{session});
-        await Review.create([{_id:row.reviewId,book:book._id,user:row.userId,rating:row.rating,content:row.content,isTestData:true,testBatch:plan.batch}],{session});
+        await Review.create([{_id:row.reviewId,book:book._id,user:row.userId,rating:row.rating,content:row.content,sourceExcerpt:row.sourceExcerpt,isTestData:true,testBatch:plan.batch}],{session});
       }
       changed=true;
     }
@@ -74,7 +85,7 @@ export async function manageReviewTestData(input,{mode='preview',writeAudit}={})
       const removed=previous.rows.filter(old=>!plan.rows.some(row=>row.userId===old.userId));
       const extra=await Review.countDocuments({user:{$in:removed.map(row=>row.userId)},testBatch:{$ne:plan.batch}}).session(session);
       if(extra)throw Error('Test account has unrelated reviews; preserve it for inspection');
-      for(const row of plan.rows)await Review.updateOne({_id:row.reviewId,book:book._id,isTestData:true,testBatch:plan.batch},{$set:{content:row.content,rating:row.rating}},{session,runValidators:true});
+      for(const row of plan.rows)await Review.updateOne({_id:row.reviewId,book:book._id,isTestData:true,testBatch:plan.batch},{$set:{content:row.content,rating:row.rating,...(row.sourceExcerpt?{sourceExcerpt:row.sourceExcerpt}:{})},...(!row.sourceExcerpt?{$unset:{sourceExcerpt:1}}:{})},{session,runValidators:true});
       if(removed.length){
         await Review.deleteMany({_id:{$in:removed.map(row=>row.reviewId)},book:book._id,isTestData:true,testBatch:plan.batch},{session});
         await User.deleteMany({_id:{$in:removed.map(row=>row.userId)},isTestAccount:true,testBatch:plan.batch},{session});

@@ -5,6 +5,12 @@ const reviewSchema = new mongoose.Schema({
   rating: { type: Number, required: true, min: 1, max: 5, validate: Number.isInteger },
   isTestData: { type: Boolean, default: false },
   testBatch: { type: String, select: false },
+  sourceExcerpt: {type: new mongoose.Schema({
+    platform:{type:String,required:true,maxLength:40},
+    author:{type:String,required:true,maxLength:80},
+    url:{type:String,required:true,maxLength:2000,validate:value=>{try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password;}catch{return false;}}},
+    publishedAt:{type:String,maxLength:40},
+  },{_id:false}),default:undefined},
   
   // 评论内容
   content: { type: String, default: '', validate: {validator: value => Array.from(value || '').length <= 140, message: '短评最多140字'} },
