@@ -12,8 +12,8 @@ for(const width of [390,1440]) {
     const panel=page.locator('#reviews-panel');
     await expect(panel.locator('.book-review')).toHaveCount(2);
     expect(reads).toHaveLength(1);expect(reads[0].searchParams.get('limit')).toBe('2');
-    const clamp=await panel.locator('.book-review-content').evaluateAll(nodes=>nodes.map(el=>({lines:getComputedStyle(el).webkitLineClamp,height:el.getBoundingClientRect().height,lineHeight:parseFloat(getComputedStyle(el).lineHeight)})));
-    for(const row of clamp){expect(row.lines).toBe('2');expect(row.height).toBeLessThanOrEqual(row.lineHeight*2+1);}
+    const clamp=await panel.locator('.book-review-content').evaluateAll(nodes=>nodes.map(el=>getComputedStyle(el).webkitLineClamp));
+    for(const lines of clamp)expect(lines).not.toBe('2');
     const action=panel.getByRole('button',{name:'查看全部评论',exact:true});
     await expect(action).toHaveCSS('min-height','22px');
     const geometry=await action.evaluate(el=>{

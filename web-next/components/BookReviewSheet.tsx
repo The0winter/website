@@ -8,6 +8,7 @@ import {lockBodyScroll} from '@/lib/body-scroll-lock';
 import BookReviewList,{type Review} from './BookReviewList';
 import {LoadingText} from './BrandLoading';
 import BookReviewComposer from './BookReviewComposer';
+import {displayReviewContent} from '@/lib/review-content';
 
 type Props={bookId:string;userId:string;preview:Review[];cursor:string|null;total:number;onClose:()=>void;personalReview:Review|null;personalLoading:boolean;personalError:string;onRetryPersonal:()=>void;onSaved:()=>void};
 export default function BookReviewSheet(props:Props) {
@@ -43,7 +44,7 @@ export default function BookReviewSheet(props:Props) {
   const unique=useMemo(()=>{
     const seen=new Set<string>();
     return rows.filter(row=>{
-      const key=(row.isTestData?row.content.replace(/^【测试】/,''):row.content).normalize('NFKC').trim().replace(/\s+/gu,' ');
+      const key=displayReviewContent(row).normalize('NFKC').trim().replace(/\s+/gu,' ');
       if(seen.has(key))return false;
       seen.add(key);return true;
     });

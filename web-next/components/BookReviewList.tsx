@@ -7,6 +7,7 @@ import UserAvatar from './UserAvatar';
 import {ratingLabel} from '@/lib/rating';
 import {formatCompactCount} from '@/lib/compact-count';
 import {useReviewReactions} from '@/lib/useReviewReactions';
+import {displayReviewContent} from '@/lib/review-content';
 
 export type Review={_id:string;isTestData?:boolean;sourceExcerpt?:{platform:string;author:string;url:string;publishedAt?:string;kind?:'excerpt'|'paraphrase'};rating:number;content:string;createdAt:string;user:{_id:string;id?:string;username:string;avatar?:string;avatarColor?:string}};
 
@@ -30,7 +31,7 @@ export default function BookReviewList({bookId,reviews,userId,compact=false}:{bo
                 {href?<Link href={href} className="book-review-name" title={name}>{name}{mine?' (我)':''}</Link>:<span className="book-review-name" title={name}>{name}{mine?' (我)':''}</span>}
                 <div className="book-review-meta"><div className="flex shrink-0 book-review-stars" role="img" aria-label={`${review.isTestData?'测试评分：':''}${ratingLabel(review.rating)}`} title={review.isTestData?'测试配置的评分，不计入本书评分':undefined}>{[1,2,3,4,5].map(star=><Star key={star} aria-hidden="true" className={star<=review.rating?'fill-yellow-400 text-yellow-400':'text-gray-300'}/>)}</div></div>
               </div>
-              <p className="book-review-content">{review.isTestData?review.content.replace(/^【测试】/,''):review.content}</p>
+              <p className="book-review-content">{displayReviewContent(review)}</p>
               <footer className="book-review-footer">
                 <time dateTime={review.createdAt} title={review.createdAt.slice(0,10)}>{review.createdAt.slice(0,4)===String(new Date().getFullYear())?review.createdAt.slice(5,10):review.createdAt.slice(0,10)}</time>
                 <div className="book-review-reactions" role="group" aria-label="评论反馈">
