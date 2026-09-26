@@ -57,7 +57,7 @@ for(const width of [320,390,1440])test(`bottom composer preserves drafts and exi
     expect(await footer.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
     await page.screenshot({path:info.outputPath(`verified-composer-${width}.png`)});
     await page.setViewportSize({width,height:500});
-    await expect(sheet).toHaveCSS('height','425px');
+    await expect(sheet).toHaveCSS('height','475px');
     expect((await footer.boundingBox())!.y+(await footer.boundingBox())!.height).toBeLessThanOrEqual(501);
     await expect(input).toHaveValue('修改后的短评😀');
     await page.keyboard.press('Escape');await expect(sheet).toHaveCount(0);

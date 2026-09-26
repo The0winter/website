@@ -29,12 +29,14 @@ export default function BookReviewList({bookId,reviews,userId,compact=false}:{bo
             <div className="book-review-body flex-1">
               <div className="book-review-heading">
                 {href?<Link href={href} className="book-review-name" title={name}>{name}{mine?' (我)':''}</Link>:<span className="book-review-name" title={name}>{name}{mine?' (我)':''}</span>}
-                <div className="book-review-meta">{source?<span className="book-review-excerpt-label">站外摘录</span>:<div className="flex shrink-0 book-review-stars" role="img" aria-label={ratingLabel(review.rating)}>{[1,2,3,4,5].map(star=><Star key={star} aria-hidden="true" className={star<=review.rating?'fill-yellow-400 text-yellow-400':'text-gray-300'}/>)}</div>}</div>
+                <div className="book-review-meta"><div className="flex shrink-0 book-review-stars" role="img" aria-label={`${review.isTestData?'测试评分：':''}${ratingLabel(review.rating)}`} title={review.isTestData?'测试配置的评分，不计入本书评分':undefined}>{[1,2,3,4,5].map(star=><Star key={star} aria-hidden="true" className={star<=review.rating?'fill-yellow-400 text-yellow-400':'text-gray-300'}/>)}</div></div>
               </div>
               <p className="book-review-content">{review.isTestData?review.content.replace(/^【测试】/,''):review.content}</p>
-              {source&&<a className="book-review-source" href={source.url} target="_blank" rel="noopener noreferrer" aria-label={`查看原文：${source.platform} · ${source.author}`}>摘自 {source.platform} · {source.author}{source.publishedAt?` · ${source.publishedAt.slice(0,10)}`:''} ↗</a>}
               <footer className="book-review-footer">
-                {review.isTestData&&<span className="book-review-test-badge">{source?'测试导入':'AI 测试'}</span>}
+                {source?<details className="book-review-attribution"><summary className="book-review-test-badge">测试导入</summary><div className="book-review-attribution-panel">
+                  <p>星级为本站测试配置，非原作者评分，不计入本书评分。以下为原文摘录的出处。</p>
+                  <a className="book-review-source" href={source.url} target="_blank" rel="noopener noreferrer" aria-label={`查看原文：${source.platform} · ${source.author}`}>{source.platform} · {source.author}{source.publishedAt?` · ${source.publishedAt.slice(0,10)}`:''} ↗</a>
+                </div></details>:review.isTestData&&<span className="book-review-test-badge">AI 测试</span>}
                 <time dateTime={review.createdAt} title={review.createdAt.slice(0,10)}>{review.createdAt.slice(0,4)===String(new Date().getFullYear())?review.createdAt.slice(5,10):review.createdAt.slice(0,10)}</time>
                 <div className="book-review-reactions" role="group" aria-label="评论反馈">
                   {(['like','dislike'] as const).map(choice=>{

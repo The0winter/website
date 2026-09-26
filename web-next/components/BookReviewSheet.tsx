@@ -9,7 +9,7 @@ import BookReviewList,{type Review} from './BookReviewList';
 import {LoadingText} from './BrandLoading';
 import BookReviewComposer from './BookReviewComposer';
 
-type Props={bookId:string;title:string;userId:string;preview:Review[];cursor:string|null;total:number;onClose:()=>void;personalReview:Review|null;personalLoading:boolean;personalError:string;onRetryPersonal:()=>void;onSaved:()=>void};
+type Props={bookId:string;userId:string;preview:Review[];cursor:string|null;total:number;onClose:()=>void;personalReview:Review|null;personalLoading:boolean;personalError:string;onRetryPersonal:()=>void;onSaved:()=>void};
 export default function BookReviewSheet(props:Props) {
   const dialog=useRef<HTMLDialogElement>(null),body=useRef<HTMLDivElement>(null);
   const [rows,setRows]=useState(props.preview),[total,setTotal]=useState(props.total);
@@ -56,7 +56,7 @@ export default function BookReviewSheet(props:Props) {
     const viewport=window.visualViewport;
     const fitKeyboard=()=>{
       const bottom=viewport&&viewport.scale===1?Math.max(0,window.innerHeight-viewport.height-viewport.offsetTop):0;
-      if(viewport&&bottom>80){element.style.bottom=`${bottom}px`;element.style.height=`${viewport.height*.85}px`;element.style.maxHeight=`${viewport.height*.85}px`;}
+      if(viewport&&bottom>80){element.style.bottom=`${bottom}px`;element.style.height=`${viewport.height*.95}px`;element.style.maxHeight=`${viewport.height*.95}px`;}
       else {element.style.removeProperty('bottom');element.style.removeProperty('height');element.style.removeProperty('max-height');}
     };
     viewport?.addEventListener('resize',fitKeyboard);viewport?.addEventListener('scroll',fitKeyboard);fitKeyboard();
@@ -67,9 +67,8 @@ export default function BookReviewSheet(props:Props) {
   return createPortal(<dialog ref={dialog} className="book-review-sheet book-community" aria-label="全部评论" onCancel={event=>{event.preventDefault();props.onClose();}}
     onClick={event=>{if(event.target===event.currentTarget){const r=event.currentTarget.getBoundingClientRect();if(event.clientY<r.top||event.clientX<r.left||event.clientX>r.right)props.onClose();}}}>
     <div className="book-review-sheet-handle" aria-hidden="true"/>
-    <header className="book-review-sheet-header"><div><h2>全部评论 <small>{total}</small></h2><p>{props.title}</p></div><button className="book-review-sheet-close" aria-label="关闭全部评论" onClick={props.onClose}><X size={22}/></button></header>
+    <header className="book-review-sheet-header"><h2>全部评论 <small>{total}</small></h2><button className="book-review-sheet-close" aria-label="关闭全部评论" onClick={props.onClose}><X size={22}/></button></header>
     <div ref={body} className="book-review-sheet-body" aria-busy={loading} onScroll={()=>{const el=body.current;if(el&&el.scrollTop>0&&el.scrollHeight-el.clientHeight-el.scrollTop<120&&!error)void load();}}>
-      {rows.some(row=>row.isTestData)&&<p className="book-review-test-notice">含测试账号导入的内容，不计入本书评分；站外摘录已注明出处。</p>}
       <BookReviewList bookId={props.bookId} reviews={showDuplicates?rows:unique} userId={props.userId}/>
       {duplicateCount>0&&<button className="book-review-duplicates" aria-expanded={showDuplicates} onClick={()=>setShowDuplicates(value=>!value)}>{showDuplicates?'收起重复评论':`已折叠重复评论（${duplicateCount} 条） · 展开`}</button>}
       <div className="book-review-load-more">

@@ -2,7 +2,7 @@ import {test,expect} from './fixtures/without-analytics';
 
 const base=process.env.REVIEW_TEST_BASE || 'http://127.0.0.1:3157';
 const book=process.env.REVIEW_TEST_BOOK || '000000000000000000000101';
-const total=Number(process.env.REVIEW_TEST_TOTAL || 8);
+const total=Number(process.env.REVIEW_TEST_TOTAL || 6);
 for(const width of [390,1440]) {
   test(`review preview and incremental sheet retain private profiles at ${width}px`,async({page},info)=>{
     await page.setViewportSize({width,height:900});
@@ -20,22 +20,33 @@ for(const width of [390,1440]) {
     const sheet=page.getByRole('dialog',{name:'全部评论'});
     await expect(sheet.locator('.book-review')).toHaveCount(5);
     expect(reads).toHaveLength(2);expect(reads[1].searchParams.get('limit')).toBe('3');expect(reads[1].searchParams.get('cursor')).toBeTruthy();
-    await expect(sheet).toHaveCSS('height','765px');
+    await expect(sheet).toHaveCSS('height','855px');
     await expect(sheet).toHaveCSS('border-top-left-radius','28px');
-    await expect.poll(async()=>Math.round((await sheet.boundingBox())?.y ?? -1)).toBe(135);
+    await expect.poll(async()=>Math.round((await sheet.boundingBox())?.y ?? -1)).toBe(45);
+    expect((await sheet.locator('.book-review-sheet-header').boundingBox())!.height).toBeLessThanOrEqual(49);
+    await expect(sheet.locator('.book-review-sheet-header p')).toHaveCount(0);
+    await expect(sheet.locator('.book-review-test-notice')).toHaveCount(0);
+    await expect(sheet.getByText('站外摘录',{exact:true})).toHaveCount(0);
     await expect(sheet.getByRole('button',{name:'写书评',exact:true})).toHaveCount(0);
     await expect(sheet.locator('.book-review-composer')).toBeVisible();
     expect(await page.evaluate(()=>document.body.style.overflow)).toBe('hidden');
     await page.screenshot({path:info.outputPath(`verified-sheet-${width}.png`)});
     const scroller=sheet.locator('.book-review-sheet-body');
-    if(await scroller.evaluate(el=>el.scrollHeight>el.clientHeight))await scroller.evaluate(el=>el.scrollTop=el.scrollHeight);
-    else await sheet.getByRole('button',{name:'加载更多评论',exact:true}).click();
+    if(total>5){
+      if(await scroller.evaluate(el=>el.scrollHeight>el.clientHeight))await scroller.evaluate(el=>el.scrollTop=el.scrollHeight);
+      else await sheet.getByRole('button',{name:'加载更多评论',exact:true}).click();
+    }
     await expect(sheet.locator('.book-review')).toHaveCount(total);
     await expect(sheet.getByText('已显示全部评论',{exact:true})).toHaveCount(0);
     await expect(sheet.locator('.book-review-duplicates')).toHaveCount(0);
-    await expect(sheet.locator('.book-review-source')).toHaveCount(7);
-    await expect(sheet.locator('.book-review').filter({has:page.locator('.book-review-source')}).locator('.book-review-stars')).toHaveCount(0);
-    expect(reads).toHaveLength(3);expect(reads[2].searchParams.get('limit')).toBe('5');
+    await expect(sheet.locator('.book-review-source')).toHaveCount(5);
+    await expect(sheet.locator('.book-review-source:visible')).toHaveCount(0);
+    await expect(sheet.locator('.book-review').filter({has:page.locator('.book-review-source')}).locator('.book-review-stars')).toHaveCount(5);
+    await sheet.locator('.book-review-attribution summary').first().click();
+    await expect(sheet.locator('.book-review-source').first()).toBeVisible();
+    await expect(sheet.locator('.book-review-attribution[open]')).toContainText('非原作者评分');
+    await sheet.locator('.book-review-attribution summary').first().click();
+    expect(reads).toHaveLength(total>5?3:2);if(total>5)expect(reads[2].searchParams.get('limit')).toBe('5');
     expect(await sheet.locator('.book-review-content').first().evaluate(el=>getComputedStyle(el).webkitLineClamp)).not.toBe('2');
     await page.keyboard.press('Escape');await expect(sheet).toHaveCount(0);
     await expect(panel.getByRole('button',{name:'查看全部评论',exact:true})).toBeFocused();
