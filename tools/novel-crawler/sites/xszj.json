@@ -29,7 +29,7 @@
   "spec": {
     "version": 1,
     "kind": "html",
-    "variant": "desktop-xszj-v2",
+    "variant": "desktop-xszj-v3",
     "identityNormalization": "chinese-simplified",
     "title": "${title}",
     "author": "${author}",
@@ -68,6 +68,10 @@
         "script",
         "style",
         "iframe"
+      ],
+      "removeText": [
+        "(?:^|\\n)[\\t 　]*小說集為廣大書友們提供好看的網路小說全文免費線上閱讀，如果您喜歡本站，請分享給更多的書友們！\\s*如果您覺得《[^《》\\n]{1,200}》小說很精彩的話，請貼上以下網址分享給您的好友，謝謝支援！\\s*（ 本書網址：https://xszj\\.tw/book/[0-9]+ ）\\s*$",
+        "(?<=\\(完\\))shocking製作\\s*$"
       ]
     }
   }

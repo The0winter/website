@@ -29,6 +29,7 @@ test('all sources read status only from the selected book; conflicting, missing 
     deqixs: '<div class="itemtxt"><h1>书名</h1><p><span>完结</span><span>玄幻</span></p></div>',
     qiufengshuwu: '<div class="cataloginfo"><div class="infotype"><p>作品状态：已完结</p></div></div>',
     xszj: '<div class="detail-status">已完结</div>',
+    nunubook: '<meta property="og:novel:status" content="已完结">',
     youyouxs: '<meta property="og:novel:status" content="已完结">',
     '80qishu': '<div class="bookcover"><span class="type">已完结</span></div>',
     diyibanzhu: '<div class="right"><h1>书名</h1><div class="status">已完结 ·</div></div>',

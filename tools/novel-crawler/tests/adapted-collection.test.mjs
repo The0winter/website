@@ -73,6 +73,22 @@ test('serial batch reuses TXT rules, continues failures, saves results and respe
   assert.ok(events.some(b => b.items[1].state === 'running' && b.items[0].state === 'failed'));
 });
 
+test('enabled booklists combine in stable order, deduplicate aliases and ignore unapproved lists', t => {
+  const dir = temp(t), first = listFor(dir, [specFor('首批故事', {titleAliases: ['早期书名']})]);
+  const second = listFor(dir, [specFor('第二批故事'), specFor('早期书名')]);
+  // Preserve each list's actual approved candidate file, as in independent runs.
+  fs.renameSync(path.join(dir, 'candidates', '0.json'), path.join(dir, 'candidates', 'second.json'));
+  second.books[0].candidateSpec = path.join(dir, 'candidates', 'second.json');
+  atomicWrite(first.books[0].candidateSpec, specFor('首批故事', {titleAliases: ['早期书名']}));
+  atomicWrite(adaptedBooklist(dir), first);
+  atomicWrite(path.join(dir, 'booklists', '豆瓣榜单.json'), {...second, title: '豆瓣中国小说'});
+  atomicWrite(path.join(dir, 'booklists', '仅供参考.json'), {...second, eligibleForAutomaticAcquisition: false});
+  const plans = planAdaptedCollection({...options(dir), inventory: []});
+  assert.deepEqual(plans.map(p => [p.item.title, p.item.state]), [['首批故事', 'pending'], ['第二批故事', 'pending'], ['早期书名', 'deferred']]);
+  assert.equal(plans[1].item.booklist, '豆瓣中国小说');
+  assert.equal(plans[1].listFile, '豆瓣榜单.json');
+});
+
 test('pause stops the batch and failed quality never counts as an export', async t => {
   const dir = temp(t); listFor(dir, [specFor('第一故事'), specFor('第二故事')]);
   let paused = false, calls = 0;

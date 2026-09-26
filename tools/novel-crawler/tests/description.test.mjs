@@ -17,6 +17,8 @@ test('all configured desktop sources extract full paragraphs, excluding controls
     '69shuba': '<div class="navtxt"><p>第一段。<br>第二段。</p><p>小说关键词：网站推广</p></div>',
     banshanren: '<div class="novel_intro_box pc"><p>第一段。<br>第二段。</p><p class="hl">更新时间</p></div><div class="novel_intro_box h5"><p>手机版重复简介</p></div>',
     ixdzs8: '<p id="intro">第一段。<br>第二段。<span class="c-more">展开</span><script>bad()</script></p>',
+    kanunu8: '<div class="catalog"><div class="intro"><p>第一段。</p><p>第二段。</p></div></div><aside>推荐内容</aside>',
+    nunubook: '<meta property="og:description" content="第一段。&#10;第二段。">',
     shudugu: '<div class="container"><div class="des bb"><p>第一段。</p><p>第二段。</p></div><div class="des bb">推广说明</div></div>',
     twkan: '<div id="tab_info"><div class="navtxt"><p>第一段。</p><p>第二段。</p>小說關鍵詞：網站推廣</div></div>',
     decha: '<meta property="og:description" content="第一段。&#10;第二段。">',

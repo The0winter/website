@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "kanunu8",
+  "name": "努努书坊",
+  "home": "https://www.kanunu8.com/",
+  "hosts": ["www.kanunu8.com"],
+  "book": {
+    "urlPattern": "^/(?:book[0-9]*/[^/]+(?:/(?:index\\.html)?)?|files/[^/]+/[0-9]+/[0-9]+(?:\\.html|/(?:index\\.html)?))$",
+    "metadata": {
+      "title": "h1, td > h2",
+      "author": {"selector": "div.info:contains('作者：'), td[height='30']:contains('作者：'):not(:has(td))", "pattern": "作者[：:]\\s*(.+?)(?:\\s*发布时间[：:]|$)"},
+      "description": ".catalog .intro"
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-kanunu8-v2",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": ["www.kanunu8.com"],
+    "encoding": "gb18030",
+    "delayMs": 1500,
+    "timeoutMs": 25000,
+    "retries": 1,
+    "metadata": {
+      "title": "h1, td > h2",
+      "author": {"selector": "div.info:contains('作者：'), td[height='30']:contains('作者：'):not(:has(td))", "pattern": "作者[：:]\\s*(.+?)(?:\\s*发布时间[：:]|$)"},
+      "description": ".catalog .intro"
+    },
+    "catalog": {"url": "${sourceUrl}", "links": ".mulu-list a[href]:not([href='']:empty), table[bgcolor='#d4d0c8' i] a[href]:not([href='']:empty)"},
+    "chapter": {
+      "title": {"selector": ".path .crumb:first, h2 > font[color='#dc143c' i], td[height='60'] font[color='#dc143c' i]", "pattern": "^(?:[\\s\\S]*>\\s*(?:正文\\s+)?)?(.+)$"},
+      "content": "#neirong, td[width='820'][align='left' i]",
+      "remove": ["script", "style", "iframe"]
+    }
+  }
+}

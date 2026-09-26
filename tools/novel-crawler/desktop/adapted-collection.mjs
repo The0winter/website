@@ -11,12 +11,24 @@ export const adaptedBooklist = stateDir => path.join(stateDir, 'booklists', '榜
 const normalized = value => normalizedIdentity(value, 'chinese-simplified');
 const inside = (root, file) => { const relative = path.relative(root, file); return relative && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative); };
 
-function readBooklist(stateDir) {
-  const list = readJson(adaptedBooklist(stateDir));
+function readBooklist(stateDir, filename = path.basename(adaptedBooklist(stateDir))) {
+  const root = path.resolve(stateDir, 'booklists'), file = path.resolve(root, filename);
+  if (!inside(root, file) || (fs.existsSync(file) && !inside(fs.realpathSync(root), fs.realpathSync(file)))) throw Error('选源书单必须位于本地 booklists 目录内');
+  const list = readJson(file);
   if (!list) throw Error('未找到已核验的选源书单，请先完成书籍选源标注');
   if (list.version !== 1 || !Array.isArray(list.books) || list.books.length > 1000) throw Error('选源书单格式不正确');
   if (list.eligibleForAutomaticAcquisition !== true) throw Error('此书单仅作选源参考，尚未启用适配采集');
   return list;
+}
+
+function enabledBooklists(stateDir) {
+  const root = path.join(stateDir, 'booklists'), legacy = path.basename(adaptedBooklist(stateDir));
+  const files = fs.existsSync(root) ? fs.readdirSync(root, {withFileTypes: true}).filter(entry => entry.isFile() && entry.name.endsWith('.json')).map(entry => entry.name) : [];
+  // Keep the original queue order. New lists join only after explicit approval.
+  files.sort((a, b) => a === legacy ? -1 : b === legacy ? 1 : a.localeCompare(b));
+  const lists = files.filter(file => readJson(path.join(root, file))?.eligibleForAutomaticAcquisition === true).map(file => ({file, list: readBooklist(stateDir, file)}));
+  if (!lists.length) throw Error(files.length ? '此书单仅作选源参考，尚未启用适配采集' : '未找到已核验的选源书单，请先完成书籍选源标注');
+  return lists;
 }
 
 function approvedSpec(row, {stateDir, sites}) {
@@ -42,11 +54,11 @@ function matches(book, row, spec) {
 }
 
 export function planAdaptedCollection({stateDir, outputDir, sites, inventory}) {
-  const list = readBooklist(stateDir);
+  const lists = enabledBooklists(stateDir);
   const local = inventory ?? planLibrary({stateDir, outputDir, sites, forUpload: true});
   const seen = [];
-  const plans = list.books.map(row => {
-    const item = {rank: row.rank, title: row.title, author: row.author, url: row.website?.url, website: row.website?.name, state: 'pending', message: '等待试采与质量检查'};
+  const plans = lists.flatMap(({file, list}) => list.books.map(row => {
+    const item = {rank: row.rank, title: row.title, author: row.author, booklist: list.title || path.basename(file, '.json'), url: row.website?.url, website: row.website?.name, state: 'pending', message: '等待试采与质量检查'};
     let spec, problem;
     try { spec = approvedSpec(row, {stateDir, sites}); } catch (error) { problem = error.message; }
     // Existing books, including protected/modified editions, always win over a
@@ -55,8 +67,8 @@ export function planAdaptedCollection({stateDir, outputDir, sites, inventory}) {
     else if (problem) Object.assign(item, {state: 'deferred', message: `${problem}${row.issues?.length ? `；${row.issues.join('；')}` : ''}`});
     else if (seen.some(book => matches(book, row, spec))) Object.assign(item, {state: 'deferred', message: '书单内作品重复，保留前一条任务'});
     else seen.push(spec);
-    return {item, rowHash: hash(row), spec};
-  });
+    return {item, listFile: file, rowHash: hash(row), spec};
+  }));
   return plans;
 }
 
@@ -78,7 +90,7 @@ export async function collectAdapted({stateDir, outputDir, sites, signal, should
     let client;
     try {
       // Never continue with stale approvals if the list/spec changes mid-run.
-      const row = readBooklist(stateDir).books.find(row => hash(row) === plan.rowHash);
+      const row = readBooklist(stateDir, plan.listFile).books.find(row => hash(row) === plan.rowHash);
       if (!row) throw Error('选源标注已变化，需重新检查后再次点击适配采集');
       const spec = approvedSpec(row, {stateDir, sites});
       const local = localBookState(spec, {stateDir, outputDir});

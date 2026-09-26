@@ -160,7 +160,7 @@ export async function searchBooks({website, title, author = '', stateDir = defau
     for (let page = 0; url && page < Math.min(site.search.maxPages || 3, 20); page++) {
       if (seen.has(url)) throw Error('搜索翻页循环，需要更新适配');
       seen.add(url);
-      const response = await client.get(url, {encoding: site.spec.encoding, fresh: true, render: (site.search.transport || site.spec.transport) === 'browser', readySelector: site.search.readySelector, ...(page === 0 && site.search.form ? {searchForm: {...site.search.form, value: title.trim()}} : {})});
+      const response = await client.get(url, {encoding: site.spec.encoding, fresh: true, render: (site.search.transport || site.spec.transport) === 'browser', readySelector: site.search.readySelector, ...(page === 0 && site.search.request ? {request: fillTemplate(site.search.request, {query: title.trim()})} : {}), ...(page === 0 && site.search.form ? {searchForm: {...site.search.form, value: title.trim()}} : {})});
       const parsed = parseSearch(decode(response.body, response.contentType, site.spec.encoding), response.url, site);
       // Search accepts title fragments; collection still verifies the selected book's full identity.
       const matches = parsed.results.filter(matchesQuery);

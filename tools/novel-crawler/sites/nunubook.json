@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "id": "nunubook",
+  "name": "努努书坊（nunubook）",
+  "home": "https://www.nunubook.com/",
+  "hosts": ["www.nunubook.com"],
+  "search": {
+    "url": "https://www.nunubook.com/e/search/index.php",
+    "request": {"method": "POST", "form": {"tbname": "bookname", "show": "title,writer", "tempid": "1", "keyboard": "${query}"}},
+    "items": "a:has(.book-base-info .book-search-count:contains('小说'))",
+    "title": ".book-title > .title",
+    "author": {"selector": ".book-author", "pattern": "^作者[：:]\\s*(.+)$"},
+    "link": "a[href]",
+    "next": "a:contains('下一页')",
+    "maxPages": 3
+  },
+  "book": {
+    "urlPattern": "^/(?<genre>[a-z]+)/(?<bookId>[A-Za-z0-9_-]+)/$",
+    "metadata": {
+      "title": {"selector": "meta[property='og:novel:book_name']", "attribute": "content"},
+      "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"},
+      "description": {"selector": "meta[property='og:description']", "attribute": "content"},
+      "status": {"selector": "meta[property='og:novel:status']", "attribute": "content"}
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-nunubook-v3",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": ["www.nunubook.com"],
+    "delayMs": 1800,
+    "timeoutMs": 25000,
+    "retries": 1,
+    "browser": {"headless": true},
+    "metadata": {
+      "readySelector": "#pageNum select option[value='0']",
+      "title": {"selector": "meta[property='og:novel:book_name']", "attribute": "content"},
+      "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"},
+      "description": {"selector": "meta[property='og:description']", "attribute": "content"},
+      "status": {"selector": "meta[property='og:novel:status']", "attribute": "content"}
+    },
+    "catalog": {
+      "url": "${sourceUrl}",
+      "links": ".conList a[href^='https://www.nunubook.com/${genre}/${bookId}/']",
+      "selectPages": {"selector": "#pageNum select", "content": ".conList", "maxPages": 100}
+    },
+    "chapter": {"title": "#title", "content": "#text", "remove": ["script", "style", "iframe", "#bottomBar", "#sub_nav", "#blankDiv", ".m-bltop", ".m-blbottom"]}
+  }
+}

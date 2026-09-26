@@ -401,7 +401,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
       }
     }
     if (request && (request.method !== 'POST' || !request.form || typeof request.form !== 'object')) throw Error('目录接口只支持显式 POST form 请求');
-    let url = original;
+    let url = original, activeRequest = request;
     for (let redirects = 0; redirects <= 5; redirects++) {
       let response;
       for (let attempt = 0; attempt <= retries; attempt++) {
@@ -409,7 +409,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
         clock.lastRequest = Date.now();
         stats.requests++;
         try {
-          response = await axios({url, signal, method: request ? 'POST' : 'GET', data: request ? new URLSearchParams(request.form).toString() : undefined, timeout: timeoutMs, responseType: 'arraybuffer', maxRedirects: 0, maxContentLength: maxBytes, maxBodyLength: maxBytes, validateStatus: () => true, headers: {'User-Agent': 'NovelCollector/1.0', Accept: '*/*', ...(request ? {'Content-Type': 'application/x-www-form-urlencoded'} : {})}});
+          response = await axios({url, signal, method: activeRequest ? 'POST' : 'GET', data: activeRequest ? new URLSearchParams(activeRequest.form).toString() : undefined, timeout: timeoutMs, responseType: 'arraybuffer', maxRedirects: 0, maxContentLength: maxBytes, maxBodyLength: maxBytes, validateStatus: () => true, headers: {'User-Agent': 'NovelCollector/1.0', Accept: '*/*', ...(activeRequest ? {'Content-Type': 'application/x-www-form-urlencoded'} : {})}});
         } catch (error) {
           stopped();
           if (attempt === retries || error.code === 'ERR_BAD_RESPONSE') throw Error(`下载失败：${url}（${error.code || error.message}）`);
@@ -439,6 +439,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         if (!response.headers.location) throw Error('重定向缺少 Location');
         url = assertUrl(httpUrl(response.headers.location, url));
+        if ([301, 302, 303].includes(response.status)) activeRequest = undefined;
         continue;
       }
       if (response.status !== 200) throw Object.assign(Error(`HTTP ${response.status}：${url}`), {stopSource: response.status === 429});
