@@ -37,21 +37,27 @@ test('rankings combine real period views and ratings before pagination; browsing
     await daily.insertOne({_id: 'old-period', bookId: popular._id, day: '2000-01-01', views: 999999});
     const queries = [], transport = mongoose.connection.transport, query = transport?.query.bind(transport);
     if(transport)transport.query = async sql => {queries.push(sql); return query(sql);};
+    let nativeReads = 0;
+    const nativeAggregate = Book.collection.aggregate;
+    if (!transport) Book.collection.aggregate = function(...args) {nativeReads++; return nativeAggregate.apply(this, args);};
     const ordered = [quality, popular, unrated, quiet].map(b => String(b._id));
     for (const orderBy of ['rank_day', 'rank_week', 'rank_month', 'rank_total']) {
       const beforeQueries = queries.length;
+      const beforeNativeReads = nativeReads;
       const result = await get({orderBy, category: '玄幻', limit: '100'});
       assert.equal(result.status, 200); assert.equal(result.count, '4');
       assert.deepEqual(result.books.map(b => b.id), ordered);
       assert.deepEqual(result.books.map(b => b.rankingScore), [92, 84, 76, 20.8]);
       assert.ok(result.books.every(b => !('rankingMaxViews' in b)));
       if (transport) assert.equal(queries.slice(beforeQueries).filter(sql => sql !== 'SELECT 1 AS ok').length, 1, 'rank, count and return only the requested page in one data read (apart from readiness ping)');
+      else assert.equal(nativeReads - beforeNativeReads, 1, 'native MongoDB ranks, counts and pages in one aggregate');
       const first = await get({orderBy, category: '玄幻', limit: '2'});
       const second = await get({orderBy, category: '玄幻', limit: '2', page: '2'});
       assert.deepEqual([...first.books, ...second.books], result.books);
       const ascending = await get({orderBy, category: '玄幻', order: 'asc'});
       assert.deepEqual(ascending.books.map(b => b.id), ordered.toReversed());
     }
+    if (!transport) Book.collection.aggregate = nativeAggregate;
     const browsing = await get({orderBy: 'views', category: '玄幻'});
     if(transport) {
     const periodQueries = queries.filter(sql => sql.includes('FROM "readdailies"'));

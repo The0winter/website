@@ -2,6 +2,7 @@ import {dayKey} from './content.js';
 import Book from '../models/Book.js';
 import mongoose from 'mongoose';
 import {rankedSqlBooks} from './ranking-sql.js';
+import {rankedMongoBooks} from './ranking-mongo.js';
 
 // Ranking pages opt into these sorts; ordinary discovery sorts stay unchanged.
 export const rankingViewFields = Object.freeze({
@@ -16,8 +17,9 @@ export async function rankedBooks(filter, orderBy, order, skip, limit, now = new
   calendar.setUTCDate(calendar.getUTCDate() - ((calendar.getUTCDay() + 6) % 7));
   const start = orderBy === 'rank_week' ? calendar.toISOString().slice(0, 10)
     : orderBy === 'rank_month' ? today.slice(0, 7) + '-01' : today;
-  const ranked = await rankedSqlBooks(mongoose.connection, Book.collection, filter,
-    orderBy === 'rank_total' ? null : {start, today}, direction, skip, limit);
+  const period = orderBy === 'rank_total' ? null : {start, today};
+  if (!mongoose.connection.transport) return rankedMongoBooks(Book, filter, period, direction, skip, limit);
+  const ranked = await rankedSqlBooks(mongoose.connection, Book.collection, filter, period, direction, skip, limit);
   if (ranked) return ranked;
   const books = await Book.find(filter).maxTimeMS(3000).lean();
   // Push date/book filtering and summation into D1. The generic $lookup
