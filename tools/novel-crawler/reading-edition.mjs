@@ -270,9 +270,12 @@ function verifySourceOrderReview(review, catalog, raw, book, seen) {
     const omit = raw[pair.omit - 1], keep = raw[pair.keep - 1];
     if (!Number.isInteger(pair.omit) || !Number.isInteger(pair.keep) || !omit || !keep || seen.has(omit.link) || !seen.has(keep.link) || omissions.has(omit.link) || pair.omitHash !== hash(omit.content) || pair.keepHash !== hash(keep.content) || typeof pair.reason !== 'string' || !pair.reason.trim()) throw Error('重复项核对与保留章节、正文哈希不匹配');
     const pairIssues = issues.filter(i => ((i.chapter === pair.omit && i.otherChapter === pair.keep) || (i.chapter === pair.keep && i.otherChapter === pair.omit)));
-    // Whole-book similarity scanning caps candidate buckets. Recheck the named
-    // pair with the same detector before validating an explicit glyph review.
-    const detectedNear = pair.glyphReview && qualityReport([omit, keep], [omit, keep], [], 'probe').issues.some(i => i.code === 'similar-body');
+    // A duplicate of a near duplicate may only point to its identical copy in
+    // the whole-book report. Recheck the explicitly pinned pair with the same
+    // detector; hashes, retained membership and source order stay mandatory.
+    const namedPairIssues = qualityReport([keep, omit], [keep, omit], [], 'probe').issues;
+    pairIssues.push(...namedPairIssues);
+    const detectedNear = pair.glyphReview && namedPairIssues.some(i => i.code === 'similar-body');
     if (!pairIssues.some(i => ['duplicate-body', 'duplicate-title-body'].includes(i.code)) &&
       !(detectedNear && reviewedGlyphDuplicate(pair, omit, keep))) throw Error('不能将未检测为重复或未逐字核实的正文从阅读版排除');
     omissions.add(omit.link);

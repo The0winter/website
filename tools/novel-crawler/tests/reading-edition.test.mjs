@@ -68,6 +68,27 @@ test('source-order review pins duplicate omissions while preserving historical n
   assert.equal(blocked.exportFile, null); assert.deepEqual(readJson(f.file), book);
 });
 
+test('source-order review rechecks a pinned duplicate whose identical copy hid the direct near match', async t => {
+  const f = await fixture(t, {sourceOrder: true, titles: {2:'第1章 场景1',3:'第1章 场景1'}});
+  const original = Array.from({length: 1400}, (_, i) => String.fromCodePoint(0x6000 + i)).join('');
+  f.state.bodies[1] = original;
+  f.state.bodies[2] = f.state.bodies[3] = original + '。';
+  const report = await acquire(f.spec, {...f.options, mode: 'download', refresh: true});
+  assert.ok(report.issues.some(i => i.code === 'duplicate-title-body' && i.chapter === 2 && i.otherChapter === 1));
+  assert.ok(report.issues.some(i => i.code === 'duplicate-body' && i.chapter === 3 && i.otherChapter === 2));
+  assert.ok(!report.issues.some(i => i.code.startsWith('duplicate') && i.chapter === 3 && i.otherChapter === 1));
+  const originals = [1,2,3,4,5].map(f.raw);
+  const book = {...f.book, chapters: [1,4,5].map((n,i) => ({...formatChapterForExport(f.raw(n)), chapter_number:i+1, sourceChapterNumber:n, sourceChapterUrl:f.raw(n).link}))};
+  atomicWrite(f.file, book);
+  const pair = omit => ({omit,keep:1,omitHash:hash(f.raw(omit).content),keepHash:hash(f.raw(1).content),reason:'同题重复副本，逐对核实，保留首次正文。'});
+  const review = {catalogHash:hash(readJson(path.join(f.dir,'catalog.json'))),reason:'保留原始来源次序',pairs:[pair(2),pair(3)]};
+  const bind = r => bindReadingEdition(f.spec,f.file,{...f.options,sourceOrderReview:r});
+  await assert.rejects(bind({...review,pairs:[pair(2),{...pair(3),keep:4,keepHash:hash(f.raw(4).content)}]}), /未检测为重复/);
+  assert.equal((await bind(review)).readingEntries, 3);
+  assert.deepEqual([1,2,3,4,5].map(f.raw), originals);
+  assert.deepEqual(readJson(f.file), book);
+});
+
 test('reviewed glyph differences admit only pinned detected near duplicates and preserve original checkpoints', async t => {
   const f = await fixture(t, {sourceOrder: true, titles: {3: '第1章 错贴的另一标题'}});
   const original = Array.from({length: 1400}, (_, i) => String.fromCodePoint(0x6000 + i)).join('');
