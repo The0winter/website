@@ -113,16 +113,18 @@ function ReviewEditor({review, submitting, onSubmit}: {review: Review | null; su
   // Mount only when the personal review is ready, so a late response cannot overwrite a draft.
   const [rating, setRating] = useState(review?.rating || 0);
   const [content, setContent] = useState(review?.content || '');
-  return <form onSubmit={event => {event.preventDefault(); void onSubmit(rating, content);}}>
+  const length = Array.from(content.trim()).length;
+  return <form onSubmit={event => {event.preventDefault(); if (length <= 140) void onSubmit(rating, content);}}>
     <div className="flex flex-wrap items-center gap-2 mb-4">
       <span className="text-sm font-bold text-gray-700">评价:</span>
       <div className="flex items-center space-x-2"><StarRating rating={rating} interactive onRate={setRating} size={6}/></div>
     </div>
     <label className="block text-sm text-gray-500 mb-2" htmlFor="book-review-content">短评（选填，可以只提交评分）</label>
     <textarea id="book-review-content" value={content} onChange={event => setContent(event.target.value)} placeholder="写下你的短评..."
-      className="w-full p-3 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:outline-none min-h-[120px] bg-white placeholder-gray-500 text-gray-900 text-sm" maxLength={4000}/>
-    <div className="mt-3 flex justify-end">
-      <button type="submit" disabled={submitting || !rating} className="bg-green-600 text-white px-6 py-2 rounded text-sm hover:bg-green-700 disabled:opacity-50 transition-colors">
+      className="w-full p-3 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:outline-none min-h-[120px] bg-white placeholder-gray-500 text-gray-900 text-sm" maxLength={Math.max(280, content.length)} aria-describedby="book-review-limit" aria-invalid={length > 140}/>
+    <div className="mt-3 flex items-center justify-between gap-3">
+      <span id="book-review-limit" className={length > 140 ? 'text-sm text-red-700' : 'text-sm text-gray-500'}>{length}/140 字{length > 140 ? '，请精简后发布' : ''}</span>
+      <button type="submit" disabled={submitting || !rating || length > 140} className="bg-green-600 text-white px-6 py-2 rounded text-sm hover:bg-green-700 disabled:opacity-50 transition-colors">
         {submitting ? '保存中...' : content.trim() ? '发表评论' : '提交评分'}
       </button>
     </div>
@@ -552,19 +554,22 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                     sortedReviews.map((review) => {
                         const userId = user?.id || user?._id;
                         const isMyReview = userId && (review.user._id === userId || review.user.id === userId);
+                        const reviewerId = review.user?._id || review.user?.id || '';
+                        const profileHref = /^[a-f0-9]{24}$/i.test(reviewerId) ? `/user/${reviewerId}` : null;
                         if (isMyReview && showReviewForm) return null;
 
                         return (
                             <article key={review._id} className="book-review">
                                 <div className="book-review-row">
                                     <div className="book-review-avatar-wrap">
-                                        <UserAvatar user={review.user || {username:'书友'}} className="book-review-avatar"/>
+                                        {profileHref ? <Link href={profileHref} className="book-review-profile-link" aria-label={`查看${review.user.username}的主页`}><UserAvatar user={review.user} className="book-review-avatar"/></Link>
+                                          : <UserAvatar user={review.user || {username:'书友'}} className="book-review-avatar"/>}
                                     </div>
                                     <div className="book-review-body flex-1">
                                         <div className="book-review-heading">
-                                            <span className="book-review-name" title={review.user?.username || '书友'}>
+                                            {profileHref ? <Link className="book-review-name" href={profileHref} title={review.user.username}>{review.user.username} {isMyReview && '(我)'}</Link> : <span className="book-review-name" title={review.user?.username || '书友'}>
                                                 {review.user?.username || '书友'} {isMyReview && '(我)'}
-                                            </span>
+                                            </span>}
                                             <div className="book-review-meta">
                                             <StarRating rating={review.rating} size={4} />
                                             </div>

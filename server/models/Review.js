@@ -5,7 +5,7 @@ const reviewSchema = new mongoose.Schema({
   rating: { type: Number, required: true, min: 1, max: 5, validate: Number.isInteger },
   
   // 评论内容
-  content: { type: String, default: '', maxlength: 4000 },
+  content: { type: String, default: '', validate: {validator: value => Array.from(value || '').length <= 140, message: '短评最多140字'} },
   likedBy: { type: [mongoose.Schema.Types.ObjectId], default: [], select: false },
   dislikedBy: { type: [mongoose.Schema.Types.ObjectId], default: [], select: false },
   

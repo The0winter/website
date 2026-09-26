@@ -97,6 +97,8 @@
 .book-review { padding:0; text-align:left; }
 .book-review-row { display:flex; align-items:flex-start; gap:12px; }
 .book-review-avatar-wrap { flex-shrink:0; padding-top:2px; }
+.book-review-profile-link { display:flex; padding:4px; margin:-4px; border-radius:50%; }
+.book-review-profile-link:focus-visible,.book-review-name:focus-visible { outline:2px solid #936139; outline-offset:3px; }
 .book-review-avatar { width:32px; height:32px; border-radius:50%; object-fit:cover; overflow:hidden; }
 .book-review-body { min-width:0; }
 .book-review-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:25px; margin-bottom:3px; }

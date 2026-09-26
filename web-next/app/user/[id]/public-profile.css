@@ -1,0 +1,25 @@
+.public-profile-page { min-height:70vh; padding:20px 24px 72px; color:var(--home-text,#3d352d); background:var(--home-background,#faf7f2); }
+.public-profile-shell { max-width:720px; margin:0 auto; }
+.public-profile-nav { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:52px; margin-bottom:16px; color:var(--home-muted,#82715e); font-size:14px; }
+.public-profile-nav button,.public-profile-nav a { display:flex; align-items:center; justify-content:center; gap:6px; min-width:44px; min-height:44px; cursor:pointer; border-radius:12px; }
+.public-profile-nav button:focus-visible,.public-profile-nav a:focus-visible { outline:2px solid #936139; outline-offset:2px; }
+.public-profile-card { overflow:hidden; }
+.public-profile-cover { position:relative; height:180px; }
+.public-profile-identity { position:relative; display:flex; flex-direction:column; align-items:center; padding:0 24px 28px; margin-top:-46px; gap:10px; }
+.public-profile-avatar { width:92px; height:92px; border:5px solid var(--profile-surface); font-size:32px; color:var(--profile-accent); background:var(--profile-accent-soft); }
+.public-profile-identity h1 { max-width:100%; font-size:26px; font-weight:600; line-height:1.5; text-align:center; overflow-wrap:anywhere; }
+.public-profile-role { display:inline-flex; align-items:center; gap:5px; padding:4px 12px; border-radius:20px; color:var(--profile-accent); background:var(--profile-soft); font-size:12px; }
+.public-profile-info { border-top:1px solid var(--profile-border); margin:0 32px; padding:24px 0 32px; }
+.public-profile-info h2 { margin-bottom:14px; font-size:15px; font-weight:600; }
+.public-profile-info dl { display:grid; gap:18px; }
+.public-profile-info dl>div { display:flex; justify-content:space-between; align-items:flex-start; gap:24px; font-size:14px; line-height:24px; }
+.public-profile-info dt { display:flex; align-items:center; gap:8px; flex-shrink:0; color:var(--profile-muted); }
+.public-profile-info dd { min-width:0; text-align:right; overflow-wrap:anywhere; }
+@media(max-width:767px) {
+  .public-profile-page { padding:8px 16px 88px; min-height:calc(100dvh - 60px); }
+  .public-profile-nav { margin-bottom:8px; }
+  .public-profile-cover { height:150px; }
+  .public-profile-identity { padding-inline:16px; }
+  .public-profile-identity h1 { font-size:23px; }
+  .public-profile-info { margin-inline:24px; }
+}

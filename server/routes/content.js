@@ -150,7 +150,7 @@ export function contentRoutes(app,auth) {
     fields(req.body,['rating','content']);
     const {rating}=req.body;
     const content=Object.hasOwn(req.body,'content') ? req.body.content : '';
-    if(!Number.isInteger(rating)||rating<1||rating>5||typeof content!=='string'||content.length>4000)fail(400,'评分须为1—5整数，短评可不填，最多4000字');
+    if(!Number.isInteger(rating)||rating<1||rating>5||typeof content!=='string'||Array.from(content.trim()).length>140)fail(400,'评分须为1—5整数，短评可不填，最多140字');
     let review;
     await mongoose.connection.transaction(async session=>{
       // Serialize review summaries against all other mutations on this book.

@@ -84,7 +84,7 @@ export interface Book {
   numReviews?:number;
   id: string;
   title: string;
-  author_id?: string | { _id: string; id: string; username: string; email: string } | null;
+  author_id?: string | { _id: string; id: string; username: string } | null;
   author?: string;
   description: string;
   cover_image?: string;

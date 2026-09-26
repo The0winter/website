@@ -279,8 +279,11 @@ app.post('/api/admin/clean-dirty-chapters',authMiddleware,adminMiddleware,(req,r
 
 app.get('/api/users/:userId/profile', async (req, res) => {
   try {
-    const user = await User.findById(req.params.userId);
+    if (!/^[a-f0-9]{24}$/i.test(req.params.userId)) return res.status(400).json({error:'用户ID无效'});
+    const user = await User.findOne({_id:req.params.userId,isBanned:{$ne:true}})
+      .select('username avatar profileTheme role created_at').maxTimeMS(3000).lean();
     if (!user) return res.status(404).json({ error: 'User not found' });
+    res.set('Cache-Control','private, no-store');
     res.json(publicUser(user));
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
