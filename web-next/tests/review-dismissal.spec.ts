@@ -1,7 +1,7 @@
 import {test,expect} from './fixtures/without-analytics';
 
 const base=process.env.REVIEW_TEST_BASE||'http://127.0.0.1:3157',book=process.env.REVIEW_TEST_BOOK||'000000000000000000000101';
-for(const width of [390,1440])test(`comment dismissal animates every exit and restores focus at ${width}px`,async({page})=>{
+for(const width of [390,1440])test(`comment dismissal animates every exit and restores focus at ${width}px`,async({page},info)=>{
   await page.setViewportSize({width,height:900});
   await page.emulateMedia({reducedMotion:'no-preference'});
   await page.goto(`${base}/book/${book}`);
@@ -26,6 +26,7 @@ for(const width of [390,1440])test(`comment dismissal animates every exit and re
     else {await page.keyboard.press('Escape');await page.keyboard.press('Escape');}
     await expect(sheet).toHaveCount(0);
     const samples=await frames;
+    await info.attach(`exit-${action}`,{body:JSON.stringify(samples),contentType:'application/json'});
     expect(samples.length).toBeGreaterThan(2);
     expect(samples.some(row=>row.y>80&&row.y<850)).toBe(true);
     expect(samples.every(row=>row.locked)).toBe(true);

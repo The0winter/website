@@ -86,6 +86,7 @@ export default function BookReviewSheet(props:Props) {
     return()=>{clearTimeout(start);request.current?.abort();request.current=null;viewport?.removeEventListener('resize',fitKeyboard);viewport?.removeEventListener('scroll',fitKeyboard);element.close();unlock();if(opener?.isConnected)opener.focus({preventScroll:true});};
   },[load]);
   return createPortal(<dialog ref={dialog} className="book-review-sheet book-community" aria-label="全部评论" data-closing={closing || undefined} onCancel={event=>{event.preventDefault();requestClose();}}
+    onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();requestClose();}}}
     onAnimationEnd={event=>{if(closing&&event.target===event.currentTarget&&event.animationName==='book-review-slide-down')finishClose();}}
     onClick={event=>{if(event.target===event.currentTarget){const r=event.currentTarget.getBoundingClientRect();if(event.clientY<r.top||event.clientX<r.left||event.clientX>r.right)requestClose();}}}>
     <div className="book-review-sheet-handle" aria-hidden="true"/>
