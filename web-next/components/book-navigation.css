@@ -1,10 +1,10 @@
 html[data-book-transition] { overflow-x: clip; }
 .book-transition-snapshot,.chapter-entry-snapshot { position: fixed; inset: 0; z-index: 10000; overflow: hidden; background: #fffdf9; pointer-events: auto; contain: paint; box-shadow: -16px 0 40px #0002; }
-.book-navigation-loading { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; padding:24px; background:var(--home-background,#f4ece6); color:var(--home-text,#352a18); font:16px/1.8 Arial,"Microsoft YaHei",sans-serif; text-align:center; touch-action:none; outline:none; }
+.book-navigation-loading { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:24px; background:var(--home-background,#f4ece6); color:var(--home-text,#352a18); font:16px/1.8 Arial,"Microsoft YaHei",sans-serif; text-align:center; touch-action:none; outline:none; }
 .book-navigation-loading>.loading-logo { width:36px; height:36px; }
 .book-navigation-loading>p { position:relative; margin:0; }
 @media(max-width:767px) {
-  .book-navigation-loading { gap:18px; }
+  .book-navigation-loading { gap:9px; }
 }
 .book-navigation-loading[aria-busy=false]>.loading-logo { display:none; }
 .book-navigation-loading>div { display:flex; gap:20px; }
