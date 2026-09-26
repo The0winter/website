@@ -211,7 +211,6 @@ function applyTheme(theme) {
   const dark = theme === 'dark';
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   const label = dark ? '日间模式' : '夜间模式';
-  $('theme-label').textContent = label;
   $('theme-toggle').title = `切换到${label}`;
   $('theme-toggle').setAttribute('aria-label', `切换到${label}`);
 }

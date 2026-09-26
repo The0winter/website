@@ -114,8 +114,9 @@ main { width: calc(100% - 220px); max-width: 1200px; margin-left: 220px; padding
 header { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: 'title library theme'; align-items: center; gap: 12px; margin-bottom: 22px; }
 header h1 { grid-area: title; }
 header .library-actions { grid-area: library; }
-.secondary.theme-toggle { grid-area: theme; gap: 7px; min-height: 42px; padding: 9px 12px; }
-.theme-toggle svg { width: 18px; height: 18px; flex-shrink: 0; }
+.secondary.theme-toggle { grid-area: theme; width: 36px; height: 36px; min-height: 36px; padding: 7px; border-color: transparent; border-radius: 50%; background: transparent; color: var(--muted); box-shadow: none; }
+.secondary.theme-toggle:hover:not(:disabled) { background: var(--soft); border-color: transparent; color: var(--text); }
+.theme-toggle svg { width: 20px; height: 20px; flex-shrink: 0; }
 .theme-sun, :root[data-theme=dark] .theme-moon { display: none; }
 :root[data-theme=dark] .theme-sun { display: block; }
 .library-actions { display: flex; flex-wrap: wrap; gap: 10px; }
