@@ -9,3 +9,5 @@ html[data-book-transition] { overflow-x: clip; }
 .book-navigation-loading[aria-busy=false]>.loading-logo { display:none; }
 .book-navigation-loading>div { display:flex; gap:20px; }
 .book-navigation-loading button { min-height:44px; padding:8px 20px; border:1px solid var(--home-border,#eadfd3); border-radius:8px; }
+.ranking-navigation-loading { touch-action:none; outline:none; }
+.ranking-navigation-loading>.ranking-page { min-height:100%; }

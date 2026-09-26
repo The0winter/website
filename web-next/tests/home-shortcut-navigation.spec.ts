@@ -47,7 +47,7 @@ for (const width of [320, 390]) for (const entry of entries) {
         await expect(page.locator('.ranking-header')).toBeVisible();
         await expect(page.locator('.book-navigation-loading')).toHaveCount(0);
       } else {
-        await expect(page.locator('.book-navigation-loading')).toContainText(`正在打开${entry.label}…`);
+        await expect(page.locator('.book-navigation-loading')).toContainText(`正在打开${entry.label}`);
         await page.waitForTimeout(500);
         await expect(page.locator('.book-navigation-loading')).toBeVisible();
         await expect(page.locator('.book-navigation-loading')).toHaveCSS('background-color', homeBackground);
@@ -114,8 +114,11 @@ test('a ranking opened from home retains its filters through details and reload,
   await expect(page.locator('.ranking-content')).toHaveAttribute('aria-busy', 'false');
   await page.locator('.ranking-card').click(); await idle(page);
   await expect(page.locator('.book-detail:visible')).toBeVisible();
+  const previousSession = await page.evaluate(() => history.state?.bookNavigation?.restoreSession);
   await page.reload();
   await expect(page.locator('.book-detail:visible')).toBeVisible();
+  // Server-rendered details are visible before navigation has hydrated.
+  await page.waitForFunction(previous => history.state?.bookNavigation?.restoreSession && history.state.bookNavigation.restoreSession !== previous, previousSession);
   await page.goBack(); await idle(page);
   await expect(page.getByRole('button', {name: '周榜', exact: true})).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', {name: '玄幻', exact: true})).toHaveAttribute('aria-pressed', 'true');
@@ -149,9 +152,10 @@ test('the ranking frame and its skeleton slide together for 400ms before data ar
     const animate = Element.prototype.animate;
     Element.prototype.animate = function(frames, options) {
       const animation = animate.call(this, frames, options);
-      if ((this as HTMLElement).dataset.motion === 'enter' && shadows.get(this)?.querySelector('.ranking-loading')) {
+      const frame = shadows.get(this) ?? this;
+      if ((this as HTMLElement).dataset.motion === 'enter' && frame.querySelector('.ranking-loading')) {
         animation.pause(); animation.currentTime = 200;
-        const shadow = shadows.get(this)!;
+        const shadow = frame;
         Object.assign(window, {rankingSlide: {
           duration: animation.effect!.getTiming().duration,
           header: Boolean(shadow.querySelector('.ranking-header')),

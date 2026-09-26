@@ -13,6 +13,10 @@ export function registerMobileSectionShells(root: ShadowRoot) {
   return () => {if (shells === root) shells = undefined;};
 }
 
+export function mobileRankingShell() {
+  return shells?.querySelector<HTMLElement>('[data-mobile-section-shell="/ranking"] > .ranking-page');
+}
+
 function snapshotStyles() {
   return [...document.styleSheets].flatMap(original => {
     if (original.disabled) return [];
@@ -60,7 +64,7 @@ export function captureMobileSectionShell(path: string, top: number, height: num
   } finally {measure.remove();}
 }
 
-export function captureMobileSection(source: HTMLElement, top: number, height: number, header = false) {
+export function captureMobileSection(source: HTMLElement, top: number, height: number, header = false, fullHome = false) {
   const element = document.createElement('div');
   element.className = header ? 'mobile-section-header' : 'mobile-section-snapshot';
   element.setAttribute('aria-hidden', 'true');
@@ -90,10 +94,27 @@ export function captureMobileSection(source: HTMLElement, top: number, height: n
   // Root-scoped font variables do not resolve identically inside a shadow
   // tree. Preserve the source font so the frame and real route use the same face.
   content.style.fontFamily = getComputedStyle(source).fontFamily;
-  content.querySelectorAll('.mh-bottom, script, iframe').forEach(child => child.remove());
+  content.querySelectorAll(fullHome ? 'script, iframe' : '.mh-bottom, script, iframe').forEach(child => child.remove());
   if (!header) content.querySelectorAll<HTMLElement>('.mh-topbar').forEach(bar => {bar.style.visibility = 'hidden';});
   if (!header) content.querySelectorAll<HTMLElement>('.library-search-header, .forum-masthead').forEach(bar => {bar.style.position = 'static';});
   Object.assign(content.style, {position: 'relative', top: `${box.top - top}px`, left: `${box.left}px`, width: `${box.width}px`, margin: '0'});
+  if (fullHome) {
+    // A home-to-ranking transition needs only these two positioned controls,
+    // not computed style and scroll reads for every book in both desktop/mobile DOMs.
+    for (const selector of ['.mh-topbar', '.mh-bottom']) {
+      const original = source.querySelector<HTMLElement>(selector);
+      const copy = content.querySelector<HTMLElement>(selector);
+      if (!original || !copy) continue;
+      const rect = original.getBoundingClientRect();
+      if (selector === '.mh-topbar') {
+        const spacer = copy.cloneNode(false) as HTMLElement;
+        spacer.dataset.snapshotSpacer = '';
+        Object.assign(spacer.style, {position: 'static', visibility: 'hidden', height: `${rect.height}px`});
+        copy.before(spacer);
+      }
+      Object.assign(copy.style, {position: 'fixed', top: `${rect.top}px`, left: `${rect.left}px`, width: `${rect.width}px`, height: `${rect.height}px`, bottom: 'auto', right: 'auto', margin: '0'});
+    }
+  }
   // The forum's floating publish button is the only remaining fixed control.
   const publish = source.querySelector<HTMLElement>('.forum-publish');
   const copiedPublish = content.querySelector<HTMLElement>('.forum-publish');

@@ -14,7 +14,14 @@ async function setup(page: Page, width = 390) {
     document.addEventListener('DOMContentLoaded', () => {const style = document.createElement('style'); style.textContent = 'nextjs-portal{display:none}'; document.head.append(style);});
   });
   const requests: string[] = [];
-  await page.route('**/api/books?*', route => {requests.push(route.request().url()); const current = Number(new URL(route.request().url()).searchParams.get('page') || 1); return route.fulfill({headers: {'X-Total-Count': '30'}, json: books.slice((current - 1) * 20, current * 20)});});
+  await page.route('**/api/books?*', route => {
+    const url = new URL(route.request().url());
+    // Detail recommendations also use /api/books. Count only ranking pages
+    // when asserting that returning does not refetch the preserved list.
+    if (url.searchParams.has('page')) requests.push(url.href);
+    const current = Number(url.searchParams.get('page') || 1);
+    return route.fulfill({headers: {'X-Total-Count': '30'}, json: books.slice((current - 1) * 20, current * 20)});
+  });
   await page.goto(base + '/ranking');
   await expect(page.locator('.ranking-row')).toHaveCount(20);
   await page.getByRole('button', {name: '周榜', exact: true}).click();

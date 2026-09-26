@@ -15,6 +15,7 @@ import LibraryToolbar from './LibraryToolbar';
 import ForumTabs from './ForumTabs';
 import ForumPostList from './ForumPostList';
 import {MobileHomeSection, MobileHomeShortcuts} from './MobileHomeFrame';
+import RankingFrame from './RankingFrame';
 import './mobile-home.css';
 import '../app/library/library.css';
 import '../app/forum/forum.css';
@@ -38,6 +39,7 @@ export default function MobileSectionShells() {
     return registerMobileSectionShells(root);
   }, []);
   return <><div hidden inert ref={mount}/>{shadow && createPortal(<>
+    <div data-mobile-section-shell="/ranking"><RankingFrame/></div>
     <div data-mobile-section-shell="/library" className="library-page">
       <div className="library-inner"><div data-section-shell-header/>
         <section className="shelf-panel"><LibraryToolbar sort={sort} empty={!shelf.rows?.length}/>

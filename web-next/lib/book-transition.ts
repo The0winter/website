@@ -1,5 +1,6 @@
 import {animateElement, type BrowserAnimation} from './browser-animation';
 import {getImageProps} from 'next/image';
+import {captureMobileSection, mobileRankingShell} from './mobile-section-snapshot';
 
 type Direction = 'enter' | 'exit';
 let cancelActive: (() => void) | undefined;
@@ -18,7 +19,7 @@ function waitForPage(href: string, signal: AbortSignal, onSlow?: () => void) {
       : parts[1] === 'author'
       ? visible(`.author-page[data-author-href="${CSS.escape(path + url.search)}"][aria-busy="false"]`)
       : parts[1] === 'ranking'
-      ? visible('.ranking-page')
+      ? visible('main .ranking-page')
       : parts[3]
       ? visible(`[data-reader-chapter="${CSS.escape(parts[3])}"][data-reader-ready="true"]`)
       : parts[1] === 'book'
@@ -34,6 +35,39 @@ function waitForPage(href: string, signal: AbortSignal, onSlow?: () => void) {
     observer.observe(document.body, {subtree: true, childList: true, attributes: true});
     if (ready() || signal.aborted) finish();
   });
+}
+
+function rankingLoadingPage(href: string) {
+  const source = mobileRankingShell();
+  if (!source) return;
+  const panel = document.createElement('div');
+  panel.className = 'book-transition-snapshot ranking-navigation-loading';
+  panel.setAttribute('aria-label', '正在打开排行榜');
+  panel.setAttribute('aria-busy', 'true');
+  panel.tabIndex = -1;
+  panel.append(source.cloneNode(true));
+  panel.querySelectorAll('nav').forEach(nav => {nav.inert = true;});
+  panel.querySelector('.ranking-back')!.addEventListener('click', () => history.back());
+  panel.addEventListener('wheel', event => event.preventDefault(), {passive: false});
+  panel.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {event.preventDefault(); history.back();}
+    if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(event.key) && event.target === panel) event.preventDefault();
+  });
+  document.body.append(panel);
+  panel.focus({preventScroll: true});
+  return {panel, slow: () => {
+    panel.setAttribute('aria-busy', 'false');
+    const content = panel.querySelector<HTMLElement>('.ranking-content')!;
+    content.setAttribute('aria-busy', 'false');
+    const error = document.createElement('div');
+    error.className = 'ranking-empty';
+    error.setAttribute('role', 'alert');
+    const message = document.createElement('p');
+    message.textContent = '排行榜暂时未能加载，请重试';
+    const retry = document.createElement('button');
+    retry.type = 'button'; retry.textContent = '重试'; retry.onclick = () => location.assign(href);
+    error.append(message, retry); content.replaceChildren(error);
+  }};
 }
 
 function bookLoadingPage(href: string, label = '书籍') {
@@ -141,11 +175,18 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   // Preserve the source page underneath the moving loader even if Next swaps
   // the route immediately (including a cached detail page).
-  const snapshot = freezeBookPage();
-  // Rankings slide in with their own framework and skeleton rows as soon as
-  // the route is ready. Their data request needs no separate loading cover.
   const ranking = new URL(href, location.origin).pathname === '/ranking';
-  const loading = direction === 'enter' && !ranking && (loadingLabel || /^\/book\/[^/?#]+$/.test(href)) ? bookLoadingPage(href, loadingLabel) : undefined;
+  const rankingEntry = ranking && direction === 'enter' && matchMedia('(max-width: 767px)').matches;
+  const home = rankingEntry ? document.querySelector<HTMLElement>('.mobile-home:not(.mobile-home-browse)') : null;
+  const snapshot = home ? captureMobileSection(home, 0, innerHeight, true, true).element : freezeBookPage();
+  if (home) {
+    snapshot.className = 'book-transition-snapshot';
+    document.body.append(snapshot);
+  }
+  // Start the shared ranking frame immediately, even when the route's JS/RSC
+  // has never been fetched. Never wait behind a still image of the home page.
+  const loading = rankingEntry ? rankingLoadingPage(href)
+    : direction === 'enter' && !ranking && (loadingLabel || /^\/book\/[^/?#]+$/.test(href)) ? bookLoadingPage(href, loadingLabel) : undefined;
   const duration = direction === 'exit' || ranking ? 400 : 240;
   root.dataset.bookTransition = direction;
   root.dataset.bookTransitionPhase = 'loading';
