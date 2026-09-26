@@ -23,8 +23,8 @@ retryBook.id = 'library-retry'; retryBook.type = 'button'; retryBook.className =
 skipBook.id = 'library-skip'; skipBook.type = 'button'; skipBook.className = 'secondary'; skipBook.textContent = '跳过，更新下一本'; skipBook.hidden = true;
 const libraryDecisionBar = document.createElement('div'); libraryDecisionBar.className = 'task-actions';
 libraryDecisionBar.append(retryBook, skipBook); libraryHelp.after(libraryDecisionBar);
-const phases = {idle: '等待开始', upload: '正在上传', partial: '有未完成项', library: '整理书库', 'library-wait': '等待你处理', search: '查找中', ready: '等待选择', resolving: '读取目录', probe: '抽样检查', download: '正在下载', pausing: '正在暂停', paused: '已暂停', stopping: '正在停止', stopped: '已停止', probed: '试采通过', complete: '已完成', error: '采集中断'};
-const working = phase => ['upload', 'library', 'library-wait', 'search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(phase);
+const phases = {idle: '等待开始', adapted: '核对适配书单', upload: '正在上传', partial: '有未完成项', library: '整理书库', 'library-wait': '等待你处理', search: '查找中', ready: '等待选择', resolving: '读取目录', probe: '抽样检查', download: '正在下载', pausing: '正在暂停', paused: '已暂停', stopping: '正在停止', stopped: '已停止', probed: '试采通过', complete: '已完成', error: '采集中断'};
+const working = phase => ['adapted', 'upload', 'library', 'library-wait', 'search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(phase);
 async function api(action, body) {
   const response = await fetch(`/api/${action}`, {method: body === undefined ? 'GET' : 'POST', headers: {'x-desktop-token': token || '', 'Content-Type': 'application/json'}, ...(body === undefined ? {} : {body: JSON.stringify(body)})});
   const result = await response.json();
@@ -59,7 +59,7 @@ function renderDiagnostics(task) {
   attention.hidden = !waiting;
   const seconds = task.actionDeadline ? Math.max(0, Math.ceil((task.actionDeadline - Date.now()) / 1000)) : null;
   attentionText.textContent = waiting ? `需要你操作：方便时点击“显示采集窗口”，${task.action === 'login' ? '手动登录' : '手动完成验证码'}。完成后自动继续，已保存章节保留。${seconds === null ? '' : `剩余等待 ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒。`}` : '';
-  showBrowser.hidden = !task.canShowBrowser;
+  showBrowser.hidden = task.kind === 'adapted' || !task.canShowBrowser;
   const failures = task.report?.failures?.length ? task.report.failures : task.failure ? [task.failure] : task.phase === 'error' ? [{error: task.message}] : [];
   const visible = !active && failures.length && !['ready', 'idle'].includes(task.phase);
   diagnostics.hidden = !visible;
@@ -133,15 +133,18 @@ function render() {
   $('folder-nav').title = `打开已下载小说所在的目录：${data.outputDir}`;
   if (!initialized) {
     $('website').value = data.settings.lastWebsite || data.sites[0]?.home || '';
-    if (!['upload', 'library'].includes(data.task.kind) && data.task.title) $('title').value = data.task.title;
-    if (!['upload', 'library'].includes(data.task.kind) && data.task.author) $('author').value = data.task.author;
+    if (!['adapted', 'upload', 'library'].includes(data.task.kind) && data.task.title) $('title').value = data.task.title;
+    if (!['adapted', 'upload', 'library'].includes(data.task.kind) && data.task.author) $('author').value = data.task.author;
     queueUI.restoreDraft(data.queue?.draft);
     initialized = true;
   }
   renderSettings(); adapterStatus();
   const task = data.task;
   active = task.busy || working(task.phase);
-  const isUpload = task.kind === 'upload', isLibrary = task.kind === 'library', batch = isLibrary || isUpload ? task.batch : null;
+  const isUpload = task.kind === 'upload', isLibrary = task.kind === 'library', isAdapted = task.kind === 'adapted', batch = isLibrary || isUpload || isAdapted ? task.batch : null;
+  $('collect-adapted').disabled = active || librarySubmitting;
+  $('collect-adapted').dataset.running = String(isAdapted && active);
+  $('collect-adapted-label').textContent = isAdapted && active ? '正在采集' : '适配采集';
   $('update-library').disabled = active || librarySubmitting;
   $('upload-library').disabled = active || librarySubmitting;
   $('upload-library').dataset.running = String(isUpload && active);
@@ -162,26 +165,26 @@ function render() {
   const isEmpty = ['idle', 'ready'].includes(task.phase);
   $('task-empty').hidden = !isEmpty;
   $('task-content').hidden = isEmpty;
-  $('task-title').textContent = isUpload && (!active || !task.title) ? '上传书库到网站' : isLibrary && (!active || !task.title) ? '本地书库更新' : task.title ? `《${task.title}》${task.author ? ` · ${task.author}` : ''}` : '采集任务';
+  $('task-title').textContent = isAdapted && (!active || !task.title) ? '适配书单采集' : isUpload && (!active || !task.title) ? '上传书库到网站' : isLibrary && (!active || !task.title) ? '本地书库更新' : task.title ? `《${task.title}》${task.author ? ` · ${task.author}` : ''}` : '采集任务';
   $('task-message').textContent = task.message;
   const report = task.report;
   const bookStatus = report ? report.status : task.status;
   const detection = report ? report.statusDetection : task.statusDetection;
   $('book-status').textContent = `作品状态：${bookStatus === '完结' ? '已完结' : bookStatus === '连载' ? '连载中' : task.phase === 'resolving' ? '正在读取…' : detection === 'conflict' ? '来源标注有冲突，待核对' : '未识别'}${detection === 'conflict-retained' ? '（来源仍标连载，保留已确认的完结状态）' : detection === 'retained' ? '（沿用已保存状态）' : ''}`;
-  $('book-status').hidden = isLibrary || isUpload;
+  $('book-status').hidden = isLibrary || isUpload || isAdapted;
   const progress = !active && report ? {downloaded: report.downloaded, total: report.expected, failed: report.failures?.filter(item => item.chapter).length || 0, mode: report.mode || task.progress?.mode} : task.progress;
   const percent = progress?.total ? Math.min(100, progress.downloaded / progress.total * 100) : batch?.total ? batch.checked / batch.total * 100 : task.phase === 'complete' || task.phase === 'probed' ? 100 : 0;
   $('progress-bar').style.width = `${percent}%`;
   $('progress-bar').className = active && task.phase !== 'library-wait' && !progress?.total && !batch?.total ? 'indeterminate' : '';
   $('progress-text').textContent = isUpload ? (batch?.items.find(item => item.state === 'running')?.message || (active ? '正在连接网站…' : '')) : task.phase === 'library-wait' ? '等待处理期间不会读取下一本书' : progress?.total ? `${progress.mode === 'probe' ? '抽样' : '采集'} ${progress.downloaded} / ${progress.total} 章${progress.failed ? ` · ${progress.failed} 章失败` : ''}` : active ? '正在连接来源…' : '';
-  $('pause').hidden = !['probe', 'download', 'pausing'].includes(task.phase);
+  $('pause').hidden = !['adapted', 'probe', 'download', 'pausing'].includes(task.phase);
   $('pause').disabled = task.phase === 'pausing';
   $('pause').textContent = task.phase === 'pausing' ? '正在保存…' : '暂停采集';
   $('report-stats').hidden = !report;
   if (report) $('report-stats').replaceChildren(...[[report.expected, report.continuation ? '本地书籍条目' : report.readingEdition ? '阅读版条目' : '目录章节'], [report.errors, '错误'], [report.warnings, '待核对']].map(([number, label]) => { const div = document.createElement('div'), strong = document.createElement('strong'); strong.textContent = number; div.append(strong, label); return div; }));
   renderDiagnostics(task);
   renderLibrary(batch);
-  $('resume').hidden = !!task.queueId || isLibrary || isUpload || !['paused', 'stopped', 'probed', 'error'].includes(task.phase) || !task.sourceUrl;
+  $('resume').hidden = !!task.queueId || isLibrary || isUpload || isAdapted || !['paused', 'stopped', 'probed', 'error'].includes(task.phase) || !task.sourceUrl;
   $('results-panel').hidden = !data.candidates.length;
   const nextKey = JSON.stringify(data.candidates);
   if (nextKey !== resultsKey) {
@@ -225,11 +228,11 @@ function currentLibraryBook(batch) {
   return (batch?.currentControlId && batch.items.find(item => item.controlId === batch.currentControlId)) || batch?.items.find(item => item.state === 'waiting') || batch?.items.find(item => ['running', 'retrying'].includes(item.state));
 }
 function renderLibrary(batch) {
-  const upload = batch?.kind === 'upload';
+  const upload = batch?.kind === 'upload', adapted = batch?.kind === 'adapted';
   const current = currentLibraryBook(batch);
   const waiting = data.task.phase === 'library-wait' && current?.state === 'waiting';
   retryBook.hidden = !waiting;
-  skipBook.hidden = upload || !current || !active;
+  skipBook.hidden = upload || adapted || !current || !active;
   retryBook.disabled = skipBook.disabled = libraryDecisionPending || ['pausing', 'stopping'].includes(data.task.phase);
   libraryHelp.hidden = !waiting;
   const helpKey = waiting ? JSON.stringify([current.controlId, current.failure]) : '';
@@ -246,10 +249,12 @@ function renderLibrary(batch) {
   $('library-results').hidden = !batch?.items.length;
   $('library-summary').textContent = batch ? upload ? `已处理 ${batch.checked} / ${batch.total} 本 · 新书 ${batch.newBooks} 本 · 新增 ${batch.added} 章 · 已同步 ${batch.unchanged} 本${batch.failed ? ` · 未完成 ${batch.failed} 本` : ''}` : `已处理 ${batch.checked} / ${batch.total} 本 · 更新 ${batch.updated} 本 · 最新 ${batch.unchanged} 本 · 新增 ${batch.added} 章${batch.active > 1 ? ` · 同时处理 ${batch.active} 本` : ''}${batch.skipped ? ` · 跳过 ${batch.skipped} 本` : ''}` : '';
   if (batch?.completed) $('library-summary').textContent += ` · 完结跳过 ${batch.completed} 本`;
+  if (adapted) $('library-summary').textContent = `已处理 ${batch.checked} / ${batch.total} 本 · 已入库 ${batch.collected} 本 · 本地已有 ${batch.existing} 本 · 待核验 ${batch.deferred} 本${batch.failed ? ` · 未完成 ${batch.failed} 本` : ''}`;
   const key = JSON.stringify(batch?.items);
   if (key === libraryKey) return;
   libraryKey = key;
   const labels = {pending: '等待检查', blocked: '需先核对', running: '检查中', retrying: '自动重试', waiting: '等待处理', updated: '已更新', uploaded: '已上传', unchanged: upload ? '已同步' : '已是最新', failed: upload ? '上传未完成' : '更新失败', completed: '完结跳过', skipped: '已手动跳过', stopped: '已停止'};
+  if (adapted) Object.assign(labels, {collected: '已入库', existing: '本地已有', deferred: '待核验', failed: '采集未完成', running: '采集中'});
   $('library-results').replaceChildren(...(batch?.items || []).map(item => {
     const row = document.createElement('div'); row.className = 'library-row'; row.dataset.state = item.state;
     const heading = document.createElement('div'); heading.className = 'library-row-heading';
@@ -284,6 +289,15 @@ async function libraryDecision(action) {
 }
 retryBook.onclick = () => libraryDecision('retry');
 skipBook.onclick = () => libraryDecision('skip');
+$('collect-adapted').onclick = async () => {
+  if (active || librarySubmitting) return;
+  librarySubmitting = true;
+  for (const id of ['collect-adapted', 'update-library', 'upload-library']) $(id).disabled = true;
+  feedback();
+  try { await api('collect-adapted', {}); }
+  catch (error) { feedback(error.message); }
+  finally { librarySubmitting = false; await poll(); }
+};
 $('update-library').onclick = async () => {
   if (active || librarySubmitting) return;
   librarySubmitting = true; $('update-library').disabled = true; feedback();

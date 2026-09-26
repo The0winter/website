@@ -4,6 +4,7 @@ import {makeClient} from '../http.mjs';
 import {failureDetails} from '../diagnostics.mjs';
 import {browserProfile} from '../browser-session.mjs';
 import {updateLibrary} from './library.mjs';
+import {collectAdapted} from './adapted-collection.mjs';
 import {createLibraryControl} from './library-control.mjs';
 import {uploadLibrary} from './upload.mjs';
 import retention from '../../storage-maintenance.cjs';
@@ -41,9 +42,9 @@ process.on('message', async message => {
       send({type: 'upload-done', batch});
       return;
     }
-    if (message.library) {
-      libraryControl = createLibraryControl({signal: controller.signal, shouldStop: () => paused});
-      const result = await updateLibrary({stateDir: message.stateDir, outputDir: message.outputDir, sites: message.sites,
+    if (message.library || message.adapted) {
+      if (!message.adapted) libraryControl = createLibraryControl({signal: controller.signal, shouldStop: () => paused});
+      const result = await (message.adapted ? collectAdapted : updateLibrary)({stateDir: message.stateDir, outputDir: message.outputDir, sites: message.sites,
         // Older open desktops select the first running row. Keep those windows
         // serial until reopened with the UI that follows currentControlId.
         concurrency: message.libraryConcurrency === 2 ? 2 : 1,

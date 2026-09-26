@@ -15,7 +15,7 @@ import {normalizedIdentity} from '../identity.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const publicFiles = {'/': ['index.html', 'text/html'], '/app.css': ['app.css', 'text/css'], '/app.js': ['app.js', 'text/javascript'], '/queue-ui.js': ['queue-ui.js', 'text/javascript'], '/icon.svg': ['icon.svg', 'image/svg+xml']};
-const busy = task => ['upload', 'library', 'library-wait', 'search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(task.phase);
+const busy = task => ['adapted', 'upload', 'library', 'library-wait', 'search', 'resolving', 'probe', 'download', 'pausing', 'stopping'].includes(task.phase);
 function visibleReport(report) {
   if (!report) return null;
   return {...Object.fromEntries(['title', 'author', 'description', 'descriptionStatus', 'status', 'statusDetection', 'jobId', 'mode', 'checkedAt', 'downloaded', 'expected', 'errors', 'warnings', 'structuralPass', 'completeAgainstSource', 'exportFile', 'summaryFile', 'reportFile', 'limitation', 'reusedExport', 'readingEdition', 'readingAdded', 'sourceExpected', 'sourceDownloaded', 'rawReportFile', 'continuation', 'switching', 'continuationAdded', 'originalCount', 'originalSourceUrl', 'automaticResolutions'].map(key => [key, report[key]])), failures: (report.failures || []).map(item => failureDetails(item, item))};
@@ -40,7 +40,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
     if (readingReport?.checkedAt === task.report.checkedAt) task.report = visibleReport(readingReport);
   }
   // An interrupted process can be resumed from crawler checkpoints, never shown as running.
-  if (busy(task)) task = {...task, phase: 'paused', message: task.kind === 'upload' ? '上次上传已停止。再次点击“上传书库”会核对网站并续传，已上传内容保留。' : task.kind === 'library' ? '上次书库更新已停止。再次点击“更新书库”即可重新检查，已保存章节会复用。' : '上次任务已停止。重新查找这本书即可继续。',
+  if (busy(task)) task = {...task, phase: 'paused', message: task.kind === 'adapted' ? '上次适配采集已停止。再次点击“适配采集”会跳过已入库书籍，并复用已保存章节。' : task.kind === 'upload' ? '上次上传已停止。再次点击“上传书库”会核对网站并续传，已上传内容保留。' : task.kind === 'library' ? '上次书库更新已停止。再次点击“更新书库”即可重新检查，已保存章节会复用。' : '上次任务已停止。重新查找这本书即可继续。',
     ...(task.batch ? {batch: {...task.batch, stopped: true, items: task.batch.items.map(item => ['pending', 'blocked', 'running', 'retrying', 'waiting'].includes(item.state) ? {...item, state: 'stopped', message: '上次任务中断，等待重新检查'} : item)}} : {})};
   let saveRetry, persistenceWarning = null, saveErrorCode = null;
   function save({progress = false} = {}) {
@@ -245,11 +245,12 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         clearBrowserSession(stateDir, site.home);
         return respond(200, {message: `已清除${site.name}在拾页中的登录状态，需要登录时会重新提示；已保存章节保留。`});
       }
-      if (pathname === '/api/update-library') {
-        if (busy(task) || worker || operation || queueWork || queueSaveRetry || queue.next()) return respond(409, {error: '请先暂停队列并等待当前任务保存结束，再更新书库'});
+      if (['/api/update-library', '/api/collect-adapted'].includes(pathname)) {
+        const adapted = pathname === '/api/collect-adapted';
+        if (busy(task) || worker || operation || queueWork || queueSaveRetry || queue.next()) return respond(409, {error: `请先暂停队列并等待当前任务保存结束，再${adapted ? '适配采集' : '更新书库'}`});
         const librarySites = sites().sites;
         stopRequested = false; candidates = []; selectedBook = null;
-        task = {kind: 'library', phase: 'library', message: '正在整理本地书库及每本书的来源…', batch: null}; save();
+        task = {kind: adapted ? 'adapted' : 'library', phase: adapted ? 'adapted' : 'library', message: adapted ? '正在核对适配书单与本地书库，跳过已有书籍…' : '正在整理本地书库及每本书的来源…', batch: null}; save();
         worker = fork(path.join(here, 'worker.mjs'), [], {windowsHide: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc']});
         const current = worker;
         let workerError = '', completed = false;
@@ -257,7 +258,7 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
         current.on('message', message => {
           if (message.type === 'library') update({batch: message.batch});
           if (message.type === 'library-phase' && !['pausing', 'stopping'].includes(task.phase)) update({phase: message.phase, title: message.title, author: message.author, sourceUrl: message.sourceUrl,
-            message: message.phase === 'library-wait' ? '这本书暂时无法更新，已暂停等待你处理。可以重试这本，或手动跳过更新下一本。' : message.phase === 'probe' ? '正在核对目录与已有章节…' : '正在补齐新章节并更新本地文件…', progress: null});
+            message: message.phase === 'library-wait' ? '这本书暂时无法更新，已暂停等待你处理。可以重试这本，或手动跳过更新下一本。' : message.phase === 'probe' ? '正在核对目录与已有章节…' : adapted ? '正在采集并检查本地书库文件…' : '正在补齐新章节并更新本地文件…', progress: null});
           if (message.type === 'status' && !['pausing', 'stopping'].includes(task.phase)) update(statusValues(message));
           if (message.type === 'progress') {
             task.progress = message;
@@ -266,18 +267,18 @@ export async function createDesktop({stateDir = defaultStateDir, outputDir = pat
           if (message.type === 'library-done') {
             completed = true;
             const batch = message.batch;
-            update({batch, phase: stopRequested || message.stopped ? 'stopped' : message.paused ? 'paused' : 'complete', progress: null,
-              message: batch.total === 0 ? '下载目录里还没有可更新的书籍。' : `${batch.stopped ? '书库更新已停止' : '书库检查完成'}：${batch.updated} 本已更新，${batch.unchanged} 本已是最新，新增 ${batch.added} 章。${batch.completed ? ` ${batch.completed} 本完结跳过。` : ''}${batch.skipped ? ` ${batch.skipped} 本手动跳过，原因见下方列表。` : ''}`});
+            update({batch, phase: stopRequested || message.stopped ? 'stopped' : message.paused || adapted && batch.stopped ? 'paused' : adapted && batch.failed ? 'partial' : 'complete', progress: null,
+              message: adapted ? `${batch.stopped ? '适配采集已暂停' : '本轮适配采集结束'}：${batch.collected} 本已入库，${batch.existing} 本本地已有，${batch.deferred} 本待核验。${batch.failed ? ` ${batch.failed} 本未完成，原因见下方；再次点击可续采。` : ''}` : batch.total === 0 ? '下载目录里还没有可更新的书籍。' : `${batch.stopped ? '书库更新已停止' : '书库检查完成'}：${batch.updated} 本已更新，${batch.unchanged} 本已是最新，新增 ${batch.added} 章。${batch.completed ? ` ${batch.completed} 本完结跳过。` : ''}${batch.skipped ? ` ${batch.skipped} 本手动跳过，原因见下方列表。` : ''}`});
           }
           if (message.type === 'error') { if (stopRequested) stoppedTask(); else update({phase: 'error', message: message.error, failure: message.failure || failureDetails(message)}); }
         });
         current.on('error', error => update({phase: 'error', message: error.message, failure: failureDetails(error)}));
         current.on('close', () => {
           if (worker === current) worker = null;
-          if (!completed && busy(task)) { if (stopRequested) stoppedTask(); else update({phase: 'error', message: `书库更新进程停止，已保存章节保留。${workerError.slice(-300)}`}); }
+          if (!completed && busy(task)) { if (stopRequested) stoppedTask(); else update({phase: 'error', message: `${adapted ? '适配采集' : '书库更新'}进程停止，已保存章节保留。${workerError.slice(-300)}`}); }
           finishQueueTask(null);
         });
-        current.send({type: 'start', library: true, libraryConcurrency: 2, stateDir, outputDir, sites: librarySites});
+        current.send({type: 'start', library: !adapted, adapted, libraryConcurrency: 2, stateDir, outputDir, sites: librarySites});
         return respond(202, {ok: true});
       }
       if (pathname === '/api/upload-library') {
