@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "sobqg",
+  "name": "搜笔趣阁",
+  "home": "https://www.sobqg.com/",
+  "hosts": ["www.sobqg.com"],
+  "book": {
+    "urlPattern": "^/book/(?<bookId>[A-Za-z0-9_-]+)\\.html$",
+    "metadata": {
+      "title": {"selector": "meta[property='og:novel:book_name']", "attribute": "content"},
+      "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"},
+      "category": {"selector": "meta[property='og:novel:category']", "attribute": "content"}
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-sobqg-v1",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": ["www.sobqg.com"],
+    "transport": "browser",
+    "encoding": "utf8",
+    "delayMs": 1500,
+    "timeoutMs": 35000,
+    "retries": 1,
+    "browser": {"headless": true, "resourceHosts": ["code.bdstatic.com"]},
+    "metadata": {
+      "title": {"selector": "meta[property='og:novel:book_name']", "attribute": "content"},
+      "author": {"selector": "meta[property='og:novel:author']", "attribute": "content"},
+      "category": {"selector": "meta[property='og:novel:category']", "attribute": "content"},
+      "readySelector": "#volumes a[href^='/read/']"
+    },
+    "catalog": {"links": "#volumes a[href^='/read/${bookId}/'][href$='.html']"},
+    "chapter": {"transport": "http", "title": "h1", "content": "#TextContent"}
+  }
+}
