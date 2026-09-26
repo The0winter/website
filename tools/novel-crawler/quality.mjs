@@ -47,9 +47,16 @@ export function mojibakeEvidence(text) {
   return {markers: matches.length, distinct};
 }
 
-export function placeholderEvidence(text) {
-  const value = String(text || '').replace(/\s/gu, '');
+export function placeholderEvidence(text, chapter = {}) {
+  let value = String(text || '').replace(/\s/gu, '');
   if (value.length > 500) return false;
+  // Some TXT mirrors repeat this chapter's heading and append an end marker
+  // around the unavailable-content message. Match only the actual heading,
+  // including a catalog-added numeric prefix, never arbitrary surrounding prose.
+  const titles = [chapter.title, chapter.catalogTitle].filter(Boolean).flatMap(title => [title, title.replace(/^\d+[.、]\s*/u, '')]).map(title => title.replace(/\s/gu, '')).filter(Boolean).sort((a, b) => b.length - a.length);
+  const prefix = titles.find(title => value.startsWith(title));
+  if (prefix) value = value.slice(prefix.length);
+  value = value.replace(/[（(]本章完[）)]$/u, '');
   return /^(?:请到手机端QQAPP查看本章|请升级到新版本查看本章|暂无内容|出于版权保护[，,]?本章暂不支持网页(?:阅读)?|内容还在处理中[，,]请稍后重试)(?:[。.!！]|（还有耶）)*$/iu.test(value);
 }
 
@@ -67,7 +74,7 @@ export function qualityReport(catalog, chapters, failures = [], mode = 'download
   const lengths = chapters.map(c => c.content.trim().length).sort((a, b) => a - b);
   const medianLength = lengths[Math.floor(lengths.length / 2)] || 0;
   for (const chapter of chapters) {
-    if (placeholderEvidence(chapter.content)) issues.push({level: 'error', code: 'placeholder', chapter: chapter.chapter_number, detail: '来源仅提供缺文提示，不能计为完整正文；保留原始记录'});
+    if (placeholderEvidence(chapter.content, chapter)) issues.push({level: 'error', code: 'placeholder', chapter: chapter.chapter_number, detail: '来源仅提供缺文提示，不能计为完整正文；保留原始记录'});
     const mojibake = mojibakeEvidence(chapter.content);
     if (mojibake) issues.push({level: 'error', code: 'mojibake', chapter: chapter.chapter_number, detail: '正文密集出现 UTF-8/GBK 二次乱码特征，不能仅凭没有替换字符判定可读；保留原文等待核对', ...mojibake});
     const text = normalizedText(chapter.content);

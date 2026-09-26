@@ -285,7 +285,7 @@ function verifySourceOrderReview(review, catalog, raw, book, seen) {
     if (!Number.isInteger(gap.position) || !chapter || seen.has(chapter.link) || omissions.has(chapter.link) || gap.link !== chapter.link || gap.contentHash !== hash(chapter.content) || typeof gap.reason !== 'string' || !gap.reason.trim()) throw Error('缺文核对与来源位置、链接及正文哈希不匹配');
     if (!gap.evidence || !/^https?:\/\//u.test(gap.evidence.url || '') || !Number.isFinite(Date.parse(gap.evidence.checkedAt)) || typeof gap.evidence.detail !== 'string' || !gap.evidence.detail.trim()) throw Error('缺文核对必须保存独立证据地址、时间和说明');
     if (gap.kind === 'placeholder') {
-      if (!placeholderEvidence(chapter.content)) throw Error('缺文提示验收不能排除普通正文');
+      if (!placeholderEvidence(chapter.content, chapter)) throw Error('缺文提示验收不能排除普通正文');
     } else if (gap.kind === 'empty') {
       if (chapter.content.trim()) throw Error('空章验收不能排除非空正文');
     } else if (gap.kind === 'garbled') {

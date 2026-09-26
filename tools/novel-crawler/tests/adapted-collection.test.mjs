@@ -9,6 +9,7 @@ import puppeteer from 'puppeteer';
 import {adaptedBooklist, planAdaptedCollection, collectAdapted} from '../desktop/adapted-collection.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 import {atomicWrite, hash, readJson} from '../storage.mjs';
+import {jobId, validateSpec} from '../core.mjs';
 
 const sites = [{id: 'fixture', name: '合成来源', home: 'https://fixture.example/', hosts: ['fixture.example', '127.0.0.1'], spec: {transport: 'http'}}];
 function temp(t) {
@@ -65,12 +66,80 @@ test('serial batch reuses TXT rules, continues failures, saves results and respe
     atomicWrite(list.books[2].candidateSpec, {...specFor('稍后变更'), variant: 'unreviewed'});
     return {exportFile, structuralPass: true, completeAgainstSource: true};
   }});
-  assert.deepEqual(calls, [['故障故事', 'probe'], ['分段故事', 'probe'], ['分段故事', 'download']]);
+  assert.deepEqual(calls, [['故障故事', 'probe'], ['分段故事', 'download']]);
   assert.deepEqual(result.items.map(item => item.state), ['failed', 'collected', 'failed']);
   assert.equal(result.collected, 1); assert.equal(result.failed, 2); assert.equal(result.checked, 3);
   assert.ok(clients.every(c => c.closed));
   assert.equal(readJson(path.join(dir, 'adapted-collection.json')).finishedAt, result.finishedAt);
   assert.ok(events.some(b => b.items[1].state === 'running' && b.items[0].state === 'failed'));
+});
+
+test('quality failures expose exact positions, related chapters and the saved report', async t => {
+  const dir = temp(t); listFor(dir, [specFor('重复书'), specFor('空章书')]);
+  const batch = await collectAdapted({...options(dir), inventory: [], clientFactory: () => ({close: async () => {}}), acquireBook: async spec => ({
+    structuralPass: false, downloaded: 10, expected: 12, reportFile: path.join(dir, `${spec.title}-report.json`),
+    issues: spec.title === '重复书' ? [{level: 'error', code: 'duplicate-body', chapter: 8, otherChapter: 7, detail: '正文完全重复'}] : [],
+    failures: spec.title === '空章书' ? [{chapter: 4, title: '第4章 重逢', link: 'https://fixture.example/4', error: '章节正文为空'}] : [],
+  })});
+  assert.equal(batch.failed, 2); assert.equal(batch.collected, 0);
+  assert.match(batch.items[0].message, /第 8 项.*正文完全重复.*第 7 项/);
+  assert.match(batch.items[1].message, /第 4 项「第4章 重逢」.*章节正文为空/);
+  assert.equal(batch.items[0].problemCount, 1);
+  assert.equal(batch.items[1].problems[0].link, 'https://fixture.example/4');
+  assert.equal(readJson(path.join(dir, 'adapted-collection.json')).items[0].reportFile, path.join(dir, '重复书-report.json'));
+});
+
+test('resume uses one full download pass and still blocks failed full-book checks', async t => {
+  const dir = temp(t), spec = validateSpec(specFor('续采书')); listFor(dir, [spec]);
+  const job = path.join(dir, 'jobs', jobId(spec)), entry = {chapter_number: 1, title: '第1章', link: 'https://fixture.example/1'};
+  atomicWrite(path.join(job, 'spec.json'), spec);
+  atomicWrite(path.join(job, 'catalog.json'), [entry]);
+  atomicWrite(path.join(job, 'chapters', hash(entry.link) + '.json'), {chapter: entry});
+  atomicWrite(path.join(job, 'download-report.json'), {paused: true});
+  const modes = [];
+  const batch = await collectAdapted({...options(dir), inventory: [], clientFactory: () => ({close: async () => {}}), acquireBook: async (_, opts) => {
+    modes.push(opts.mode); assert.equal(opts.stopOnFailure, true);
+    return {structuralPass: false, completeAgainstSource: true, issues: [{level: 'error', code: 'duplicate-body', chapter: 2, otherChapter: 1, detail: '正文重复'}]};
+  }});
+  assert.deepEqual(modes, ['download']); assert.equal(batch.failed, 1); assert.equal(batch.collected, 0);
+});
+
+test('different sites overlap, shared domains stay serial and retain pacing across books', async t => {
+  const dir = temp(t);
+  const specs = [specFor('甲一'), specFor('甲二', {sourceUrl: 'https://alias.example/book/2', allowedHosts: ['alias.example', 'fixture.example']}), specFor('乙一', {sourceUrl: 'https://other.example/book/1'})];
+  const configured = [{...sites[0], hosts: ['fixture.example', 'alias.example', 'other.example']}];
+  // Separate sites; the candidate host allowlist ties only the first two lanes.
+  configured[0].hosts = ['fixture.example', 'alias.example'];
+  configured.push({...sites[0], id: 'other', hosts: ['other.example']});
+  const list = listFor(dir, specs); list.books[2].website.id = 'other'; atomicWrite(adaptedBooklist(dir), list);
+  let active = 0, maximum = 0, releaseFirst, releaseSecond;
+  const first = new Promise(resolve => { releaseFirst = resolve; }), second = new Promise(resolve => { releaseSecond = resolve; });
+  const clocks = [], order = [], phases = [], progress = [];
+  const batch = await collectAdapted({...options(dir), sites: configured, inventory: [], concurrency: 2,
+    onPhase: (_, item) => phases.push(item.title), onProgress: p => progress.push(p.title),
+    clientFactory: config => { clocks.push(config.pacing); active++; maximum = Math.max(maximum, active); return {close: async () => { active--; }}; },
+    acquireBook: async (spec, opts) => {
+      order.push(spec.title); opts.onProgress({title: spec.title});
+      if (spec.title === '甲一') { releaseFirst(); await second; }
+      if (spec.title === '乙一') { await first; releaseSecond(); }
+      return {structuralPass: false, failures: [{error: '合成来源失败'}]};
+    }});
+  assert.equal(maximum, 2); assert.equal(active, 0); assert.equal(batch.active, 0); assert.equal(batch.failed, 3);
+  assert.deepEqual(order, ['甲一', '乙一', '甲二']);
+  assert.equal(clocks[0], clocks[2]); assert.notEqual(clocks[0], clocks[1]);
+  assert.equal(phases[0], '甲一'); assert.equal(progress[0], '甲一');
+});
+
+test('stopping parallel collection waits for both clients and leaves later books pending for resume', async t => {
+  const dir = temp(t), specs = [specFor('甲一'), specFor('甲二'), specFor('乙一', {sourceUrl: 'https://other.example/book/1'})];
+  const configured = [sites[0], {...sites[0], id: 'other', hosts: ['other.example']}];
+  const list = listFor(dir, specs); list.books[2].website.id = 'other'; atomicWrite(adaptedBooklist(dir), list);
+  const controller = new AbortController(), calls = []; let closed = 0;
+  const batch = await collectAdapted({...options(dir), sites: configured, inventory: [], signal: controller.signal,
+    clientFactory: () => ({close: async () => { await new Promise(resolve => setTimeout(resolve, 5)); closed++; }}),
+    acquireBook: async spec => { calls.push(spec.title); if (calls.length === 2) controller.abort(); else await new Promise(resolve => controller.signal.addEventListener('abort', resolve, {once: true})); return {paused: true}; }});
+  assert.deepEqual(calls, ['甲一', '乙一']); assert.equal(closed, 2); assert.equal(batch.stopped, true);
+  assert.ok(batch.items.every(item => item.state === 'stopped')); assert.equal(batch.active, 0);
 });
 
 test('enabled booklists combine in stable order, deduplicate aliases and ignore unapproved lists', t => {

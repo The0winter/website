@@ -249,6 +249,17 @@ test('quality checks flag duplicated bodies, title mismatch and decoding problem
   assert.ok(chapterQuality({...chapters[0], content: '\uFFFD'}).some(i => i.code === 'decode'));
 });
 
+test('unavailable chapter messages cannot hide behind the actual title and end marker', () => {
+  const chapter = {chapter_number: 3, title: '3.番外：山中的梦', link: 'https://fixture.example/3', content: '番外：山中的梦请升级到新版本查看本章\n(本章完)'};
+  assert.equal(placeholderEvidence(chapter.content, chapter), true);
+  assert.equal(qualityReport([chapter], [chapter]).structuralPass, false);
+  assert.equal(qualityReport([chapter], [chapter]).issues.find(i => i.code === 'placeholder').chapter, 3);
+  assert.equal(placeholderEvidence('别的标题请升级到新版本查看本章(本章完)', chapter), false);
+  assert.equal(placeholderEvidence('番外：山中的梦他说请升级到新版本查看本章，然后关上手机。(本章完)', chapter), false);
+  assert.equal(placeholderEvidence('番外：山中的梦请假一天。(本章完)', chapter), false);
+  assert.equal(placeholderEvidence('请升级到新版本查看本章（本章完）'), true);
+});
+
 test('TXT segmentation preserves volume resets and preamble; GB18030 decoding is explicit', () => {
   const input = '前言文字\n第一章 开始\n春天的故事。\n第二章 下雨\n雨后的故事。\n第一章 新卷\n新的故事。';
   const chapters = splitText(input, {});
@@ -339,6 +350,18 @@ test('multipart TXT rejects webpage downloads, foreign hosts and incompatible co
     {...spec, resource: {parts: []}}, {...spec, resource: {parts: [...spec.resource.parts, ...spec.resource.parts]}},
     {...spec, resource: {parts: [{url: f.base + '/one.txt', expectedCount: 0}]}},
   ]) assert.throws(() => validateSpec(invalid));
+});
+
+test('TXT website responses are diagnosed before applying the configured book encoding', async t => {
+  const f = await fixture(t, (req, res) => res.end(req.url === '/book' ? heading : '<!doctype html><html><body>下载页面已失效，请返回首页🧭</body></html>'));
+  for (const parts of [false, true]) {
+    const resource = {encoding: 'gb18030', ...(parts ? {parts: [{url: f.base + '/one.txt', expectedCount: 1}]} : {url: f.base + '/one.txt'})};
+    const report = await acquire({...specFor(f.base), kind: 'txt', variant: `html-error-${parts}`, resource}, f.options);
+    assert.equal(report.exportFile, null);
+    assert.equal(report.downloaded, 0);
+    assert.match(report.failures[0].error, /TXT 下载返回了网页/);
+    assert.doesNotMatch(report.failures[0].error, /乱码/);
+  }
 });
 
 test('TXT resources pass the real import contract and keep original resource hashes', async t => {

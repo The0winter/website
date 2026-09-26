@@ -305,6 +305,16 @@ export function splitText(text, spec) {
   return chapters;
 }
 
+function decodeTextResource(bytes, contentType, encoding) {
+  // A missing download may redirect to the site's UTF-8 home/verification page
+  // even when the configured book is GB18030. Identify HTML before decoding it
+  // as novel text, so this is reported as a bad download rather than corruption.
+  if (/^\s*(?:<!doctype html|<html)/i.test(bytes.subarray(0, 512).toString('utf8').replace(/^\uFEFF/u, ''))) throw Error('TXT 下载返回了网页，请核对下载地址或更换来源');
+  const text = decode(bytes, contentType, encoding);
+  if (/^\s*(?:<!doctype html|<html)/i.test(text)) throw Error('TXT 下载返回了网页，请核对下载地址或更换来源');
+  return text;
+}
+
 export async function getResource(spec, client, jobDir) {
   const evidence = await client.get(spec.sourceUrl, {encoding: spec.encoding, fresh: true});
   const $ = load(decode(evidence.body, evidence.contentType, spec.encoding));
@@ -323,8 +333,7 @@ export async function getResource(spec, client, jobDir) {
       const item = await client.get(part.url);
       bytes += item.body.length;
       if (bytes > 64 * 1024 * 1024) throw Error('分段 TXT 总文件大小超过 64 MiB');
-      const text = decode(item.body, item.contentType, config.encoding);
-      if (/^\s*(?:<!doctype html|<html)/i.test(text)) throw Error('TXT 下载返回了网页');
+      const text = decodeTextResource(item.body, item.contentType, config.encoding);
       const parsed = splitText(text, spec);
       if (parsed.length !== part.expectedCount) throw Error(`TXT 分段 ${index + 1} 分章数量 ${parsed.length} 与已核实的 ${part.expectedCount} 不同`);
       if (parsed.preamble) atomicWrite(path.join(jobDir, `source-preamble-${index + 1}.txt`), parsed.preamble);
@@ -347,8 +356,7 @@ export async function getResource(spec, client, jobDir) {
       if (result.error || result.status !== 0) throw Error(`TXT ZIP 解析失败：${result.error?.message || result.stderr.toString().slice(0, 500)}`);
       bytes = result.stdout;
     }
-    const text = decode(bytes, config.compression ? '' : response.contentType, config.encoding);
-    if (/^\s*(?:<!doctype html|<html)/i.test(text)) throw Error('TXT 下载返回了网页');
+    const text = decodeTextResource(bytes, config.compression ? '' : response.contentType, config.encoding);
     chapters = splitText(text, spec);
   } else if (!config.parts) {
     const file = path.join(jobDir, 'source.epub');

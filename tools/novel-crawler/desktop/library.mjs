@@ -163,7 +163,7 @@ export function librarySummary(items) {
 }
 const publicItem = ({file, title, author, url, count, state, message, added, failure, controlId}) => ({file, title, author, url, count, state, message, added, failure, controlId});
 
-function sourceLanes(plans, sites) {
+export function sourceLanes(plans, sites) {
   const owners = new Map(), parent = new Map();
   const root = key => parent.has(key) ? root(parent.get(key)) : key;
   for (const item of plans) {

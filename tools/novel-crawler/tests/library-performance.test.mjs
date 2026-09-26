@@ -169,12 +169,14 @@ test('unchanged updates preserve partial file bytes and timestamp, corrupted par
 });
 
 test('desktop parallel worker keeps a later failing row selected while another source is in flight', async t => {
-  const f=fixture(t,['a.example','b.example','c.example']), requests=[]; let held;
+  const f=fixture(t,['a.example','b.example','c.example']), requests=[], heldReady=deferred(); let held;
   const server=http.createServer((req,res)=>{
     requests.push(req.url); res.setHeader('Content-Type','text/html; charset=utf-8');
     const [,index,last]=req.url.split('/'), n=Number(last?.replace('.html',''));
-    if(index==='0' && n===4){held=()=>res.end(`<h1>${title(n)}</h1><article>${body(n)}</article>`);return;}
-    if(index==='1' && n===4)return res.end('<h1>第4章 山中故事4</h1><article></article>');
+    if(index==='0' && n===4){held=()=>res.end(`<h1>${title(n)}</h1><article>${body(n)}</article>`);heldReady.resolve();return;}
+    // Synchronize the intended overlap; machine load must not decide whether
+    // source 0 reaches its held chapter before source 1 reports the failure.
+    if(index==='1' && n===4){void heldReady.promise.then(()=>res.end('<h1>第4章 山中故事4</h1><article></article>'));return;}
     if(n)return res.end(`<h1>${title(n)}</h1><article>${body(n)}</article>`);
     res.end(`<h1>故事${index}</h1><b>测试作者</b><nav>${[1,2,3,4].map(n=>`<a href="/${index}/${n}.html">${title(n)}</a>`).join('')}</nav>`);
   });
