@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "id": "zxcs-zip",
+  "name": "知轩藏书",
+  "home": "https://zxcs.zip/",
+  "hosts": [
+    "zxcs.zip"
+  ],
+  "search": {
+    "url": "https://zxcs.zip/search?q=${query}",
+    "items": "a[href^=\"/book/\"]:has(h3)",
+    "title": {
+      "selector": "h3",
+      "pattern": "^《([^》]+)》"
+    },
+    "author": {
+      "selector": "h3",
+      "pattern": "作者[：:]\\s*(.+)$"
+    },
+    "link": "a[href^=\"/book/\"]",
+    "maxPages": 1
+  },
+  "book": {
+    "urlPattern": "^/book/(?<bookId>[0-9]+)\\.html$",
+    "metadata": {
+      "title": {
+        "selector": "h2.mio-whats-new-title",
+        "pattern": "^《([^》]+)》"
+      },
+      "author": {
+        "selector": "h2.mio-whats-new-title",
+        "pattern": "作者[：:]\\s*(.+)$"
+      }
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "txt",
+    "variant": "desktop-zxcs-gb18030-sections-v2",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": [
+      "zxcs.zip",
+      "download.zxcs.zip"
+    ],
+    "delayMs": 1500,
+    "timeoutMs": 60000,
+    "retries": 1,
+    "browser": {
+      "headless": true
+    },
+    "metadata": {
+      "title": {
+        "selector": "h2.mio-whats-new-title",
+        "pattern": "^《([^》]+)》"
+      },
+      "author": {
+        "selector": "h2.mio-whats-new-title",
+        "pattern": "作者[：:]\\s*(.+)$"
+      }
+    },
+    "resource": {
+      "link": "a#downloadtxt[href^=\"https://download.zxcs.zip/\"]",
+      "encoding": "gb18030",
+      "preamble": "metadata",
+      "endBefore": "==========================================================\n更多精校小说尽在知轩藏书下载：https://zxcs.zip/\n==========================================================",
+      "headingPattern": "^((?:第[0-9零〇一二三四五六七八九十百千万两]+[章节回幕卷集][^\\r\\n]{0,90}|序[章幕][^\\r\\n]{0,60}|尾声|记[一二三四五六七八九十]+|完本感言|[上下]半部[：:][^\\r\\n]{1,60}))[\\t ]*\\r?$",
+      "sectionPattern": "^(?:第[0-9零〇一二三四五六七八九十百千万两]+[卷集]|[上下]半部[：:]|尾声$)"
+    }
+  }
+}

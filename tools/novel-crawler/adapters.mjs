@@ -277,6 +277,8 @@ export function splitText(text, spec) {
   const matches = [...text.matchAll(expression)];
   if (!matches.length) throw Error('TXT 未识别章节标题，需要明确分章规则；不会把整书当作一章');
   const chapters = [];
+  const sectionExpression = config.sectionPattern ? new RegExp(config.sectionPattern, 'u') : null;
+  let sourceSection, pendingSections = [];
   const preamble = text.slice(0, matches[0].index).trim();
   if (preamble && config.preamble !== 'metadata') chapters.push({title: '前言', content: preamble});
   for (let i = 0; i < matches.length; i++) {
@@ -287,6 +289,13 @@ export function splitText(text, spec) {
     const titleText = value => config.decodeTitleEntities ? load(value.replaceAll('<', '&lt;').replaceAll('>', '&gt;'), {}, false).text() : value;
     const catalogTitle = titleText(sourceCatalogTitle);
     let content = text.slice(match.index + match[0].length, matches[i + 1]?.index ?? text.length).trim();
+    if (sectionExpression?.test(sourceCatalogTitle) && !content) {
+      // Only explicit, bodyless section labels may be attached to the next
+      // chapter. Never discard a preface, notice, or prose under a volume title.
+      sourceSection = sourceCatalogTitle;
+      pendingSections.push(sourceCatalogTitle);
+      continue;
+    }
     let title = catalogTitle, sourceTitle = sourceCatalogTitle;
     if (config.innerHeadingPattern) {
       const lines = content.split(/\r?\n/);
@@ -299,8 +308,10 @@ export function splitText(text, spec) {
       if (!match.length) throw Error('正文噪声规则不能匹配空字符串');
       return '';
     }).trim();
-    chapters.push({title, catalogTitle, content, ...(title !== sourceTitle ? {sourceTitle} : {}), ...(catalogTitle !== sourceCatalogTitle ? {sourceCatalogTitle} : {})});
+    chapters.push({title, catalogTitle, content, ...(sourceSection ? {sourceSection} : {}), ...(pendingSections.length ? {sourceSectionHeadings: pendingSections} : {}), ...(title !== sourceTitle ? {sourceTitle} : {}), ...(catalogTitle !== sourceCatalogTitle ? {sourceCatalogTitle} : {})});
+    pendingSections = [];
   }
+  if (pendingSections.length) throw Error('TXT 末尾分卷标题没有后续章节');
   chapters.preamble = preamble;
   return chapters;
 }
@@ -352,7 +363,7 @@ export async function getResource(spec, client, jobDir) {
       const file = path.join(jobDir, 'source.zip');
       atomicWrite(file, bytes);
       const args = [fileURLToPath(new URL('./epub.py', import.meta.url)), file, '--txt', ...(config.entry ? [config.entry] : [])];
-      const result = spawnSync(process.env.NOVEL_CRAWLER_PYTHON || 'python', args, {maxBuffer: 128 * 1024 * 1024, timeout: 60000, windowsHide: true});
+      const result = spawnSync(process.env.NOVEL_CRAWLER_PYTHON || 'python', args, {maxBuffer: 128 * 1024 * 1024, timeout: 60000, windowsHide: true, env: {...process.env, NOVEL_CRAWLER_ZIP_PASSWORD: config.password || ''}});
       if (result.error || result.status !== 0) throw Error(`TXT ZIP 解析失败：${result.error?.message || result.stderr.toString().slice(0, 500)}`);
       bytes = result.stdout;
     }

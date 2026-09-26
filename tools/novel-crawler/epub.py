@@ -1,5 +1,6 @@
 """Read an unencrypted EPUB in spine order. No extraction to the filesystem."""
 import json
+import os
 import posixpath
 import sys
 import zipfile
@@ -105,7 +106,7 @@ def parse_epub(file):
         return {'metadata': metadata, 'chapters': chapters}
 
 
-def extract_txt(file, selected=None):
+def extract_txt(file, selected=None, password=None):
     with zipfile.ZipFile(file) as archive:
         entries = archive.infolist()
         if len(entries) > 10000 or sum(e.file_size for e in entries) > MAX_TOTAL:
@@ -118,16 +119,18 @@ def extract_txt(file, selected=None):
         if len(candidates) != 1:
             raise ValueError('ZIP must contain exactly one selected TXT file')
         entry = candidates[0]
-        if entry.file_size > 64 * 1024 * 1024 or entry.flag_bits & 1:
-            raise ValueError('Oversized or encrypted TXT entry')
-        return archive.read(entry)
+        if entry.file_size > 64 * 1024 * 1024:
+            raise ValueError('Oversized TXT entry')
+        if entry.flag_bits & 1 and not password:
+            raise ValueError('Encrypted TXT entry requires an explicit archive password')
+        return archive.read(entry, pwd=password.encode('utf-8') if password else None)
 
 
 if __name__ == '__main__':
     try:
         # ASCII JSON keeps subprocess output portable under Windows code pages.
         if len(sys.argv) > 2 and sys.argv[2] == '--txt':
-            sys.stdout.buffer.write(extract_txt(sys.argv[1], sys.argv[3] if len(sys.argv) > 3 else None))
+            sys.stdout.buffer.write(extract_txt(sys.argv[1], sys.argv[3] if len(sys.argv) > 3 else None, os.environ.get('NOVEL_CRAWLER_ZIP_PASSWORD')))
         else:
             print(json.dumps(parse_epub(sys.argv[1]), ensure_ascii=True))
     except Exception as error:
