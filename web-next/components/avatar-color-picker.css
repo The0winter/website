@@ -1,0 +1,23 @@
+.avatar-color-settings { margin:0 24px 20px; color:var(--profile-text); }
+.avatar-color-trigger { display:flex; align-items:center; gap:8px; min-height:44px; font-size:13px; cursor:pointer; }
+.avatar-color-trigger>span { width:18px; height:18px; border:1px solid; border-radius:50%; }
+.avatar-color-panel { padding:16px; border:1px solid var(--profile-border); border-radius:16px; background:var(--profile-soft); }
+.avatar-color-panel header { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+.avatar-color-panel header>.user-avatar { width:44px; height:44px; font-size:22px; }
+.avatar-color-panel h2 { font-size:14px; font-weight:600; }
+.avatar-color-panel p { font-size:12px; color:var(--profile-muted); margin-top:4px; }
+.avatar-color-panel fieldset { display:grid; grid-template-columns:repeat(8,minmax(44px,1fr)); max-width:440px; gap:4px; margin:0; padding:0; border:0; }
+.avatar-color-panel label { position:relative; display:grid; place-items:center; min-height:44px; cursor:pointer; }
+.avatar-color-panel input { position:absolute; width:1px; height:1px; opacity:0; }
+.avatar-color-panel label>span { display:grid; place-items:center; width:32px; height:32px; border:1px solid; border-radius:50%; }
+.avatar-color-panel input:checked+span { outline:2px solid currentColor; outline-offset:3px; }
+.avatar-color-panel input:focus-visible+span { outline:3px solid currentColor; outline-offset:3px; }
+.avatar-color-panel footer { display:flex; align-items:center; gap:10px; margin-top:12px; font-size:12px; }
+.avatar-color-panel footer>span { flex:1; color:var(--profile-muted); }
+.avatar-color-panel button { min-height:44px; padding:0 12px; border-radius:9px; cursor:pointer; }
+.avatar-color-panel .avatar-color-save { color:white; background:var(--profile-accent); }
+.avatar-color-panel .avatar-color-error { color:#ad3434; }
+.avatar-color-settings button:focus-visible { outline:2px solid var(--profile-accent); outline-offset:2px; }
+.avatar-color-settings button:disabled,.avatar-color-panel fieldset:disabled { opacity:.55; cursor:wait; }
+.profile-avatar>.user-avatar { width:100%; height:100%; border:0; border-radius:inherit; font-size:inherit; }
+@media(max-width:767px) { .avatar-color-settings { margin:0 16px 20px; } .avatar-color-panel { padding:12px; } .avatar-color-panel fieldset { grid-template-columns:repeat(5,minmax(44px,1fr)); } }

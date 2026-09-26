@@ -10,6 +10,7 @@ const reviewSchema = new mongoose.Schema({
     author:{type:String,required:true,maxLength:80},
     url:{type:String,required:true,maxLength:2000,validate:value=>{try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password;}catch{return false;}}},
     publishedAt:{type:String,maxLength:40},
+    kind:{type:String,enum:['excerpt','paraphrase']},
   },{_id:false}),default:undefined},
   
   // 评论内容

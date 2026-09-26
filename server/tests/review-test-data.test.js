@@ -58,7 +58,7 @@ test('test review batches are visible, isolated from reader scores, idempotent a
     const summary=JSON.parse((await request(`/api/books/${book.id}/reviews`)).headers.get('x-rating-summary'));
     assert.equal(summary.readerCount,1);assert.equal(summary.rating,5);
     assert.equal((await Book.findById(book._id)).rating,5);
-    const sourceExcerpt={platform:'来源测试',author:'原作者',url:'https://example.org/review/1',publishedAt:'2026-09-26'};
+    const sourceExcerpt={platform:'来源测试',author:'原作者',url:'https://example.org/review/1',publishedAt:'2026-09-26',kind:'paraphrase'};
     let smaller={...plan,previousDrafts:plan.drafts,drafts:plan.drafts.slice(0,7).map(row=>({...row,content:'更简短的测试观点。',sourceExcerpt}))};
     assert.throws(()=>validatePlan({...smaller,drafts:[{...smaller.drafts[0],sourceExcerpt:{...sourceExcerpt,url:'javascript:alert(1)'}}]}));
     const replacement=await manageReviewTestData(smaller,{mode:'replace',writeAudit});
@@ -66,6 +66,17 @@ test('test review batches are visible, isolated from reader scores, idempotent a
     assert.equal(await Review.countDocuments(),8);assert.equal(await User.countDocuments(),8);
     assert.equal((await manageReviewTestData(smaller,{mode:'replace',writeAudit})).changed,false);
     assert.deepEqual((await request(`/api/books/${book.id}/reviews?limit=50`)).body.find(row=>row._id===sample.reviewId).sourceExcerpt,sourceExcerpt);
+    assert.throws(()=>validatePlan({...smaller,drafts:[{...smaller.drafts[0],sourceExcerpt:{...sourceExcerpt,kind:'unknown'}}]}));
+    const sources=await request(`/api/users/${sample.userId}/review-sources`);
+    assert.equal(sources.headers.get('cache-control'),'private, no-store');
+    assert.deepEqual(sources.body,[{bookTitle:book.title,platform:sourceExcerpt.platform,author:sourceExcerpt.author,url:sourceExcerpt.url,kind:'paraphrase'}]);
+    assert(!JSON.stringify(sources.body).includes('@'));
+    await Book.updateOne({_id:book.id},{$set:{visibility:'private'}});
+    assert.deepEqual((await request(`/api/users/${sample.userId}/review-sources`)).body,[]);
+    await Book.updateOne({_id:book.id},{$set:{visibility:'public'}});
+    await User.updateOne({_id:sample.userId},{$set:{isBanned:true}});
+    assert.equal((await request(`/api/users/${sample.userId}/review-sources`)).status,404);
+    await User.updateOne({_id:sample.userId},{$set:{isBanned:false}});
     await Review.updateOne({_id:sample.reviewId},{$set:{sourceExcerpt:{...sourceExcerpt,author:'被改动的署名'}}});
     await assert.rejects(manageReviewTestData(smaller,{mode:'replace',writeAudit}),/changed/);
     await Review.updateOne({_id:sample.reviewId},{$set:{sourceExcerpt}});

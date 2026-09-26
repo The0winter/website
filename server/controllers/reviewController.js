@@ -23,7 +23,7 @@ export const getReviews=asyncRoute(async(req,res)=>{
   const cursor=readCursor(req.query.cursor,bookId);
   const filter=cursor?{...comments,$or:[{createdAt:{$lt:cursor.createdAt}},{createdAt:cursor.createdAt,_id:{$gt:cursor.id}}]}:comments;
   const [rows,distribution,commentCount]=await Promise.all([
-    Review.find(filter).sort({createdAt:-1,_id:1}).skip(cursor?0:skip).limit(limit+1).populate('user','username avatar').maxTimeMS(3000).lean(),
+    Review.find(filter).sort({createdAt:-1,_id:1}).skip(cursor?0:skip).limit(limit+1).populate('user','username avatar avatarColor').maxTimeMS(3000).lean(),
     Review.aggregate([{$match:{book:new mongoose.Types.ObjectId(bookId),isTestData:{$ne:true}}},{$group:{_id:'$rating',count:{$sum:1}}}]).option({maxTimeMS:3000}),
     Review.countDocuments(comments).maxTimeMS(3000),
   ]);

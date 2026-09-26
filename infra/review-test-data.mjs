@@ -33,7 +33,8 @@ export function validatePlan(input) {
       const url=new URL(source.url);
       if(url.username||url.password)throw Error('Invalid excerpt source');
       if(source.publishedAt!==undefined&&(typeof source.publishedAt!=='string'||source.publishedAt.length>40))throw Error('Invalid excerpt date');
-      sourceExcerpt={platform:source.platform,author:source.author,url:source.url,...(source.publishedAt?{publishedAt:source.publishedAt}:{})};
+      if(source.kind!==undefined&&!['excerpt','paraphrase'].includes(source.kind))throw Error('Invalid source kind');
+      sourceExcerpt={platform:source.platform,author:source.author,url:source.url,...(source.publishedAt?{publishedAt:source.publishedAt}:{}),...(source.kind?{kind:source.kind}:{})};
     }
     return {userId:idFor(input.batch,'user:'+draft.id),reviewId:idFor(input.batch,'review:'+draft.id),username,content,rating:draft.rating,
       sourceExcerpt,profileTheme:['apricot','sage','mist','rose'][index%4]};
@@ -63,7 +64,7 @@ export async function manageReviewTestData(input,{mode='preview',writeAudit}={})
       const user=users.find(user=>String(user._id)===row.userId),review=reviews.find(review=>String(review._id)===row.reviewId);
       return user?.isTestAccount && user.testBatch===plan.batch && user.username===row.username && review?.isTestData && review.testBatch===plan.batch
         && String(review.book)===plan.bookId && String(review.user)===row.userId && review.content===row.content && review.rating===row.rating
-        && ['platform','author','url','publishedAt'].every(key=>(review.sourceExcerpt?.[key]||'')===(row.sourceExcerpt?.[key]||''));
+        && ['platform','author','url','publishedAt','kind'].every(key=>(review.sourceExcerpt?.[key]||'')===(row.sourceExcerpt?.[key]||''));
     });
     const alreadyReplaced=mode==='replace' && matches(plan);
     if(mode==='replace' && !alreadyReplaced && !matches(previous))throw Error('Test records changed; preserve data for inspection');

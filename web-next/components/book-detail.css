@@ -96,7 +96,10 @@
 .book-review-list { display:flex; flex-direction:column; gap:20px; }
 .book-review { padding:0; text-align:left; }
 .book-review-preview .book-review-content { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; overflow:hidden; }
-.book-review-view-all { display:flex; width:100%; align-items:center; justify-content:center; gap:5px; margin-top:20px; min-height:44px; color:#806849; font-size:14px; cursor:pointer; }
+.book-review-view-all { position:relative; display:flex; width:100%; align-items:center; justify-content:center; gap:3.25px; margin-top:10px; min-height:22px; color:#806849; font-size:14px; line-height:22px; cursor:pointer; }
+.book-review-view-all::after { content:''; position:absolute; inset:-11px 0; }
+.book-review-view-all>span { position:relative; }
+.book-review-view-all svg { position:absolute; left:calc(100% + 3.25px); top:50%; transform:translateY(-50%); }
 .book-review-view-all:focus-visible { outline:2px solid #936139; outline-offset:2px; }
 .book-review-sheet.book-community { position:fixed; inset:auto 0 0; margin:0 auto; width:100%; max-width:100%; height:95vh; height:95dvh; max-height:95dvh; padding:0; border:0; border-radius:28px 28px 0 0; background:#fffdf9; color:#262626; overflow:hidden; box-shadow:0 -8px 40px #30271922; }
 .book-review-sheet[open] { display:flex; flex-direction:column; animation:book-review-slide-up .24s ease-out; }
@@ -137,14 +140,6 @@
 .book-review-compose-options small { flex-basis:100%; color:#938779; font-size:11px; }
 .book-review-compose-status { color:#786653; font-size:12px; margin:8px 0 0 42px; }
 .book-review-duplicates { display:block; margin:12px auto 0; min-height:44px; color:#938779; font-size:13px; cursor:pointer; }
-.book-review-source { display:block; margin:5px 0; color:#8e795f; font-size:12px; line-height:20px; overflow-wrap:anywhere; }
-.book-review-source:hover { text-decoration:underline; }
-.book-review-attribution { position:relative; flex-shrink:0; }
-.book-review-attribution>summary { list-style:none; cursor:pointer; }
-.book-review-attribution>summary::-webkit-details-marker { display:none; }
-.book-review-attribution>summary:focus-visible { outline:2px solid #936139; outline-offset:4px; }
-.book-review-attribution-panel { position:absolute; z-index:2; top:calc(100% + 8px); left:0; width:min(260px,calc(100vw - 96px)); padding:12px; border:1px solid #e9e2d9; border-radius:12px; background:#fffdf9; color:#786653; box-shadow:0 4px 20px #30271922; font-size:12px; line-height:1.7; }
-.book-review-test-badge { padding:1px 6px; border:1px solid currentColor; border-radius:4px; font-size:10px; line-height:1.5; color:#786653; }
 .book-review-row { display:flex; align-items:flex-start; gap:12px; }
 .book-review-avatar-wrap { flex-shrink:0; padding-top:2px; }
 .book-review-profile-link { display:flex; padding:4px; margin:-4px; border-radius:50%; }

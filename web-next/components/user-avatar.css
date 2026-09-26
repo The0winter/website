@@ -1,3 +1,3 @@
-.user-avatar { display:inline-flex; flex-shrink:0; align-items:center; justify-content:center; width:32px; height:32px; overflow:hidden; border:1px solid #eacfc7; border-radius:50%; background:#fae5df; color:#a64143; font-family:Arial,"Microsoft YaHei",sans-serif; font-size:16px; line-height:1; font-weight:600; }
+.user-avatar { display:inline-flex; flex-shrink:0; align-items:center; justify-content:center; width:32px; height:32px; overflow:hidden; border:1px solid var(--avatar-border,#eacfc7); border-radius:50%; background:var(--avatar-background,#fae5df); color:var(--avatar-foreground,#a64143); font-family:Arial,"Microsoft YaHei",sans-serif; font-size:16px; line-height:1; font-weight:600; }
 .user-avatar>img { display:block; width:100%; height:100%; object-fit:cover; }
-.user-avatar--dark { background:#333; border-color:#555; color:#f3c4bd; }
+.user-avatar--dark { box-shadow:0 0 0 1px #ffffff12; }

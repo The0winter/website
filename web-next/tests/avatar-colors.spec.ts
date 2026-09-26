@@ -1,0 +1,40 @@
+import {test,expect} from './fixtures/without-analytics';
+
+test('avatar palette previews, cancels, retries and persists without replacing uploaded photos',async({page},info)=>{
+  const base=process.env.REVIEW_TEST_BASE||'http://127.0.0.1:3157';
+  const account={id:'000000000000000000000011',username:'山间读者',role:'reader',profileTheme:'sage',avatarColor:'coral',avatar:''};
+  let fail=true,writes=0;
+  await page.route('**/api/auth/session',route=>route.fulfill({json:{user:account,profile:account}}));
+  await page.route('**/api/auth/csrf',route=>route.fulfill({json:{csrfToken:'fixture-csrf'}}));
+  await page.route(`**/api/users/${account.id}`,route=>{
+    writes++;
+    expect(route.request().method()).toBe('PATCH');
+    expect(route.request().postDataJSON()).toEqual({avatarColor:'violet'});
+    if(fail)return route.fulfill({status:503,json:{error:'稍后重试'}});
+    account.avatarColor='violet';return route.fulfill({json:{success:true,user:account}});
+  });
+  await page.setViewportSize({width:390,height:900});
+  await page.goto(base+'/profile');
+  const avatar=page.locator('.profile-avatar>.user-avatar'),panel=page.locator('#avatar-color-options');
+  await expect(avatar).toHaveAttribute('data-avatar-color','coral');
+  await page.getByRole('button',{name:'头像颜色',exact:true}).click();
+  await expect(panel.getByRole('radio')).toHaveCount(16);
+  await panel.getByRole('radio',{name:'紫藤',exact:true}).check();
+  await expect(panel.locator('.user-avatar')).toHaveAttribute('data-avatar-color','violet');
+  await expect(avatar).toHaveAttribute('data-avatar-color','coral');
+  await panel.getByRole('button',{name:'取消'}).click();expect(writes).toBe(0);
+  await page.getByRole('button',{name:'头像颜色',exact:true}).click();
+  await panel.getByRole('radio',{name:'紫藤',exact:true}).check();
+  await panel.getByRole('button',{name:'保存颜色'}).click();
+  await expect(panel.getByRole('alert')).toHaveText('稍后重试');
+  await page.screenshot({path:info.outputPath('verified-avatar-palette.png')});
+  fail=false;await panel.getByRole('button',{name:'保存颜色'}).click();
+  await expect(panel).toHaveCount(0);await expect(avatar).toHaveAttribute('data-avatar-color','violet');
+  await page.reload();await expect(avatar).toHaveAttribute('data-avatar-color','violet');
+  account.avatar='/api/media/000000000000000000000111';
+  await page.route('**'+account.avatar,route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="red"/></svg>'}));
+  await page.reload();await page.getByRole('button',{name:'头像颜色',exact:true}).click();
+  await expect(panel).toContainText('已上传的图片会保留');
+  await panel.getByRole('button',{name:'保存颜色'}).click();
+  await expect(avatar.locator('img')).toHaveAttribute('src',account.avatar);
+});

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import {AVATAR_COLOR_IDS} from '../../shared/avatar-colors.mjs';
 
 const UserSchema = new mongoose.Schema({
   username: {
@@ -29,6 +30,7 @@ const UserSchema = new mongoose.Schema({
   isTestAccount: { type: Boolean, default: false },
   testBatch: { type: String, select: false },
   profileTheme: { type: String, enum: ['apricot', 'sage', 'mist', 'rose'] },
+  avatarColor: {type:String,enum:AVATAR_COLOR_IDS},
   
   loginAttempts: { 
     type: Number, 

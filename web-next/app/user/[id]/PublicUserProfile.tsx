@@ -5,6 +5,7 @@ import {useRouter} from 'next/navigation';
 import {ArrowLeft, BookOpen, CalendarDays, Shield, UserRound} from 'lucide-react';
 import type {Profile} from '@/lib/api';
 import UserAvatar from '@/components/UserAvatar';
+import ProfileReviewSources from '@/components/ProfileReviewSources';
 import ProfileCoverArtwork from '@/components/ProfileCoverArtwork';
 import {resolveProfileTheme} from '@/lib/profile-themes';
 import '../../profile/profile.css';
@@ -37,6 +38,7 @@ export default function PublicUserProfile({profile}:{profile:Profile}) {
             <div><dt><CalendarDays size={17}/>加入时间</dt><dd><time dateTime={Number.isFinite(date.getTime()) ? date.toISOString() : undefined}>{joined}</time></dd></div>
           </dl>
         </section>
+        {profile.isTestAccount&&<ProfileReviewSources key={profile.id} userId={profile.id}/>}
       </article>
     </div>
   </main>;

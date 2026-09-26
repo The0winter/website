@@ -65,6 +65,7 @@ export interface ForumComment {
 }
 
 export interface Profile {
+  avatarColor?: string;
   isTestAccount?: boolean;
   profileTheme?: ProfileTheme;
   avatar?: string;
@@ -127,6 +128,7 @@ export interface Bookmark {
 }
 
 export interface AuthUser {
+  avatarColor?:string;
   profileTheme?: ProfileTheme;
   _id?:string;
   id: string;
@@ -316,7 +318,7 @@ export const authApi = {
     return { success: true };
   },
 
-  updateUser: async (userId: string, data: { avatar?: string; profileTheme?: ProfileTheme }): Promise<{success?: boolean; user?: Profile; error?: string}> => {
+  updateUser: async (userId: string, data: { avatar?: string; profileTheme?: ProfileTheme; avatarColor?:string }): Promise<{success?: boolean; user?: Profile; error?: string}> => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
     const res = await fetch(`${API_BASE_URL}/users/${userId}`, {
       method: 'PATCH',

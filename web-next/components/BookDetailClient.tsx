@@ -537,7 +537,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             {reviewsLoading ? <p className="book-review-loading" role="status"><LoadingText>正在加载评论</LoadingText></p> : reviewError ? null : sortedReviews.length === 0 ? (
               <div className="text-gray-500 text-sm text-center py-4">还没有文字评论，可以先评分，也可以写下读后感。</div>
             ) : <BookReviewList key={reactionRefresh} bookId={book.id} reviews={sortedReviews.filter(review => !(showReviewForm && (review.user._id === userId || review.user.id === userId))).slice(0,2)} userId={userId} compact/>}
-            {reviewTotal>0 && <button className="book-review-view-all" aria-haspopup="dialog" onClick={()=>setReviewSheetOpen(true)}>查看全部评论<ChevronRight size={16}/></button>}
+            {reviewTotal>0 && <button className="book-review-view-all" aria-haspopup="dialog" onClick={()=>setReviewSheetOpen(true)}><span>查看全部评论<ChevronRight size={16}/></span></button>}
             {reviewSheetOpen && <BookReviewSheet key={book.id} bookId={book.id} userId={userId} preview={reviewsLoading||reviewError?[]:reviews} cursor={reviewsLoading||reviewError?'':reviewCursor} total={reviewTotal}
               onClose={()=>{setReviewSheetOpen(false);setReactionRefresh(value=>value+1);}}
               personalReview={myReview} personalLoading={authLoading||personalLoading} personalError={personalError} onRetryPersonal={()=>setReviewRefresh(value=>value+1)}

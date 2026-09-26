@@ -6,6 +6,8 @@ import AccountLoading from '@/components/AccountLoading';
 import MobileBottomNav from '@/components/MobileBottomNav';
 import AdminModeNotice from '@/components/AdminModeNotice';
 import ProfileCoverArtwork from '@/components/ProfileCoverArtwork';
+import UserAvatar from '@/components/UserAvatar';
+import AvatarColorPicker from '@/components/AvatarColorPicker';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -31,6 +33,7 @@ export default function ProfilePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarColorSaving,setAvatarColorSaving]=useState(false);
   const [themeDraft, setThemeDraft] = useState<{userId: string; theme: ProfileTheme} | null>(null);
   const [themeSaving, setThemeSaving] = useState(false);
   const [themeError, setThemeError] = useState('');
@@ -47,7 +50,7 @@ export default function ProfilePage() {
   };
 
   const saveAppearance = async () => {
-    if (!user || themeSaving || avatarUploading) return;
+    if (!user || themeSaving || avatarUploading || avatarColorSaving) return;
     setThemeSaving(true);
     setThemeError('');
     try {
@@ -68,7 +71,7 @@ export default function ProfilePage() {
   
   // 📸 处理头像上传
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (avatarUploading || themeSaving) return;
+    if (avatarUploading || themeSaving || avatarColorSaving) return;
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
@@ -211,18 +214,14 @@ return (
                                         <Loader2 className="h-8 w-8 text-white animate-spin" />
                                     </div>
                                 )}
-                                {user.avatar ? (
-                                    <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover scale-[1.02] group-hover/avatar:scale-110 transition-transform duration-500" />
-                                ) : (
-                                    (user.username || 'User').substring(0, 1).toUpperCase()
-                                )}
+                                <UserAvatar user={user}/>
                                 <label className="absolute inset-0 cursor-pointer flex flex-col items-center justify-center bg-black/0 hover:bg-black/20 transition-colors z-20">
                                     <input 
                                         type="file" 
                                         className="hidden" 
                                         accept="image/*" 
                                         onChange={handleAvatarUpload}
-                                        disabled={avatarUploading || themeSaving}
+                                        disabled={avatarUploading || themeSaving || avatarColorSaving}
                                     />
                                     <Camera className="h-9 w-9 text-white opacity-0 group-hover/avatar:opacity-100 transition-all duration-300 drop-shadow-lg scale-90 group-hover/avatar:scale-100" />
                                 </label>
@@ -262,6 +261,7 @@ return (
                 </div>
             </div>
 
+            <AvatarColorPicker disabled={avatarUploading||themeSaving} onSaving={setAvatarColorSaving}/>
             {appearanceOpen && <section id="profile-appearance" className="profile-appearance" aria-labelledby="profile-appearance-title" onKeyDown={event => {
               if (event.key === 'Escape') {event.preventDefault(); closeAppearance();}
             }}>
@@ -281,7 +281,7 @@ return (
               <div className="profile-appearance-actions">
                 <span aria-live="polite">{themeSaving ? '正在保存…' : '正在预览，保存后生效'}</span>
                 <button type="button" onClick={closeAppearance} disabled={themeSaving}>取消</button>
-                <button type="button" className="profile-theme-save" disabled={themeSaving || avatarUploading} onClick={saveAppearance}>{themeSaving ? '保存中…' : '保存装扮'}</button>
+                <button type="button" className="profile-theme-save" disabled={themeSaving || avatarUploading || avatarColorSaving} onClick={saveAppearance}>{themeSaving ? '保存中…' : '保存装扮'}</button>
               </div>
             </section>}
 

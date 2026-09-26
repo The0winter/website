@@ -95,7 +95,7 @@ export default function BookReviewSheet(props:Props) {
       <BookReviewList bookId={props.bookId} reviews={showDuplicates?rows:unique} userId={props.userId}/>
       {duplicateCount>0&&<button className="book-review-duplicates" aria-expanded={showDuplicates} onClick={()=>setShowDuplicates(value=>!value)}>{showDuplicates?'收起重复评论':`已折叠重复评论（${duplicateCount} 条） · 展开`}</button>}
       <div className="book-review-load-more">
-        {error?<p role="alert">{error} <button onClick={()=>void load(true)}>重试</button></p>:loading?<p role="status"><LoadingText>正在加载评论</LoadingText></p>:cursor!==null?<button onClick={()=>void load()}>加载更多评论</button>:rows.length===0?<p>还没有文字评论，可以先评分，也可以写下读后感。</p>:null}
+        {error?<p role="alert">{error} <button onClick={()=>void load(true)}>重试</button></p>:loading?<p role="status"><LoadingText>正在加载评论</LoadingText></p>:cursor!==null?<button onClick={()=>void load()}>加载更多评论</button>:rows.length===0?<p>还没有文字评论，可以先评分，也可以写下读后感。</p>:<p className="book-review-end">已折叠无效评论</p>}
       </div>
     </div>
     <BookReviewComposer bookId={props.bookId} review={props.personalReview} loading={props.personalLoading} error={props.personalError} onRetry={props.onRetryPersonal} onSaved={review=>{

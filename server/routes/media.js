@@ -4,6 +4,8 @@ import sharp from 'sharp';
 import rateLimit from 'express-rate-limit';
 import Media from '../models/Media.js';
 import User from '../models/User.js';
+import Review from '../models/Review.js';
+import {AVATAR_COLOR_IDS} from '../../shared/avatar-colors.mjs';
 import mongoose from 'mongoose';
 import { asyncRoute, publicUser } from '../security.js';
 import {getCoverStorage,prepareCover,coverUploadLimit} from '../services/cover-storage.js';
@@ -73,8 +75,12 @@ export function mediaRoutes(app,auth) {
   app.patch('/api/users/:userId',auth.authenticate,asyncRoute(async(req,res)=>{
     if (req.params.userId!==req.user.id) return res.status(403).json({error:'只能修改本人资料'});
     const keys = Object.keys(req.body);
-    if (!keys.length || keys.some(k=>!['avatar','profileTheme'].includes(k))) return res.status(400).json({error:'资料字段无效'});
+    if (!keys.length || keys.some(k=>!['avatar','profileTheme','avatarColor'].includes(k))) return res.status(400).json({error:'资料字段无效'});
     const updates = {};
+    if(Object.hasOwn(req.body,'avatarColor')){
+      if(!AVATAR_COLOR_IDS.includes(req.body.avatarColor))return res.status(400).json({error:'请选择有效的头像颜色'});
+      updates.avatarColor=req.body.avatarColor;
+    }
     if (Object.hasOwn(req.body,'avatar')) {
       if (typeof req.body.avatar!=='string' || (req.body.avatar!==''&&!/^\/api\/media\/[a-f0-9]{24}$/.test(req.body.avatar))) return res.status(400).json({error:'头像必须来自本人上传'});
       updates.avatar = req.body.avatar;
@@ -93,5 +99,14 @@ export function mediaRoutes(app,auth) {
     });
     const coverCleanup=await finishCoverRetirement(retiredCover,{storage:app.locals.coverStorage});
     res.json({success:true,user:publicUser(user),coverCleanup});
+  }));
+  app.get('/api/users/:userId/review-sources',asyncRoute(async(req,res)=>{
+    const user=await User.findOne({_id:req.params.userId,isBanned:{$ne:true}}).select('isTestAccount').lean();
+    if(!user)return res.status(404).json({error:'用户不存在'});
+    const rows=user.isTestAccount?await Review.find({user:user._id,isTestData:true,sourceExcerpt:{$exists:true}})
+      .select('book sourceExcerpt').sort({createdAt:-1}).limit(50).populate('book','title visibility deletedAt').lean():[];
+    res.set('Cache-Control','private, no-store').json(rows.filter(row=>row.book&&row.book.visibility!=='private'&&!row.book.deletedAt).map(row=>({bookTitle:row.book.title,
+      platform:row.sourceExcerpt.platform,author:row.sourceExcerpt.author,url:row.sourceExcerpt.url,
+      kind:row.sourceExcerpt.kind==='paraphrase'?'paraphrase':'excerpt'})));
   }));
 }

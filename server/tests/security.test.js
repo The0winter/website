@@ -198,7 +198,12 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       assert.equal(await Chapter.countDocuments({bookId:book._id}),3);
       const ratings=await Promise.all([[owner,5],[other,1]].map(([c,rating])=>c.write(`/api/books/${book._id}/reviews`,'POST',{rating,content:'Controlled review'})));
       assert.ok(ratings.every(r=>r.status===201),JSON.stringify(ratings));
-      const summary=await Book.findById(book._id);assert.equal(summary.rating,3);assert.equal(summary.numReviews,2);
+      const summary=await Book.findById(book._id);
+      const seedVotes=summary.statisticsSeed?.ratingSample?.votes||[];
+      const seedCount=seedVotes.length||summary.statisticsSeed?.ratingWeight||0;
+      const seedTotal=seedVotes.length?seedVotes.reduce((sum,value)=>sum+value,0):(summary.statisticsSeed?.rating||0)*seedCount;
+      assert.equal(summary.rating,(seedTotal+5+1)/(seedCount+2));
+      assert.equal(summary.numRatings,2);assert.equal(summary.numReviews,2);
       assert.equal((await owner.write(`/api/books/${book._id}/reviews`,'POST',{rating:2.5,content:'invalid'})).status,400);
       assert.equal((await owner.write(`/api/books/${book._id}`,'DELETE',{})).status,200);
       assert.equal((await owner.request(`/api/chapters/${chapter._id}`)).status,404);

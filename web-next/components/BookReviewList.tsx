@@ -8,7 +8,7 @@ import {ratingLabel} from '@/lib/rating';
 import {formatCompactCount} from '@/lib/compact-count';
 import {useReviewReactions} from '@/lib/useReviewReactions';
 
-export type Review={_id:string;isTestData?:boolean;sourceExcerpt?:{platform:string;author:string;url:string;publishedAt?:string};rating:number;content:string;createdAt:string;user:{_id:string;id?:string;username:string;avatar?:string}};
+export type Review={_id:string;isTestData?:boolean;sourceExcerpt?:{platform:string;author:string;url:string;publishedAt?:string;kind?:'excerpt'|'paraphrase'};rating:number;content:string;createdAt:string;user:{_id:string;id?:string;username:string;avatar?:string;avatarColor?:string}};
 
 export default function BookReviewList({bookId,reviews,userId,compact=false}:{bookId:string;reviews:Review[];userId:string;compact?:boolean}) {
   const router=useRouter();
@@ -18,14 +18,13 @@ export default function BookReviewList({bookId,reviews,userId,compact=false}:{bo
     <div className={`book-review-list${compact?' book-review-preview':''}`}>
       {reviews.map(review=>{
         const reviewerId=review.user?._id||review.user?.id||'';
-        const name=review.user?.username||'书友';
+        const name=review.isTestData?(review.user?.username||'书友').replace(/（测试）$/,''):review.user?.username||'书友';
         const href=/^[a-f\d]{24}$/i.test(reviewerId)?`/user/${reviewerId}`:null;
         const mine=Boolean(userId)&&reviewerId===userId;
         const row=feedback.rows[review._id];
-        const source=review.isTestData&&review.sourceExcerpt?.url.startsWith('https://')?review.sourceExcerpt:null;
         return <article key={review._id} className="book-review" data-review-id={review._id}>
           <div className="book-review-row">
-            <div className="book-review-avatar-wrap">{href?<Link href={href} className="book-review-profile-link" aria-label={`查看${name}的主页`}><UserAvatar user={review.user} className="book-review-avatar"/></Link>:<UserAvatar user={review.user||{username:name}} className="book-review-avatar"/>}</div>
+            <div className="book-review-avatar-wrap">{href?<Link href={href} className="book-review-profile-link" aria-label={`查看${name}的主页`}><UserAvatar user={{...review.user,username:name}} className="book-review-avatar"/></Link>:<UserAvatar user={review.user||{username:name}} className="book-review-avatar"/>}</div>
             <div className="book-review-body flex-1">
               <div className="book-review-heading">
                 {href?<Link href={href} className="book-review-name" title={name}>{name}{mine?' (我)':''}</Link>:<span className="book-review-name" title={name}>{name}{mine?' (我)':''}</span>}
@@ -33,10 +32,6 @@ export default function BookReviewList({bookId,reviews,userId,compact=false}:{bo
               </div>
               <p className="book-review-content">{review.isTestData?review.content.replace(/^【测试】/,''):review.content}</p>
               <footer className="book-review-footer">
-                {source?<details className="book-review-attribution"><summary className="book-review-test-badge">测试导入</summary><div className="book-review-attribution-panel">
-                  <p>星级为本站测试配置，非原作者评分，不计入本书评分。以下为原文摘录的出处。</p>
-                  <a className="book-review-source" href={source.url} target="_blank" rel="noopener noreferrer" aria-label={`查看原文：${source.platform} · ${source.author}`}>{source.platform} · {source.author}{source.publishedAt?` · ${source.publishedAt.slice(0,10)}`:''} ↗</a>
-                </div></details>:review.isTestData&&<span className="book-review-test-badge">AI 测试</span>}
                 <time dateTime={review.createdAt} title={review.createdAt.slice(0,10)}>{review.createdAt.slice(0,4)===String(new Date().getFullYear())?review.createdAt.slice(5,10):review.createdAt.slice(0,10)}</time>
                 <div className="book-review-reactions" role="group" aria-label="评论反馈">
                   {(['like','dislike'] as const).map(choice=>{

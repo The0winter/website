@@ -10,6 +10,7 @@ import {readConfig} from '../config.js';
 import User from '../models/User.js';
 import Book from '../models/Book.js';
 import Review from '../models/Review.js';
+import {AVATAR_COLOR_IDS} from '../../shared/avatar-colors.mjs';
 
 test('public profile exposes basic identity only and review writes enforce 140 characters', async t => {
   const database = await TestDatabase.create();
@@ -50,6 +51,23 @@ test('public profile exposes basic identity only and review writes enforce 140 c
       assert.equal((await request(endpoint)).status,404);
       await User.updateOne({_id:user._id},{$set:{isBanned:false}});
     });
+    await t.test('avatar colors persist across session and public views and remain owner-only',async()=>{
+      const token=(await request('/api/auth/csrf')).body.csrfToken;
+      const headers={'x-csrf-token':token,origin:'http://127.0.0.1:3000'};
+      const patch=(id,value)=>request(`/api/users/${id}`,'PATCH',{avatarColor:value},headers);
+      assert.equal(AVATAR_COLOR_IDS.length,16);
+      for(const color of AVATAR_COLOR_IDS){
+        assert.equal((await patch(user.id,color)).status,200);
+        const profile=(await request(endpoint)).body;
+        assert.equal(profile.avatarColor,color);assert(!('email' in profile));
+        assert.equal((await request('/api/auth/session')).body.user.avatarColor,color);
+      }
+      for(const invalid of ['red','',null,{},['rose']])assert.equal((await patch(user.id,invalid)).status,400);
+      assert.equal((await patch(new mongoose.Types.ObjectId(),'rose')).status,403);
+      assert.equal((await User.findById(user.id)).avatarColor,'sand');
+      assert.equal((await User.findById(user.id)).profileTheme,'sage');
+      assert.deepEqual((await request(`/api/users/${user.id}/review-sources`)).body,[]);
+    });
     await t.test('API accepts 140 Unicode characters and rejects 141 without overwriting a review',async () => {
       const book = await Book.create({title:'短评边界测试',author_id:user._id});
       const path = `/api/books/${book.id}/reviews`;
@@ -61,7 +79,8 @@ test('public profile exposes basic identity only and review writes enforce 140 c
       assert.equal(saved.content,content);assert.equal(saved.rating,4);
       const listing = await request(path);
       assert(!JSON.stringify(listing.body).includes(user.email));
-      assert.deepEqual(Object.keys(listing.body[0].user).sort(),['_id','avatar','username']);
+      assert.deepEqual(Object.keys(listing.body[0].user).sort(),['_id','avatar','avatarColor','username']);
+      assert.equal(listing.body[0].user.avatarColor,'sand');
       assert.equal((await write(path,{rating:5,content:'  短评  '})).status,201);
       assert.equal((await Review.findById(saved._id)).content,'短评');
       assert.equal((await write(path,{rating:3})).status,201);

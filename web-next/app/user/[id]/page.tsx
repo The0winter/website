@@ -15,7 +15,7 @@ const getProfile = cache(async (id:string) => {
   if (!response.ok) throw new Error('书友主页暂时无法读取');
   const row = await response.json();
   // Only public fields cross the server/client boundary, even if an API adds fields later.
-  return {id, username:String(row.username || '书友'), avatar:typeof row.avatar === 'string' ? row.avatar : '',
+  return {id, username:String(row.username || '书友'), avatar:typeof row.avatar === 'string' ? row.avatar : '',avatarColor:typeof row.avatarColor==='string'?row.avatarColor:undefined,
     isTestAccount:row.isTestAccount === true,
     role:row.role === 'admin' ? 'admin' as const : 'reader' as const,
     created_at:typeof row.created_at === 'string' ? row.created_at : '',
