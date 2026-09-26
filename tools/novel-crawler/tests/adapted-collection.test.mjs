@@ -74,6 +74,26 @@ test('serial batch reuses TXT rules, continues failures, saves results and respe
   assert.ok(events.some(b => b.items[1].state === 'running' && b.items[0].state === 'failed'));
 });
 
+test('supervision pins exact books across retries without filling from unrelated pending rows', async t => {
+  const dir = temp(t), specs = ['已有', '待核验', '本轮新书', '不在本轮'].map(title => specFor(title));
+  const list = listFor(dir, specs); list.books[1].collectionApproved = false; atomicWrite(adaptedBooklist(dir), list);
+  atomicWrite(path.join(dir, 'booklists', 'second.json'), {...list, books: [list.books[2]]});
+  const books = specs.slice(0, 3).map(({title, author}) => ({title, author})), calls = [];
+  const common = {...options(dir), books, clientFactory: () => ({close: async () => {}}), acquireBook: async spec => { calls.push(spec.title); return {structuralPass: false, failures: [{error: '合成故障'}]}; }};
+  const first = await collectAdapted({...common, inventory: [books[0]]});
+  assert.equal(first.total, 3);assert.deepEqual(first.items.map(i => i.state), ['existing', 'deferred', 'failed']);assert.deepEqual(calls, ['本轮新书']);
+  const retried = await collectAdapted({...common, inventory: [books[0], books[2]]});
+  assert.equal(retried.total, 3);assert.deepEqual(retried.items.map(i => i.state), ['existing', 'deferred', 'existing']);assert.deepEqual(calls, ['本轮新书']);
+  for (const invalid of [[], [{title: '已有'}], [books[0], books[0]]]) await assert.rejects(collectAdapted({...common, books: invalid}), /监督书目/);
+  await assert.rejects(collectAdapted({...common, books: [{title: '不存在', author: '测试作者'}], inventory: []}), /不在已启用/);
+  // A disabled first-list row must not hide the same approved book in another list.
+  list.books[2].collectionApproved = false; atomicWrite(adaptedBooklist(dir), list);
+  const available = await collectAdapted({...common, inventory: [books[0]]});
+  assert.equal(available.total, 3);
+  assert.deepEqual(available.items.map(i => i.state), ['existing', 'deferred', 'failed']);
+  assert.deepEqual(calls, ['本轮新书', '本轮新书']);
+});
+
 test('quality failures expose exact positions, related chapters and the saved report', async t => {
   const dir = temp(t); listFor(dir, [specFor('重复书'), specFor('空章书')]);
   const batch = await collectAdapted({...options(dir), inventory: [], clientFactory: () => ({close: async () => {}}), acquireBook: async spec => ({

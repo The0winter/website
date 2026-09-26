@@ -81,9 +81,25 @@ function reportProblems(report) {
   return {summary: summary || '质量检查未通过，已保留检查点，未完成入库', problems};
 }
 
-export async function collectAdapted({stateDir, outputDir, sites, signal, shouldStop = () => false, onLibrary = () => {}, onPhase = () => {}, onProgress, onStatus, onClient = () => {}, inventory, acquireBook = acquire, clientFactory = makeClient, concurrency = 2}) {
+export async function collectAdapted({stateDir, outputDir, sites, signal, shouldStop = () => false, onLibrary = () => {}, onPhase = () => {}, onProgress, onStatus, onClient = () => {}, inventory, books, acquireBook = acquire, clientFactory = makeClient, concurrency = 2}) {
   if (![1, 2].includes(concurrency)) throw Error('适配采集同时处理的来源数只能为1或2');
-  const plans = planAdaptedCollection({stateDir, outputDir, sites, inventory});
+  const identity = book => `${normalized(book.title)}\0${normalized(book.author)}`;
+  let selected;
+  if (books !== undefined) {
+    if (!Array.isArray(books) || !books.length || books.length > 1000 || books.some(book => !book || ['title', 'author'].some(field => typeof book[field] !== 'string' || !book[field].trim() || book[field].length > 200))) throw Error('监督书目需要1–1000本明确的书名和作者');
+    selected = new Set(books.map(identity));
+    if (selected.size !== books.length) throw Error('监督书目存在重复作品');
+  }
+  const allPlans = planAdaptedCollection({stateDir, outputDir, sites, inventory});
+  if (selected && [...selected].some(key => !allPlans.some(plan => identity(plan.item) === key))) throw Error('监督书目不在已启用的选源书单内');
+  // Pin the requested identities across retries. Already collected or deferred
+  // books remain visible; they must not be replaced by unrelated pending books.
+  const selectedPlans = new Map(), priority = {existing: 2, pending: 1, deferred: 0};
+  if (selected) for (const plan of allPlans) {
+    const key = identity(plan.item), previous = selectedPlans.get(key);
+    if (selected.has(key) && (!previous || priority[plan.item.state] > priority[previous.item.state])) selectedPlans.set(key, plan);
+  }
+  const plans = selected ? [...selectedPlans.values()] : allPlans;
   const batch = {kind: 'adapted', startedAt: new Date().toISOString(), concurrency, total: plans.length, items: plans.map(plan => plan.item)};
   const contexts = new Map();
   let fatal, presentation, lastProgress, lastStatus, lastPublish = 0;

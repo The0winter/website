@@ -57,6 +57,11 @@ export function placeholderEvidence(text, chapter = {}) {
   const prefix = titles.find(title => value.startsWith(title));
   if (prefix) value = value.slice(prefix.length);
   value = value.replace(/[（(]本章完[）)]$/u, '');
+  // Observed TXT failures can preserve an ad comment or navigation arrows
+  // around a response that contains no story text. Match the whole payload;
+  // a character quoting an error message must remain ordinary narrative.
+  const payload = value.replace(/<!--adv[0-9]+-->/giu, '');
+  if (/^(?:error[:：]错误html|(?:←→)+)$/iu.test(payload)) return true;
   return /^(?:请到手机端QQAPP查看本章|请升级到新版本查看本章|暂无内容|出于版权保护[，,]?本章暂不支持网页(?:阅读)?|内容还在处理中[，,]请稍后重试)(?:[。.!！]|（还有耶）)*$/iu.test(value);
 }
 

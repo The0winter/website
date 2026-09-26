@@ -63,3 +63,15 @@ test('ordinary narrative mentioning placeholder messages stays intact', () => {
     assert.equal(qualityReport([chapter], [chapter]).issues.some(issue => issue.code === 'placeholder'), false);
   }
 });
+
+test('navigation-only and HTML-error TXT payloads cannot count as complete chapters', () => {
+  for (const content of ['←  →\n　　←  →', '<!--adv2-->\r\n　　error:错误html', 'error：错误html']) {
+    const chapter = item(1, content), before = structuredClone(chapter);
+    assert.ok(qualityReport([chapter], [chapter]).issues.some(issue => issue.code === 'placeholder'));
+    assert.deepEqual(chapter, before);
+  }
+  for (const content of ['屏幕上写着 error:错误html，他关闭了页面。', '← 向左走，向右走 →', '<!--adv2-->今天请假一天。']) {
+    const chapter = item(1, content);
+    assert.equal(qualityReport([chapter], [chapter]).issues.some(issue => issue.code === 'placeholder'), false);
+  }
+});
