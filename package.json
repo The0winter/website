@@ -18,9 +18,12 @@
     "test": "node tools/local-run.cjs server-test",
     "test:crawler": "node tools/local-run.cjs node --require ./tools/test-env.cjs --test tools/novel-crawler/tests/*.test.mjs",
     "test:browser": "node tools/local-run.cjs node --require ./tools/test-env.cjs web-next/node_modules/@playwright/test/cli.js test --config web-next/playwright.config.ts",
-    "test:storage": "node --require ./tools/test-env.cjs --test tools/tests/storage-maintenance.test.cjs",
+    "test:storage": "node --require ./tools/test-env.cjs --test tools/tests/storage-maintenance.test.cjs tools/tests/storage-snapshots.test.cjs",
     "storage:plan": "node tools/storage-maintenance.cjs",
     "storage:clean": "node tools/storage-maintenance.cjs --apply",
+    "storage:snapshot": "node tools/storage-snapshots.cjs",
+    "storage:daily": "node tools/storage-maintenance.cjs --daily",
+    "storage:schedule": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/storage-schedule.ps1",
     "dev:isolated": "node tools/local-run.cjs node server/dev.js"
   },
   "dependencies": {

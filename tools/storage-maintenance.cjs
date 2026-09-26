@@ -8,7 +8,7 @@ const ROOT = path.resolve(__dirname, '..');
 const DAY = 86400000;
 const POLICY = Object.freeze({buildAge: 2 * DAY, keepBuilds: 2, tempAge: DAY,
   cacheAge: 7 * DAY, cacheBytes: 1024 ** 3, artifactAge: 14 * DAY,
-  artifactBytes: 500 * 1024 ** 2, interval: 12 * 3600000});
+  artifactBytes: 500 * 1024 ** 2, buildCacheBytes: 1024 ** 3, interval: 12 * 3600000});
 const STATE = '.runtime/storage-maintenance';
 const norm = value => value.replaceAll('\\', '/');
 const alive = pid => { if (!Number.isInteger(pid) || pid < 1) return true; try { process.kill(pid, 0); return true; } catch (e) { return e.code !== 'ESRCH'; } };
@@ -81,31 +81,41 @@ function processSnapshot() {
       return m && {pid: +m[1], parent: +m[2], command: m[3]};
     }).filter(Boolean);
   }
-  const script = 'Get-CimInstance Win32_Process | Where-Object { $_.Name -match "^(node|mongod|chrome|msedge|nginx)(.exe)?$" } | Select-Object @{n="pid";e={$_.ProcessId}},@{n="parent";e={$_.ParentProcessId}},@{n="command";e={$_.CommandLine}} | ConvertTo-Json -Compress';
+  // Include intermediate cmd/PowerShell parents so our own npm invocation is
+  // excluded correctly. Only inspect commands of the relevant runtime types.
+  const script = 'Get-CimInstance Win32_Process | Select-Object @{n="pid";e={$_.ProcessId}},@{n="parent";e={$_.ParentProcessId}},@{n="name";e={$_.Name}},@{n="command";e={if ($_.Name -match "^(node|mongod|chrome|msedge|nginx)(.exe)?$") {$_.CommandLine}}} | ConvertTo-Json -Compress';
   const data = JSON.parse(execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {encoding: 'utf8', windowsHide: true, timeout: 15000, maxBuffer: 4 * 1024 ** 2}) || '[]');
-  return Array.isArray(data) ? data : [data];
+  return (Array.isArray(data) ? data : [data]).map(p => ({...p, command: typeof p.command === 'string' ? p.command : null}));
 }
-function busyCategories(root, processes) {
+function busyCategories(root, processes, blockers = []) {
   const busy = new Set(), ancestors = new Set([process.pid, process.ppid]);
+  const add = (pid, reason, categories) => { for (const c of categories) busy.add(c); blockers.push({pid, reason, categories}); };
   for (let i = 0; i < processes.length; i++) for (const p of processes) if (ancestors.has(p.pid)) ancestors.add(p.parent);
   for (const p of processes) {
     if (ancestors.has(p.pid)) continue;
-    if (!p.command) { busy.add('all'); continue; }
+    if (p.name && !/^(node|mongod|chrome|msedge|nginx)(\.exe)?$/i.test(p.name)) continue;
+    if (typeof p.command !== 'string' || !p.command) { add(p.pid, 'Unreadable runtime command', ['all']); continue; }
     const command = norm(p.command).toLowerCase();
     if (/desktop-browser|site-monitor\/(?:main\.mjs|browser\/)/.test(command)) continue; // Monitor profiles have their own PID leases.
-    if (/mongod|--test|test-env\.cjs/.test(command)) { busy.add('temp'); busy.add('build'); busy.add('clean-room'); }
-    if (/next[/ ]|next-server|server\/(dev|staging)\.js|clean-room\.mjs/.test(command)) { busy.add('build'); busy.add('clean-room'); }
-    if (/novel-crawler/.test(command) && !/desktop\/main\.mjs/.test(command)) busy.add('crawler-cache');
-    if (/npm-cli|npm (install|ci)/.test(command)) busy.add('npm-cache');
-    if (/browser_data/.test(command)) busy.add('browser-cache');
-    if (command.includes(norm(root).toLowerCase()) && !/desktop\/main\.mjs|desktop-browser/.test(command)) busy.add('all');
+    // These known hosts only provide a workspace. Their task children remain
+    // in this loop, and unreadable/unknown child commands still fail closed.
+    if (command.includes('/openai/codex/runtimes/cua_node/') && /\/\.tmp[^/ ]+\/(?:kernel|trusted-worker)\.js(?:[" ]|$)/.test(command)) continue;
+    const categories = new Set();
+    if (/mongod|--test|test-env\.cjs|playwright\/cli|@playwright\/test/.test(command)) for (const c of ['temp', 'build', 'clean-room', 'artifacts']) categories.add(c);
+    if (/next[/ ]|next-server|server\/(dev|staging)\.js|clean-room\.mjs/.test(command)) for (const c of ['build', 'clean-room']) categories.add(c);
+    if (/novel-crawler/.test(command) && !/desktop\/main\.mjs/.test(command)) for (const c of ['crawler-cache', 'snapshots']) categories.add(c);
+    if (/npm-cli|npm (install|ci)/.test(command)) categories.add('npm-cache');
+    if (/browser_data/.test(command)) categories.add('browser-cache');
+    const browser = /(?:chrome|msedge)(?:\.exe)?[" ]/.test(command);
+    if (categories.size) add(p.pid, 'Recognized active runtime', [...categories]);
+    else if (command.includes(norm(root).toLowerCase()) && !/desktop\/main\.mjs/.test(command) && !browser) add(p.pid, 'Unknown project runtime', ['all']);
   }
   for (const e of entries(root, STATE + '/leases')) {
     if (!e.isFile() || !e.name.endsWith('.json')) { busy.add('all'); continue; }
     const lease = read(inside(root, STATE + '/leases/' + e.name));
-    const categories = ['all', 'temp', 'build', 'clean-room', 'crawler-cache', 'npm-cache', 'browser-cache', 'artifacts'];
+    const categories = ['all', 'temp', 'build', 'clean-room', 'crawler-cache', 'npm-cache', 'browser-cache', 'artifacts', 'snapshots'];
     if (!Number.isInteger(lease.pid) || lease.pid < 1 || !Array.isArray(lease.categories) || !lease.categories.length || lease.categories.some(x => !categories.includes(x))) throw Error('Invalid activity lease');
-    if (alive(lease.pid)) for (const category of lease.categories) busy.add(category);
+    if (alive(lease.pid)) add(lease.pid, 'Activity lease', lease.categories);
   }
   return busy;
 }
@@ -172,10 +182,14 @@ function evidenceHashes(root, check) {
 }
 function plan(root, {now = Date.now(), initial = false, policy = POLICY, processes = processSnapshot(), tracked = trackedFiles(root), scope, reserveBytes = 0} = {}) {
   root = validateRoot(root);
-  const busy = busyCategories(root, processes), candidates = [], protectedPaths = [], warnings = [], checkedParents = new Set();
+  const blockers = [], busy = busyCategories(root, processes, blockers), candidates = [], protectedPaths = [], warnings = [], checkedParents = new Set();
   const check = pendingCheck(root); check(true);
   function inspect(relative, category) {
     if (busy.has('all') || busy.has(category)) return null;
+    const absolute = norm(path.resolve(root, relative)).toLowerCase();
+    if (processes.some(p => typeof p.command === 'string' && norm(p.command).toLowerCase().includes(absolute))) {
+      protectedPaths.push({path: relative, reason: 'Path referenced by an active process'}); return null;
+    }
     try { return {...snapshot(root, relative, tracked, checkedParents, check), category}; }
     catch (e) { if (e.code === 'STORAGE_YIELD') throw e; protectedPaths.push({path: relative, reason: e.message}); return null; }
   }
@@ -200,6 +214,12 @@ function plan(root, {now = Date.now(), initial = false, policy = POLICY, process
   const activeBuilds = [defaultBuild, process.env.NEXT_DIST_DIR].filter(Boolean).map(value => norm(path.relative(root, path.resolve(root, 'web-next', value))));
   const builds = directories('web-next', /^\.next(?:-[a-z0-9-]+)?$/, 'build').filter(x => !activeBuilds.some(active => active === x.path || active.startsWith(x.path + '/')));
   for (const item of builds.slice(initial ? 0 : policy.keepBuilds)) if (now - item.newest > policy.buildAge) candidates.push(item);
+  // Rebuildable caches have a separate lifetime; keep the actual build output.
+  for (const relative of [...new Set(activeBuilds)].flatMap(build => [build + '/dev/cache', build + '/cache'])) {
+    if (!fs.existsSync(inside(root, relative))) continue;
+    const item = inspect(relative, 'build');
+    if (item && (now - item.newest > policy.cacheAge || item.bytes > policy.buildCacheBytes)) candidates.push(item);
+  }
   let cleanKeep;
   const cleanReport = inside(root, 'artifacts/clean-room-report.json');
   if (fs.existsSync(cleanReport)) {
@@ -227,7 +247,8 @@ function plan(root, {now = Date.now(), initial = false, policy = POLICY, process
     if (now - item.newest > (finished ? policy.tempAge : policy.cacheAge)) candidates.push(item);
   }
   for (const item of directories('.runtime/test-tmp', /^(?:test1-(?:mongo|sqlite)|mongo-mem|novel-browser|site-monitor-test)-[A-Za-z0-9]+$/, 'temp')) if (now - item.newest > policy.tempAge) candidates.push(item);
-  for (const [relative, category] of [['.runtime/npm-cache', 'npm-cache'], ['browser_data/Default/Cache', 'browser-cache']]) {
+  for (const item of directories('.runtime/test-tmp', /^(?:playwright_chromiumdev_profile|update-live|update-benchmark|search-ui)-[A-Za-z0-9]+$/, 'temp')) if (now - item.newest > policy.tempAge) candidates.push(item);
+  for (const [relative, category] of [['.runtime/npm-cache', 'npm-cache'], ['.runtime/npm-r2-cache', 'npm-cache'], ['.runtime/novel-crawler-npm-cache', 'npm-cache'], ['browser_data/Default/Cache', 'browser-cache']]) {
     if (!fs.existsSync(inside(root, relative))) continue;
     const item = inspect(relative, category);
     if (item && (initial || now - item.newest > policy.cacheAge || item.bytes > policy.cacheBytes)) candidates.push(item);
@@ -270,15 +291,31 @@ function plan(root, {now = Date.now(), initial = false, policy = POLICY, process
   for (const relative of ['artifacts', 'web-next/artifacts', '.runtime/task-artifacts']) scanArtifacts(relative);
   let artifactBytes = artifacts.reduce((n, x) => n + x.bytes, 0);
   for (const item of artifacts.sort((a, b) => a.newest - b.newest)) if (now - item.newest > policy.artifactAge || (artifactBytes > policy.artifactBytes && now - item.newest > policy.tempAge)) { candidates.push(item); artifactBytes -= item.bytes; }
+  // Explicitly archived historical backups retain all bytes in verified,
+  // compressed content objects. Unknown snapshots are never candidates.
+  if (!busy.has('all') && fs.existsSync(inside(root, '.runtime/storage-snapshots/archives'))) {
+    const store = require('./storage-snapshots.cjs');
+    for (const archive of store.archivedCandidates(root, warnings)) {
+      const parent = norm(path.resolve(root, path.dirname(archive.path))).toLowerCase();
+      if (processes.some(p => typeof p.command === 'string' && norm(p.command).toLowerCase().includes(parent))) { protectedPaths.push({path: archive.path, reason: 'Archive task is still active'}); continue; }
+      const item = inspect(archive.path, 'archived-backup');
+      if (item && item.fingerprint === archive.fingerprint) candidates.push({...item, category: 'archived-backup', snapshotId: archive.snapshotId});
+    }
+  }
+  let snapshotRetention;
+  if (!busy.has('all') && !busy.has('snapshots') && fs.existsSync(inside(root, '.runtime/storage-snapshots'))) {
+    try { snapshotRetention = require('./storage-snapshots.cjs').prune(root, {now}); }
+    catch (error) { warnings.push('Snapshot retention deferred: ' + error.message); }
+  }
   check(true);
-  return {root, createdAt: new Date(now).toISOString(), initial, candidates, bytes: candidates.reduce((n, x) => n + x.bytes, 0), busy: [...busy], protectedPaths, warnings};
+  return {root, createdAt: new Date(now).toISOString(), initial, candidates, bytes: candidates.reduce((n, x) => n + x.bytes, 0), snapshotRetention, busy: [...busy], blockers, protectedPaths, warnings};
 }
 
 function execute(root, proposed, options = {}) {
   // Rebuild the allowlist from current state; never trust a saved path list.
   const current = proposed.candidates.length ? plan(root, {...options, initial: proposed.initial, scope:proposed.scope, reserveBytes:proposed.reserveBytes||0}) : proposed;
   const allowed = new Map(current.candidates.map(x => [x.path, x]));
-  const result = {startedAt: new Date().toISOString(), deleted: [], skipped: [], warnings: current.warnings, busy: current.busy};
+  const result = {startedAt: new Date().toISOString(), deleted: [], skipped: [], warnings: current.warnings, busy: current.busy, blockers: current.blockers || []};
   const tracked = options.tracked || trackedFiles(root);
   const indexStamp = () => {
     const file = path.join(root, '.git/index');
@@ -286,6 +323,7 @@ function execute(root, proposed, options = {}) {
     const s = fs.statSync(file); return [s.ino, s.size, s.mtimeMs, s.ctimeMs].join(':');
   };
   const index = indexStamp(), failedCacheBodies = new Set(), check = pendingCheck(root);
+  let lastProcesses = [], lastProcessCheck = 0;
   for (const item of proposed.candidates) {
     try {
       check(true);
@@ -293,6 +331,14 @@ function execute(root, proposed, options = {}) {
       if (item.category === 'crawler-cache' && item.path.endsWith('.json') && failedCacheBodies.has(item.path.replace(/\.json$/, '.bin'))) throw Error('Cache body could not be removed; retaining its metadata');
       const fresh = allowed.get(item.path);
       if (!fresh || fresh.fingerprint !== item.fingerprint) throw Error('Candidate changed or is now protected');
+      // A process can start during a long scan without going through local-run.
+      if (!options.processes && item.category !== 'site-monitor') {
+        if (Date.now() - lastProcessCheck > 1000 || item.files > 1) { lastProcesses = processSnapshot(); lastProcessCheck = Date.now(); }
+        const live = lastProcesses, busy = busyCategories(root, live);
+        const category = item.category;
+        if (busy.has('all') || busy.has(category) || live.some(p => typeof p.command === 'string' && norm(p.command).toLowerCase().includes(norm(path.resolve(root, item.path)).toLowerCase()))) throw Error('New process is using this category or path');
+        if (category === 'archived-backup' && live.some(p => typeof p.command === 'string' && norm(p.command).toLowerCase().includes(norm(path.resolve(root, path.dirname(item.path))).toLowerCase()))) throw Error('Archive task became active');
+      }
       if (snapshot(root, item.path, tracked, undefined, check).fingerprint !== item.fingerprint) throw Error('Candidate changed during cleanup');
       fs.rmSync(inside(root, item.path), {recursive: true, force: false, maxRetries: 2, retryDelay: 100});
       result.deleted.push({path: item.path, bytes: item.bytes, files: item.files});
@@ -317,10 +363,53 @@ function maintain({root = ROOT, apply = false, initial = false, ...options} = {}
       const file = inside(root, STATE + '/' + folder + '/' + entry.name);
       if (!alive(read(file).pid)) fs.unlinkSync(file);
     }
+    if (!options.scope && !result.busy.includes('all') && !result.busy.includes('snapshots') && fs.existsSync(inside(root, '.runtime/storage-snapshots'))) {
+      try { result.snapshotRetention = require('./storage-snapshots.cjs').prune(root, {apply: true}); }
+      catch (error) { result.warnings.push('Snapshot retention deferred: ' + error.message); }
+    }
     write(root, STATE + '/last-run.json', result);
+    recordHistory(root, result);
     if (!options.scope && !result.busy.length && !result.skipped.length) write(root, STATE + '/last-auto.json', {finishedAt: result.finishedAt});
     return result;
   });
+}
+function recordHistory(root, result) {
+  const relative = STATE + '/history.json';
+  let history = [];
+  try { history = read(inside(root, relative)); if (!Array.isArray(history)) history = []; } catch { /* First run. */ }
+  const entry = {at: result.finishedAt || new Date().toISOString(), reclaimedBytes: (result.bytes || 0) + (result.snapshotRetention?.bytes || 0),
+    deleted: result.deleted?.length || 0, skipped: result.skipped?.length || 0,
+    busy: result.busy || [], blockers: result.blockers || [], warnings: result.warnings || [], error: result.error};
+  history.push(entry);
+  write(root, relative, history.filter(x => Date.now() - Date.parse(x.at) < 30 * DAY).slice(-120));
+}
+function measureUsage(root) {
+  const totals = {};
+  function visit(target) {
+    const stat = fs.lstatSync(target); if (stat.isSymbolicLink()) return 0;
+    if (stat.isFile()) return stat.size;
+    if (!stat.isDirectory()) return 0;
+    return fs.readdirSync(target).reduce((n, name) => n + visit(path.join(target, name)), 0);
+  }
+  for (const name of fs.readdirSync(root)) {
+    try { const target = inside(root, name); totals[name] = fs.existsSync(target) ? visit(target) : 0; }
+    catch (error) { totals[name] = {error: error.code || error.message}; }
+  }
+  const relative = STATE + '/usage.json'; let days = [];
+  try { days = read(inside(root, relative)); } catch { /* First run. */ }
+  if (!Array.isArray(days)) days = [];
+  const at = new Date().toISOString();
+  days = days.filter(day => day.at.slice(0, 10) !== at.slice(0, 10) && Date.now() - Date.parse(day.at) < 30 * DAY);
+  days.push({at, totals}); write(root, relative, days.slice(-30));
+  return totals;
+}
+function daily() {
+  try {
+    const result = maintain({apply: true});
+    result.usage = measureUsage(ROOT);
+    write(ROOT, STATE + '/last-daily.json', result);
+    return {finishedAt: result.finishedAt, reclaimedBytes: result.bytes + (result.snapshotRetention?.bytes || 0), busy: result.busy};
+  } catch (error) { recordHistory(ROOT, {error: error.message}); throw error; }
 }
 function automatic() {
   if (process.env.LOCAL_STORAGE_MAINTENANCE === 'off' || process.env.CI || !fs.existsSync(path.join(ROOT, '.git'))) return;
@@ -331,7 +420,7 @@ function automatic() {
     // Busy categories must get another chance at the next quiet entry point.
     if (!result.busy.length && !result.skipped.length) write(ROOT, STATE + '/last-auto.json', {finishedAt: result.finishedAt});
     if (result.bytes) console.error('[storage] Reclaimed ' + (result.bytes / 1024 ** 3).toFixed(2) + ' GiB');
-  } catch (e) { console.error('[storage] Cleanup deferred: ' + e.message); }
+  } catch (e) { try { recordHistory(ROOT, {error: e.message}); } catch {} console.error('[storage] Cleanup deferred: ' + e.message); }
 }
 function queueAutomatic() {
   if (process.env.LOCAL_STORAGE_MAINTENANCE === 'off' || process.env.CI || !fs.existsSync(path.join(ROOT, '.git'))) return false;
@@ -365,12 +454,13 @@ function activity(categories, {sweep = false} = {}) {
 function cacheActivity(cacheDir) {
   return path.resolve(cacheDir) === path.join(ROOT, '.novel-crawler/cache') ? activity(['crawler-cache']) : () => {};
 }
-module.exports = {POLICY, inside, snapshot, plan, execute, maintain, automatic, queueAutomatic, activity, cacheActivity};
+module.exports = {POLICY, inside, snapshot, plan, execute, maintain, automatic, queueAutomatic, activity, cacheActivity, busyCategories, processSnapshot, trackedFiles, recordHistory, measureUsage, daily};
 if (require.main === module) {
   try {
     const args = process.argv.slice(2);
-    if (args.some(x => !['--apply', '--initial', '--auto', '--site-monitor'].includes(x))) throw Error('Usage: node tools/storage-maintenance.cjs [--apply] [--initial] [--auto] [--site-monitor]');
+    if (args.some(x => !['--apply', '--initial', '--auto', '--daily', '--site-monitor'].includes(x))) throw Error('Usage: node tools/storage-maintenance.cjs [--apply] [--initial] [--auto] [--daily] [--site-monitor]');
     if (args.includes('--auto')) automatic();
+    else if (args.includes('--daily')) console.log(JSON.stringify(daily(), null, 2));
     else console.log(JSON.stringify(maintain({apply: args.includes('--apply'), initial: args.includes('--initial'), scope:args.includes('--site-monitor')?'site-monitor':undefined}), null, 2));
   } catch (e) { console.error(e.message); process.exitCode = 1; }
 }

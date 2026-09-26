@@ -27,8 +27,8 @@ test('preview keeps current/recent builds, tracked material, pins and every busi
   f.put('web-next/.next-pinned/.storage-keep');
   f.put('web-next/.next-source/code.js');
   const p = f.plan({tracked: ['web-next/.next-source/code.js']});
-  assert.equal(p.candidates.length, 1);
-  assert.ok(!p.candidates.some(x => /candidate|pinned|source/.test(x.path)));
+  assert.equal(p.candidates.filter(x => x.category === 'build' && !x.path.endsWith('/cache')).length, 1);
+  assert.ok(!p.candidates.some(x => /pinned|source/.test(x.path) || x.path === 'web-next/.next-candidate'));
   assert.ok(fs.existsSync(path.join(f.root, p.candidates[0].path)));
 });
 test('initial cleanup still respects age, current build, pins and configuration files', t => {
@@ -36,12 +36,13 @@ test('initial cleanup still respects age, current build, pins and configuration 
   f.put('web-next/.next-old/cache/out');
   f.put('web-next/.next-new/cache/out', 'new', now);
   f.put('web-next/.next-candidate/cache/out');
+  f.put('web-next/.next-candidate/server/route.js', 'compiled');
   f.put('web-next/.next-secret/.env');
   const p = f.plan({initial: true});
-  assert.deepEqual(p.candidates.map(x => x.path), ['web-next/.next-old']);
+  assert.deepEqual(p.candidates.map(x => x.path), ['web-next/.next-old', 'web-next/.next-candidate/cache']);
   const r = execute(f.root, p, f.options);
-  assert.equal(r.deleted.length, 1);
-  assert.ok(fs.existsSync(path.join(f.root, 'web-next/.next-candidate/cache/out')));
+  assert.equal(r.deleted.length, 2);
+  assert.ok(fs.existsSync(path.join(f.root, 'web-next/.next-candidate/server/route.js')));
 });
 test('configured build paths are protected; unknown configuration disables build collection', t => {
   const f = fixture(t);
@@ -199,4 +200,54 @@ test('activity waits while another process publishes and releases its maintenanc
   release();
   assert.equal((await closed)[0], 0);
   assert.ok(!fs.existsSync(mutex));
+});
+
+test('known crawler workers protect acquisition without blocking rebuildable developer caches', t => {
+  const f = fixture(t);
+  f.put('web-next/.next-candidate/dev/cache/entry');
+  const p = f.plan({processes: [{pid: 999999, command: `node ${f.root}/tools/novel-crawler/desktop/worker.mjs`} ]});
+  assert.ok(p.busy.includes('crawler-cache'));
+  assert.ok(!p.busy.includes('all'));
+  assert.ok(p.candidates.some(x => x.path.endsWith('/dev/cache')));
+  assert.equal(p.blockers[0].pid, 999999);
+});
+
+test('Codex workspace hosts do not block cleanup, but their unknown project children do', t => {
+  const f = fixture(t); f.put('web-next/.next-candidate/dev/cache/entry');
+  const host = {pid: 999998, command: `C:/Users/test/AppData/Local/OpenAI/Codex/runtimes/cua_node/v/bin/node.exe C:/Temp/.tmp123/kernel.js --working-dir ${f.root}`};
+  assert.ok(f.plan({processes: [host]}).candidates.length);
+  const child = {pid: 999999, parent: host.pid, command: `node ${f.root}/unknown-job.cjs`};
+  assert.equal(f.plan({processes: [host, child]}).candidates.length, 0);
+});
+
+test('temporary Chromium profiles are protected by their exact live paths', t => {
+  const f = fixture(t), a = '.runtime/test-tmp/playwright_chromiumdev_profile-aaa', b = '.runtime/test-tmp/playwright_chromiumdev_profile-bbb';
+  f.put(a + '/Default/cache'); f.put(b + '/Default/cache');
+  const p = f.plan({processes: [{pid: 999999, command: `chrome.exe --user-data-dir="${f.root}/${a}"`} ]});
+  assert.deepEqual(p.candidates.map(x => x.path), [b]);
+  assert.ok(p.protectedPaths.some(x => x.path === a));
+});
+
+test('default build cache budget never removes the compiled output and live Next protects both', t => {
+  const f = fixture(t);
+  f.put('web-next/.next-candidate/dev/cache/entry', 'large enough cache', now);
+  f.put('web-next/.next-candidate/server/route.js', 'compiled', now);
+  const options = {policy: {...POLICY, buildCacheBytes: 1}};
+  assert.deepEqual(f.plan(options).candidates.map(x => x.path), ['web-next/.next-candidate/dev/cache']);
+  assert.equal(f.plan({...options, processes: [{pid: 999999, command: `node ${f.root}/web-next/node_modules/next/dist/bin/next dev`}]}).candidates.length, 0);
+  assert.ok(fs.existsSync(path.join(f.root, 'web-next/.next-candidate/server/route.js')));
+});
+
+test('maintenance records bounded diagnostic history with blocker reasons', t => {
+  const f = fixture(t);
+  const history = Array.from({length: 150}, () => ({at: new Date().toISOString()}));
+  f.put('.runtime/storage-maintenance/history.json', JSON.stringify(history));
+  maintain({root: f.root, ...f.options, apply: true, processes: [{pid: 999999, command: `node ${f.root}/unknown-job.cjs`} ]});
+  const saved = JSON.parse(fs.readFileSync(path.join(f.root, '.runtime/storage-maintenance/history.json')));
+  assert.equal(saved.length, 120); assert.equal(saved.at(-1).blockers[0].reason, 'Unknown project runtime');
+});
+test('Windows empty calculated command objects are ignored only for non-runtime processes', t => {
+  const f = fixture(t); f.put('web-next/.next-candidate/cache/out');
+  assert.ok(f.plan({processes: [{pid: 999999, name: 'svchost.exe', command: {}}]}).candidates.length);
+  assert.equal(f.plan({processes: [{pid: 999999, name: 'node.exe', command: {}}]}).candidates.length, 0);
 });

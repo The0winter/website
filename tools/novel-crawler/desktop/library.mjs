@@ -10,6 +10,7 @@ import {applyVerifiedBookStatus, loadSites, specForBook} from './sources.mjs';
 import {createLibraryControl} from './library-control.mjs';
 import {localUploadIndex} from './upload-cache.mjs';
 import {normalizeBookStatus} from '../adapters.mjs';
+import recoverySnapshots from '../../storage-snapshots.cjs';
 
 const entries = dir => fs.existsSync(dir) ? fs.readdirSync(dir, {withFileTypes: true}) : [];
 function sealed(file) {
@@ -217,12 +218,13 @@ export async function updateLibrary({stateDir, outputDir, sites, shouldStop = ()
       while (!bookStopped()) {
         item.state = 'running'; item.message = '正在核对来源目录…'; delete item.failure; delete item.interruption;
         item.phase = 'probe'; item.status = item.progress = null; publish();
-        let client, failure;
+        let client, failure, recovery;
         try {
           if (blocked) throw Error(blocked);
           const file = path.resolve(outputDir, item.file);
           if (!fs.lstatSync(file).isFile() || fs.lstatSync(file).isSymbolicLink() || hash(fs.readFileSync(file)) !== item.hash) throw Error('排队期间下载文件被修改或移走，请重新检查；原文件保留');
           const spec = item.spec;
+          recovery = recoverySnapshots.beforeBook({stateDir, outputDir, item, job: jobId(spec), key: continuationKey(item)});
           client = createClient({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts,
             delayMs: spec.delayMs, pacing, retries: 2, retryNetworkErrors: true, timeoutMs: spec.timeoutMs, browser: spec.browser,
             signal: bookControl.controller.signal, shouldStop: bookStopped, onStatus: status => {
@@ -240,6 +242,7 @@ export async function updateLibrary({stateDir, outputDir, sites, shouldStop = ()
           const report = await collect(spec, {...options, mode: 'download'});
           if (report.exportFile && report.structuralPass && (report.completeAgainstSource || report.completeSelectedScope)) {
             if (path.resolve(report.exportFile) !== file) throw Error('更新输出与原文件不一致，请核对来源绑定');
+            if (recovery) recoverySnapshots.accept(recovery.root, recovery.id);
             item.added = Math.max(0, report.expected - item.count);
             item.state = report.reusedExport ? 'unchanged' : 'updated';
             item.message = item.added ? `新增 ${item.added} 章，现有 ${report.expected} 章` : report.reusedExport ? '已是最新' : '章节无新增，书籍信息已更新';

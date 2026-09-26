@@ -43,6 +43,7 @@
 - 清理统一使用 `npm run storage:plan` 预览、`npm run storage:clean` 执行，规则见 [本地容量与清理](docs/本地容量与清理.md)。不得直接清空 `.runtime`、`.novel-crawler`、`artifacts` 或测试临时根目录。
 - 调试截图、日志统一放入 `.runtime/task-artifacts/<任务>/`，使用 `debug`、`initial`、`before` 等明确文件名；最终验收材料使用 `final`、`verified` 等标记。需要临时保留某个目录时放置 `.storage-keep` 文件，任务结束后检查是否仍需保留。
 - 清理只淘汰可再生成的输出。小说、封面、续更映射、原始取证页面、登录数据、恢复备份和不明用途的任务快照不得按时间或总容量直接删除。以后新增一次性工具应给临时产物明确生命周期，不再创建无上限的构建/安装副本。
+- 2026-09-26 起，监督更新使用书库入口自带的按书压缩去重快照，不再在任务脚本中复制整库 downloads、jobs 或 continuations。历史备份先用 `npm run storage:snapshot -- archive <已完成任务的backup或before目录>` 完整归档与恢复校验，再由统一 storage:plan / storage:clean 删除未压缩副本；不得绕过归档验证直接删备份。恢复到新的 `.runtime/test-tmp/restored-*` 目录核对，不覆盖运行中的书库。每日隐藏清理与容量记录见 `npm run storage:schedule` 和 `docs/本地容量与清理.md`。
 
 ## Git 工作流
 
