@@ -47,6 +47,7 @@ export function authRoutes(app,auth,config) {
     if (typeof identifier !== 'string' || typeof password !== 'string' || Buffer.byteLength(password)>72) return res.status(400).json({error:'账号或密码无效'});
     let user = await User.findOne({$or:[{email:identifier},{username:identifier}]});
     if (!user) return res.status(401).json({error:'账号或密码错误'});
+    if (user.isTestAccount) return res.status(403).json({error:'测试展示账号不提供登录'});
     const now = Date.now();
     await User.updateOne({_id:user._id,lockUntil:{$gt:0,$lte:now}},{$set:{loginAttempts:0},$unset:{lockUntil:1}});
     user = await User.findById(user._id);

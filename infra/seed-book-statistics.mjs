@@ -48,7 +48,8 @@ export async function applyPlan(plan, {runId, source, writeAudit, now = new Date
       // chapter version or making every book appear newly updated.
       await Book.updateOne({_id: book._id}, {$inc: {milestoneVersion: 1}}, {session, timestamps: false});
       const favorites = await Bookmark.countDocuments({bookId: book._id}).session(session);
-      const [stats] = await Review.aggregate([{$match: {book: book._id}}, {$group: {_id: null, rating: {$avg: '$rating'}, count: {$sum: 1}}}]).session(session);
+      const [stats] = await Review.aggregate([{$match: {book: book._id, isTestData: {$ne:true}}}, {$group: {_id: null, rating: {$avg: '$rating'}, count: {$sum: 1}}}]).session(session);
+      const comments = await Review.countDocuments({book:book._id,content:/\S/}).session(session);
       const seed = {runId, source, qidianRank: row.rank, views: Math.max(0, row.views - (book.views || 0)),
         favorites: Math.max(0, row.favorites - favorites), rating: row.rating / 2,
         ratingWeight: Math.max(30, Math.round(row.favorites * 0.08)), initializedAt: now};
@@ -56,7 +57,7 @@ export async function applyPlan(plan, {runId, source, writeAudit, now = new Date
       // entry, but the persisted seed guard prevents duplicate initialization.
       await writeAudit({phase: 'prepared', id: row.id, before: book.toObject(), actualFavorites: favorites, actualReviews: stats || null, seed});
       const rating = combinedRating({statisticsSeed: seed}, stats?.rating || 0, stats?.count || 0);
-      await Book.updateOne({_id: book._id}, {$inc: {views: seed.views}, $set: {statisticsSeed: seed, rating, numReviews: stats?.count || 0}}, {session, timestamps: false, runValidators: true});
+      await Book.updateOne({_id: book._id}, {$inc: {views: seed.views}, $set: {statisticsSeed: seed, rating, numRatings:stats?.count || 0, numReviews:comments}}, {session, timestamps: false, runValidators: true});
       result = {id: row.id, title: row.title, status: 'seeded', views: (book.views || 0) + seed.views, favorites: favorites + seed.favorites, rating: rating * 2};
     });
     await writeAudit({phase: 'completed', ...result});

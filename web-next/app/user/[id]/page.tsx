@@ -16,6 +16,7 @@ const getProfile = cache(async (id:string) => {
   const row = await response.json();
   // Only public fields cross the server/client boundary, even if an API adds fields later.
   return {id, username:String(row.username || '书友'), avatar:typeof row.avatar === 'string' ? row.avatar : '',
+    isTestAccount:row.isTestAccount === true,
     role:row.role === 'admin' ? 'admin' as const : 'reader' as const,
     created_at:typeof row.created_at === 'string' ? row.created_at : '',
     profileTheme:resolveProfileTheme(id, row.profileTheme)};

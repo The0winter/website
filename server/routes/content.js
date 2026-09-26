@@ -160,7 +160,7 @@ export function contentRoutes(app,auth) {
       const update={rating};
       if(Object.hasOwn(req.body,'content'))update.content=content.trim();
       review=await Review.findOneAndUpdate({book:req.params.id,user:req.user.id},{$set:update},{new:true,upsert:true,runValidators:true,session});
-      const [stats]=await Review.aggregate([{$match:{book:new mongoose.Types.ObjectId(req.params.id)}},{$group:{_id:null,rating:{$avg:'$rating'},count:{$sum:1}}}]).session(session);
+      const [stats]=await Review.aggregate([{$match:{book:new mongoose.Types.ObjectId(req.params.id),isTestData:{$ne:true}}},{$group:{_id:null,rating:{$avg:'$rating'},count:{$sum:1}}}]).session(session);
       const comments=await Review.countDocuments({book:req.params.id,content:/\S/}).session(session);
       await Book.updateOne({_id:req.params.id},{$set:{rating:combinedRating(book,stats?.rating,stats?.count),numRatings:stats?.count || 0,numReviews:comments}},{session});
     });res.status(201).json(await Review.findById(review._id).populate('user','username avatar'));

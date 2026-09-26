@@ -42,7 +42,7 @@ export async function applyRatingPlan(plan, {runId, writeAudit, now = new Date()
       if (!book || book.title !== row.title || (book.author || '') !== row.author) throw Error('Book changed since preview: ' + row.id);
       if (book.statisticsSeed?.ratingSample) {result = {id: row.id, status: 'already-initialized'}; return;}
       await Book.updateOne({_id: book._id}, {$inc: {milestoneVersion: 1}}, {session, timestamps: false});
-      const [stats] = await Review.aggregate([{$match: {book: book._id}}, {$group: {_id: null, rating: {$avg: '$rating'}, count: {$sum: 1}}}]).session(session);
+      const [stats] = await Review.aggregate([{$match: {book: book._id, isTestData: {$ne:true}}}, {$group: {_id: null, rating: {$avg: '$rating'}, count: {$sum: 1}}}]).session(session);
       const comments = await Review.countDocuments({book: book._id, content: /\S/}).session(session);
       const seed = book.statisticsSeed?.toObject() || {runId, source: 'rating-samples-v1', views: 0, favorites: 0, initializedAt: now};
       seed.ratingSample = {version: 1, runId, views: row.views, initializedAt: now, votes: row.votes};

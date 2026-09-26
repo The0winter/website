@@ -27,7 +27,8 @@ export default function PublicUserProfile({profile}:{profile:Profile}) {
         <header className="public-profile-identity">
           <UserAvatar user={profile} className="public-profile-avatar"/>
           <h1>{profile.username}</h1>
-          <span className="public-profile-role">{profile.role === 'admin' ? <Shield size={14}/> : <UserRound size={14}/>} {profile.role === 'admin' ? '管理员' : '书友'}</span>
+          <span className="public-profile-role">{profile.role === 'admin' ? <Shield size={14}/> : <UserRound size={14}/>} {profile.isTestAccount ? '测试账号' : profile.role === 'admin' ? '管理员' : '书友'}</span>
+          {profile.isTestAccount && <p className="text-sm text-center text-gray-500">用于评论功能调试，非真实读者身份。</p>}
         </header>
         <section className="public-profile-info" aria-labelledby="public-profile-info-title">
           <h2 id="public-profile-info-title">基本资料</h2>

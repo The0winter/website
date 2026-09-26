@@ -65,6 +65,7 @@ export interface ForumComment {
 }
 
 export interface Profile {
+  isTestAccount?: boolean;
   profileTheme?: ProfileTheme;
   avatar?: string;
   id: string;

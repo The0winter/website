@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 const reviewSchema = new mongoose.Schema({
   // 评分 (1-5星)
   rating: { type: Number, required: true, min: 1, max: 5, validate: Number.isInteger },
+  isTestData: { type: Boolean, default: false },
+  testBatch: { type: String, select: false },
   
   // 评论内容
   content: { type: String, default: '', validate: {validator: value => Array.from(value || '').length <= 140, message: '短评最多140字'} },

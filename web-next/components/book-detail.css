@@ -95,6 +95,8 @@
 .book-article-compose:focus-visible { outline:2px solid currentColor; outline-offset:3px; }
 .book-review-list { display:flex; flex-direction:column; gap:20px; }
 .book-review { padding:0; text-align:left; }
+.book-review-test-notice { margin:0 0 18px; color:#786653; font-size:12px; line-height:1.8; }
+.book-review-test-badge { padding:1px 6px; border:1px solid currentColor; border-radius:4px; font-size:10px; line-height:1.5; color:#786653; }
 .book-review-row { display:flex; align-items:flex-start; gap:12px; }
 .book-review-avatar-wrap { flex-shrink:0; padding-top:2px; }
 .book-review-profile-link { display:flex; padding:4px; margin:-4px; border-radius:50%; }

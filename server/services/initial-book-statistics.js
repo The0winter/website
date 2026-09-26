@@ -62,7 +62,7 @@ export async function ensureBookStatistics(book, {session, writeAudit, runId, no
   if (!needsBookStatistics(book)) return false;
   if (!session?.inTransaction()) throw Error('Statistics initialization requires the book transaction');
   await Book.updateOne({_id:book._id}, {$inc:{milestoneVersion:1}}, {session, timestamps:false});
-  const [stats] = await Review.aggregate([{$match:{book:book._id}}, {$group:{_id:null, average:{$avg:'$rating'}, count:{$sum:1}}}]).session(session);
+  const [stats] = await Review.aggregate([{$match:{book:book._id,isTestData:{$ne:true}}}, {$group:{_id:null, average:{$avg:'$rating'}, count:{$sum:1}}}]).session(session);
   const favorites = await Bookmark.countDocuments({bookId:book._id}).session(session);
   const comments = await Review.countDocuments({book:book._id, content:/\S/}).session(session);
   const update = initialStatisticsPlan(book, {favorites, readerAverage:stats?.average, readerCount:stats?.count, comments, now, runId});

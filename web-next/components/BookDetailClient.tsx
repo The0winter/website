@@ -87,6 +87,7 @@ interface Chapter {
 
 interface Review {
   _id: string;
+  isTestData?: boolean;
   rating: number;
   content: string;
   user: {
@@ -532,6 +533,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             </div>
             {communityTab === 'articles' && <div id="articles-panel" role="tabpanel" aria-labelledby="articles-tab"><BookArticles bookId={book.id} /></div>}
             <div id="reviews-panel" role="tabpanel" aria-labelledby="reviews-tab" aria-busy={reviewsLoading} hidden={communityTab !== 'reviews'}>
+            {!reviewsLoading && sortedReviews.some(review => review.isTestData) && <p className="book-review-test-notice">本页包含用于功能调试的 AI 测试评论，测试评分不计入本书评分。</p>}
             
             {/* 评论表单 */}
             {showReviewForm && (
@@ -576,6 +578,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                                         </div>
                                         <p className="book-review-content">{review.content}</p>
                                         <footer className="book-review-footer">
+                                            {review.isTestData && <span className="book-review-test-badge">测试数据</span>}
                                             <time dateTime={review.createdAt} title={review.createdAt.slice(0, 10)}>{review.createdAt.slice(0, 4) === String(new Date().getFullYear()) ? review.createdAt.slice(5, 10) : review.createdAt.slice(0, 10)}</time>
                                             <div className="book-review-reactions" role="group" aria-label="评论反馈">
                                                 {(['like', 'dislike'] as const).map(choice => {

@@ -11,7 +11,7 @@ export const getReviews=asyncRoute(async(req,res)=>{
   const comments={book:bookId,content:/\S/};
   const [rows,distribution,commentCount]=await Promise.all([
     Review.find(comments).sort({createdAt:-1,_id:1}).skip(skip).limit(limit).populate('user','username avatar').maxTimeMS(3000).lean(),
-    Review.aggregate([{$match:{book:new mongoose.Types.ObjectId(bookId)}},{$group:{_id:'$rating',count:{$sum:1}}}]).option({maxTimeMS:3000}),
+    Review.aggregate([{$match:{book:new mongoose.Types.ObjectId(bookId),isTestData:{$ne:true}}},{$group:{_id:'$rating',count:{$sum:1}}}]).option({maxTimeMS:3000}),
     Review.countDocuments(comments).maxTimeMS(3000),
   ]);
   const total = distribution.reduce((sum,row)=>sum+row.count,0);
