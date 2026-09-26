@@ -3,6 +3,7 @@
 import {useCallback, useEffect, useRef, useState, useSyncExternalStore} from 'react';
 import {ArrowLeft, ChevronRight, Clock3, Eye, Star, TrendingUp} from 'lucide-react';
 import {safeFetch} from '@/lib/request';
+import {formatCompactCount} from '@/lib/compact-count';
 import {bookMilestonesOpen, closeBookMilestones, openBookMilestones, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import {milestoneNumber, type BookMilestone, type MilestoneKind} from '../../shared/book-milestones.mjs';
 import './book-milestones.css';
@@ -10,7 +11,6 @@ import './book-milestones.css';
 export type MilestoneData = {counts: Record<MilestoneKind, number>; events: BookMilestone[]; next: Record<MilestoneKind, number | null>};
 const kinds = ['favorites', 'views'] as const;
 const labels = {favorites: '收藏', views: '浏览'};
-const compact = (value: number) => new Intl.NumberFormat('zh-CN', {notation: 'compact', maximumFractionDigits: 1}).format(value);
 
 export function useBookMilestones(bookId: string, initialData: MilestoneData | null) {
   const [data, setData] = useState(initialData);
@@ -110,7 +110,7 @@ export function BookMilestoneSheet({title, state}: {title: string; state: State}
           <div className="milestone-progress" aria-label="下一里程碑">
             {kinds.map(kind => <div key={kind}>
               <span className="milestone-progress-label">{kind === 'favorites' ? <Star size={14}/> : <Eye size={15}/>} {labels[kind]}</span>
-              <p><strong>{compact(data.counts[kind])}</strong><span>{data.next[kind] ? ` / ${compact(data.next[kind]!)}` : ' · 全部达成'}</span></p>
+              <p><strong>{formatCompactCount(data.counts[kind])}</strong><span>{data.next[kind] ? ` / ${formatCompactCount(data.next[kind]!)}` : ' · 全部达成'}</span></p>
               <div role="progressbar" aria-label={`${labels[kind]}里程碑进度`} aria-valuenow={data.counts[kind]} aria-valuemin={0} aria-valuemax={Math.max(data.next[kind] || 0, data.counts[kind])} className="milestone-progress-track"><span style={{width: `${Math.min(100, data.counts[kind] / (data.next[kind] || 1) * 100)}%`}}/></div>
             </div>)}
           </div>

@@ -16,6 +16,7 @@ import {BookMilestoneEntry, BookMilestoneSheet, useBookMilestones, type Mileston
 import {useBookCatalog} from '@/lib/useBookCatalog';
 import {formatChapterTitle} from '@/lib/catalog-title';
 import {formatRating, ratingLabel} from '@/lib/rating';
+import {compactCountParts, formatCompactCount} from '@/lib/compact-count';
 import {useReviewReactions} from '@/lib/useReviewReactions';
 import {beginChapterEntry} from '@/lib/chapter-entry';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
@@ -372,13 +373,10 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   const readerRatingCount = book.ratingSummary?.readerCount ?? book.numRatings ?? 0;
   const ratingCount = book.ratingSummary?.count ?? baselineRatingCount + readerRatingCount;
   const ratingOrigin = baselineRatingCount ? '基础评分为初始化样本，不代表真实读者；书友评分按实际提交人数计算。' : '评分来自读者实际提交，每人每书计一次。';
-  const compactCount = new Intl.NumberFormat('zh-CN', {notation: 'compact', maximumFractionDigits: 1});
   const mobileWordCount = totalWords === null ? null : Math.floor(totalWords >= 10000 ? totalWords / 10000 : totalWords);
   const mobileWordUnit = totalWords !== null && totalWords >= 10000 ? '万字' : '字';
   const liveViews = milestones.data?.counts.views ?? book.views ?? 0;
-  const viewParts = compactCount.formatToParts(liveViews);
-  const viewCount = viewParts.filter(part => part.type !== 'compact').map(part => part.value).join('');
-  const viewUnit = viewParts.find(part => part.type === 'compact')?.value;
+  const {value: viewCount, unit: viewUnit} = compactCountParts(liveViews);
 
   return (
     // 修改1：增加手机端底部 padding (pb-24)，防止被常驻底栏遮挡内容
@@ -585,7 +583,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
                                                         aria-pressed={active} disabled={feedback.busy(review._id) || (!!user && !row)}
                                                         onClick={() => {if (!user) router.push('/login'); else void feedback.react(review._id, active ? null : choice);}}>
                                                         <Icon size={18} aria-hidden="true"/>
-                                                        {count > 0 && <span aria-hidden="true">{new Intl.NumberFormat('zh-CN', {notation:'compact', maximumFractionDigits:1}).format(count)}</span>}
+                                                        {count > 0 && <span aria-hidden="true">{formatCompactCount(count)}</span>}
                                                     </button>;
                                                 })}
                                             </div>
