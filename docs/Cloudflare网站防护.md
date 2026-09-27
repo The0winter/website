@@ -2,6 +2,8 @@
 
 2026-09-27 19:21 UTC 因整站加载缓慢和超时，已将主域名及 www 恢复为 **DNS only**，Nginx 源站入口恢复 **observe**。主站当前不经过 Cloudflare 代理。Atlas 节流版本 `fd207d8`、数据库、备份、R2 图片和邮件配置保留。
 
+**后续发现（2026-09-27 20:27 UTC）：** Cloudflare 正在处理[亚太网络性能下降事件](https://www.cloudflarestatus.com/incidents/8wmvkv5jkf15)，官方称 9 月 21 日起多条海底光缆故障造成东京与新加坡之间拥塞，9 月 25 日仍有部分客户间歇性连接变差；查询时状态为 `identified`，尚无恢复标记。本源站的网络观测指向新加坡。结合故障时间、回传等待和重传证据，这是当前最有依据的外部故障候选；尚未取得 Cloudflare 内部逐请求路径，不能将本网站每次超时都确定归因于该事故。详见下方第二轮调查。
+
 ## 当前状态与回退原因
 
 - 主域名 A 记录仍为 `51.79.242.0`，www CNAME 仍指向主域名；只撤回本次启用的橙云代理。HTTPS 证书、HTTP/2 直连、站内认证及 Nginx 原有限速保留。
@@ -49,6 +51,46 @@
 本次证据位于 `.runtime/task-artifacts/cloudflare-root-cause-20260927/`：`incident-evidence.py.log`、`connections.py.log`、`past-protocol.py.log`、`edge-*.json`、两组 `edge-batch-origin-*.json` 和 `verified-protocol-restored.png`。重放结果位于先前任务目录的 `edge-exact-replay-timing-*.json`。原始运行产物不提交 Git。
 
 参考：[Cloudflare 协议故障排查](https://developers.cloudflare.com/speed/optimization/protocol/troubleshooting/protocol-troubleshooting/)、[HTTP/2 回源](https://developers.cloudflare.com/speed/optimization/protocol/http2-to-origin/)、[Nginx HTTP/2 模块](https://nginx.org/en/docs/http/ngx_http_v2_module.html)。
+
+## 相似案例、服务器位置与网络对照（20:10–20:27 UTC）
+
+用户确认故障时使用德国/欧洲网络，没有 VPN 或代理。本轮优先调查欧洲访问与新加坡源站之间的传输，主站 DNS 不变。
+
+### 官方事件与第一手案例
+
+- [Cloudflare 官方事件 8wmvkv5jkf15](https://www.cloudflarestatus.com/incidents/8wmvkv5jkf15)：9 月 23 日发布，追溯影响起点为 **9 月 21 日 02:20 UTC**；多条海底光缆故障使东京与新加坡之间拥塞，Cloudflare 已改道并与外部供应商恢复容量。9 月 25 日更新仍描述少量客户的间歇性连接退化。20:25 UTC 获取的状态 API 显示该事件未解决、`Network` 为 `degraded_performance`。单独的 SIN/CPH 节点组件为 operational，不能据此忽略整体网络事件。
+- [站长第一手排查记录，9 月 24 日更新](https://zixianchen.com/blog/cloudflare-proxy-slow-at-night)：作者在同一周记录了源站毫秒级、代理路径 6–10 秒甚至超时；协议和加速开关对照未解决，撤回 API 主机名的代理后恢复，并关联上述官方事故。这是相似案例，不是本网站的独立故障鉴定。
+- [另一位新加坡源站用户的报告](https://www.reddit.com/r/CloudFlare/comments/1ouupq9/intermittent_1030s_latency_spikes_between/)：Business 套餐同样出现直连快、代理偶发 15–30 秒的现象。案例时间较早、部署不同，只能说明类似表现并非免费套餐独有，不能据此保证升级或某种设置有效。
+
+### 位置和多地区实测
+
+VPS 出口向 Cloudflare 查询得到 `loc=SG`、`colo=SIN`，OVH 路由包含 `sin-sg1-...sgp.asia`；新加坡外部探针到 VPS 的 TCP 建连约 2 ms。这些相互印证源站处于新加坡网络位置。未读取到主机商合同中的精确机房编号或套餐，不用 IP 地理信息替代合同记录。
+
+通过 Globalping 复用相同五个探针，对源站 IP 和 Cloudflare IP 分别发送 HTTP/2 请求，Host/SNI 为本站，TLS 校验成功。每条路径分别测健康接口和图标，共 20 次请求全部返回 200。健康接口只有 17 字节，其单次完整请求耗时如下；包含连接建立，不是浏览器页面交互耗时，也不是长期分位数：
+
+| 探针 | 直连源站 | 经 Cloudflare | CF 节点 |
+| --- | --- | --- | --- |
+| 德国 Falkenstein / Hetzner | 582 ms | 687 ms | MRS |
+| 德国 Nuremberg / netcup | 800 ms | 569 ms | HAM |
+| 丹麦 Copenhagen / Hiper | 519 ms | 611 ms | CPH |
+| 新加坡 / LeaseWeb | 14 ms | 49 ms | SIN |
+| 美国 Buffalo / HostPapa | 757 ms | 769 ms | ORD |
+
+跨洲位置能解释正常情况下的数百毫秒成本，不能单独解释 10 秒级停顿。本轮各地区都能正常经代理访问，说明此前回归不是每次请求都会发生，也不支持“此站永久无法使用 Cloudflare”。Globalping 的图标正文记录被截断到 10 KB，不据此评价 812 KB 图标的完整下载吞吐量；完整下载另由本地 HTTP/2 探针测量。
+
+### 队列参数与 MTU 对照
+
+- 按 [Cloudflare 关于 HTTP/2 发送队列的说明](https://blog.cloudflare.com/http-2-prioritization-with-nginx/)，将 `net.ipv4.tcp_notsent_lowat` 从默认 `4294967295` 临时设为 `16384`，有信号处理和 100 秒后自动恢复；不重启网站、不改持久配置。手机/桌面各 4 次点书通过，点书 1.57–2.34 秒，未显示稳定优于先前基线。
+- 相同 HTTP/2 连接上并发图标和小请求的对照各 31 次请求：健康请求中位数从 194 ms 到 199 ms，图标中位数从 582 ms 到 721 ms，未支持将此参数作为故障修复。另一次独立基线 41 次请求同样无错误。20:20:24 UTC 已确认参数恢复到原值；未启用 BBR、未更改 MTU、未留下内核调优。
+- 根据 [OVH 用户关于大包卡住的讨论](https://www.reddit.com/r/OVHcloud/comments/1wcszej/ovh_vps_sourcedependent_tcp_connectivity/)，测试了两个实际曾参与慢请求的 Cloudflare 回源地址，以及 1.1.1.1。1228 和 1500 字节的禁止分片 IPv4 包，每种各 3 次，均全部成功；两个实际回源地址往返约 170/178 ms。未发现当前存在持续的大包黑洞，但短时 ICMP 测试不能排除历史或间歇性 TCP 异常。没有因中间路由器的探测不响应而声称存在同等比例的业务丢包。
+
+### 当前判断和处理
+
+当前优先解释是：新加坡源站在 Cloudflare 已公告的亚太容量退化期间，经代理路径遇到间歇性传输问题；协议多路复用、大响应可能放大体验影响。**官方事故存在是事实，本网站与该事故的关联仍是基于多项证据的推断**；缺少 Cloudflare 内部路由和逐请求确认，不能称为最终闭环根因。
+
+常规协议、发送队列和 MTU 检查没有支持某个漏配开关。维持当前主站直连和图片 R2 的可用方案；暂不升级套餐、不迁移源站，也不因当前一轮测试变快就重新让全部用户经过代理。官方事故恢复后，可先沿用隔离的固定 IP 测试，覆盖欧洲多网络和正常导航，再决定是否恢复主站代理。这里未创建定时监测，也未向供应商发送信息。
+
+新增证据仍在 `.runtime/task-artifacts/cloudflare-root-cause-20260927/`：`provider-network.py.log`、`cloudflare-status-*.json`、`edge-global-*.json`、`direct-global-*.json`、`mtu-evidence.py.log`、`temporary-lowat.py.log`、`*-transport.json`、`edge-lowat-h2-auto-*.json`。调试产物不提交 Git。临时参数原值快照：`/var/lib/test1-edge-backups/tcp-lowat-20260927T201844Z.json`。
 
 ## 首次接入配置（以下为回退前记录）
 
