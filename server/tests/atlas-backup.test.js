@@ -37,6 +37,8 @@ test('streamed backup preserves restore format and publishes only complete, veri
   },destroy(){}});
   const options={directory,keepLocal:true,env:{R2_BUCKET:'private',COVER_R2_BUCKET:'public'},mongoFactory:mongoFactory(),storageFactory};
   const manifest=await backupAtlas('synthetic',options);
+  assert.ok(manifest.sourceUsage.documentBytes > 6000 * Buffer.byteLength('完整章节'));
+  assert.equal(manifest.sourceUsage.collections[0].documentBytes, manifest.sourceUsage.documentBytes);
   const snapshot=unpackSnapshot(await fs.readFile(path.join(directory,manifest.archive)));
   assert.equal(snapshot.collections[0].documents.length,2);
   assert.equal(JSON.parse(snapshot.collections[0].documents[0].document).title,'完整章节'.repeat(6000),'multibyte records spanning the compression chunk boundary remain intact');

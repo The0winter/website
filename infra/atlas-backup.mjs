@@ -24,7 +24,7 @@ export async function writeMongoArchive(client, file) {
   // snapshot expires, fail closed; never continue with a fresh read timestamp.
   const session = client.startSession({snapshot:true,causalConsistency:false});
   const createdAt = new Date().toISOString();
-  const readStarted = Date.now(), summary = [];
+  const readStarted = Date.now(), summary = [], usage = [];
   let bytes = 0;
   try {
     const hash = createHash('sha256');
@@ -32,12 +32,13 @@ export async function writeMongoArchive(client, file) {
       yield JSON.stringify({format, source:'MongoDB', database:db.databaseName, createdAt}).slice(0,-1) + ',"collections":[';
       for (let i = 0; i < names.length; i++) {
         const name = names[i], contentHash = createHash('sha256');
-        let count = 0;
+        let count = 0, documentBytes = 0;
         yield (i ? ',' : '') + JSON.stringify({name,indexes:indexes.get(name)}).slice(0,-1) + ',"documents":[';
         const cursor = db.collection(name).find({}, {session,readPreference:'primary',sort:{_id:1},batchSize:2000});
         let chunks = [], chunkBytes = 0;
         try {
           for await (const doc of cursor) {
+            documentBytes += mongoose.mongo.BSON.calculateObjectSize(doc);
             const row = {id:String(doc._id), document:encode(doc), bson:mongoose.mongo.BSON.EJSON.stringify(doc,{relaxed:false})};
             contentHash.update(row.id + '\0' + row.document + '\n');
             const encoded = (count++ ? ',' : '') + JSON.stringify(row);
@@ -51,12 +52,14 @@ export async function writeMongoArchive(client, file) {
         } finally { await cursor.close(); }
         yield ']}';
         summary.push({name,count,sha256:contentHash.digest('hex')});
+        usage.push({name,documentBytes});
       }
       yield ']}';
     }
     const meter = new Transform({transform(chunk,encoding,callback) {bytes += chunk.length; hash.update(chunk); callback(null,chunk);}});
     await pipeline(Readable.from(documents(),{objectMode:false}),createGzip(),meter,createWriteStream(file,{flags:'w',mode:0o600}));
-    return {format,source:'MongoDB',createdAt,collections:summary,bytes,sha256:hash.digest('hex'),snapshotReadMs:Date.now()-readStarted};
+    return {format,source:'MongoDB',createdAt,collections:summary,bytes,sha256:hash.digest('hex'),snapshotReadMs:Date.now()-readStarted,
+      sourceUsage:{measurement:'bson-documents-excluding-protocol',documentBytes:usage.reduce((sum,row)=>sum+row.documentBytes,0),collections:usage}};
   } finally { await session.endSession(); }
 }
 
@@ -91,8 +94,8 @@ export async function backupAtlas(uri, {directory,keepLocal=false,env=process.en
     finally {response.Body?.destroy?.();}
     if (verifiedBytes !== bytes || readback.digest('hex') !== sha256) throw new Error('R2 backup readback mismatch');
     stage = 'publish';
-    const {source,createdAt,collections,snapshotReadMs} = summary;
-    const manifest = {status:'success',startedAt,finishedAt:new Date().toISOString(),archive,bytes,sha256,source,createdAt,collections,snapshotReadMs,consistency:'snapshot-session',offsite:'R2-verified',bucket:env.R2_BUCKET,key};
+    const {source,createdAt,collections,snapshotReadMs,sourceUsage} = summary;
+    const manifest = {status:'success',startedAt,finishedAt:new Date().toISOString(),archive,bytes,sha256,source,createdAt,collections,snapshotReadMs,sourceUsage,consistency:'snapshot-session',offsite:'R2-verified',bucket:env.R2_BUCKET,key};
     if (keepLocal) await fs.copyFile(file,path.join(directory,archive),fs.constants.COPYFILE_EXCL);
     await fs.writeFile(path.join(directory,archive+'.json'),JSON.stringify(manifest,null,2),{mode:0o600,flag:'wx'});
     const latest = path.join(temporary,'latest.json');

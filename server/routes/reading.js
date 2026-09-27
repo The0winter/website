@@ -57,11 +57,16 @@ export function readingRoutes(app,auth) {
     if(category)filter.category=String(category).slice(0,80);
     if(q){if(typeof q!=='string'||q.length>100)fail(400,'搜索关键词过长');const escaped=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');filter.$or=[{title:{$regex:escaped,$options:'i'}},{author:{$regex:escaped,$options:'i'}}];}
     let books, total;
-    if(orderBy==='discovery')({rows: books, total} = await discoveryBooks(filter,(page-1)*limit,limit));
-    else if(orderBy==='featured_daily')({rows: books, total} = await dailyFeaturedBooks(filter,(page-1)*limit,limit));
-    else if(Object.hasOwn(rankingViewFields,orderBy))({rows: books, total} = await rankedBooks(filter,orderBy,order,(page-1)*limit,limit));
-    else if(orderBy==='composite')books=await Book.aggregate([{$match:filter},{$addFields:{score:{$add:[{$multiply:[{$ifNull:['$rating',0]},60]},{$multiply:[{$ifNull:['$weekly_views',0]},0.4]}]}}},{$sort:{score:order==='asc'?1:-1,_id:1}},{$skip:(page-1)*limit},{$limit:limit},{$unset:'score'}]).option({maxTimeMS:3000});
-    else books=await Book.find(filter).sort({[orderBy==='updatedAt'?'lastUpdated':orderBy]:order==='asc'?1:-1,_id:1}).skip((page-1)*limit).limit(limit).populate('author_id','username').maxTimeMS(3000).lean();
+    const projection = req.query.fields === 'ranking' ? Object.fromEntries(rankingFields.map(key => [key, 1])) : undefined;
+    if(orderBy==='discovery')({rows: books, total} = await discoveryBooks(filter,(page-1)*limit,limit,undefined,projection));
+    else if(orderBy==='featured_daily')({rows: books, total} = await dailyFeaturedBooks(filter,(page-1)*limit,limit,undefined,projection));
+    else if(Object.hasOwn(rankingViewFields,orderBy))({rows: books, total} = await rankedBooks(filter,orderBy,order,(page-1)*limit,limit,undefined,projection));
+    else if(orderBy==='composite')books=await Book.aggregate([{$match:filter},{$addFields:{score:{$add:[{$multiply:[{$ifNull:['$rating',0]},60]},{$multiply:[{$ifNull:['$weekly_views',0]},0.4]}]}}},{$sort:{score:order==='asc'?1:-1,_id:1}},{$skip:(page-1)*limit},{$limit:limit},{$unset:'score'},...(projection ? [{$project:projection}] : [])]).option({maxTimeMS:3000});
+    else {
+      const query = Book.find(filter).select(projection).sort({[orderBy==='updatedAt'?'lastUpdated':orderBy]:order==='asc'?1:-1,_id:1}).skip((page-1)*limit).limit(limit);
+      if (!projection) query.populate('author_id','username');
+      books = await query.maxTimeMS(3000).lean();
+    }
     res.set('X-Total-Count',String(total ?? await Book.countDocuments(filter).maxTimeMS(3000)));
     // Ranking cards do not need import provenance, milestone history, or the
     // editorial statistics audit embedded in each full book document.

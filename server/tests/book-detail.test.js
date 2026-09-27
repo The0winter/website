@@ -64,6 +64,9 @@ test('detail bootstrap preserves previews, exact totals, access and partial-fail
     const originalFind = Chapter.find;
     try {
       Chapter.find = () => {throw new Error('catalog unavailable');};
+      // A warmed preview survives a catalog outage without another read.
+      assert.equal((await get(root+'/detail')).data.catalog.total, 75);
+      await Book.updateOne({_id:book._id}, {$inc:{writeVersion:1}});
       const degraded = await get(root+'/detail');
       assert.equal(degraded.status, 200);
       assert.equal(degraded.data.book.description, '完整简介');
@@ -72,6 +75,9 @@ test('detail bootstrap preserves previews, exact totals, access and partial-fail
       assert.ok(degraded.data.milestones);
     } finally {Chapter.find = originalFind;}
     assert.equal((await get(root+'/detail')).data.catalog.total, 75);
+    await Book.updateOne({_id:book._id}, {$set:{visibility:'private', author_id:new mongoose.Types.ObjectId()}});
+    assert.equal((await get(root+'/detail')).status, 404, 'a cached preview never bypasses fresh access checks');
+    await Book.updateOne({_id:book._id}, {$set:{visibility:'public'}});
     await Book.updateOne({_id:book._id}, {$set:{deletedAt:new Date()}});
     assert.equal((await get(root+'/detail')).status, 404);
   } finally {

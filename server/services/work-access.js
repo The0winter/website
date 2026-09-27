@@ -20,7 +20,10 @@ export function workAccess(app, auth) {
       bookId = chapter?.bookId;
     }
     if (!bookId || !/^[a-f\d]{24}$/i.test(String(bookId))) return next();
-    const book = await Book.findById(bookId).select('visibility author_id deletedAt writeVersion statisticsSeed').maxTimeMS(3000).lean();
+    // Review summaries use the editorial rating seed; reading/catalog access
+    // checks need only current permissions, deletion state and revision.
+    const reviewSummary = ['GET', 'HEAD'].includes(req.method) && /^\/reviews\/?$/.test(req.path);
+    const book = await Book.findById(bookId).select('visibility author_id deletedAt writeVersion' + (reviewSummary ? ' statisticsSeed' : '')).maxTimeMS(3000).lean();
     res.locals.workAccess = {bookId, book};
     if (book?.visibility !== 'private') return next();
     res.set('Cache-Control', 'private, no-store');

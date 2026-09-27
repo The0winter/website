@@ -1,6 +1,6 @@
 // Keep the native MongoDB path in the database too: the web server receives
 // one page, instead of every book followed by a second remote statistics read.
-export async function rankedMongoBooks(Book, filter, period, direction, skip, limit) {
+export async function rankedMongoBooks(Book, filter, period, direction, skip, limit, projection) {
   const pipeline = [{$match: filter}];
   if (period) pipeline.push({$lookup: {
     from: 'readdailies', localField: '_id', foreignField: 'bookId', as: 'rankingPeriod',
@@ -19,7 +19,8 @@ export async function rankedMongoBooks(Book, filter, period, direction, skip, li
     ]}}},
     {$facet: {
       rows: [{$sort: {rankingScore: direction, rankingViews: direction, rankingRating: direction, _id: 1}},
-        {$skip: skip}, {$limit: limit}, {$unset: ['rankingPeriod', 'rankingRating', 'rankingMaxViews']}],
+        {$skip: skip}, {$limit: limit}, {$unset: ['rankingPeriod', 'rankingRating', 'rankingMaxViews']},
+        ...(projection ? [{$project: projection}] : [])],
       total: [{$count: 'count'}],
     }},
   );

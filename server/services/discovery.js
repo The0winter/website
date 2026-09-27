@@ -32,9 +32,15 @@ export function selectDiscoveryBooks(books, limit = 57, now = new Date()) {
   return selected;
 }
 
-export async function discoveryBooks(filter, skip, limit, now = new Date()) {
-  const books = await Book.find(filter).maxTimeMS(3000).lean();
+export async function discoveryBooks(filter, skip, limit, now = new Date(), projection) {
+  // Rotation only needs these small fields. Fetch descriptions/audit history
+  // for the requested page, rather than transferring them for the whole library.
+  const books = await Book.find(filter).select('_id views rating lastUpdated updatedAt category author').maxTimeMS(3000).lean();
   // Discovery is a finite feed, not an unbounded ranking page.
   const feed = selectDiscoveryBooks(books, 59, now);
-  return {rows: feed.slice(skip, skip + limit), total: feed.length};
+  const ids = feed.slice(skip, skip + limit).map(book => book._id);
+  if (!ids.length) return {rows: [], total: feed.length};
+  const rows = await Book.find({$and: [filter, {_id: {$in: ids}}]}).select(projection).maxTimeMS(3000).lean();
+  const byId = new Map(rows.map(book => [String(book._id), book]));
+  return {rows: ids.map(id => byId.get(String(id))).filter(Boolean), total: feed.length};
 }

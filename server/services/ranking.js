@@ -10,7 +10,7 @@ export const rankingViewFields = Object.freeze({
   rank_month: 'monthly_views', rank_total: 'views',
 });
 
-export async function rankedBooks(filter, orderBy, order, skip, limit, now = new Date()) {
+export async function rankedBooks(filter, orderBy, order, skip, limit, now = new Date(), projection) {
   if (!Object.hasOwn(rankingViewFields, orderBy)) throw new Error('Unknown ranking period');
   const field = rankingViewFields[orderBy], direction = order === 'asc' ? 1 : -1;
   const today = dayKey(now), calendar = new Date(today + 'T00:00:00Z');
@@ -18,7 +18,7 @@ export async function rankedBooks(filter, orderBy, order, skip, limit, now = new
   const start = orderBy === 'rank_week' ? calendar.toISOString().slice(0, 10)
     : orderBy === 'rank_month' ? today.slice(0, 7) + '-01' : today;
   const period = orderBy === 'rank_total' ? null : {start, today};
-  if (!mongoose.connection.transport) return rankedMongoBooks(Book, filter, period, direction, skip, limit);
+  if (!mongoose.connection.transport) return rankedMongoBooks(Book, filter, period, direction, skip, limit, projection);
   const ranked = await rankedSqlBooks(mongoose.connection, Book.collection, filter, period, direction, skip, limit);
   if (ranked) return ranked;
   const books = await Book.find(filter).maxTimeMS(3000).lean();

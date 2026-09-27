@@ -1,11 +1,18 @@
 import mongoose from 'mongoose';
 import {installSqlDriver} from './driver.js';
+import {observeMongoClient} from '../services/mongo-usage.js';
 
 export async function connectDatabase(uri = process.env.DATABASE_URL || process.env.MONGO_URI, options = {}) {
   if (!uri) throw new Error('DATABASE_URL is required');
   if (/^(d1|sqlite):/.test(uri)) installSqlDriver();
   mongoose.set('bufferCommands', false);
-  return mongoose.connect(uri, {autoIndex:false, autoCreate:false, serverSelectionTimeoutMS:5000, connectTimeoutMS:5000, socketTimeoutMS:10000, ...options});
+  const native = /^mongodb(?:\+srv)?:/.test(uri);
+  const connected = await mongoose.connect(uri, {autoIndex:false, autoCreate:false, serverSelectionTimeoutMS:5000, connectTimeoutMS:5000, socketTimeoutMS:10000,
+    ...(native ? {monitorCommands:true} : {}), ...options});
+  if (native && options.monitorCommands !== false) observeMongoClient(mongoose.connection.getClient(), {
+    log:process.env.APP_ENV === 'production' ? row => console.log(JSON.stringify(row)) : undefined,
+  });
+  return connected;
 }
 
 // Readiness checks perform a real round trip. Concurrent requests share the

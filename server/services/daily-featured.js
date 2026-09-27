@@ -27,7 +27,7 @@ export function selectDailyFeatured(books, day, previous = []) {
 
 async function choose(day) {
   const [books, previous] = await Promise.all([
-    Book.find(publicBooks).sort({views: -1, _id: 1}).limit(100).maxTimeMS(3000).lean(),
+    Book.find(publicBooks).select('_id views rating category author').sort({views: -1, _id: 1}).limit(100).maxTimeMS(3000).lean(),
     DailyFeatured.findOne({day: {$lt: day}}).sort({day: -1}).maxTimeMS(3000).lean(),
   ]);
   return selectDailyFeatured(books, day, previous?.bookIds || []);
@@ -50,13 +50,13 @@ export async function ensureDailyFeatured(now = new Date()) {
   }
 }
 
-export async function dailyFeaturedBooks(filter, skip, limit, now = new Date()) {
+export async function dailyFeaturedBooks(filter, skip, limit, now = new Date(), projection) {
   const day = dayKey(now);
   const saved = await DailyFeatured.findOne({day: {$lte: day}}).sort({day: -1}).maxTimeMS(3000).lean();
   // Keep yesterday's set while the new day's popularity is being calculated.
   // A fresh installation has a read-only deterministic fallback until its job runs.
   const selected = saved?.bookIds || (await choose(day)).books.map(book => book._id);
-  const visible = await Book.find({...filter, _id: {$in: selected}}).maxTimeMS(3000).lean();
+  const visible = await Book.find({...filter, _id: {$in: selected}}).select(projection).maxTimeMS(3000).lean();
   const byId = new Map(visible.map(book => [String(book._id), book]));
   const rows = selected.map(id => byId.get(String(id))).filter(Boolean);
   return {rows: rows.slice(skip, skip + limit), total: rows.length};
