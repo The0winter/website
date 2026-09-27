@@ -2,6 +2,8 @@
 import BookCover from '@/components/BookCover';
 import {ratingLabel} from '@/lib/rating';
 import MobileHome from './MobileHome';
+import {usePathname} from 'next/navigation';
+import {scheduleBookDetailCodeWarmup} from '@/lib/book-detail-code';
 import type {LucideIcon} from 'lucide-react';
 
 
@@ -243,6 +245,10 @@ export default function HomePageClient({
   initialDayRankBooks = [],
   initialRecommendedBooks = [],
 }: HomePageClientProps) {
+  const pathname = usePathname();
+  useEffect(() => {
+    if (pathname === '/') return scheduleBookDetailCodeWarmup();
+  }, [pathname]);
   const allBooks = initialBooks;
   const featuredBooks = useMemo(() => {
     if (initialFeaturedBooks.length > 0) return initialFeaturedBooks.slice(0, 3);
