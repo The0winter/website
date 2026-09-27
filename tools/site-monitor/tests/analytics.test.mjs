@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import {googleCollectors,normalizeReports,reportRequests,activityRequests,normalizeActivity,dateInZone,validateCredentials,regionFilter,cityRequests,normalizeCities,rankBrowsing} from '../analytics.mjs';
+import {googleCollectors,normalizeReports,reportRequests,activityRequests,normalizeActivity,dateInZone,validateCredentials,regionFilter,cityRequests,normalizeCities,rankBrowsing,browsingRequests,normalizeBrowsing} from '../analytics.mjs';
 import {collectSite,validateConfig} from '../collectors.mjs';
 import {createMonitor} from '../server.mjs';
 import {fixtureCollectors,workspace,removeWorkspace} from './fixture.mjs';
@@ -82,16 +82,16 @@ test('城市报表失败独立显示错误，不影响全站和中国人数，�
     const data=activityReports();if(requests[0].dimensionFilter)data[0].rows[1].metricValues[0].value='7';
     return Response.json({reports:data});
   }});
-  const data=await collect.analytics(new AbortController().signal);assert.equal(data.activity.rolling[7].activeUsers,12);assert.equal(data.regions.china.activity.rolling[7].activeUsers,7);assert.equal(data.regions.china.status,'connected');assert.ok(data.regions.china.sampledAt);assert.equal(data.cities.status,'error');assert.match(data.cities.error,/额度/);assert.equal(data.cities.periods,undefined);assert.equal(data.regions.other,undefined);assert.equal(calls.length,4);
+  const data=await collect.analytics(new AbortController().signal);assert.equal(data.activity.rolling[7].activeUsers,12);assert.equal(data.regions.china.activity.rolling[7].activeUsers,7);assert.equal(data.regions.china.status,'connected');assert.ok(data.regions.china.sampledAt);assert.equal(data.cities.status,'error');assert.match(data.cities.error,/额度/);assert.equal(data.cities.periods,undefined);assert.equal(data.regions.other,undefined);assert.equal(data.browsing.status,'error');assert.equal(calls.length,5);
 });
 
 test('谷歌报表按整个周期去重，日期补齐，保留元数据和零基期',()=>{const data=normalizeReports(reports(),7,Date.parse('2026-09-23T17:00:00Z'));assert.equal(data.todayDate,'2026-09-24');assert.equal(data.current.activeUsers,12);assert.equal(data.daily.length,7);assert.equal(data.daily[0].activeUsers,0);assert.equal(data.daily.at(-1).activeUsers,9);assert.equal(data.today.screenPageViews,9);assert.equal(growth(12,0).direction,'new');assert.equal(growth(0,0).direction,'flat');assert.equal(growth(null,5),null);const raw=reports();raw[2].metadata.subjectToThresholding=true;assert.match(normalizeReports(raw,7).notices[0],/隐私/);assert.throws(()=>normalizeReports([],7));});
 test('报表只有五个批量查询、完整周期比较，不用日人数相加',()=>{const q=reportRequests(30);assert.equal(q.length,5);assert.deepEqual(q[0].dateRanges.map(r=>[r.startDate,r.endDate]),[['30daysAgo','yesterday'],['60daysAgo','31daysAgo'],['today','today']]);assert.equal(q[2].dimensions[0].name,'pagePath');assert.equal(q[2].limit,'10');assert.throws(()=>reportRequests(8));assert.equal(dateInZone(Date.parse('2026-09-24T01:00:00Z'),'America/Los_Angeles'),'2026-09-23');});
 test('服务账号仅请求只读权限，忽略文件内任意 token_uri，缓存授权且不泄露密钥',async()=>{
   const {privateKey,publicKey}=crypto.generateKeyPairSync('rsa',{modulusLength:2048}),credentials={type:'service_account',client_email:'test@synthetic.iam.gserviceaccount.com',private_key:privateKey.export({format:'pem',type:'pkcs8'}),token_uri:'https://evil.test'};
-  const calls=[],fetchImpl=async(url,options)=>{calls.push(url);if(url.includes('oauth2')){const assertion=options.body.get('assertion'),parts=assertion.split('.'),payload=JSON.parse(Buffer.from(parts[1],'base64url'));assert.equal(payload.scope,'https://www.googleapis.com/auth/analytics.readonly');assert.equal(payload.aud,'https://oauth2.googleapis.com/token');assert.ok(crypto.verify('RSA-SHA256',Buffer.from(parts.slice(0,2).join('.')),publicKey,Buffer.from(parts[2],'base64url')));return Response.json({access_token:'synthetic-secret-token',expires_in:3600});}return Response.json(url.endsWith(':batchRunReports')?{reports:JSON.parse(options.body).requests.length===4?activityReports():JSON.parse(options.body).requests.length===3?cityReports():reports()}:report([],['activeUsers'],[[[],[0]]]));};
+  const calls=[],fetchImpl=async(url,options)=>{calls.push(url);if(url.includes('oauth2')){const assertion=options.body.get('assertion'),parts=assertion.split('.'),payload=JSON.parse(Buffer.from(parts[1],'base64url'));assert.equal(payload.scope,'https://www.googleapis.com/auth/analytics.readonly');assert.equal(payload.aud,'https://oauth2.googleapis.com/token');assert.ok(crypto.verify('RSA-SHA256',Buffer.from(parts.slice(0,2).join('.')),publicKey,Buffer.from(parts[2],'base64url')));return Response.json({access_token:'synthetic-secret-token',expires_in:3600});}return Response.json(url.endsWith(':batchRunReports')?{reports:JSON.parse(options.body).requests.length===4?activityReports():JSON.parse(options.body).requests.length===3?(JSON.parse(options.body).requests[0].dimensions[0].name==='pagePath'?browsingReports():cityReports()):reports()}:report([],['activeUsers'],[[[],[0]]]));};
   const collect=googleCollectors({gaPropertyId:'123',gaCredentialsPath:'/synthetic.json',analyticsDays:7},{fetchImpl,readFile:async()=>JSON.stringify(credentials)}),signal=new AbortController().signal;
-  const result=await collect.analytics(signal),realtime=await collect.realtime(signal);assert.equal(result.current.activeUsers,12);assert.equal(result.cities.status,'connected');assert.equal(result.cities.periods.week.cities[0].activeUsers,70);assert.equal(realtime.activeUsers,0);assert.equal(calls.filter(x=>x.includes('oauth2')).length,1);assert.ok(!calls.some(x=>x.includes('evil')));assert.ok(!JSON.stringify(result).includes('secret'));assert.throws(()=>validateCredentials({type:'service_account',private_key:'bad'}));
+  const result=await collect.analytics(signal),realtime=await collect.realtime(signal);assert.equal(result.current.activeUsers,12);assert.equal(result.cities.status,'connected');assert.equal(result.browsing.status,'connected');assert.equal(result.browsing.periods.day.pages[0].path,'/reader/one');assert.equal(result.cities.periods.week.cities[0].activeUsers,70);assert.equal(realtime.activeUsers,0);assert.equal(calls.filter(x=>x.includes('oauth2')).length,1);assert.ok(!calls.some(x=>x.includes('evil')));assert.ok(!JSON.stringify(result).includes('secret'));assert.throws(()=>validateCredentials({type:'service_account',private_key:'bad'}));
 });
 test('未配置、权限不足和配额错误分别展示，不用零掩盖错误',async()=>{const signal=new AbortController().signal;const none=await googleCollectors({}).analytics(signal);assert.equal(none.status,'unconfigured');assert.equal(none.current,undefined);const creds={type:'authorized_user',client_id:'synthetic-client',client_secret:'synthetic-secret',refresh_token:'synthetic-refresh'};for(const [status,message] of [[403,/授权/],[429,/额度/],[500,/失败/]]){const collect=googleCollectors({gaPropertyId:'1',gaCredentialsPath:'/mock',analyticsDays:7},{readFile:async()=>JSON.stringify(creds),fetchImpl:async(url)=>url.includes('oauth2')?Response.json({access_token:'test',expires_in:3600}):Response.json({error:{message:'private detail'}},{status})});await assert.rejects(collect.analytics(signal),message);}for(const value of [{gaPropertyId:'G-ID'},{gaPropertyId:'1/evil'},{analyticsDays:1},{gaCredentialsPath:'relative'}])assert.throws(()=>validateConfig(value));});
 test('真实阅读抽查只 GET，不增加浏览统计；依赖失败时标注未检查',async()=>{const calls=[],book='a'.repeat(24),chapter='b'.repeat(24);const fetchImpl=async(url,options)=>{calls.push({url,options});if(url==='https://example.test')return new Response('<html><title>Website</title></html>');return Response.json(url.endsWith('?limit=1')?[{id:url.includes('/chapters')?chapter:book}]:url.includes('/api/chapters/')?{content:'真实章节内容'}:{});};const value=await collectSite({site:'https://example.test'},new AbortController().signal,{fetchImpl});assert.equal(value.checks.filter(c=>c.status==='ok').length,4);assert.equal(calls.length,4);assert.ok(calls.every(c=>!c.options.method||c.options.method==='GET'));assert.ok(calls.every(c=>!c.url.includes('/views')));const failed=await collectSite({site:'https://example.test'},new AbortController().signal,{fetchImpl:async()=>Response.json({}, {status:503})});assert.equal(failed.checks[2].status,'skipped');assert.equal(failed.checks[0].status,'error');});
@@ -100,7 +100,7 @@ test('切换日期取消旧请求，迟到数据不会串入新范围，暂停�
 test('授权文件只在本机保存，导出不包含授权内容或路径',async t=>{const root=workspace();t.after(()=>removeWorkspace(root));const app=await createMonitor({root,collect:fixtureCollectors(),start:false});t.after(()=>app.close());const headers={'x-monitor-token':app.token,'Content-Type':'application/json'};const credentials={type:'authorized_user',client_id:'synthetic-client',client_secret:'synthetic-secret',refresh_token:'synthetic-refresh'};const res=await fetch(app.baseUrl+'/api/analytics/credentials',{method:'POST',headers,body:JSON.stringify({propertyId:'123',credentials})});assert.equal(res.status,200);assert.equal(JSON.parse(fs.readFileSync(path.join(root,'.runtime/site-monitor/google-credentials.json'),'utf8')).type,'authorized_user');assert.ok(!JSON.stringify(app.snapshot()).includes('synthetic-secret'));const exported=await(await fetch(app.baseUrl+'/api/export',{method:'POST',headers,body:'{"format":"json"}'})).json();const raw=await(await fetch(app.baseUrl+'/api/report?name='+exported.name,{headers})).text();assert.ok(!raw.includes('gaCredentialsPath'));assert.ok(!raw.includes('synthetic-refresh'));assert.equal((await fetch(app.baseUrl+'/google-credentials.json')).status,404);});
 
 
-test('城市记录先排除哥德堡和零时长再取前十；浏览排名覆盖原前十之外的记录',()=>{
+test('城市记录先排除哥德堡和零时长再取前十',()=>{
   const raw=cityReports();
   const entries=[['g','Gothenburg',9999,99999],['z','Zero City',9998,0],['r','Reader City',1,100000],['s','Short City',1,.1]];
   for(const report of raw){
@@ -108,12 +108,9 @@ test('城市记录先排除哥德堡和零时长再取前十；浏览排名覆�
   }
   const data=normalizeCities(raw,'2026-09-27','Asia/Shanghai').day;
   assert.equal(data.cities.length,10);assert.ok(data.cities.every(c=>c.name!=='Gothenburg'&&c.name!=='Zero City'));
-  assert.ok(data.browsing.every(c=>c.name!=='Gothenburg'));assert.equal(data.browsing.length,13);
-  assert.ok(data.browsing.find(c=>c.name==='Reader City').score>data.browsing.find(c=>c.name==='Zero City').score);
-  assert.ok(data.browsing.some(c=>c.name==='Short City'));
   for(const name of ['gOtHeNbUrG','Göteborg','Goteborg','哥德堡']){
     raw[0].rows[0].dimensionValues[1].value=name;
-    assert.ok(normalizeCities(raw,'2026-09-27','Asia/Shanghai').day.browsing.every(c=>c.id!=='g'));
+    assert.ok(normalizeCities(raw,'2026-09-27','Asia/Shanghai').day.cities.every(c=>c.id!=='g'));
   }
   const filter=cityRequests('2026-09-27')[0].dimensionFilter.notExpression.filter.inListFilter;
   assert.ok(filter.values.includes('Gothenburg'));assert.equal(filter.caseSensitive,false);
@@ -121,8 +118,37 @@ test('城市记录先排除哥德堡和零时长再取前十；浏览排名覆�
 });
 
 test('浏览综合分采用对数归一化，次数40%、时长60%，稳定降序且零值不产生NaN',()=>{
-  const city=(id,sessions,seconds)=>({id,name:id,sessions,userEngagementDuration:seconds});
+  const city=(id,views,seconds)=>({id,path:id,views,userEngagementDuration:seconds});
   const result=rankBrowsing([city('frequent',99,0),city('reader',0,99),city('both',99,99),city('empty',0,0)]);
   assert.deepEqual(result.map(c=>[c.id,Math.round(c.score)]),[['both',100],['reader',60],['frequent',40],['empty',0]]);
   assert.equal(rankBrowsing([city('single',1,1)])[0].score,100);assert.deepEqual(rankBrowsing([]),[]);assert.equal(rankBrowsing([city('zero',0,0)])[0].score,0);
+});
+
+
+function browsingReports(){return [1,7,30].map(days=>report(['pagePath','pageTitle'],['screenPageViews','userEngagementDuration'],[
+  [['/reader/one','旧标题'],[3*days,30*days]],
+  [['/reader/one','章节一'],[7*days,700*days]],
+  [['/bookshelf','书架'],[5*days,0]],
+  [['/reader/one','(not set)'],[0,5*days]],
+  [['(not set)','未知'],[9999,99999]],
+]));}
+
+test('网页排名按路径合并标题并累计浏览和时长；城市在汇总前过滤，未知地理仍保留',()=>{
+  const requests=browsingRequests('2026-09-27');
+  assert.deepEqual(requests.map(r=>r.dateRanges[0].startDate),['2026-09-27','2026-09-21','2026-08-29']);
+  for(const request of requests){
+    assert.deepEqual(request.dimensions,[{name:'pagePath'},{name:'pageTitle'}]);
+    assert.deepEqual(request.metrics,[{name:'screenPageViews'},{name:'userEngagementDuration'}]);
+    const filter=request.dimensionFilter.notExpression.filter;
+    assert.equal(filter.fieldName,'city');assert.ok(filter.inListFilter.values.includes('Gothenburg'));assert.ok(!filter.inListFilter.values.includes('(not set)'));
+    assert.equal(request.limit,'10000');
+  }
+  const raw=browsingReports(),data=normalizeBrowsing(raw,'2026-09-27','Asia/Shanghai');
+  assert.equal(data.day.pages.length,2);assert.deepEqual(data.day.pages[0],{path:'/reader/one',title:'章节一',views:10,userEngagementDuration:735,score:100});
+  assert.equal(data.week.pages[0].views,70);assert.equal(data.month.pages[0].views,300);
+  assert.equal(data.day.pages[1].userEngagementDuration,0);assert.equal(data.day.pages[1].views,5);
+  raw[0].metadata.subjectToThresholding=true;assert.match(normalizeBrowsing(raw,'2026-09-27','Asia/Shanghai').day.notices[0],/隐私/);
+  raw[0].rowCount=10001;assert.throws(()=>normalizeBrowsing(raw,'2026-09-27','Asia/Shanghai'),/不完整排名/);
+  raw[0].rowCount=0;raw[0].metadata.timeZone='UTC';assert.throws(()=>normalizeBrowsing(raw,'2026-09-27','Asia/Shanghai'),/口径/);
+  assert.throws(()=>normalizeBrowsing([],'2026-09-27','Asia/Shanghai'),/不完整/);
 });

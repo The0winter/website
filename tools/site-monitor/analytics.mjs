@@ -57,11 +57,39 @@ export function activityRequests(today,region='all') {
   ];
 }
 const cityPeriods={day:1,week:7,month:30};
-const excludedCities=['','(not set)','(other)','Gothenburg','Göteborg','Goteborg','哥德堡'];
-export function rankBrowsing(cities) {
-  const visits=(Math.max(0,...cities.map(c=>Math.log1p(c.sessions)))||1),duration=(Math.max(0,...cities.map(c=>Math.log1p(c.userEngagementDuration)))||1);
-  return cities.map(c=>({...c,score:100*(.4*Math.log1p(c.sessions)/visits+.6*Math.log1p(c.userEngagementDuration)/duration)}))
-    .sort((a,b)=>b.score-a.score||b.userEngagementDuration-a.userEngagementDuration||b.sessions-a.sessions||a.name.localeCompare(b.name)||a.id.localeCompare(b.id));
+const gothenburgNames=['Gothenburg','Göteborg','Goteborg','哥德堡'];
+const excludedCities=['','(not set)','(other)',...gothenburgNames];
+export function rankBrowsing(pages) {
+  const views=(Math.max(0,...pages.map(p=>Math.log1p(p.views)))||1),duration=(Math.max(0,...pages.map(p=>Math.log1p(p.userEngagementDuration)))||1);
+  return pages.map(p=>({...p,score:100*(.4*Math.log1p(p.views)/views+.6*Math.log1p(p.userEngagementDuration)/duration)}))
+    .sort((a,b)=>b.score-a.score||b.userEngagementDuration-a.userEngagementDuration||b.views-a.views||a.path.localeCompare(b.path));
+}
+export function browsingRequests(today) {
+  return Object.values(cityPeriods).map(days=>({
+    dateRanges:[{startDate:shiftDate(today,1-days),endDate:today}],
+    dimensions:fields(['pagePath','pageTitle']),metrics:fields(['screenPageViews','userEngagementDuration']),
+    dimensionFilter:{notExpression:{filter:{fieldName:'city',inListFilter:{values:gothenburgNames,caseSensitive:false}}}},
+    orderBys:[{dimension:{dimensionName:'pagePath'}},{dimension:{dimensionName:'pageTitle'}}],limit:'10000',returnPropertyQuota:true,
+  }));
+}
+export function normalizeBrowsing(reports,today,timeZone) {
+  if(!Array.isArray(reports)||reports.length!==3)throw Error('谷歌网页报表不完整，请重试');
+  return Object.fromEntries(Object.entries(cityPeriods).map(([unit,days],i)=>{
+    const report=reports[i];
+    if(report.metadata?.timeZone!==timeZone||['screenPageViews','userEngagementDuration'].some(name=>!report.metricHeaders?.some(h=>h.name===name))||['pagePath','pageTitle'].some(name=>!report.dimensionHeaders?.some(h=>h.name===name)))throw Error('谷歌网页报表口径不一致，请重试');
+    if(Number(report.rowCount||0)>(report.rows||[]).length)throw Error('网页记录超出查询范围，暂不展示不完整排名');
+    const byPath=new Map();
+    for(const row of rows(report)) {
+      if(!row.pagePath.startsWith('/')||row.pagePath.startsWith('//'))continue;
+      const page=byPath.get(row.pagePath)||{path:row.pagePath,title:'',titleViews:-1,views:0,userEngagementDuration:0};
+      page.views+=row.screenPageViews;page.userEngagementDuration+=row.userEngagementDuration;
+      if(row.pageTitle&&!['(not set)','(other)'].includes(row.pageTitle)&&row.screenPageViews>page.titleViews){page.title=row.pageTitle;page.titleViews=row.screenPageViews;}
+      byPath.set(page.path,page);
+    }
+    const pages=rankBrowsing([...byPath.values()].filter(p=>p.views>0).map(({titleViews,...page})=>page));
+    const notices=[report.metadata?.subjectToThresholding?'部分网页数据受谷歌隐私阈值限制':null,report.metadata?.dataLossFromOtherRow?'部分网页被谷歌合并，排名可能不完整':null,report.metadata?.samplingMetadatas?.length?'网页排名包含抽样数据':null].filter(Boolean);
+    return [unit,{startDate:shiftDate(today,1-days),endDate:today,pages,notices}];
+  }));
 }
 export function cityRequests(today) {
   return Object.values(cityPeriods).map(days=>({
@@ -79,11 +107,10 @@ export function normalizeCities(reports,today,timeZone) {
     if(Number(report.rowCount||0)>(report.rows||[]).length)throw Error('城市记录超出查询范围，暂不展示不完整排名');
     const records=rows(report).filter(r=>!excludedCities.some(name=>name.toLowerCase()===r.city.trim().toLowerCase()))
       .map(r=>({id:r.cityId,name:r.city,region:r.region,country:r.countryId,activeUsers:r.activeUsers,sessions:r.sessions,userEngagementDuration:r.userEngagementDuration}));
-    const browsing=rankBrowsing(records.filter(r=>r.sessions>0));
     const cities=records.filter(r=>r.activeUsers>0&&r.sessions>0&&r.userEngagementDuration>0)
       .sort((a,b)=>b.activeUsers-a.activeUsers||a.name.localeCompare(b.name)||a.id.localeCompare(b.id)).slice(0,10);
     const notices=[report.metadata?.subjectToThresholding?'部分城市数据受谷歌隐私阈值限制':null,report.metadata?.dataLossFromOtherRow?'部分城市被谷歌合并，排名可能不完整':null,report.metadata?.samplingMetadatas?.length?'城市排名包含抽样数据':null].filter(Boolean);
-    return [unit,{startDate:shiftDate(today,1-days),endDate:today,cities,browsing,notices}];
+    return [unit,{startDate:shiftDate(today,1-days),endDate:today,cities,notices}];
   }));
 }
 export function normalizeActivity(reports,today,timeZone) {
@@ -166,13 +193,14 @@ export function googleCollectors(config,{fetchImpl=fetch,readFile=fs.readFile,cl
       const activity=await run('batchRunReports',{requests:activityRequests(data.todayDate)},signal);
       data.activity=normalizeActivity(activity.reports,data.todayDate,data.timeZone);
       data.notices=[...new Set([...data.notices,...data.activity.notices])];
-      const [china,cities]=await Promise.allSettled([
+      const [china,cities,browsing]=await Promise.allSettled([
         (async()=>{const report=await run('batchRunReports',{requests:activityRequests(data.todayDate,'china')},signal);return {status:'connected',sampledAt:new Date(clock()).toISOString(),activity:normalizeActivity(report.reports,data.todayDate,data.timeZone)};})(),
         (async()=>{const report=await run('batchRunReports',{requests:cityRequests(data.todayDate)},signal);return {status:'connected',sampledAt:new Date(clock()).toISOString(),periods:normalizeCities(report.reports,data.todayDate,data.timeZone)};})(),
+        (async()=>{const report=await run('batchRunReports',{requests:browsingRequests(data.todayDate)},signal);return {status:'connected',sampledAt:new Date(clock()).toISOString(),periods:normalizeBrowsing(report.reports,data.todayDate,data.timeZone)};})(),
       ]);
       if(signal.aborted)throw signal.reason||Error('统计读取已取消');
       const resultOrError=result=>result.status==='fulfilled'?result.value:{status:'error',error:result.reason.message};
-      data.regions={china:resultOrError(china)};data.cities=resultOrError(cities);
+      data.regions={china:resultOrError(china)};data.cities=resultOrError(cities);data.browsing=resultOrError(browsing);
       return data;
     },
     realtime:async signal=>{

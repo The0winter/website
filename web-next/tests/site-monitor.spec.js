@@ -5,7 +5,7 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 
 let app,child;
-const projectRoot=process.cwd(),dir=path.join(projectRoot,'.runtime/task-artifacts/site-monitor-browsing');
+const projectRoot=process.cwd(),dir=path.join(projectRoot,'.runtime/task-artifacts/site-monitor-page-browsing');
 test.beforeAll(async()=>{fs.mkdirSync(dir,{recursive:true});child=spawn(process.execPath,['--require','./tools/test-env.cjs','tools/site-monitor/tests/browser-fixture.mjs'],{cwd:projectRoot,windowsHide:true,stdio:['pipe','pipe','pipe']});app=await new Promise((resolve,reject)=>{let output='';child.stdout.on('data',b=>{output+=b;if(output.includes('\n')){try{resolve(JSON.parse(output.trim()));}catch(error){reject(error);}}});child.on('error',reject);child.stderr.on('data',b=>reject(Error(String(b))));child.on('exit',code=>{if(code)reject(Error('Fixture failed: '+code));});});});
 test.afterAll(async()=>{if(child&&child.exitCode===null){const exited=once(child,'exit');child.stdin.end('close');await exited;}});
 
@@ -168,15 +168,16 @@ test('异常自动置顶，未授权或旧数据不冒充最新用户统计',asy
 test('浏览记录显示加权排名和原始数值，刷新发起新查询且请求中禁用',async({page})=>{
   await page.goto(app.url);
   await page.getByRole('button',{name:'浏览记录',exact:true}).click();
-  const list=page.getByRole('region',{name:'城市浏览记录'});
+  const list=page.getByRole('region',{name:'网页浏览记录'});
   await expect(list.locator('li')).toHaveCount(10);
-  await expect(list.locator('li').first()).toContainText('Shanghai');
-  await expect(list.locator('li').first()).toContainText('访问 20 次');
+  await expect(list.locator('li').first()).toContainText('绍宋 · 第一章');
+  await expect(list.locator('li').first()).toContainText('/reader/chapter-one');
+  await expect(list.locator('li').first()).toContainText('浏览 20 次');
   await expect(list.locator('li').first()).toContainText('使用总时长 28 分 0 秒');
   const scores=await list.locator('li strong').allTextContents();
   expect(scores.map(parseFloat)).toEqual(scores.map(parseFloat).sort((a,b)=>b-a));
-  await expect(page.getByText('次数 40% · 使用总时长 60% · 已排除哥德堡')).toBeVisible();
-  await page.getByRole('button',{name:'周',exact:true}).click();await expect(list.locator('li').first()).toContainText('访问 140 次');
+  await expect(page.getByText('浏览次数 40% · 使用总时长 60% · 已排除哥德堡')).toBeVisible();
+  await page.getByRole('button',{name:'周',exact:true}).click();await expect(list.locator('li').first()).toContainText('浏览 140 次');
   for(const width of [1440,390,320]){
     await page.setViewportSize({width,height:1000});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -189,4 +190,15 @@ test('浏览记录显示加权排名和原始数值，刷新发起新查询且�
   await expect(page.getByRole('button',{name:'浏览记录',exact:true})).toHaveAttribute('aria-pressed','true');
   await page.route('**/api/refresh',route=>route.fulfill({status:503,json:{error:'刷新暂时失败'}}));
   await page.locator('#refresh').click();await expect(page.locator('#toast')).toContainText('刷新暂时失败');await expect(page.locator('#refresh')).toBeEnabled();await expect(list.locator('li')).toHaveCount(10);
+});
+
+
+test('网页浏览查询失败或无记录时独立提示，不影响城市分布',async({page})=>{
+ let browsing={status:'error',error:'网页查询额度暂时用完'};
+ await page.route('**/api/state',async route=>{const response=await route.fetch(),state=await response.json();state.modules.analytics.data.browsing=browsing;await route.fulfill({response,json:state});});
+ await page.goto(app.url);await page.getByRole('button',{name:'浏览记录',exact:true}).click();await expect(page.getByText(/网页查询额度暂时用完/)).toBeVisible();
+ await expect(page.locator('.page-row')).toHaveCount(0);
+ await page.getByRole('button',{name:'城市分布',exact:true}).click();await expect(page.locator('.city-row')).toHaveCount(10);
+ browsing={status:'connected',periods:{day:{startDate:'2026-09-27',endDate:'2026-09-27',pages:[],notices:[]}}};
+ await page.getByRole('button',{name:'浏览记录',exact:true}).click();await expect(page.getByText('暂无网页浏览记录')).toBeVisible();
 });
