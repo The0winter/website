@@ -260,6 +260,13 @@ test('unavailable chapter messages cannot hide behind the actual title and end m
   assert.equal(placeholderEvidence('请升级到新版本查看本章（本章完）'), true);
 });
 
+test('markup-only source content is rejected while prose with markup remains readable', () => {
+  const chapter = {chapter_number: 7, title: '第七章', link: 'https://fixture.example/7', content: '<divid="\nfootlink"\n>'};
+  assert.ok(chapterQuality(chapter).some(issue => issue.code === 'markup-only' && issue.level === 'error'));
+  assert.equal(qualityReport([chapter], [chapter]).structuralPass, false);
+  assert.equal(chapterQuality({...chapter, content: '他在纸上写下 <div>，继续讲解网页。'}).some(issue => issue.code === 'markup-only'), false);
+});
+
 test('TXT segmentation preserves volume resets and preamble; GB18030 decoding is explicit', () => {
   const input = '前言文字\n第一章 开始\n春天的故事。\n第二章 下雨\n雨后的故事。\n第一章 新卷\n新的故事。';
   const chapters = splitText(input, {});

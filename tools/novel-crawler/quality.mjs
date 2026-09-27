@@ -26,6 +26,7 @@ export function chapterQuality(chapter) {
   if (/\uFFFD/.test(text)) add('error', 'decode', '正文含编码替换字符，需要核实编码');
   if (/[\uE000-\uF8FF]/u.test(text)) add('warning', 'private-use-characters', '可能使用自定义字体，正文尚未确认可读');
   if (text.length < 1500 && /^(?:\s)*(?:access denied|forbidden|just a moment|验证您的浏览器|请完成验证|请登录后阅读|订阅本章|本章需要订阅)/iu.test(text)) add('error', 'access-page', '疑似验证、登录或订阅页面');
+  if (text.length <= 500 && /<[^>]+>/u.test(text) && !text.replace(/<[^>]+>/gu, '').trim()) add('error', 'markup-only', '正文只有网页标签或残留标记，不能计为有效章节');
   if (chapter.catalogTitle && normalizedTitle(chapter.title) !== normalizedTitle(chapter.catalogTitle)) {
     if (normalizedTitle(withoutChapterNumber(chapter.title)) === normalizedTitle(withoutChapterNumber(chapter.catalogTitle))) add('info', 'numbering-difference', '目录与正文标题的章号不同，按目录位置排序，保留双方标题');
     else add('warning', 'title-mismatch', '目录标题与正文页标题不同，未自动重命名或交换正文');
