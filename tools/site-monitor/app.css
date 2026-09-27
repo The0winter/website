@@ -127,3 +127,5 @@
 @media(max-width:650px){.r2-composition{height:8px}}
 
 .r2-capacity .r2-summary .r2-size{margin:2px 0}.r2-capacity .r2-composition{margin:3px 0 2px}
+
+#user-trend .ranking-table .list-name>.city-identity{display:flex;align-items:baseline;gap:6px;white-space:nowrap;min-width:0}#user-trend .city-identity .city-short{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#user-trend .ranking-table .city-identity small{display:inline;margin:0;flex-shrink:0;white-space:nowrap}
