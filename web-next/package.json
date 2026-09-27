@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node tools/precompress-assets.mjs",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit"
