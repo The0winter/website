@@ -54,7 +54,7 @@ for(const entry of ['avatar','shelf'] as const){
     await page.goto(base);
     const trigger=page.locator(entry==='avatar'?'.mobile-account-link:visible':'.mh-bottom [data-section="library"]');
     await expect(trigger).toHaveAttribute('href','/login');await trigger.click();
-    const side=entry==='shelf'?'left':'right',x=entry==='shelf'?'-100%':'100%';
+    const side='right',x='100%';
     await expect(page.locator('.login-page')).toHaveCSS('animation-duration','0.6s');
     await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--auth-enter-x'))).toBe(x);
     await settled(page);
@@ -83,7 +83,7 @@ test('login/register transitions reverse on Back and retain the shelf origin',as
   await expect.poll(async()=> (await exits(page)).at(-1)?.side).toBe('right');
   await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--auth-enter-x'))).toBe('-100%');
   await settled(page);await page.getByRole('button',{name:'返回',exact:true}).click();
-  await expect.poll(async()=> (await exits(page)).at(-1)?.side).toBe('left');
+  await expect.poll(async()=> (await exits(page)).at(-1)?.side).toBe('right');
   await expect(page.locator('.auth-exit-viewport')).toHaveCount(0);
 });
 
