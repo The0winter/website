@@ -226,6 +226,6 @@ test('R2部分盘点显示容量下限，完成后才显示总量',async({page})
   await route.fulfill({response,json:state});
  });
  await page.goto(app.url);const card=page.locator('.r2-capacity');
- await expect(card.locator('.r2-size')).toHaveText('≥ 1 GiB');await expect(card).toContainText('尚非总容量');await expect(card.locator('.tag.good')).toHaveCount(0);
- complete=true;await expect(card.locator('.r2-size')).toHaveText('1 GiB');await expect(card.locator('.tag.good')).toHaveText('已盘点');await expect(card).toContainText('封面 1 MiB');
+ await expect(card.locator('.r2-size')).toHaveText('≥ 1 GiB / 10 GB 免费参考');await expect(card).toContainText('尚非总容量');await expect(card.locator('.tag.good')).toHaveCount(0);
+ complete=true;await expect(card.locator('.r2-size')).toHaveText('1 GiB / 10 GB 免费参考');await expect(card.locator('.tag.good')).toHaveText('10.7% 已用');await expect(card).toContainText('封面 1 MiB');
 });
