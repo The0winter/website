@@ -12,7 +12,7 @@ function shingles(text) {
 }
 
 export function chapterDuplicateIssues(chapters) {
-  const issues = [], exact = new Map(), titles = new Map(), links = new Map();
+  const issues = [], exact = new Map(), titles = new Map(), openings = new Map(), links = new Map();
   for (const chapter of chapters) {
     const number = chapter.chapter_number ?? chapter.chapterNumber;
     const link = chapter.link ?? chapter.sourceUrl;
@@ -28,6 +28,23 @@ export function chapterDuplicateIssues(chapters) {
     }
     exact.set(text, number);
     const title = titleKey(chapter.title);
+    // Different chapter headings can still point to the same story text. A long,
+    // identical opening narrows the expensive comparison to likely mispastes.
+    if (text.length >= 1500) {
+      const opening = text.slice(0, 512);
+      const previousOpenings = openings.get(opening) || [];
+      let signature;
+      for (const other of previousOpenings) {
+        if (Math.min(text.length, other.text.length) / Math.max(text.length, other.text.length) < 0.8) continue;
+        signature ??= shingles(text);
+        other.signature ??= shingles(other.text);
+        let overlap = 0;
+        for (const part of signature) if (other.signature.has(part)) overlap++;
+        const similarity = overlap / (signature.size + other.signature.size - overlap);
+        if (similarity >= 0.8) issues.push({level: 'error', code: 'duplicate-opening-body', chapter: number, otherChapter: other.number, similarity, detail: '不同目录项开头及大段正文高度相似，可能错贴；保留原文并暂停导出/导入，须核对'});
+      }
+      previousOpenings.push({number, text, signature}); openings.set(opening, previousOpenings);
+    }
     if (!title) continue;
     const previous = titles.get(title) || [];
     let signature;

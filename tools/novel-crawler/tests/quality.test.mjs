@@ -30,6 +30,18 @@ test('exact duplicate bodies and repeated source links are blocked even under di
   assert.throws(()=>prepareImport({title:'测试',sourceUrl:'https://example.test/book',chapters:[a,b]}), /duplicate-link/);
 });
 
+test('long mispasted bodies under different chapter titles block collection and import', () => {
+  const original = Array.from({length: 110}, (_, i) => `盛夏第${i}个夜晚，山道上闪过一道光。`).join('');
+  const a = item(1, original, '第一章 开始');
+  const b = item(2, `${original.slice(0, 1400)}一个错字${original.slice(1400)}`, '第四百二十章');
+  const before = structuredClone([a, b]);
+  const report = qualityReport([a, b], [a, b]);
+  assert.equal(report.structuralPass, false);
+  assert.ok(report.issues.some(issue => issue.code === 'duplicate-opening-body' && issue.chapter === 2 && issue.otherChapter === 1));
+  assert.throws(() => prepareImport({title: '测试', sourceUrl: 'https://example.test/book', chapters: [a, b]}), /duplicate-opening-body/);
+  assert.deepEqual([a, b], before);
+});
+
 test('valid Unicode mojibake blocks a clean quality result while keeping original text', () => {
   const content = '銆銆姹熸笣鐧芥湜鐫鐪煎墠锛岃╀粬鏉ユ敹绉燂紝鈥︹︺'.repeat(12);
   assert.equal(content.includes('\uFFFD'), false);
