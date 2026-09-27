@@ -35,7 +35,9 @@ export function selectDiscoveryBooks(books, limit = 57, now = new Date()) {
 export async function discoveryBooks(filter, skip, limit, now = new Date(), projection) {
   // Rotation only needs these small fields. Fetch descriptions/audit history
   // for the requested page, rather than transferring them for the whole library.
-  const books = await Book.find(filter).select('_id views rating lastUpdated updatedAt category author').maxTimeMS(3000).lean();
+  // A bounded metadata batch avoids the default 101-row first-batch round trip.
+  const books = await Book.find(filter).select('_id views rating lastUpdated updatedAt category author')
+    .batchSize(1000).maxTimeMS(3000).lean();
   // Discovery is a finite feed, not an unbounded ranking page.
   const feed = selectDiscoveryBooks(books, 59, now);
   const ids = feed.slice(skip, skip + limit).map(book => book._id);

@@ -20,7 +20,7 @@ test('compact lists preserve exact results and detail previews share reads while
   await new Promise(resolve=>server.once('listening',resolve));
   const get=async path=>{const response=await fetch(`http://127.0.0.1:${server.address().port}${path}`);assert.equal(response.status,200);return response.json();};
   try {
-    await Book.insertMany(Array.from({length:90},(_,i)=>({title:`Fixture ${i}`,author:`Author ${i%13}`,category:'测试',views:i,rating:i%5,
+    await Book.insertMany(Array.from({length:150},(_,i)=>({title:`Fixture ${i}`,author:`Author ${i%13}`,category:'测试',views:i,rating:i%5,
       description:'简介'.repeat(200),statisticsSeed:{favorites:200,views:i,initializedAt:new Date(),rating:4,ratingWeight:20,runId:'audit'.repeat(200)}})));
     const commands=[], client=mongoose.connection.transport ? null : mongoose.connection.getClient();
     client?.on('commandStarted',e=>commands.push(e.command));
@@ -32,6 +32,7 @@ test('compact lists preserve exact results and detail previews share reads while
       const compact=await get(path+'&fields=ranking');
       assert.deepEqual(compact,full.map(book=>Object.fromEntries(fields.filter(f=>f in book).map(f=>[f,book[f]]))),sort);
       if (client) {
+        if (sort==='discovery') assert.equal(commands.filter(c=>c.find || c.getMore).length,2,'metadata and page take two reads even above the default 101-document first batch');
         const find=commands.filter(c=>c.find==='books');
         assert.ok(find.every(c=>c.projection && !c.projection.statisticsSeed),`${sort}: field selection reaches MongoDB`);
         for (const aggregate of commands.filter(c=>c.aggregate==='books')) {
