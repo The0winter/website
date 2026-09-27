@@ -223,7 +223,7 @@ export default function ReaderPages(props:ReaderPageProps) {
     }else setNotice(direction<0?'已经是第一章':'已读到最新章节');
   },[controlsBlocked,props.navigating,props.previousId,props.nextId,onChapter,onHideTools]);
   const turn=useCallback((direction:number)=>{
-    if(controlsBlocked || props.navigating || turnBusy())return;
+    if(controlsBlocked || props.navigating || !layout.width || !layout.height || turnBusy())return;
     onHideTools();
     const viewport=textWindow.current;
     if(scrolling && viewport){
@@ -233,8 +233,9 @@ export default function ReaderPages(props:ReaderPageProps) {
     }
     const target=currentPage.current+direction;
     if(beginPageTurn(target,direction)){finishTurn(true);return;}
-    adjacentChapter(direction);
-  },[controlsBlocked,props.navigating,scrolling,turnBusy,onHideTools,adjacentChapter,beginPageTurn,finishTurn,textWindow]);
+    // A page animation that cannot start is not a chapter boundary.
+    if(target<0 || target>=layout.total)adjacentChapter(direction);
+  },[controlsBlocked,props.navigating,layout.width,layout.height,layout.total,scrolling,turnBusy,onHideTools,adjacentChapter,beginPageTurn,finishTurn,textWindow]);
   useEffect(()=>{
     const handle=(event:KeyboardEvent)=>{
       if(controlsBlocked || (event.target as HTMLElement).closest('input,textarea,[contenteditable=true],[role=dialog],[role=menu]'))return;
@@ -267,7 +268,7 @@ export default function ReaderPages(props:ReaderPageProps) {
   }
   function pointerDown(event:React.PointerEvent) {
     if(!event.isPrimary){cancelGesture();return;}
-    if(controlsBlocked || props.navigating || event.button!==0 || (event.target as HTMLElement).closest('button,a'))return;
+    if(controlsBlocked || props.navigating || !layout.width || !layout.height || event.button!==0 || (event.target as HTMLElement).closest('button,a'))return;
     // Suppress the drag's own click, never a separate press that follows it.
     suppressGestureClick.current=false;
     settleTurn();
@@ -303,7 +304,10 @@ export default function ReaderPages(props:ReaderPageProps) {
     const fast=performance.now()-state.lastTime<100 && Math.abs(state.velocity)>.45 && state.velocity*distance>0;
     const commit=Math.abs(distance)>extent*.2 || (Math.abs(distance)>24 && fast);
     if(turnBusy())finishTurn(commit);
-    else if(commit)adjacentChapter(distance<0?1:-1);
+    else if(commit){
+      const direction=distance<0?1:-1,target=currentPage.current+direction;
+      if(target<0 || target>=layout.total)adjacentChapter(direction);
+    }
   }
   function cancelGesture(){
     if(gesture.current){clearTimeout(gesture.current.timer);suppressGestureClick.current=true;}

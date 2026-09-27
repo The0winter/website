@@ -19,8 +19,15 @@ export function readerColumnLayout(body:HTMLElement){
   // Animated translations introduce floating-point noise (e.g. 350 becomes
   // 349.999969). Keep layout's fractional precision without treating that as
   // a resize and cancelling a page turn during a fullscreen transition.
-  const width=Math.round(body.getBoundingClientRect().width*64)/64;
-  return {width,step:width+readerColumnGap,total:Math.max(1,Math.ceil((body.scrollWidth+readerColumnGap-1)/(width+readerColumnGap)))};
+  const box=body.getBoundingClientRect();
+  const width=Math.round(box.width*64)/64;
+  // A clipped multicolumn scrollWidth can describe just the first sheet.
+  // The final paragraph's fragments still locate the actual end of the text.
+  // Subtract the translated body's origin so this also works after a turn.
+  const fragments=body.lastElementChild?.getClientRects();
+  let extent=body.scrollWidth;
+  if(fragments)for(const rect of fragments)extent=Math.max(extent,rect.right-box.left);
+  return {width,step:width+readerColumnGap,total:Math.max(1,Math.ceil((extent+readerColumnGap-1)/(width+readerColumnGap)))};
 }
 
 // Inert previews use the same markup/typography as the interactive chapter.
