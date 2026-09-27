@@ -5,7 +5,6 @@ import {useRouter} from 'next/navigation';
 import {ArrowLeft, BookOpen, CalendarDays, Shield, UserRound} from 'lucide-react';
 import type {Profile} from '@/lib/api';
 import UserAvatar from '@/components/UserAvatar';
-import ProfileReviewSources from '@/components/ProfileReviewSources';
 import ProfileCoverArtwork from '@/components/ProfileCoverArtwork';
 import {resolveProfileTheme} from '@/lib/profile-themes';
 import '../../profile/profile.css';
@@ -28,8 +27,7 @@ export default function PublicUserProfile({profile}:{profile:Profile}) {
         <header className="public-profile-identity">
           <UserAvatar user={profile} className="public-profile-avatar"/>
           <h1>{profile.username}</h1>
-          <span className="public-profile-role">{profile.role === 'admin' ? <Shield size={14}/> : <UserRound size={14}/>} {profile.isTestAccount ? '测试账号' : profile.role === 'admin' ? '管理员' : '书友'}</span>
-          {profile.isTestAccount && <p className="text-sm text-center text-gray-500">用于评论功能调试，非真实读者身份。</p>}
+          <span className="public-profile-role">{profile.role === 'admin' ? <Shield size={14}/> : <UserRound size={14}/>} {profile.role === 'admin' ? '管理员' : '书友'}</span>
         </header>
         <section className="public-profile-info" aria-labelledby="public-profile-info-title">
           <h2 id="public-profile-info-title">基本资料</h2>
@@ -38,7 +36,6 @@ export default function PublicUserProfile({profile}:{profile:Profile}) {
             <div><dt><CalendarDays size={17}/>加入时间</dt><dd><time dateTime={Number.isFinite(date.getTime()) ? date.toISOString() : undefined}>{joined}</time></dd></div>
           </dl>
         </section>
-        {profile.isTestAccount&&<ProfileReviewSources key={profile.id} userId={profile.id}/>}
       </article>
     </div>
   </main>;

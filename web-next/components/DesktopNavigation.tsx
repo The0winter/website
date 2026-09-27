@@ -1,37 +1,27 @@
 'use client';
 
-import { useState } from 'react';
-
 import Link from './PrefetchLink';
 import AccountLink from './AccountLink';
-import MobileAccountLink from './MobileAccountLink';
 import ThemeToggle from './ThemeToggle';
 import UserAvatar from './UserAvatar';
 import BookSearch from './BookSearch';
 import { useRouter, usePathname } from 'next/navigation';
-// 1. 引入 Next.js 的图片组件
 import Image from 'next/image';
-// 2. 去掉了 BookOpen，其他图标保持不变
-import { Search, LogOut, PenTool, Library, X } from 'lucide-react';
+import { LogOut, PenTool } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext'; 
 
-export default function Navbar() {
+export default function DesktopNavigation() {
   const { user, logout, loading: authLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   
-  // 移动端搜索框开关状态
-  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
-
-  const { theme } = useReadingSettings(); 
+  const { theme } = useReadingSettings();
   const isDark = theme === 'dark';
-
-const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
-  // 只要是旧版阅读页(/read/)、新版阅读页、或者论坛主页，都隐藏
-  if (pathname === '/search' || pathname === '/ranking' || pathname === '/login' || pathname === '/register' || pathname === '/library' || (pathname === '/profile' && (authLoading || !user)) || pathname?.startsWith('/read/') || pathname?.startsWith('/forum') || isNewReadingPage) {
-    return null;
-  }
+  // Only established desktop pages opt in; new routes never inherit old chrome.
+  const needsNavigation = ['/', '/profile', '/writer', '/authorsList'].includes(pathname || '')
+    || /^\/(book|author)\/[^/]+\/?$/.test(pathname || '');
+  if (!needsNavigation || (pathname === '/profile' && (authLoading || !user))) return null;
 
   const handleLogout = async () => {
     await logout();
@@ -45,15 +35,13 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
   const hoverText = 'hover:text-blue-600';
 
   return (
-    <nav data-site-chrome="true" className={`${pathname === '/profile' || /^\/book\/[^/]+\/?$/.test(pathname || '') ? 'hidden md:block' : ''} ${navBg} border-b ${navBorder} sticky top-0 z-50 transition-colors duration-300`}>
+    <nav data-site-chrome="true" aria-label="桌面导航" className={`hidden md:block ${navBg} border-b ${navBorder} sticky top-0 z-50 transition-colors duration-300`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* ==================== 1. 电脑端布局 (hidden md:flex) ==================== */}
         <div className="hidden md:flex justify-between h-16">
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/" className="flex items-center">
-              {/* 🔥 修改点：电脑端 Logo */}
               <Image 
                 src="/icon.png"       // 对应 public/icon.png
                 alt="Logo" 
@@ -73,7 +61,6 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
             <BookSearch appearance="navbar" dark={isDark}/>
           </div>
 
-          {/* 右侧按钮 (保持原有逻辑完全不动) */}
           <div className="flex items-center space-x-4">
             <AccountLink
               href="/library" 
@@ -101,7 +88,7 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
                   <span className={`${textSecondary} font-medium`}>{user.username}</span>
                 </Link>
                 
-                <button onClick={handleLogout} className={`p-2 transition-colors hover:text-red-600 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                <button aria-label="退出登录" onClick={handleLogout} className={`p-2 transition-colors hover:text-red-600 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   <LogOut className="h-5 w-5" />
                 </button>
               </div>
@@ -114,53 +101,6 @@ const isNewReadingPage = /^\/book\/[^/]+\/[^/]+/.test(pathname || '');
             )}
           </div>
         </div>
-
-        {/* ==================== 2. 手机端布局 (md:hidden) ==================== */}
-        <div className="md:hidden flex flex-col">
-            <div className="flex justify-between items-center h-14">
-                {/* 左侧：精简 Logo */}
-                <Link href="/" className="flex items-center gap-2">
-                   {/* 🔥 修改点：手机端 Logo */}
-                   <Image 
-                     src="/icon.png" 
-                     alt="Logo" 
-                     width={24}  // 手机端稍微小一点
-                     height={24} 
-                     className="w-6 h-6 object-contain" 
-                   />
-                   <span className={`font-black text-lg tracking-tighter ${textPrimary}`}>九天</span>
-                </Link>
-
-                {/* 右侧：图标组 (保持原有逻辑完全不动) */}
-                <div className={`flex items-center gap-5 ${textSecondary}`}>
-                   {/* 搜索图标 */}
-                   <button 
-                     onClick={() => setIsMobileSearchOpen(!isMobileSearchOpen)}
-                     className="focus:outline-none"
-                   >
-                     {isMobileSearchOpen ? (
-                       <X className="w-5 h-5" />
-                     ) : (
-                       <Search className="w-5 h-5" />
-                     )}
-                   </button>
-                   
-                   {/* 书架图标 */}
-                   <AccountLink href="/library" aria-label="书架"><Library className="w-5 h-5" /></AccountLink>
-                   
-                   {/* 用户头像 */}
-                   <div className="site-account-actions"><ThemeToggle/><MobileAccountLink dark={isDark}/></div>
-                </div>
-            </div>
-
-          {/* 移动端书库实时搜索 */}
-            {isMobileSearchOpen && (
-              <div className="pb-3 px-1 animate-in slide-in-from-top-2 fade-in duration-200">
-                <BookSearch appearance="navbar" dark={isDark} autoFocus onNavigate={() => setIsMobileSearchOpen(false)}/>
-              </div>
-            )}
-        </div>
-
       </div>
     </nav>
   );

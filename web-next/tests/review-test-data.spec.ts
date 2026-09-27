@@ -60,9 +60,11 @@ for(const width of [390,1440]) {
     await panel.getByRole('button',{name:'查看全部评论',exact:true}).click();
     const link=sheet.locator('.book-review-profile-link').first(),href=await link.getAttribute('href');
     await link.click();await expect(page).toHaveURL(base+href);
-    await expect(page.locator('.public-profile-role')).toHaveText('测试账号');
-    await expect(page.getByRole('heading',{name:'评论来源'})).toBeVisible();
-    await expect(page.getByText('星级用于功能测试，非原作者评分；参考改写的内容也不代表原作者原话。')).toBeVisible();
+    await expect(page.locator('.public-profile-role')).toHaveText('书友');
+    await expect(page.getByRole('heading',{name:'评论来源'})).toHaveCount(0);
+    await expect(page.locator('.public-profile-page')).not.toContainText(/测试|调试/);
+    await expect(page.locator('nav[data-site-chrome]')).toHaveCount(0);
+    await expect(page.locator('.public-profile-page a[target="_blank"]')).toHaveCount(0);
     await expect(page.locator('.public-profile-page')).not.toContainText('邮箱');
     expect(await (await page.request.get(base+href)).text()).not.toContain('@review-test.invalid');
     await page.getByRole('button',{name:'返回',exact:true}).click();await expect(page).toHaveURL(`${base}/book/${book}`);

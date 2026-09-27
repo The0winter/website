@@ -4,7 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ReadingSettingsProvider } from "@/contexts/ReadingSettingsContext"; 
 import MobileSectionShells from "@/components/MobileSectionShells";
-import Navbar from "@/components/Navbar";
+import DesktopNavigation from "@/components/DesktopNavigation";
 import Footer from "@/components/Footer";
 import BookPrefetchSession from "@/components/BookPrefetchSession";
 import BookNavigation from "@/components/BookNavigation";
@@ -64,7 +64,7 @@ export default function RootLayout({
           <ReadingSettingsProvider>
             <MobileWriterProvider>
             
-            <Navbar />
+            <DesktopNavigation />
             
             {/* ✅ 修改点：增加了 dark:bg 和 transition，让搜索页等其他页面也能适配夜间模式 */}
             <main className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] transition-colors duration-300">

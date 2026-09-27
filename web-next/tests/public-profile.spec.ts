@@ -10,6 +10,7 @@ for(const width of [390,1440]) {
     await page.getByRole('link',{name:'查看山间读者的主页',exact:true}).click();
     await expect(page).toHaveURL(`${base}/user/${user}`);
     await expect(page.getByRole('heading',{name:'山间读者',exact:true})).toBeVisible();
+    await expect(page.locator('nav[data-site-chrome]')).toHaveCount(0);
     await expect(page.getByText('加入时间',{exact:true})).toBeVisible();
     await expect(page.locator('[data-testid=public-profile]')).not.toContainText('邮箱');
     expect(await page.content()).not.toContain('never-public@example.test');
