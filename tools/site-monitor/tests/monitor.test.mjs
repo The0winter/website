@@ -131,3 +131,16 @@ test('R2完整盘点缓存跨启动复用，缺失或部分盘点不会覆盖上
  for(let i=0;i<50&&app.snapshot().inventory.running;i++)await new Promise(r=>setTimeout(r,5));
  assert.ok(app.snapshot().inventory.error);assert.equal(JSON.parse(fs.readFileSync(path.join(root,'.runtime/site-monitor/inventory.json'),'utf8')).inventory.buckets[0].bytes,100);await app.close();
 });
+
+test('大书库达到本轮预算后继续盘点，不重复已完成的封面桶或先前页',async t=>{
+ const root=setup(t),calls=[];
+ const remote=async(_kind,_config,_signal,request)=>{calls.push(request);return request.bucket==='chapters'&&!request.cursor?{bytes:100,objects:20,pages:200,complete:false,cursor:'next-page',groups:{}}:{bytes:10,objects:2,pages:1,complete:true,cursor:null,groups:{}};};
+ const app=await createMonitor({root,config:defaults,collect:fixtureCollectors(),start:false,autoInventory:true,remote});t.after(()=>app.close());
+ for(let i=0;i<50&&app.snapshot().inventory.running;i++)await new Promise(r=>setTimeout(r,5));
+ assert.equal(app.snapshot().inventory.canResume,true);assert.equal(calls.length,2);
+ await fetch(app.baseUrl+'/api/inventory',{method:'POST',headers:{'x-monitor-token':app.token},body:JSON.stringify({resume:true})});
+ for(let i=0;i<50&&app.snapshot().inventory.running;i++)await new Promise(r=>setTimeout(r,5));
+ assert.equal(calls.length,3);assert.equal(calls[2].cursor,'next-page');assert.equal(app.snapshot().inventory.canResume,false);
+ assert.equal(app.snapshot().inventory.buckets[0].bytes,110);assert.equal(app.snapshot().inventory.error,null);
+ assert.equal(JSON.parse(fs.readFileSync(path.join(root,'.runtime/site-monitor/inventory.json'),'utf8')).inventory.buckets[0].bytes,110);
+});

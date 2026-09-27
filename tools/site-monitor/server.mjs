@@ -33,13 +33,16 @@ export async function createMonitor({root=projectRoot,collect,config:configInput
   }catch{}
   const tidy=(apply,reserveBytes=0)=>retention.maintain({root,scope:'site-monitor',apply,reserveBytes,processes:[]});
   function diskState(){const files=storage.reports(root);return {policy:storage.POLICY,bytes:files.reduce((n,f)=>n+f.bytes,0),files:files.sort((a,b)=>b.mtime-a.mtime),directory:path.join(root,storage.BASE,'reports')};}
-  function snapshot(){return {...session.snapshot(),config:{...config},inventory:{...inventory,buckets:inventory.buckets.map(({cursor,...rest})=>rest)},storage:diskState()};}
-  async function scan(){
+  function snapshot(){return {...session.snapshot(),config:{...config},inventory:{...inventory,canResume:!inventory.running&&inventory.buckets.length>0&&!(inventory.buckets.length===2&&inventory.buckets.every(b=>b.complete)),buckets:inventory.buckets.map(({cursor,...rest})=>rest)},storage:diskState()};}
+  async function scan(resume=false){
     if(inventory.running)return;
-    inventory={running:true,buckets:[],error:null,startedAt:Date.now()};scanController=new AbortController();
+    inventory={running:true,buckets:resume?inventory.buckets:[],error:null,startedAt:resume?inventory.startedAt:Date.now()};scanController=new AbortController();
     scanPromise=(async()=>{try{
       for(const id of ['chapters','covers']){
-        const total={id,bytes:0,objects:0,pages:0,complete:false,groups:{},startedAt:Date.now()};inventory.buckets.push(total);
+        let total=inventory.buckets.find(b=>b.id===id);
+        if(total?.complete)continue;
+        if(!total){total={id,bytes:0,objects:0,pages:0,complete:false,groups:{},startedAt:Date.now()};inventory.buckets.push(total);}
+        const initialPages=total.pages;
         while(!scanController.signal.aborted){
           const part=await remote('inventory',config,scanController.signal,{bucket:id,cursor:total.cursor});
           if(scanController.signal.aborted)break;
@@ -47,7 +50,7 @@ export async function createMonitor({root=projectRoot,collect,config:configInput
           total.bytes+=part.bytes;total.objects+=part.objects;total.pages+=part.pages;total.cursor=part.cursor;total.bucket=part.bucket;total.complete=part.complete;
           for(const [name,group]of Object.entries(part.groups)){total.groups[name]??={bytes:0,objects:0};total.groups[name].bytes+=group.bytes;total.groups[name].objects+=group.objects;}
           if(part.complete){total.finishedAt=Date.now();break;}
-          if(total.pages>=200){inventory.error='已到单桶 200 次列表请求上限；当前为部分统计。';break;}
+          if(total.pages-initialPages>=200){inventory.error='本轮达到单桶 200 页上限；当前为部分统计，可继续盘点。';break;}
         }
         if(scanController.signal.aborted)break;
       }
@@ -79,7 +82,7 @@ export async function createMonitor({root=projectRoot,collect,config:configInput
         const value=await body(req);
         if(url.pathname==='/api/refresh'){if(value.module&&!session.modules[value.module])throw Error('未知模块');void session.refresh(value.module);json(res,202,{ok:true});return;}
         if(url.pathname==='/api/pause'){session.paused=Boolean(value.paused);json(res,200,{ok:true});return;}
-        if(url.pathname==='/api/inventory'){void scan();json(res,202,{ok:true});return;}
+        if(url.pathname==='/api/inventory'){void scan(value.resume===true);json(res,202,{ok:true});return;}
         if(url.pathname==='/api/inventory/cancel'){if(inventory.running){inventory.error='盘点已取消；部分结果不代表总容量';scanController?.abort();}json(res,200,{ok:true});return;}
         if(['/api/config','/api/range','/api/analytics/credentials'].includes(url.pathname)&&updating){json(res,409,{error:'正在更新设置，请稍后重试'});return;}
         if(url.pathname==='/api/range'){
