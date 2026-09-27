@@ -14,6 +14,7 @@ type Props = Omit<ComponentProps<typeof Link>, 'href' | 'onNavigate'> & { href: 
 export default function AccountLink({ href, children, ...props }: Props) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const authSide = href === '/library' ? 'left' : 'right';
   const [waiting, setWaiting] = useState(false);
   const proceed = useRef<((user: AuthUser | null) => void) | null>(null);
   const cleanup = useRef<(() => void) | null>(null);
@@ -24,7 +25,7 @@ export default function AccountLink({ href, children, ...props }: Props) {
   return <Link {...props} href={user ? href : '/login'} aria-busy={waiting || undefined}
     onNavigate={event => {
       if (!loading) {
-        if (!user && navigateMobileAuth('/login')) event.preventDefault();
+        if (!user && navigateMobileAuth('/login', authSide)) event.preventDefault();
         return;
       }
       event.preventDefault();
@@ -50,7 +51,7 @@ export default function AccountLink({ href, children, ...props }: Props) {
         setWaiting(false);
         if (location.href === source) {
           const destination = sessionUser ? href : '/login';
-          if (navigateMobileAuth(destination) || navigateMobileRoot(destination)) return;
+          if (navigateMobileAuth(destination, authSide) || navigateMobileRoot(destination)) return;
           beginMobileSectionTransition(destination);
           router.push(destination);
         }
