@@ -586,6 +586,34 @@ test('library browser requests retry navigation timeouts twice without retrying 
   } finally { await client.close(); }
 });
 
+test('a detached navigation target restarts the browser and retries the original timeout', async t => {
+  const f = await fixture(t, (req, res, counts) => {
+    if (req.url === '/slow' && counts.get('/slow') === 1) return;
+    res.end('<h1>已恢复</h1><div id="content">合成测试正文</div>');
+  });
+  const {default: puppeteer} = await import('puppeteer');
+  let launches = 0;
+  const launchBrowser = async options => {
+    const browser = await puppeteer.launch(options);
+    if (++launches === 1) {
+      const patch = page => { page.createCDPSession = async () => { throw Error('Protocol error (Page.stopLoading): Not attached to an active page'); }; return page; };
+      const pages = browser.pages.bind(browser), newPage = browser.newPage.bind(browser);
+      browser.pages = async () => (await pages()).map(patch);
+      browser.newPage = async () => patch(await newPage());
+    }
+    return browser;
+  };
+  const client = makeClient({allowedHosts: ['127.0.0.1'], cacheDir: path.join(f.dir, 'detached-retry'), delayMs: 200, timeoutMs: 300,
+    retries: 1, retryNetworkErrors: true, launchBrowser});
+  try {
+    const result = await client.get(f.base + '/slow', {render: true, readySelector: '#content'});
+    assert.match(result.body.toString(), /合成测试正文/);
+    assert.equal(launches, 2);
+    assert.equal(f.counts.get('/slow'), 2);
+    assert.equal(client.stats.retries, 1);
+  } finally { await client.close(); }
+});
+
 test('sparse probes stop after three failed requests instead of requiring adjacent chapter numbers', async t => {
   const f = await fixture(t, (req, res) => {
     if (req.url === '/book') res.end(heading + `<div id="catalog">${Array.from({length: 100}, (_, i) => `<a href="/a${i + 1}">第${i + 1}章</a>`).join('')}</div>`);

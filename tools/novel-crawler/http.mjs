@@ -187,6 +187,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
       for (let attempt = 0; attempt <= retries; attempt++) {
         await wait(spacing());
         await ensureBrowser();
+        const attemptPage = page;
         let retryAfterMs, responseListener;
         try {
           clock.lastRequest = Date.now();
@@ -382,18 +383,25 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
             continue;
           }
           if (!browser.connected || page.isClosed()) throw windowClosed();
-          if (retryNetworkErrors && !error.stopSource && (error.name === 'TimeoutError' || /^net::ERR_(CONNECTION|TIMED_OUT|NAME_NOT_RESOLVED|NETWORK|INTERNET_DISCONNECTED)/.test(error.message))) {
+          if (retryNetworkErrors && attempt < retries && !error.stopSource && (error.name === 'TimeoutError' || /^net::ERR_(CONNECTION|TIMED_OUT|NAME_NOT_RESOLVED|NETWORK|INTERNET_DISCONNECTED)/.test(error.message))) {
             // A goto timeout does not cancel Chromium's pending navigation. Stop it
-            // before changing cache settings or attempting the same URL again.
-            const navigation = await page.createCDPSession();
-            try { await navigation.send('Page.stopLoading'); }
-            finally { await navigation.detach(); }
+            // before attempting the URL again. A detached target cannot accept
+            // stopLoading; reset that browser and preserve the original failure.
+            let navigation;
+            try {
+              navigation = await page.createCDPSession();
+              await navigation.send('Page.stopLoading');
+            } catch {
+              try { await closeBrowser(); } catch {}
+              browser = page = launchPromise = closingBrowser = null;
+              sessionReady = false;
+            } finally { await navigation?.detach().catch(() => {}); }
             error.retryAfterMs = Math.max(delayMs, 1000 * 2 ** attempt);
           }
           if (attempt === retries || !Number.isFinite(error.retryAfterMs)) throw error;
           retryAfterMs = error.retryAfterMs;
           stats.retries++;
-        } finally { manualAction = false; if (responseListener) page.off('response', responseListener); }
+        } finally { manualAction = false; if (responseListener) attemptPage.off('response', responseListener); }
         onStatus?.({kind: 'retrying', url: original, message: `读取暂时失败，${Math.ceil(retryAfterMs / 1000)} 秒后自动重试（${attempt + 1}/${retries}）；已完成的章节保留。`});
         defer(retryAfterMs);
         await wait(retryAfterMs);
