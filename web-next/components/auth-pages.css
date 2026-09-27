@@ -3,8 +3,10 @@
   to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 @media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
-  .login-page, .register-page { animation: auth-page-enter 400ms cubic-bezier(.22, .68, 0, 1); }
+  .login-page, .register-page { animation: auth-page-enter 600ms cubic-bezier(.22, .68, 0, 1); }
+  .auth-enter-active .login-page, .auth-enter-active .register-page { position:relative; z-index:91; }
   body:has(.login-page, .register-page) > main { overflow: hidden; }
 }
+.auth-entry-background { position:fixed; left:0; width:100%; z-index:90; overflow:hidden; contain:layout paint; background:var(--home-background); pointer-events:none; }
 .auth-exit-viewport { position:fixed; inset:0; z-index:100; overflow:hidden; pointer-events:none; }
 .auth-exit-snapshot { position:absolute; top:0; left:0; width:100%; overflow:hidden; contain:layout paint; background:var(--home-background); pointer-events:none; will-change:transform; }

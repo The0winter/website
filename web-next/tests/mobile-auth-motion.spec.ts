@@ -7,6 +7,35 @@ type Exit={side:string;duration:number;transform:string};
 const exits=(page:Page)=>page.evaluate(()=>(window as unknown as Window & {authExits:Exit[]}).authExits);
 const settled=(page:Page)=>page.evaluate(()=>Promise.all(document.querySelector('.login-page, .register-page')?.getAnimations().map(a=>a.finished.catch(()=>{})) || []));
 
+for (const entry of ['avatar', 'shelf', 'book'] as const) {
+  test(`${entry}: the source stays painted underneath the first login frame`, async ({page}, info) => {
+    const book=process.env.AUTH_ENTRY_BOOK || '000000000000000000000101';
+    await page.goto(base+(entry==='book'?`/book/${book}`:'/'));
+    const trigger=entry==='book'?page.getByRole('button',{name:'加入书架',exact:true}).filter({visible:true}):page.locator(entry==='avatar'?'.mobile-account-link:visible':'.mh-bottom [data-section="library"]');
+    await expect(trigger).toBeVisible();
+    await page.evaluate(() => {
+      const marker=document.createElement('div');
+      marker.style.cssText='position:fixed;left:12px;top:320px;width:80px;height:80px;background:rgb(13,99,177);z-index:80';
+      document.querySelector('main')!.append(marker);
+      document.addEventListener('animationstart', event => {
+        if ((event as AnimationEvent).animationName!=='auth-page-enter') return;
+        for(const animation of (event.target as HTMLElement).getAnimations()) {animation.pause();animation.currentTime=0;}
+      });
+    });
+    const clip={x:20,y:330,width:40,height:40};
+    const before=await page.screenshot({clip});
+    await trigger.click();
+    await expect(page.locator('.auth-entry-background')).toHaveCount(1);
+    await expect(page.locator('.login-page')).toHaveCSS('animation-duration','0.6s');
+    expect(await page.screenshot({clip})).toEqual(before);
+    await page.screenshot({path:info.outputPath(`verified-${entry}-first-frame.png`)});
+    // Interrupting an entry must also remove its inert background.
+    await page.goBack();
+    await expect(page.locator('.auth-entry-background')).toHaveCount(0);
+    await expect(page.locator('html')).not.toHaveClass(/auth-enter-active/);
+  });
+}
+
 test.beforeEach(async({page})=>{
   await page.route('**/api/auth/session',route=>route.fulfill({status:401,contentType:'application/json',body:'{}'}));
   await page.addInitScript(()=>{
@@ -21,18 +50,18 @@ test.beforeEach(async({page})=>{
 });
 
 for(const entry of ['avatar','shelf'] as const){
-  test(`${entry}: 400ms entry and exit use the originating edge through Back, Forward and reload`,async({page},info)=>{
+  test(`${entry}: 600ms entry and exit use the originating edge through Back, Forward and reload`,async({page},info)=>{
     await page.goto(base);
     const trigger=page.locator(entry==='avatar'?'.mobile-account-link:visible':'.mh-bottom [data-section="library"]');
     await expect(trigger).toHaveAttribute('href','/login');await trigger.click();
     const side=entry==='shelf'?'left':'right',x=entry==='shelf'?'-100%':'100%';
-    await expect(page.locator('.login-page')).toHaveCSS('animation-duration','0.4s');
+    await expect(page.locator('.login-page')).toHaveCSS('animation-duration','0.6s');
     await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--auth-enter-x'))).toBe(x);
     await settled(page);
     await page.screenshot({path:info.outputPath(`final-${entry}-center.png`)});
     await page.getByRole('button',{name:'返回',exact:true}).click();
     await expect(page).toHaveURL(base+'/');
-    await expect.poll(()=>exits(page)).toEqual([{side,duration:400,transform:`translate3d(${x},0,0)`}]);
+    await expect.poll(()=>exits(page)).toEqual([{side,duration:600,transform:`translate3d(${x},0,0)`}]);
     await expect(page.locator('.auth-exit-viewport')).toHaveCount(0);
     await page.goForward();await expect(page.locator('.login-card')).toBeVisible();
     await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--auth-enter-x'))).toBe(x);

@@ -9,13 +9,14 @@ let available = false;
 let current: {path: string; index: number; side: AuthSide} | undefined;
 let pending: {path: string; side: AuthSide} | undefined;
 let clearExit: (() => void) | undefined;
+let clearEntry: (() => void) | undefined;
 const mobile = () => matchMedia('(max-width: 767px)').matches;
 const authPath = (path: string) => ['/login', '/register'].includes(path);
 const savedSide = (state: typeof history.state, path: string): AuthSide => state?.mobileAuth?.path === path && state.mobileAuth.side === 'left' ? 'left' : 'right';
 
 export function installMobileAuthNavigation() {
   available = true;
-  const clear = () => clearExit?.();
+  const clear = () => {clearExit?.(); clearEntry?.();};
   window.addEventListener('pagehide', clear);
   return () => { available = false; clear(); window.removeEventListener('pagehide', clear); };
 }
@@ -25,6 +26,32 @@ export function syncMobileAuthPage(path: string) {
   pending = undefined;
   document.documentElement.style.setProperty('--auth-enter-x', side === 'left' ? '-100%' : '100%');
   current = {path, index: history.state?.mobileRoot?.index ?? 0, side: savedSide(history.state, path)};
+  if (clearEntry) {
+    const clear = clearEntry;
+    const page = document.querySelector<HTMLElement>('main .login-page, main .register-page');
+    const animations = page?.getAnimations() || [];
+    void Promise.all(animations.map(animation => animation.finished.catch(() => {}))).then(clear);
+  }
+}
+
+// Keep the visible source underneath the incoming form. Capture before native
+// navigation resets scroll; the pre-mutation hook also covers browser Forward.
+function retainEntryBackground() {
+  if (clearEntry || !mobile() || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const source = document.querySelector<HTMLElement>('body > main');
+  if (!source) return;
+  const {element} = captureMobileSection(source, 0, innerHeight, true, true);
+  element.className = 'auth-entry-background';
+  document.body.append(element);
+  document.documentElement.classList.add('auth-enter-active');
+  const clear = () => {
+    element.remove();
+    if (clearEntry === clear) {
+      clearEntry = undefined;
+      document.documentElement.classList.remove('auth-enter-active');
+    }
+  };
+  clearEntry = clear;
 }
 
 function beginMobileAuthExit(side: AuthSide) {
@@ -47,7 +74,7 @@ function beginMobileAuthExit(side: AuthSide) {
   document.body.append(viewport);
   const animation = animateElement(element, [{transform:'translate3d(0,0,0)'},
     {transform:`translate3d(${side === 'left' ? '-100%' : '100%'},0,0)`}],
-    {duration:400, easing:'cubic-bezier(.22,.68,0,1)', fill:'forwards'});
+    {duration:600, easing:'cubic-bezier(.22,.68,0,1)', fill:'forwards'});
   const clear = () => {animation.cancel(); viewport.remove(); if (clearExit === clear) clearExit = undefined;};
   clearExit = clear;
   void animation.finished.then(clear);
@@ -58,6 +85,8 @@ function beginMobileAuthExit(side: AuthSide) {
 export function prepareMobileAuthTransition(from: string, path: string) {
   if (!mobile()) return;
   const fromAuth = authPath(from), toAuth = authPath(path);
+  if (fromAuth || !toAuth) clearEntry?.();
+  else retainEntryBackground();
   const back = (history.state?.mobileRoot?.index ?? -1) < (current?.index ?? 0);
   const incoming: AuthSide = pending?.path === path ? pending.side : fromAuth ? back ? 'left' : 'right' : savedSide(history.state, path);
   if (fromAuth) beginMobileAuthExit(toAuth ? incoming === 'left' ? 'right' : 'left' : current?.side ?? 'right');
@@ -69,6 +98,7 @@ export function navigateMobileAuth(href: string, side: AuthSide = 'right', repla
   const target = new URL(href, location.origin);
   if (target.origin !== location.origin || !authPath(target.pathname)) return false;
   if (target.href !== location.href) {
+    if (!authPath(location.pathname)) retainEntryBackground();
     pending = {path:target.pathname, side};
     // Do not copy __NA: Next only synchronizes usePathname for native entries
     // without that internal flag, and adds its own route state afterwards.
