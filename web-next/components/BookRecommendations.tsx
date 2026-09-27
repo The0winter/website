@@ -1,7 +1,6 @@
 'use client';
 
 import {useEffect, useState} from 'react';
-import {ChevronRight} from 'lucide-react';
 import type {Book} from '@/lib/api';
 import {safeFetch} from '@/lib/request';
 import BookShelf from './BookShelf';
@@ -33,7 +32,7 @@ export default function BookRecommendations({book}: {book: Pick<Book, 'id' | 'ca
   }, [book.id, book.category, retry]);
 
   return <section className="book-recommendations" aria-label="猜你喜欢" aria-busy={!result}>
-    <header><h2>猜你喜欢</h2>{!!result?.books.length && <span>左右滑动 <ChevronRight size={13} aria-hidden="true"/></span>}</header>
+    <header><h2>猜你喜欢</h2></header>
     {!result ? <p className="book-recommendations-status" role="status"><LoadingText>正在加载推荐</LoadingText></p>
       : result.failed ? <p className="book-recommendations-status" role="alert">推荐暂时加载失败 <button onClick={() => {setResult(null); setRetry(value => value + 1);}}>重试</button></p>
       : result.books.length ? <BookShelf books={result.books} title="猜你喜欢"/>

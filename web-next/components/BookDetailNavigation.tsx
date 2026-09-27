@@ -45,7 +45,7 @@ export default function BookDetailNavigation({bookId, title}: {bookId: string; t
   }, [open]);
 
   return <nav className="book-home-actions" aria-label="详情页导航">
-    <Link href={returnHref} prefetch={false} aria-label={returnHref === '/' ? '返回精选' : '返回上一本书'} className="book-home-back"
+    <Link href={returnHref} prefetch={false} aria-label={returnHref === '/' ? '返回精选' : returnHref.startsWith('/user/') ? '返回书友主页' : '返回上一本书'} className="book-home-back"
       onNavigate={event => {if (returnHref !== '/') {event.preventDefault(); window.history.back();}}}>
       <ChevronLeft size={36} strokeWidth={1.35} aria-hidden="true"/>
     </Link>

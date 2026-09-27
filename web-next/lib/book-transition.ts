@@ -16,6 +16,8 @@ function waitForPage(href: string, signal: AbortSignal, onSlow?: () => void) {
     const parts = path.split('/');
     const ready = () => location.pathname === path && (parts[1] === 'library'
       ? visible('.library-page, .account-loading')
+      : parts[1] === 'user'
+      ? visible(`[data-public-profile-id="${CSS.escape(parts[2])}"], [data-public-profile-unavailable]`)
       : parts[1] === 'author'
       ? visible(`.author-page[data-author-href="${CSS.escape(path + url.search)}"][aria-busy="false"]`)
       : parts[1] === 'ranking'

@@ -23,3 +23,15 @@
   .public-profile-identity h1 { font-size:23px; }
   .public-profile-info { margin-inline:24px; }
 }
+.public-profile-recent { margin-top:24px; padding:24px 32px; border:1px solid var(--home-border,#e9e1d7); border-radius:20px; background:var(--home-surface,#fffdf9); --shelf-gutter:32px; }
+.public-profile-recent h2 { margin-bottom:18px; font-size:18px; font-weight:500; }
+.public-profile-recent>p { padding:24px 0; text-align:center; color:var(--home-muted,#82715e); font-size:14px; }
+.public-profile-recent>p button { padding:8px; text-decoration:underline; color:var(--home-accent,#936139); }
+@media(min-width:768px) {
+  .public-profile-recent { --shelf-book-width:120px; }
+  .public-profile-recent .mh-shelf { scrollbar-width:thin; padding-bottom:12px; }
+  .public-profile-recent .mh-shelf::-webkit-scrollbar { display:block; height:6px; }
+}
+@media(max-width:767px) {
+  .public-profile-recent { margin-top:16px; padding:20px; --shelf-gutter:20px; }
+}

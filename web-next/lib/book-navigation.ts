@@ -3,10 +3,10 @@ import {cancelChapterEntry, currentChapterEntry} from './chapter-entry';
 import {installRankingCache, loadRanking, trackRankingReading} from './ranking-cache';
 import {installReaderFullscreenBack} from './reader-fullscreen';
 
-type Route = {kind: 'home' | 'author' | 'library' | 'ranking' | 'detail' | 'reader'; href: string; bookId?: string};
+type Route = {kind: 'home' | 'author' | 'profile' | 'library' | 'ranking' | 'detail' | 'reader'; href: string; bookId?: string};
 type RankingView = {activeRank: string; category: string};
 type SourceVisit = {href: string; flow: string};
-type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; milestones?: boolean; search?: boolean; share?: boolean; restoreSession?: string; homeBrowse?: boolean; homeShortcutVisit?: boolean; libraryReturn?: string; rankingView?: RankingView; authorSource?: SourceVisit; detailSource?: SourceVisit};
+type Entry = Route & {version: 2; flow: string; level: number; catalog?: boolean; settings?: boolean; milestones?: boolean; search?: boolean; share?: boolean; restoreSession?: string; homeBrowse?: boolean; homeShortcutVisit?: boolean; libraryReturn?: string; rankingView?: RankingView; authorSource?: SourceVisit; profileSource?: SourceVisit; detailSource?: SourceVisit};
 type Router = {push: (href: string) => void; replace: (href: string) => void};
 const listeners = new Set<() => void>();
 let router: Router | undefined;
@@ -21,7 +21,7 @@ let documentSession: string | undefined;
 const session = () => documentSession ??= crypto.randomUUID();
 
 const overlay = (entry?: Entry) => entry?.catalog ? 'catalog' : entry?.settings ? 'settings' : entry?.milestones ? 'milestones' : entry?.search ? 'search' : entry?.share ? 'share' : undefined;
-const isList = (route?: Route): route is Route & {kind: 'home' | 'author' | 'library' | 'ranking'} => route?.kind === 'home' || route?.kind === 'author' || route?.kind === 'library' || route?.kind === 'ranking';
+const isList = (route?: Route): route is Route & {kind: 'home' | 'author' | 'profile' | 'library' | 'ranking'} => route?.kind === 'home' || route?.kind === 'author' || route?.kind === 'profile' || route?.kind === 'library' || route?.kind === 'ranking';
 const mobile = () => window.matchMedia('(max-width: 767px)').matches;
 function homeShortcut(route?: Route) {
   if (route?.kind === 'ranking') return '排行榜';
@@ -36,6 +36,7 @@ function routeFor(href: string): Route | undefined {
   if (href === '/library' || href.startsWith('/library?')) return {kind: 'library', href};
   if (href === '/ranking' || href.startsWith('/ranking?')) return {kind: 'ranking', href};
   if (/^\/author\/[^/?#]+(?:\?[^#]*)?$/.test(href)) return {kind: 'author', href};
+  if (/^\/user\/[a-f0-9]{24}$/.test(href)) return {kind: 'profile', href};
   const match = /^\/book\/([^/?#]+)(?:\/([^/?#]+))?$/.exec(href);
   if (match) return {kind: match[2] ? 'reader' : 'detail', href, bookId: match[1]};
 }
@@ -166,17 +167,17 @@ function navigate(entry: Entry, direction: 'enter' | 'exit', replace: boolean, t
       window.history[replace ? 'replaceState' : 'pushState']({...window.history.state, bookNavigation: entry}, '', entry.href);
       current = entry;
       router!.replace(entry.href);
-    } else if (!replace && (entry.kind === 'detail' || entry.kind === 'author')) {
+    } else if (!replace && (entry.kind === 'detail' || entry.kind === 'author' || entry.kind === 'profile')) {
       // Reserve the visit before requesting it so Back from its loader
       // lands on the source, even before the destination route is available.
       // This slot has no restoreSession: Forward must load the real details,
       // rather than restoring the source's temporary Next route tree.
       window.history.pushState({...window.history.state, bookNavigation: entry}, '', entry.href);
-      if (entry.kind === 'author') current = entry;
+      if (entry.kind === 'author' || entry.kind === 'profile') current = entry;
       router!.replace(entry.href);
     } else if (replace) router!.replace(entry.href);
     else router!.push(entry.href);
-  }, entry.kind === 'author' ? '作者主页' : mobile() ? homeShortcut(entry) : undefined);
+  }, entry.kind === 'author' ? '作者主页' : entry.kind === 'profile' ? '书友主页' : mobile() ? homeShortcut(entry) : undefined);
 }
 
 function onPopState(event: PopStateEvent) {
@@ -186,8 +187,8 @@ function onPopState(event: PopStateEvent) {
   if (!from || !router) { cancelBookTransition(); return; }
   // Authors and books opened by detail search retain their source visit across
   // Back/Forward, reloads and cancellation while the destination is loading.
-  const fromSource = from.kind === 'author' ? from.authorSource : from.kind === 'detail' ? from.detailSource : undefined;
-  const targetSource = target?.kind === 'author' ? target.authorSource : target?.kind === 'detail' ? target.detailSource : undefined;
+  const fromSource = from.kind === 'author' ? from.authorSource : from.kind === 'profile' ? from.profileSource : from.kind === 'detail' ? from.detailSource : undefined;
+  const targetSource = target?.kind === 'author' ? target.authorSource : target?.kind === 'profile' ? target.profileSource : target?.kind === 'detail' ? target.detailSource : undefined;
   const sourceBack = fromSource?.flow === target?.flow && fromSource?.href === target?.href;
   const sourceForward = targetSource?.flow === from.flow && targetSource?.href === from.href;
   if (target && (sourceBack || sourceForward)) {
@@ -266,6 +267,10 @@ export function navigateBookLink(href: string) {
   const target = routeFor(href);
   if (!target || !router) return false;
   if (document.documentElement.dataset.bookTransition) return true;
+  if (target.kind === 'profile' && target.href !== current?.href) {
+    navigate({...entryFor(target), profileSource: current ? {href: current.href, flow: current.flow} : undefined}, 'enter', false);
+    return true;
+  }
   if (target.kind === 'author' && target.href !== current?.href) {
     navigate({...entryFor(target), authorSource: current ? {href: current.href, flow: current.flow} : undefined}, 'enter', false);
     return true;
@@ -304,7 +309,7 @@ export function navigateBookLink(href: string) {
     navigate({...entryFor(target, current.flow), level: 1, libraryReturn: current.href}, 'enter', false); return true;
   }
   if (isList(current) && target.kind === 'detail') {
-    navigate(entryFor(target, current.flow), 'enter', false); return true;
+    navigate({...entryFor(target, current.flow), ...(current.kind === 'profile' ? {detailSource: {href: current.href, flow: current.flow}} : {})}, 'enter', false); return true;
   }
   if (current.kind === 'detail' && target.kind === 'reader' && current.bookId === target.bookId) {
     navigate(entryFor(target, current.flow), 'enter', Boolean(current.catalog)); return true;

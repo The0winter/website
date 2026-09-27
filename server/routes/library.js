@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Book from '../models/Book.js';
+import User from '../models/User.js';
 import Chapter from '../models/Chapter.js';
 import Bookmark from '../models/Bookmark.js';
 import ReadingHistory from '../models/ReadingHistory.js';
@@ -14,6 +15,28 @@ const objectId = value => {
 };
 
 export function libraryRoutes(app, auth) {
+  app.get('/api/users/:userId/recent-books', asyncRoute(async (req, res) => {
+    const userId = objectId(req.params.userId);
+    if (!await User.exists({_id: userId, isBanned: {$ne: true}})) fail(404, '用户不存在');
+    const books = [];
+    // Batch only this user's chapter-reading records. Filter unavailable books
+    // before taking eight, without a D1 lookup over the entire book collection.
+    for (let skip = 0; books.length < 8; skip += 32) {
+      const visits = await ReadingHistory.find({userId, lastReadAt: {$ne: null}})
+        .select('bookId').sort({lastReadAt: -1, _id: -1}).skip(skip).limit(32).maxTimeMS(3000).lean();
+      if (!visits.length) break;
+      const rows = await Book.find({_id: {$in: visits.map(row => row.bookId)}, deletedAt: null, visibility: {$ne: 'private'}})
+        .select('_id title author cover_image category rating').maxTimeMS(3000).lean();
+      const byId = new Map(rows.map(row => [String(row._id), row]));
+      for (const visit of visits) {
+        const book = byId.get(String(visit.bookId));
+        if (book) books.push({id: String(book._id), title: book.title, author: book.author, cover_image: book.cover_image, category: book.category, rating: book.rating});
+        if (books.length === 8) break;
+      }
+      if (visits.length < 32) break;
+    }
+    res.set('Cache-Control', 'private, no-store').json(books);
+  }));
   app.post('/api/users/:userId/history', auth.authenticate, own, asyncRoute(async (req, res) => {
     const bookId = objectId(req.body.bookId);
     const chapterId = req.body.chapterId ? objectId(req.body.chapterId) : null;

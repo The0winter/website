@@ -5,6 +5,7 @@ import {useRouter} from 'next/navigation';
 import {ArrowLeft, BookOpen, CalendarDays, Shield, UserRound} from 'lucide-react';
 import type {Profile} from '@/lib/api';
 import UserAvatar from '@/components/UserAvatar';
+import ProfileRecentBooks from '@/components/ProfileRecentBooks';
 import ProfileCoverArtwork from '@/components/ProfileCoverArtwork';
 import {resolveProfileTheme} from '@/lib/profile-themes';
 import '../../profile/profile.css';
@@ -15,7 +16,7 @@ export default function PublicUserProfile({profile}:{profile:Profile}) {
   const theme = resolveProfileTheme(profile.id, profile.profileTheme);
   const date = new Date(profile.created_at);
   const joined = Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat('zh-CN', {year:'numeric',month:'long',day:'numeric',timeZone:'Asia/Shanghai'}).format(date) : '暂未公开';
-  return <main className="public-profile-page" data-testid="public-profile">
+  return <main className="public-profile-page" data-testid="public-profile" data-public-profile-id={profile.id}>
     <div className="public-profile-shell">
       <nav className="public-profile-nav" aria-label="个人主页导航">
         <button type="button" onClick={() => {if (window.history.length > 1) router.back(); else router.replace('/');}}><ArrowLeft size={20}/>返回</button>
@@ -37,6 +38,7 @@ export default function PublicUserProfile({profile}:{profile:Profile}) {
           </dl>
         </section>
       </article>
+      <ProfileRecentBooks key={profile.id} userId={profile.id}/>
     </div>
   </main>;
 }

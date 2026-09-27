@@ -9,3 +9,8 @@ export function ratingLabel(stars?: number | null): string {
   const score = formatRating(stars);
   return score === '暂无评分' ? score : `${score} 分`;
 }
+
+// Display counts only; stored votes and the average remain unchanged.
+export function displayRatingCount(count: number): number {
+  return Number.isFinite(count) && count > 0 ? Math.ceil(count / 2) : 0;
+}
