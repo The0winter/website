@@ -59,6 +59,11 @@ export function activityRequests(today,region='all') {
 const cityPeriods={day:1,week:7,month:30};
 const gothenburgNames=['Gothenburg','Göteborg','Goteborg','哥德堡'];
 const excludedCities=['','(not set)','(other)',...gothenburgNames];
+export function rankCities(cities) {
+  const visits=Math.max(0,...cities.map(c=>Math.log1p(c.sessions)))||1,duration=Math.max(0,...cities.map(c=>Math.log1p(c.userEngagementDuration)))||1;
+  return cities.map(c=>({...c,score:100*(.4*Math.log1p(c.sessions)/visits+.6*Math.log1p(c.userEngagementDuration)/duration)}))
+    .sort((a,b)=>b.score-a.score||b.userEngagementDuration-a.userEngagementDuration||b.sessions-a.sessions||a.name.localeCompare(b.name)||a.id.localeCompare(b.id));
+}
 export function rankBrowsing(pages) {
   const views=(Math.max(0,...pages.map(p=>Math.log1p(p.views)))||1),duration=(Math.max(0,...pages.map(p=>Math.log1p(p.userEngagementDuration)))||1);
   return pages.map(p=>({...p,score:100*(.4*Math.log1p(p.views)/views+.6*Math.log1p(p.userEngagementDuration)/duration)}))
@@ -107,8 +112,7 @@ export function normalizeCities(reports,today,timeZone) {
     if(Number(report.rowCount||0)>(report.rows||[]).length)throw Error('城市记录超出查询范围，暂不展示不完整排名');
     const records=rows(report).filter(r=>!excludedCities.some(name=>name.toLowerCase()===r.city.trim().toLowerCase()))
       .map(r=>({id:r.cityId,name:r.city,region:r.region,country:r.countryId,activeUsers:r.activeUsers,sessions:r.sessions,userEngagementDuration:r.userEngagementDuration}));
-    const cities=records.filter(r=>r.activeUsers>0&&r.sessions>0&&r.userEngagementDuration>0)
-      .sort((a,b)=>b.activeUsers-a.activeUsers||a.name.localeCompare(b.name)||a.id.localeCompare(b.id)).slice(0,10);
+    const cities=rankCities(records.filter(r=>r.activeUsers>0&&r.sessions>0&&r.userEngagementDuration>0)).slice(0,10);
     const notices=[report.metadata?.subjectToThresholding?'部分城市数据受谷歌隐私阈值限制':null,report.metadata?.dataLossFromOtherRow?'部分城市被谷歌合并，排名可能不完整':null,report.metadata?.samplingMetadatas?.length?'城市排名包含抽样数据':null].filter(Boolean);
     return [unit,{startDate:shiftDate(today,1-days),endDate:today,cities,notices}];
   }));

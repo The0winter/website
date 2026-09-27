@@ -5,7 +5,7 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 
 let app,child;
-const projectRoot=process.cwd(),dir=path.join(projectRoot,'.runtime/task-artifacts/site-monitor-page-browsing');
+const projectRoot=process.cwd(),dir=path.join(projectRoot,'.runtime/task-artifacts/site-monitor-compact-rankings');
 test.beforeAll(async()=>{fs.mkdirSync(dir,{recursive:true});child=spawn(process.execPath,['--require','./tools/test-env.cjs','tools/site-monitor/tests/browser-fixture.mjs'],{cwd:projectRoot,windowsHide:true,stdio:['pipe','pipe','pipe']});app=await new Promise((resolve,reject)=>{let output='';child.stdout.on('data',b=>{output+=b;if(output.includes('\n')){try{resolve(JSON.parse(output.trim()));}catch(error){reject(error);}}});child.on('error',reject);child.stderr.on('data',b=>reject(Error(String(b))));child.on('exit',code=>{if(code)reject(Error('Fixture failed: '+code));});});});
 test.afterAll(async()=>{if(child&&child.exitCode===null){const exited=once(child,'exit');child.stdin.end('close');await exited;}});
 
@@ -97,12 +97,12 @@ test('触屏选点后保留浮框，Escape 关闭且不挤动曲线',async({brow
 
 test('城市前十在原卡片内滚动，日周月切换并保留自动刷新时的滚动位置',async({page})=>{
   await page.goto(app.url);const card=page.locator('.panel:has(#user-trend)'),before=await card.boundingBox();
-  await page.getByRole('button',{name:'城市分布',exact:true}).click();const list=page.getByRole('region',{name:'活跃用户最多的十个城市'});
+  await page.getByRole('button',{name:'城市分布',exact:true}).click();const list=page.getByRole('region',{name:'城市综合排名前十'});
   await expect(list.locator('li')).toHaveCount(10);await expect(list.locator('li').first()).toContainText('Shanghai');await expect(list.locator('li').first().locator('strong')).toHaveText('10');await expect(list.locator('li').first().locator('.city-duration')).toHaveText('平均使用 1 分 24 秒 / 次');await expect(page.locator('#user-trend svg')).toHaveCount(0);await expect(page.locator('.daily-circle .circle-value')).toHaveText('21');
   expect((await card.boundingBox()).height).toBeLessThanOrEqual(before.height+1);expect(await list.evaluate(e=>e.scrollHeight>e.clientHeight)).toBe(true);
   await list.hover();await page.mouse.wheel(0,await list.evaluate(e=>e.scrollHeight));await expect.poll(()=>list.evaluate(e=>e.scrollTop)).toBeGreaterThan(0);await expect(list.locator('li').last()).toBeInViewport();
   const scrolled=await list.evaluate(e=>e.scrollTop);await page.evaluate(()=>fetch('/api/refresh',{method:'POST',headers:{'x-monitor-token':sessionStorage.getItem('monitor-token'),'Content-Type':'application/json'},body:JSON.stringify({module:'analytics'})}));await page.waitForTimeout(2200);expect(await list.evaluate(e=>e.scrollTop)).toBe(scrolled);
-  await page.getByRole('button',{name:'周',exact:true}).click();await expect(list.locator('li').first().locator('strong')).toHaveText('70');await expect(page.locator('.city-caption')).toContainText('近 7 天');expect(await list.evaluate(e=>e.scrollTop)).toBe(0);
+  await page.getByRole('button',{name:'周',exact:true}).click();await expect(list.locator('li').first().locator('strong')).toHaveText('70');await expect(page.locator('.city-caption')).toHaveCount(0);await expect(page.locator('.city-dates')).toHaveText('2026-09-18 — 2026-09-24');expect(await list.evaluate(e=>e.scrollTop)).toBe(0);
   await page.getByRole('button',{name:'月',exact:true}).click();await expect(list.locator('li').first().locator('strong')).toHaveText('300');await page.screenshot({path:path.join(dir,'verified-desktop-cities-fixture.png'),fullPage:true});
   for(const width of [390,320]){await page.setViewportSize({width,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await list.focus();await page.keyboard.press('End');await expect(list.locator('li').last()).toBeInViewport();await page.screenshot({path:path.join(dir,`verified-cities-${width}-fixture.png`),fullPage:true});}
   await page.getByRole('button',{name:'全部',exact:true}).click();await expect(page.getByRole('img',{name:'用户变化趋势'})).toBeVisible();await expect(page.locator('.city-scroll')).toHaveCount(0);
@@ -171,12 +171,12 @@ test('浏览记录显示加权排名和原始数值，刷新发起新查询且�
   const list=page.getByRole('region',{name:'网页浏览记录'});
   await expect(list.locator('li')).toHaveCount(10);
   await expect(list.locator('li').first()).toContainText('绍宋 · 第一章');
-  await expect(list.locator('li').first()).toContainText('/reader/chapter-one');
+  await expect(list).not.toContainText('/reader/chapter-one');await expect(list.locator('.page-path,strong')).toHaveCount(0);
   await expect(list.locator('li').first()).toContainText('浏览 20 次');
   await expect(list.locator('li').first()).toContainText('使用总时长 28 分 0 秒');
-  const scores=await list.locator('li strong').allTextContents();
-  expect(scores.map(parseFloat)).toEqual(scores.map(parseFloat).sort((a,b)=>b-a));
-  await expect(page.getByText('浏览次数 40% · 使用总时长 60% · 已排除哥德堡')).toBeVisible();
+  await expect(page.locator('.city-caption,.city-chart>.city-note')).toHaveCount(0);
+  const bars=await list.locator('.city-track span').evaluateAll(nodes=>nodes.map(n=>parseFloat(n.style.width)));
+  expect(bars).toEqual([...bars].sort((a,b)=>b-a));
   await page.getByRole('button',{name:'周',exact:true}).click();await expect(list.locator('li').first()).toContainText('浏览 140 次');
   for(const width of [1440,390,320]){
     await page.setViewportSize({width,height:1000});

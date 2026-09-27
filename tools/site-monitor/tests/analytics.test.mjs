@@ -152,3 +152,18 @@ test('网页排名按路径合并标题并累计浏览和时长；城市在汇�
   raw[0].rowCount=0;raw[0].metadata.timeZone='UTC';assert.throws(()=>normalizeBrowsing(raw,'2026-09-27','Asia/Shanghai'),/口径/);
   assert.throws(()=>normalizeBrowsing([],'2026-09-27','Asia/Shanghai'),/不完整/);
 });
+
+
+test('城市按会话40%与时长60%加权后取前十，低人数长阅读可以进入榜首，不用零时长凑数',()=>{
+  const raw=[1,7,30].map(()=>report(['cityId','city','region','countryId'],['activeUsers','sessions','userEngagementDuration'],[
+    ...Array.from({length:12},(_,i)=>[[String(i),'City '+i,'Region','CN'],[100-i,100-i,1]]),
+    [['reader','Reader','Region','CN'],[1,1,100000]],
+    [['zero','Zero','Region','CN'],[99999,99999,0]],
+  ]));
+  const period=normalizeCities(raw,'2026-09-27','Asia/Shanghai').day;
+  assert.equal(period.cities.length,10);assert.equal(period.cities[0].id,'reader');
+  assert.ok(period.cities.every(c=>c.id!=='zero'));
+  assert.ok(period.cities.every((c,i,list)=>!i||c.score<=list[i-1].score));
+  raw[0].rows=raw[0].rows.slice(-2);
+  assert.equal(normalizeCities(raw,'2026-09-27','Asia/Shanghai').day.cities.length,1);
+});
