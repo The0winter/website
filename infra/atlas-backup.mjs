@@ -19,40 +19,44 @@ export async function writeMongoArchive(client, file) {
   const names = (await db.listCollections({type:'collection'}).toArray()).map(row => row.name).sort();
   const indexes = new Map();
   for (const name of names) indexes.set(name, await db.collection(name).indexes());
-  const session = client.startSession();
+  // Snapshot sessions pin every find to the same majority-committed timestamp
+  // without the short lifetime limit of a multi-document transaction. If that
+  // snapshot expires, fail closed; never continue with a fresh read timestamp.
+  const session = client.startSession({snapshot:true,causalConsistency:false});
   const createdAt = new Date().toISOString();
-  let summary, bytes, sha256;
+  const readStarted = Date.now(), summary = [];
+  let bytes = 0;
   try {
-    await session.withTransaction(async () => {
-      // A transaction retry truncates its private file and starts every hash anew.
-      summary = []; bytes = 0;
-      const hash = createHash('sha256');
-      async function* documents() {
-        yield JSON.stringify({format, source:'MongoDB', database:db.databaseName, createdAt}).slice(0,-1) + ',"collections":[';
-        for (let i = 0; i < names.length; i++) {
-          const name = names[i], contentHash = createHash('sha256');
-          let count = 0;
-          yield (i ? ',' : '') + JSON.stringify({name,indexes:indexes.get(name)}).slice(0,-1) + ',"documents":[';
-          // Keep batches bounded while avoiding hundreds of inter-region
-          // getMore round trips inside Atlas's snapshot transaction deadline.
-          const cursor = db.collection(name).find({}, {session,sort:{_id:1},batchSize:2000});
-          try {
-            for await (const doc of cursor) {
-              const row = {id:String(doc._id), document:encode(doc), bson:mongoose.mongo.BSON.EJSON.stringify(doc,{relaxed:false})};
-              contentHash.update(row.id + '\0' + row.document + '\n');
-              yield (count++ ? ',' : '') + JSON.stringify(row);
+    const hash = createHash('sha256');
+    async function* documents() {
+      yield JSON.stringify({format, source:'MongoDB', database:db.databaseName, createdAt}).slice(0,-1) + ',"collections":[';
+      for (let i = 0; i < names.length; i++) {
+        const name = names[i], contentHash = createHash('sha256');
+        let count = 0;
+        yield (i ? ',' : '') + JSON.stringify({name,indexes:indexes.get(name)}).slice(0,-1) + ',"documents":[';
+        const cursor = db.collection(name).find({}, {session,readPreference:'primary',sort:{_id:1},batchSize:2000});
+        let chunks = [], chunkBytes = 0;
+        try {
+          for await (const doc of cursor) {
+            const row = {id:String(doc._id), document:encode(doc), bson:mongoose.mongo.BSON.EJSON.stringify(doc,{relaxed:false})};
+            contentHash.update(row.id + '\0' + row.document + '\n');
+            const encoded = (count++ ? ',' : '') + JSON.stringify(row);
+            chunks.push(encoded); chunkBytes += Buffer.byteLength(encoded);
+            // Bound memory while avoiding one zlib write per document.
+            if (chunkBytes >= 64 * 1024) {
+              yield chunks.join(''); chunks = []; chunkBytes = 0;
             }
-          } finally { await cursor.close(); }
-          yield ']}';
-          summary.push({name,count,sha256:contentHash.digest('hex')});
-        }
+          }
+          if (chunks.length) yield chunks.join('');
+        } finally { await cursor.close(); }
         yield ']}';
+        summary.push({name,count,sha256:contentHash.digest('hex')});
       }
-      const meter = new Transform({transform(chunk,encoding,callback) {bytes += chunk.length; hash.update(chunk); callback(null,chunk);}});
-      await pipeline(Readable.from(documents(),{objectMode:false}),createGzip(),meter,createWriteStream(file,{flags:'w',mode:0o600}));
-      sha256 = hash.digest('hex');
-    }, {readConcern:{level:'snapshot'},readPreference:'primary'});
-    return {format,source:'MongoDB',createdAt,collections:summary,bytes,sha256};
+      yield ']}';
+    }
+    const meter = new Transform({transform(chunk,encoding,callback) {bytes += chunk.length; hash.update(chunk); callback(null,chunk);}});
+    await pipeline(Readable.from(documents(),{objectMode:false}),createGzip(),meter,createWriteStream(file,{flags:'w',mode:0o600}));
+    return {format,source:'MongoDB',createdAt,collections:summary,bytes,sha256:hash.digest('hex'),snapshotReadMs:Date.now()-readStarted};
   } finally { await session.endSession(); }
 }
 
@@ -65,32 +69,39 @@ export async function backupAtlas(uri, {directory,keepLocal=false,env=process.en
   const temporary = await fs.mkdtemp(path.join(directory,'.atlas-backup-'));
   await fs.chmod(temporary,0o700);
   const file = path.join(temporary,'snapshot.json.gz'), startedAt = new Date().toISOString();
-  let mongo, storage;
+  let mongo, storage, stage = 'connect';
   try {
     mongo = mongoFactory(uri); await mongo.connect();
+    stage = 'snapshot';
     const summary = await writeMongoArchive(mongo,file);
     await mongo.close(); mongo = null; // Release the snapshot before network upload.
     const {sha256,bytes} = summary;
     const archive = `atlas-${startedAt.replaceAll(/[:.]/g,'-')}-${sha256.slice(0,12)}.json.gz`;
     const key = 'backups/database/' + archive;
     storage = storageFactory();
+    stage = 'upload';
     const body = createReadStream(file);
     try {
       await storage.send(new PutObjectCommand({Bucket:env.R2_BUCKET,Key:key,Body:body,ContentLength:bytes,ContentType:'application/gzip',Metadata:{sha256,format}}),{abortSignal:AbortSignal.timeout(120000)});
     } finally {body.destroy();}
+    stage = 'verify';
     const response = await storage.send(new GetObjectCommand({Bucket:env.R2_BUCKET,Key:key}),{abortSignal:AbortSignal.timeout(120000)});
     const readback = createHash('sha256'); let verifiedBytes = 0;
     try {for await (const chunk of response.Body) {readback.update(chunk); verifiedBytes += chunk.length;}}
     finally {response.Body?.destroy?.();}
     if (verifiedBytes !== bytes || readback.digest('hex') !== sha256) throw new Error('R2 backup readback mismatch');
-    const {source,createdAt,collections} = summary;
-    const manifest = {status:'success',startedAt,finishedAt:new Date().toISOString(),archive,bytes,sha256,source,createdAt,collections,offsite:'R2-verified',bucket:env.R2_BUCKET,key};
+    stage = 'publish';
+    const {source,createdAt,collections,snapshotReadMs} = summary;
+    const manifest = {status:'success',startedAt,finishedAt:new Date().toISOString(),archive,bytes,sha256,source,createdAt,collections,snapshotReadMs,consistency:'snapshot-session',offsite:'R2-verified',bucket:env.R2_BUCKET,key};
     if (keepLocal) await fs.copyFile(file,path.join(directory,archive),fs.constants.COPYFILE_EXCL);
     await fs.writeFile(path.join(directory,archive+'.json'),JSON.stringify(manifest,null,2),{mode:0o600,flag:'wx'});
     const latest = path.join(temporary,'latest.json');
     await fs.writeFile(latest,JSON.stringify(manifest,null,2),{mode:0o600});
     await fs.rename(latest,path.join(directory,'latest.json'));
     return manifest;
+  } catch (error) {
+    error.backupStage = stage;
+    throw error;
   } finally {
     try {if(mongo) await mongo.close();} finally {storage?.destroy(); await fs.rm(temporary,{recursive:true,force:true});}
   }

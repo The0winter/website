@@ -33,4 +33,4 @@ async function main() {
       : await verifyMongoSnapshot(db,snapshot,schemas)));
   } finally {await client.close();}
 }
-main().catch(error=>{console.error(JSON.stringify({failed:true,code:error.code||error.name,message:/^(Target |Missing migration schema|BSON conversion|MongoDB verification|Invalid ObjectId|Migration requires)/.test(error.message)?error.message:'Atlas data operation failed; no success was recorded'}));process.exitCode=1;});
+main().catch(error=>{console.error(JSON.stringify({failed:true,code:error.code||error.name,codeName:/^[A-Za-z][A-Za-z0-9]*$/.test(error.codeName||'')?error.codeName:undefined,stage:error.backupStage,message:/^(Target |Missing migration schema|BSON conversion|MongoDB verification|Invalid ObjectId|Migration requires)/.test(error.message)?error.message:'Atlas data operation failed; no success was recorded'}));process.exitCode=1;});
