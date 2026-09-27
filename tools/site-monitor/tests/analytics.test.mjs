@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import {googleCollectors,normalizeReports,reportRequests,activityRequests,normalizeActivity,dateInZone,validateCredentials,regionFilter,cityRequests,normalizeCities} from '../analytics.mjs';
+import {googleCollectors,normalizeReports,reportRequests,activityRequests,normalizeActivity,dateInZone,validateCredentials,regionFilter,cityRequests,normalizeCities,rankBrowsing} from '../analytics.mjs';
 import {collectSite,validateConfig} from '../collectors.mjs';
 import {createMonitor} from '../server.mjs';
 import {fixtureCollectors,workspace,removeWorkspace} from './fixture.mjs';
@@ -28,7 +28,7 @@ function cityReports(){return [1,7,30].map(days=>report(['cityId','city','region
 
 test('城市前十按当天和近七/三十天直接去重查询，不累加日人数，缺失地区不冒充城市',()=>{
   const requests=cityRequests('2026-01-01');assert.equal(requests.length,3);assert.deepEqual(requests.map(r=>r.dateRanges[0].startDate),['2026-01-01','2025-12-26','2025-12-03']);
-  for(const request of requests){assert.equal(request.dateRanges[0].endDate,'2026-01-01');assert.equal(request.limit,'10');assert.equal(request.orderBys[0].metric.metricName,'activeUsers');assert.equal(request.orderBys[0].desc,true);assert.deepEqual(request.metrics,[{name:'activeUsers'},{name:'sessions'},{name:'userEngagementDuration'}]);assert.ok(request.dimensions.some(d=>d.name==='cityId'));assert.ok(request.dimensionFilter.notExpression.filter.inListFilter.values.includes('(not set)'));}
+  for(const request of requests){assert.equal(request.dateRanges[0].endDate,'2026-01-01');assert.equal(request.limit,'10000');assert.equal(request.orderBys[0].metric.metricName,'activeUsers');assert.equal(request.orderBys[0].desc,true);assert.deepEqual(request.metrics,[{name:'activeUsers'},{name:'sessions'},{name:'userEngagementDuration'}]);assert.ok(request.dimensions.some(d=>d.name==='cityId'));assert.ok(request.dimensionFilter.notExpression.filter.inListFilter.values.includes('(not set)'));}
   const raw=cityReports();raw[0].rows.reverse();raw[0].rows.push({dimensionValues:['unknown','(not set)','',''].map(value=>({value})),metricValues:[{value:'900'},{value:'900'},{value:'0'}]});
   const data=normalizeCities(raw,'2026-01-01','Asia/Shanghai');assert.equal(data.day.cities.length,10);assert.equal(data.day.cities[0].name,'City 0');assert.equal(data.day.cities[0].activeUsers,10);assert.equal(data.week.cities[0].activeUsers,70);assert.equal(data.week.cities[0].sessions,140);assert.equal(data.week.cities[0].userEngagementDuration,11760);assert.equal(data.month.cities[0].activeUsers,300);
   raw[1].rows=[];raw[1].metadata.subjectToThresholding=true;const limited=normalizeCities(raw,'2026-01-01','Asia/Shanghai');assert.deepEqual(limited.week.cities,[]);assert.match(limited.week.notices[0],/隐私/);
@@ -98,3 +98,31 @@ test('真实阅读抽查只 GET，不增加浏览统计；依赖失败时标注�
 test('健康结果不能用正常旧值掩盖断线，单个进程内存上限也会提醒',async()=>{const collect=fixtureCollectors(),s=new MonitorSession(collect);await s.refresh();const snap=s.snapshot();snap.config={atlasLimitMiB:512};snap.modules.server.data.services=['test1-api.service','test1-web.service','nginx.service'].map(Id=>({Id,ActiveState:'active',MemoryCurrent:'10',MemoryMax:'100'}));assert.equal(assessHealth(snap).level,'good');assert.equal(capacityTone(80),'warning');assert.equal(capacityTone(90),'danger');snap.modules.server.data.services[0].MemoryCurrent='95';assert.ok(assessHealth(snap).issues.some(i=>i.level==='danger'&&i.title.includes('自身内存')));snap.modules.server.status='error';assert.ok(assessHealth(snap).resources.every(r=>r.id==='atlas'||r.tone==='unknown'));snap.modules.site.stale=true;assert.ok(assessHealth(snap).checks.every(c=>c.level==='unknown'));snap.config.atlasLimitMiB=null;assert.ok(assessHealth(snap).issues.some(i=>i.title.includes('容量余量')));await s.close();});
 test('切换日期取消旧请求，迟到数据不会串入新范围，暂停状态保留',async()=>{let resolve;const s=new MonitorSession({analytics:()=>new Promise(r=>resolve=r)});s.paused=true;const first=s.refresh('analytics');await Promise.resolve();const resetting=s.reset(['analytics'],{analytics:async()=>({days:7})});resolve({days:30});await first;await resetting;assert.equal(s.modules.analytics.data.days,7);assert.equal(s.paused,true);await s.close();});
 test('授权文件只在本机保存，导出不包含授权内容或路径',async t=>{const root=workspace();t.after(()=>removeWorkspace(root));const app=await createMonitor({root,collect:fixtureCollectors(),start:false});t.after(()=>app.close());const headers={'x-monitor-token':app.token,'Content-Type':'application/json'};const credentials={type:'authorized_user',client_id:'synthetic-client',client_secret:'synthetic-secret',refresh_token:'synthetic-refresh'};const res=await fetch(app.baseUrl+'/api/analytics/credentials',{method:'POST',headers,body:JSON.stringify({propertyId:'123',credentials})});assert.equal(res.status,200);assert.equal(JSON.parse(fs.readFileSync(path.join(root,'.runtime/site-monitor/google-credentials.json'),'utf8')).type,'authorized_user');assert.ok(!JSON.stringify(app.snapshot()).includes('synthetic-secret'));const exported=await(await fetch(app.baseUrl+'/api/export',{method:'POST',headers,body:'{"format":"json"}'})).json();const raw=await(await fetch(app.baseUrl+'/api/report?name='+exported.name,{headers})).text();assert.ok(!raw.includes('gaCredentialsPath'));assert.ok(!raw.includes('synthetic-refresh'));assert.equal((await fetch(app.baseUrl+'/google-credentials.json')).status,404);});
+
+
+test('城市记录先排除哥德堡和零时长再取前十；浏览排名覆盖原前十之外的记录',()=>{
+  const raw=cityReports();
+  const entries=[['g','Gothenburg',9999,99999],['z','Zero City',9998,0],['r','Reader City',1,100000],['s','Short City',1,.1]];
+  for(const report of raw){
+    report.rows.unshift(...entries.map(([id,name,count,duration])=>({dimensionValues:[id,name,'Region','SE'].map(value=>({value})),metricValues:[count,count,duration].map(value=>({value:String(value)}))})));
+  }
+  const data=normalizeCities(raw,'2026-09-27','Asia/Shanghai').day;
+  assert.equal(data.cities.length,10);assert.ok(data.cities.every(c=>c.name!=='Gothenburg'&&c.name!=='Zero City'));
+  assert.ok(data.browsing.every(c=>c.name!=='Gothenburg'));assert.equal(data.browsing.length,13);
+  assert.ok(data.browsing.find(c=>c.name==='Reader City').score>data.browsing.find(c=>c.name==='Zero City').score);
+  assert.ok(data.browsing.some(c=>c.name==='Short City'));
+  for(const name of ['gOtHeNbUrG','Göteborg','Goteborg','哥德堡']){
+    raw[0].rows[0].dimensionValues[1].value=name;
+    assert.ok(normalizeCities(raw,'2026-09-27','Asia/Shanghai').day.browsing.every(c=>c.id!=='g'));
+  }
+  const filter=cityRequests('2026-09-27')[0].dimensionFilter.notExpression.filter.inListFilter;
+  assert.ok(filter.values.includes('Gothenburg'));assert.equal(filter.caseSensitive,false);
+  raw[0].rowCount=10001;assert.throws(()=>normalizeCities(raw,'2026-09-27','Asia/Shanghai'),/不完整排名/);
+});
+
+test('浏览综合分采用对数归一化，次数40%、时长60%，稳定降序且零值不产生NaN',()=>{
+  const city=(id,sessions,seconds)=>({id,name:id,sessions,userEngagementDuration:seconds});
+  const result=rankBrowsing([city('frequent',99,0),city('reader',0,99),city('both',99,99),city('empty',0,0)]);
+  assert.deepEqual(result.map(c=>[c.id,Math.round(c.score)]),[['both',100],['reader',60],['frequent',40],['empty',0]]);
+  assert.equal(rankBrowsing([city('single',1,1)])[0].score,100);assert.deepEqual(rankBrowsing([]),[]);assert.equal(rankBrowsing([city('zero',0,0)])[0].score,0);
+});

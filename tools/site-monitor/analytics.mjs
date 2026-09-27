@@ -57,12 +57,18 @@ export function activityRequests(today,region='all') {
   ];
 }
 const cityPeriods={day:1,week:7,month:30};
+const excludedCities=['','(not set)','(other)','Gothenburg','Göteborg','Goteborg','哥德堡'];
+export function rankBrowsing(cities) {
+  const visits=(Math.max(0,...cities.map(c=>Math.log1p(c.sessions)))||1),duration=(Math.max(0,...cities.map(c=>Math.log1p(c.userEngagementDuration)))||1);
+  return cities.map(c=>({...c,score:100*(.4*Math.log1p(c.sessions)/visits+.6*Math.log1p(c.userEngagementDuration)/duration)}))
+    .sort((a,b)=>b.score-a.score||b.userEngagementDuration-a.userEngagementDuration||b.sessions-a.sessions||a.name.localeCompare(b.name)||a.id.localeCompare(b.id));
+}
 export function cityRequests(today) {
   return Object.values(cityPeriods).map(days=>({
     dateRanges:[{startDate:shiftDate(today,1-days),endDate:today}],
     dimensions:fields(['cityId','city','region','countryId']),metrics:fields(['activeUsers','sessions','userEngagementDuration']),
-    dimensionFilter:{notExpression:{filter:{fieldName:'city',inListFilter:{values:['','(not set)','(other)'],caseSensitive:false}}}},
-    orderBys:[{metric:{metricName:'activeUsers'},desc:true},{dimension:{dimensionName:'city'}},{dimension:{dimensionName:'cityId'}}],limit:'10',returnPropertyQuota:true,
+    dimensionFilter:{notExpression:{filter:{fieldName:'city',inListFilter:{values:excludedCities,caseSensitive:false}}}},
+    orderBys:[{metric:{metricName:'activeUsers'},desc:true},{dimension:{dimensionName:'city'}},{dimension:{dimensionName:'cityId'}}],limit:'10000',returnPropertyQuota:true,
   }));
 }
 export function normalizeCities(reports,today,timeZone) {
@@ -70,11 +76,14 @@ export function normalizeCities(reports,today,timeZone) {
   return Object.fromEntries(Object.entries(cityPeriods).map(([unit,days],i)=>{
     const report=reports[i];
     if(report.metadata?.timeZone!==timeZone||['activeUsers','sessions','userEngagementDuration'].some(name=>!report.metricHeaders?.some(h=>h.name===name))||['cityId','city','region','countryId'].some(name=>!report.dimensionHeaders?.some(h=>h.name===name)))throw Error('谷歌城市报表口径不一致，请重试');
-    const cities=rows(report).filter(r=>r.city.trim()&&!['(not set)','(other)'].includes(r.city.trim().toLowerCase())&&r.activeUsers>0)
-      .map(r=>({id:r.cityId,name:r.city,region:r.region,country:r.countryId,activeUsers:r.activeUsers,sessions:r.sessions,userEngagementDuration:r.userEngagementDuration}))
+    if(Number(report.rowCount||0)>(report.rows||[]).length)throw Error('城市记录超出查询范围，暂不展示不完整排名');
+    const records=rows(report).filter(r=>!excludedCities.some(name=>name.toLowerCase()===r.city.trim().toLowerCase()))
+      .map(r=>({id:r.cityId,name:r.city,region:r.region,country:r.countryId,activeUsers:r.activeUsers,sessions:r.sessions,userEngagementDuration:r.userEngagementDuration}));
+    const browsing=rankBrowsing(records.filter(r=>r.sessions>0));
+    const cities=records.filter(r=>r.activeUsers>0&&r.sessions>0&&r.userEngagementDuration>0)
       .sort((a,b)=>b.activeUsers-a.activeUsers||a.name.localeCompare(b.name)||a.id.localeCompare(b.id)).slice(0,10);
     const notices=[report.metadata?.subjectToThresholding?'部分城市数据受谷歌隐私阈值限制':null,report.metadata?.dataLossFromOtherRow?'部分城市被谷歌合并，排名可能不完整':null,report.metadata?.samplingMetadatas?.length?'城市排名包含抽样数据':null].filter(Boolean);
-    return [unit,{startDate:shiftDate(today,1-days),endDate:today,cities,notices}];
+    return [unit,{startDate:shiftDate(today,1-days),endDate:today,cities,browsing,notices}];
   }));
 }
 export function normalizeActivity(reports,today,timeZone) {

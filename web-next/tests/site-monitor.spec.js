@@ -5,7 +5,7 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 
 let app,child;
-const projectRoot=process.cwd(),dir=path.join(projectRoot,'.runtime/task-artifacts/site-monitor-v10');
+const projectRoot=process.cwd(),dir=path.join(projectRoot,'.runtime/task-artifacts/site-monitor-browsing');
 test.beforeAll(async()=>{fs.mkdirSync(dir,{recursive:true});child=spawn(process.execPath,['--require','./tools/test-env.cjs','tools/site-monitor/tests/browser-fixture.mjs'],{cwd:projectRoot,windowsHide:true,stdio:['pipe','pipe','pipe']});app=await new Promise((resolve,reject)=>{let output='';child.stdout.on('data',b=>{output+=b;if(output.includes('\n')){try{resolve(JSON.parse(output.trim()));}catch(error){reject(error);}}});child.on('error',reject);child.stderr.on('data',b=>reject(Error(String(b))));child.on('exit',code=>{if(code)reject(Error('Fixture failed: '+code));});});});
 test.afterAll(async()=>{if(child&&child.exitCode===null){const exited=once(child,'exit');child.stdin.end('close');await exited;}});
 
@@ -27,12 +27,12 @@ async function expectTooltipClear(trend,previousPlot){
 test('用户数据优先、正常状态收到底部、容量紧凑，日周月及缩放读数可用',async({page})=>{
   const errors=[];page.on('pageerror',error=>errors.push(error.message));await page.goto(app.url);
   await expect(page.getByRole('heading',{name:'运行概况',exact:true})).toBeVisible();
-  await expect(page.locator('.topbar,.eyebrow,#page-description,#pause,#refresh,.trend-hint')).toHaveCount(0);
+  await expect(page.locator('.topbar,.eyebrow,#page-description,#pause,#last-read,.trend-hint')).toHaveCount(0);
   await expect(page.getByText('今天活跃',{exact:true})).toHaveCount(0);await expect(page.locator('.usage-metric strong')).toHaveText('1 分 24 秒');await expect(page.locator('.usage-metric')).toHaveAttribute('title',/前台使用总时长.*会话数/);
   await expect(page.getByText(/日活为今日，周\/月活含今天|上栏为全站近况/)).toHaveCount(0);
   await expect(page.getByRole('article',{name:'日活',exact:true}).locator('.circle-value')).toHaveText('21');
   await expect(page.getByRole('article',{name:'日活',exact:true}).locator('.circle-new')).toHaveText('新用户 9');
-  const lastRead=await page.locator('#last-read').innerText();await page.waitForTimeout(2200);await expect(page.locator('#last-read')).toHaveText(lastRead);
+  await expect(page.getByRole('button',{name:'刷新',exact:true})).toBeEnabled();
   const daily=await page.locator('.daily-circle').boundingBox(),weekly=await page.getByRole('article',{name:'周活',exact:true}).boundingBox(),monthly=await page.getByRole('article',{name:'月活',exact:true}).boundingBox();
   expect(Math.abs(daily.width-daily.height)).toBeLessThan(1);expect(daily.width).toBeGreaterThan(weekly.width);expect(weekly.y).toBeGreaterThan(daily.y+daily.height);expect(monthly.x).toBeGreaterThan(weekly.x);expect(Math.abs(monthly.y-weekly.y)).toBeLessThan(1);
   expect(await page.locator('.activity-layout').evaluate(e=>e.getBoundingClientRect().top)).toBeLessThan(100);
@@ -108,11 +108,11 @@ test('城市前十在原卡片内滚动，日周月切换并保留自动刷新�
   await page.getByRole('button',{name:'全部',exact:true}).click();await expect(page.getByRole('img',{name:'用户变化趋势'})).toBeVisible();await expect(page.locator('.city-scroll')).toHaveCount(0);
 });
 
-test('使用时长为零时显示零，缺失或没有访问时显示未知',async({page})=>{
+test('全站时长保留零和未知，城市分布过滤零时长或未知时长',async({page})=>{
   let seconds=0,sessions=4;
   await page.route('**/api/state',async route=>{const response=await route.fetch(),state=await response.json();Object.assign(state.modules.analytics.data.today,{userEngagementDuration:seconds,sessions});Object.assign(state.modules.analytics.data.cities.periods.day.cities[0],{userEngagementDuration:seconds,sessions});await route.fulfill({response,json:state});});
-  await page.goto(app.url);await expect(page.locator('.usage-metric strong')).toHaveText('0 秒');await page.getByRole('button',{name:'城市分布',exact:true}).click();await expect(page.locator('.city-duration').first()).toHaveText('平均使用 0 秒 / 次');
-  seconds=null;await expect(page.locator('.usage-metric strong')).toHaveText('—');await expect(page.locator('.city-duration').first()).toHaveText('平均使用 — / 次');
+  await page.goto(app.url);await expect(page.locator('.usage-metric strong')).toHaveText('0 秒');await page.getByRole('button',{name:'城市分布',exact:true}).click();await expect(page.locator('.city-row')).toHaveCount(9);await expect(page.locator('.city-label').filter({hasText:'Shanghai'})).toHaveCount(0);
+  seconds=null;await expect(page.locator('.usage-metric strong')).toHaveText('—');await expect(page.locator('.city-row')).toHaveCount(9);
   seconds=734;sessions=24;await expect(page.locator('.usage-metric strong')).toHaveText('31 秒');await expect(page.locator('.city-duration').first()).toHaveText('平均使用 31 秒 / 次');
   sessions=0;await expect(page.locator('.usage-metric strong')).toHaveText('—');
 });
@@ -120,7 +120,7 @@ test('使用时长为零时显示零，缺失或没有访问时显示未知',asy
 test('城市查询失败或为空时不伪造排名，其他统计仍可查看',async({page})=>{
   let cities={status:'error',error:'城市查询额度暂时用完'};
   await page.route('**/api/state',async route=>{const response=await route.fetch(),state=await response.json();state.modules.analytics.data.cities=cities;await route.fulfill({response,json:state});});
-  await page.goto(app.url);await page.getByRole('button',{name:'城市分布',exact:true}).click();await expect(page.getByText(/城市查询额度暂时用完/)).toBeVisible();await expect(page.locator('.city-row')).toHaveCount(0);await expect(page.locator('.daily-circle .circle-value')).toHaveText('21');await expect(page.locator('#last-read')).toContainText('尚未取得');
+  await page.goto(app.url);await page.getByRole('button',{name:'城市分布',exact:true}).click();await expect(page.getByText(/城市查询额度暂时用完/)).toBeVisible();await expect(page.locator('.city-row')).toHaveCount(0);await expect(page.locator('.daily-circle .circle-value')).toHaveText('21');await expect(page.locator('#refresh')).toBeVisible();
   cities={status:'connected',sampledAt:new Date().toISOString(),periods:{day:{startDate:'2026-09-24',endDate:'2026-09-24',cities:[],notices:['部分城市数据受谷歌隐私阈值限制']}}};
   await expect(page.getByText('暂无可识别城市的数据')).toBeVisible();await expect(page.getByText('部分城市数据受谷歌隐私阈值限制')).toBeVisible();await expect(page.locator('.city-row')).toHaveCount(0);
   await page.getByRole('button',{name:'中国',exact:true}).click();await expect(page.locator('.daily-circle .circle-value')).toHaveText('12');await expect(page.getByRole('img',{name:'用户变化趋势'})).toBeVisible();
@@ -129,7 +129,7 @@ test('城市查询失败或为空时不伪造排名，其他统计仍可查看',
 test('地区失败不混入全站人数，缺少地区数据的数据源禁用筛选',async({page})=>{
   await page.route('**/api/state',async route=>{const response=await route.fetch(),state=await response.json();state.modules.analytics.data.regions.china={status:'error',error:'地区查询暂不可用'};state.modules.analytics.lastSuccess=Date.parse('2026-09-25T01:02:03Z');await route.fulfill({response,json:state});});
   await page.goto(app.url);await page.getByRole('button',{name:'中国',exact:true}).click();
-  await expect(page.getByText(/中国：地区查询暂不可用/)).toBeVisible();await expect(page.getByRole('article',{name:'日活',exact:true}).locator('.circle-value')).toHaveText('—');await expect(page.locator('#last-read')).toContainText('尚未取得');await expect(page.getByRole('img',{name:'用户变化趋势'})).toHaveCount(0);
+  await expect(page.getByText(/中国：地区查询暂不可用/)).toBeVisible();await expect(page.getByRole('article',{name:'日活',exact:true}).locator('.circle-value')).toHaveText('—');await expect(page.locator('#refresh')).toBeVisible();await expect(page.getByRole('img',{name:'用户变化趋势'})).toHaveCount(0);
   await page.getByLabel('用户数据类型').selectOption('raw');await expect(page.getByRole('button',{name:'中国',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'城市分布',exact:true})).toBeDisabled();await expect(page.getByText('此图表数据未记录国家，暂不支持地区筛选。')).toBeVisible();await expect(page.getByRole('article',{name:'日活',exact:true}).locator('.circle-value')).toHaveText('4');
   await expect(page.locator('#user-trend tbody tr').last()).toHaveText('2026-09-24（今日累计，尚未结束）42');
   await page.getByLabel('用户数据类型').selectOption('visitors');await expect(page.getByRole('button',{name:'全部',exact:true})).toHaveAttribute('aria-pressed','true');await expect(page.getByRole('article',{name:'日活',exact:true}).locator('.circle-value')).toHaveText('21');
@@ -148,7 +148,7 @@ test('设置输入、容量盘点、保存和清理继续可用',async({page})=>
   await page.goto(app.url);
   await page.getByRole('button',{name:'容量与服务',exact:true}).click();await page.getByText('需要排查时，展开技术详情').click();await expect(page.getByText('synthetic_test',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'正文与封面',exact:true}).click();await page.getByRole('button',{name:'开始容量盘点'}).click();await expect(page.getByText('本次盘点完成 · 20 个对象')).toHaveCount(2);
-  await page.getByRole('button',{name:'连接设置',exact:true}).click();await page.getByLabel('数据库套餐容量上限（MiB）').fill('768');await page.waitForTimeout(2300);await expect(page.getByLabel('数据库套餐容量上限（MiB）')).toHaveValue('768');await page.getByRole('button',{name:'保存服务器设置'}).click();await expect(page.getByText('设置已保存，正在核对连接结果',{exact:true})).toBeVisible();await expect(page.locator('#last-read')).toContainText('上次读取时间');
+  await page.getByRole('button',{name:'连接设置',exact:true}).click();await page.getByLabel('数据库套餐容量上限（MiB）').fill('768');await page.waitForTimeout(2300);await expect(page.getByLabel('数据库套餐容量上限（MiB）')).toHaveValue('768');await page.getByRole('button',{name:'保存服务器设置'}).click();await expect(page.getByText('设置已保存，正在核对连接结果',{exact:true})).toBeVisible();await expect(page.locator('#refresh')).toBeVisible();
   await page.getByRole('button',{name:'报告与清理',exact:true}).click();await page.getByRole('button',{name:'保存本次报告',exact:true}).click();await page.getByRole('button',{name:'保存完整 JSON'}).click();await expect(page.getByRole('button',{name:'下载副本'})).toBeVisible();await page.getByRole('button',{name:'预览过期清理'}).click();await expect(page.getByText('当前没有需要清理的过期文件。')).toBeVisible();await page.getByRole('button',{name:'关闭',exact:true}).last().click();
 });
 
@@ -162,4 +162,31 @@ test('异常自动置顶，未授权或旧数据不冒充最新用户统计',asy
   await page.screenshot({path:path.join(dir,'verified-capacity-warning-fixture.png'),fullPage:true});
   await page.unroute('**/api/state');await page.route('**/api/state',async route=>{const response=await route.fetch(),state=await response.json();state.modules.server.status='error';state.modules.server.error='服务器只读查询失败';state.modules.analytics.status='error';state.modules.analytics.error='谷歌暂时无法连接';await route.fulfill({response,json:state});});
   await expect(page.getByText(/当前保留上次成功结果，不能当作最新数据/).first()).toBeVisible();await expect(page.getByRole('meter',{name:'运行内存',exact:true})).toHaveClass(/unknown/);await expect(page.getByRole('heading',{name:'已检查的关键项目正常'})).toHaveCount(0);
+});
+
+
+test('浏览记录显示加权排名和原始数值，刷新发起新查询且请求中禁用',async({page})=>{
+  await page.goto(app.url);
+  await page.getByRole('button',{name:'浏览记录',exact:true}).click();
+  const list=page.getByRole('region',{name:'城市浏览记录'});
+  await expect(list.locator('li')).toHaveCount(10);
+  await expect(list.locator('li').first()).toContainText('Shanghai');
+  await expect(list.locator('li').first()).toContainText('访问 20 次');
+  await expect(list.locator('li').first()).toContainText('使用总时长 28 分 0 秒');
+  const scores=await list.locator('li strong').allTextContents();
+  expect(scores.map(parseFloat)).toEqual(scores.map(parseFloat).sort((a,b)=>b-a));
+  await expect(page.getByText('次数 40% · 使用总时长 60% · 已排除哥德堡')).toBeVisible();
+  await page.getByRole('button',{name:'周',exact:true}).click();await expect(list.locator('li').first()).toContainText('访问 140 次');
+  for(const width of [1440,390,320]){
+    await page.setViewportSize({width,height:1000});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.screenshot({path:path.join(dir,`verified-browsing-${width}.png`),fullPage:true});
+  }
+  let release;const gate=new Promise(resolve=>release=resolve);let requests=0;
+  await page.route('**/api/refresh',async route=>{requests++;expect(route.request().postDataJSON()).toEqual({});await gate;await route.continue();});
+  await page.locator('#refresh').click();await expect(page.locator('#refresh')).toBeDisabled();await expect(page.locator('#refresh')).toHaveText('刷新中…');
+  release();await expect(page.locator('#refresh')).toBeEnabled();expect(requests).toBe(1);
+  await expect(page.getByRole('button',{name:'浏览记录',exact:true})).toHaveAttribute('aria-pressed','true');
+  await page.route('**/api/refresh',route=>route.fulfill({status:503,json:{error:'刷新暂时失败'}}));
+  await page.locator('#refresh').click();await expect(page.locator('#toast')).toContainText('刷新暂时失败');await expect(page.locator('#refresh')).toBeEnabled();await expect(list.locator('li')).toHaveCount(10);
 });
