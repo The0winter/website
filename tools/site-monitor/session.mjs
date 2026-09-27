@@ -17,6 +17,13 @@ export class MonitorSession {
     const promise=Promise.resolve().then(()=>this.collect[key](controller.signal)).then(data=>{
       if(this.closed||controller.signal.aborted)return;
       const old=state.data,now=this.clock();
+      if(key==='atlas'){
+        const r=data.runtime,previous=old?.runtime,dt=(Date.parse(r?.sampledAt)-Date.parse(previous?.sampledAt))/1000;
+        data.operationsPerSecond=null;data.operationsWindowSeconds=null;
+        if(r?.status==='available'&&previous?.status==='available'&&typeof r.node==='string'&&r.node.length>0&&r.node===previous.node&&r.uptime>=previous.uptime&&dt>=1&&dt<=180&&Number.isFinite(r.operations)&&Number.isFinite(previous.operations)&&r.operations>=previous.operations){
+          data.operationsPerSecond=(r.operations-previous.operations)/dt;data.operationsWindowSeconds=dt;
+        }
+      }
       if(key==='server'){
         const dt=old?(Date.parse(data.sampledAt)-Date.parse(old.sampledAt))/1000:0;
         const delta=old?data.cpu.total-old.cpu.total:0,idle=old?data.cpu.idle-old.cpu.idle:0;
@@ -27,7 +34,7 @@ export class MonitorSession {
       state.data=data;state.status='ok';state.error=null;state.lastSuccess=now;
       const point={at:now};
       if(key==='server')Object.assign(point,{cpu:data.cpuPercent,memory:100*(1-data.memory.available/data.memory.total),disk:100*(1-data.disk.available/data.disk.total),rx:data.rxPerSecond,tx:data.txPerSecond});
-      if(key==='atlas')Object.assign(point,{logical:data.cluster?.logicalBytes??data.dataBytes+data.indexBytes,ping:data.pingMs});
+      if(key==='atlas')Object.assign(point,{logical:data.cluster?.logicalBytes??data.dataBytes+data.indexBytes,ping:data.pingMs,operations:data.operationsPerSecond,connections:data.runtime?.connections?.current});
       if(key==='site')point.latency=data.latencyMs;
       state.history.push(point);if(state.history.length>this.maxPoints)state.history.splice(0,state.history.length-this.maxPoints);
     }).catch(error=>{if(!this.closed&&!controller.signal.aborted){state.status='error';state.error=error.message;state.history.push({at:this.clock(),gap:true});if(state.history.length>this.maxPoints)state.history.shift();}})

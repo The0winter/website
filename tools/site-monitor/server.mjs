@@ -19,11 +19,18 @@ async function body(req){let text='';for await(const chunk of req){text+=chunk;i
 function atomic(root,relative,data){const dest=safeFile(root,relative);fs.mkdirSync(path.dirname(dest),{recursive:true});const tmp=safeFile(root,relative+'.tmp');fs.writeFileSync(tmp,JSON.stringify(data,null,2),{mode:0o600});fs.renameSync(tmp,dest);}
 function csv(snapshot){const rows=['module,time,cpu_percent,memory_percent,disk_percent,download_bytes_per_second,upload_bytes_per_second,atlas_logical_bytes,latency_ms,gap'];for(const [key,value]of Object.entries(snapshot.modules))for(const p of value.history)rows.push([key,new Date(p.at).toISOString(),p.cpu,p.memory,p.disk,p.rx,p.tx,p.logical,p.ping??p.latency,p.gap?1:0].map(x=>x??'').join(','));return '\uFEFF'+rows.join('\r\n');}
 
-export async function createMonitor({root=projectRoot,collect,config:configInput,start=true,onClose=()=>{},remote=runRemote}={}) {
+export async function createMonitor({root=projectRoot,collect,config:configInput,start=true,autoInventory=start&&!collect,onClose=()=>{},remote=runRemote}={}) {
   root=path.resolve(root);
   let config;try{config=validateConfig(configInput??JSON.parse(fs.readFileSync(safeFile(root,storage.BASE+'/config.json'),'utf8')));}catch{config=validateConfig(configInput);}
   const token=crypto.randomBytes(32).toString('hex');
   let session=new MonitorSession(collect||collectors(config)),inventory={running:false,buckets:[],error:null},scanController,scanPromise,closing=false,updating=false;
+  const inventoryFile=storage.BASE+'/inventory.json';
+  try {
+    const file=safeFile(root,inventoryFile);
+    if(fs.statSync(file).size<65536){const saved=JSON.parse(fs.readFileSync(file,'utf8'));
+      if(saved.host===config.host&&saved.inventory?.finishedAt<=Date.now()&&saved.inventory?.buckets?.length===2&&new Set(saved.inventory.buckets.map(b=>b.id)).size===2&&saved.inventory.buckets.every(b=>['chapters','covers'].includes(b.id)&&b.complete&&Number.isFinite(b.bytes)&&b.bytes>=0))inventory={...saved.inventory,running:false};
+    }
+  }catch{}
   const tidy=(apply,reserveBytes=0)=>retention.maintain({root,scope:'site-monitor',apply,reserveBytes,processes:[]});
   function diskState(){const files=storage.reports(root);return {policy:storage.POLICY,bytes:files.reduce((n,f)=>n+f.bytes,0),files:files.sort((a,b)=>b.mtime-a.mtime),directory:path.join(root,storage.BASE,'reports')};}
   function snapshot(){return {...session.snapshot(),config:{...config},inventory:{...inventory,buckets:inventory.buckets.map(({cursor,...rest})=>rest)},storage:diskState()};}
@@ -45,8 +52,13 @@ export async function createMonitor({root=projectRoot,collect,config:configInput
         if(scanController.signal.aborted)break;
       }
     }catch(error){inventory.error=scanController.signal.aborted?'盘点已取消；部分结果不代表总容量':error.message;}
-    finally{inventory.running=false;inventory.finishedAt=Date.now();}})();
+    finally{inventory.running=false;inventory.finishedAt=Date.now();
+      if(!inventory.error&&inventory.buckets.length===2&&inventory.buckets.every(b=>b.complete)){
+        try{atomic(root,inventoryFile,{host:config.host,inventory:{...inventory,buckets:inventory.buckets.map(({cursor,...rest})=>rest)}});}catch{inventory.error='容量盘点已完成，但无法保存本机缓存';}
+      }
+    }})();
   }
+  function refreshInventory(){if(!closing&&!updating&&!inventory.running&&(!inventory.finishedAt||Date.now()-inventory.finishedAt>=86400000))void scan();}
   const server=http.createServer(async(req,res)=>{
     res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
     res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
@@ -82,7 +94,7 @@ export async function createMonitor({root=projectRoot,collect,config:configInput
         if(url.pathname==='/api/config'){
           const next=validateConfig({...config,...value});updating=true;
           try{atomic(root,storage.BASE+'/config.json',next);scanController?.abort();await scanPromise;const paused=session.paused;await session.close();
-          config=next;inventory={running:false,buckets:[],error:null};session=new MonitorSession(collect||collectors(config));session.paused=paused;session.start();json(res,200,{ok:true});}finally{updating=false;}return;
+          config=next;inventory={running:false,buckets:[],error:null};session=new MonitorSession(collect||collectors(config));session.paused=paused;session.start();json(res,200,{ok:true});}finally{updating=false;if(autoInventory)refreshInventory();}return;
         }
         if(url.pathname==='/api/export'){
           if(!['json','csv'].includes(value.format))throw Error('导出格式无效');
@@ -98,14 +110,16 @@ export async function createMonitor({root=projectRoot,collect,config:configInput
         if(url.pathname==='/api/close'){json(res,200,{ok:true});setImmediate(onClose);return;}
         json(res,404,{error:'接口不存在'});return;
       }
-      const assets={'/':'index.html','/app.js':'app.js','/health.mjs':'health.mjs','/engagement.mjs':'engagement.mjs','/periods.mjs':'periods.mjs','/trend-chart.js':'trend-chart.js','/tooltip-layout.mjs':'tooltip-layout.mjs','/app.css':'app.css','/vendor/bootstrap.min.css':'vendor/bootstrap.min.css','/icon.svg':'icon.svg'};
+      const assets={'/':'index.html','/app.js':'app.js','/health.mjs':'health.mjs','/usage.mjs':'usage.mjs','/engagement.mjs':'engagement.mjs','/periods.mjs':'periods.mjs','/trend-chart.js':'trend-chart.js','/tooltip-layout.mjs':'tooltip-layout.mjs','/app.css':'app.css','/vendor/bootstrap.min.css':'vendor/bootstrap.min.css','/icon.svg':'icon.svg'};
       if(req.method!=='GET'||!assets[url.pathname]){res.writeHead(404);res.end();return;}
       const file=assets[url.pathname];res.setHeader('Content-Type',file.endsWith('.css')?'text/css':/\.m?js$/.test(file)?'text/javascript':file.endsWith('.svg')?'image/svg+xml':'text/html; charset=utf-8');res.end(fs.readFileSync(path.join(webRoot,file)));
     }catch(error){json(res,400,{error:/^ENOENT/.test(error.message)?'文件不存在':error.message});}
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   if(start)session.start();
+  if(autoInventory)refreshInventory();
+  const inventoryTimer=autoInventory?setInterval(refreshInventory,3600000):null;inventoryTimer?.unref();
   const cleanTimer=setInterval(()=>{try{tidy(true);}catch{}},3600000);cleanTimer.unref();
   const baseUrl=`http://127.0.0.1:${server.address().port}`;
-  return {server,token,baseUrl,url:baseUrl+'/#'+token,snapshot,get session(){return session;},get config(){return config;},async close(){if(closing)return;closing=true;clearInterval(cleanTimer);scanController?.abort();await Promise.allSettled([session.close(),scanPromise]);server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}};
+  return {server,token,baseUrl,url:baseUrl+'/#'+token,snapshot,get session(){return session;},get config(){return config;},async close(){if(closing)return;closing=true;clearInterval(cleanTimer);clearInterval(inventoryTimer);scanController?.abort();await Promise.allSettled([session.close(),scanPromise]);server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}};
 }

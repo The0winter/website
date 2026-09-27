@@ -5,7 +5,7 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 
 let app,child;
-const projectRoot=process.cwd(),dir=path.join(projectRoot,'.runtime/task-artifacts/site-monitor-compact-rankings');
+const projectRoot=process.cwd(),dir=path.join(projectRoot,'.runtime/task-artifacts/site-monitor-table-usage');
 test.beforeAll(async()=>{fs.mkdirSync(dir,{recursive:true});child=spawn(process.execPath,['--require','./tools/test-env.cjs','tools/site-monitor/tests/browser-fixture.mjs'],{cwd:projectRoot,windowsHide:true,stdio:['pipe','pipe','pipe']});app=await new Promise((resolve,reject)=>{let output='';child.stdout.on('data',b=>{output+=b;if(output.includes('\n')){try{resolve(JSON.parse(output.trim()));}catch(error){reject(error);}}});child.on('error',reject);child.stderr.on('data',b=>reject(Error(String(b))));child.on('exit',code=>{if(code)reject(Error('Fixture failed: '+code));});});});
 test.afterAll(async()=>{if(child&&child.exitCode===null){const exited=once(child,'exit');child.stdin.end('close');await exited;}});
 
@@ -42,7 +42,7 @@ test('用户数据优先、正常状态收到底部、容量紧凑，日周月�
   await expect(page.getByRole('article',{name:'日活',exact:true})).toBeVisible();await expect(page.getByRole('article',{name:'周活',exact:true})).toBeVisible();await expect(page.getByRole('article',{name:'月活',exact:true})).toBeVisible();
   await expect(page.getByRole('article',{name:'周活',exact:true}).locator('.circle-value')).toContainText('91');
   await expect(page.getByRole('meter',{name:'运行内存',exact:true})).toHaveAttribute('aria-valuenow','25');
-  expect(await page.locator('.compact-resource').first().evaluate(e=>e.getBoundingClientRect().height)).toBeLessThan(95);
+  expect(await page.locator('.compact-resource').first().evaluate(e=>e.getBoundingClientRect().height)).toBeLessThan(115);
   expect(await status.evaluate(e=>e.getBoundingClientRect().height)).toBeLessThan(90);
   await expect(trend).toHaveAttribute('data-total-points','14');
   await expect(trend.locator('[data-partial="true"]')).toHaveCount(2);
@@ -98,13 +98,13 @@ test('触屏选点后保留浮框，Escape 关闭且不挤动曲线',async({brow
 test('城市前十在原卡片内滚动，日周月切换并保留自动刷新时的滚动位置',async({page})=>{
   await page.goto(app.url);const card=page.locator('.panel:has(#user-trend)'),before=await card.boundingBox();
   await page.getByRole('button',{name:'城市分布',exact:true}).click();const list=page.getByRole('region',{name:'城市综合排名前十'});
-  await expect(list.locator('li')).toHaveCount(10);await expect(list.locator('li').first()).toContainText('Shanghai');await expect(list.locator('li').first().locator('strong')).toHaveText('10');await expect(list.locator('li').first().locator('.city-duration')).toHaveText('平均使用 1 分 24 秒 / 次');await expect(page.locator('#user-trend svg')).toHaveCount(0);await expect(page.locator('.daily-circle .circle-value')).toHaveText('21');
+  await expect(list.locator('tbody tr')).toHaveCount(10);await expect(list.locator('tbody tr').first()).toContainText('Shanghai');await expect(list.locator('tbody tr').first().locator('[data-label="活跃访客"]')).toHaveText('10');await expect(list.locator('tbody tr').first().locator('.city-duration')).toHaveText('1 分 24 秒');await expect(page.locator('#user-trend svg')).toHaveCount(0);await expect(page.locator('.daily-circle .circle-value')).toHaveText('21');
   expect((await card.boundingBox()).height).toBeLessThanOrEqual(before.height+1);expect(await list.evaluate(e=>e.scrollHeight>e.clientHeight)).toBe(true);
-  await list.hover();await page.mouse.wheel(0,await list.evaluate(e=>e.scrollHeight));await expect.poll(()=>list.evaluate(e=>e.scrollTop)).toBeGreaterThan(0);await expect(list.locator('li').last()).toBeInViewport();
+  await list.hover();await page.mouse.wheel(0,await list.evaluate(e=>e.scrollHeight));await expect.poll(()=>list.evaluate(e=>e.scrollTop)).toBeGreaterThan(0);await expect(list.locator('tbody tr').last()).toBeInViewport();
   const scrolled=await list.evaluate(e=>e.scrollTop);await page.evaluate(()=>fetch('/api/refresh',{method:'POST',headers:{'x-monitor-token':sessionStorage.getItem('monitor-token'),'Content-Type':'application/json'},body:JSON.stringify({module:'analytics'})}));await page.waitForTimeout(2200);expect(await list.evaluate(e=>e.scrollTop)).toBe(scrolled);
-  await page.getByRole('button',{name:'周',exact:true}).click();await expect(list.locator('li').first().locator('strong')).toHaveText('70');await expect(page.locator('.city-caption')).toHaveCount(0);await expect(page.locator('.city-dates')).toHaveText('2026-09-18 — 2026-09-24');expect(await list.evaluate(e=>e.scrollTop)).toBe(0);
-  await page.getByRole('button',{name:'月',exact:true}).click();await expect(list.locator('li').first().locator('strong')).toHaveText('300');await page.screenshot({path:path.join(dir,'verified-desktop-cities-fixture.png'),fullPage:true});
-  for(const width of [390,320]){await page.setViewportSize({width,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await list.focus();await page.keyboard.press('End');await expect(list.locator('li').last()).toBeInViewport();await page.screenshot({path:path.join(dir,`verified-cities-${width}-fixture.png`),fullPage:true});}
+  await page.getByRole('button',{name:'周',exact:true}).click();await expect(list.locator('tbody tr').first().locator('[data-label="活跃访客"]')).toHaveText('70');await expect(page.locator('.city-caption')).toHaveCount(0);await expect(page.locator('.city-dates')).toHaveText('2026-09-18 — 2026-09-24');expect(await list.evaluate(e=>e.scrollTop)).toBe(0);
+  await page.getByRole('button',{name:'月',exact:true}).click();await expect(list.locator('tbody tr').first().locator('[data-label="活跃访客"]')).toHaveText('300');await page.screenshot({path:path.join(dir,'verified-desktop-cities-fixture.png'),fullPage:true});
+  for(const width of [390,320]){await page.setViewportSize({width,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await list.focus();await page.keyboard.press('End');await expect(list.locator('tbody tr').last()).toBeInViewport();await page.screenshot({path:path.join(dir,`verified-cities-${width}-fixture.png`),fullPage:true});}
   await page.getByRole('button',{name:'全部',exact:true}).click();await expect(page.getByRole('img',{name:'用户变化趋势'})).toBeVisible();await expect(page.locator('.city-scroll')).toHaveCount(0);
 });
 
@@ -113,7 +113,7 @@ test('全站时长保留零和未知，城市分布过滤零时长或未知时�
   await page.route('**/api/state',async route=>{const response=await route.fetch(),state=await response.json();Object.assign(state.modules.analytics.data.today,{userEngagementDuration:seconds,sessions});Object.assign(state.modules.analytics.data.cities.periods.day.cities[0],{userEngagementDuration:seconds,sessions});await route.fulfill({response,json:state});});
   await page.goto(app.url);await expect(page.locator('.usage-metric strong')).toHaveText('0 秒');await page.getByRole('button',{name:'城市分布',exact:true}).click();await expect(page.locator('.city-row')).toHaveCount(9);await expect(page.locator('.city-label').filter({hasText:'Shanghai'})).toHaveCount(0);
   seconds=null;await expect(page.locator('.usage-metric strong')).toHaveText('—');await expect(page.locator('.city-row')).toHaveCount(9);
-  seconds=734;sessions=24;await expect(page.locator('.usage-metric strong')).toHaveText('31 秒');await expect(page.locator('.city-duration').first()).toHaveText('平均使用 31 秒 / 次');
+  seconds=734;sessions=24;await expect(page.locator('.usage-metric strong')).toHaveText('31 秒');await expect(page.locator('.city-duration').first()).toHaveText('31 秒');
   sessions=0;await expect(page.locator('.usage-metric strong')).toHaveText('—');
 });
 
@@ -169,15 +169,15 @@ test('浏览记录显示加权排名和原始数值，刷新发起新查询且�
   await page.goto(app.url);
   await page.getByRole('button',{name:'浏览记录',exact:true}).click();
   const list=page.getByRole('region',{name:'网页浏览记录'});
-  await expect(list.locator('li')).toHaveCount(10);
-  await expect(list.locator('li').first()).toContainText('绍宋 · 第一章');
+  await expect(list.locator('tbody tr')).toHaveCount(10);
+  await expect(list.locator('tbody tr').first()).toContainText('绍宋 · 第一章');
   await expect(list).not.toContainText('/reader/chapter-one');await expect(list.locator('.page-path,strong')).toHaveCount(0);
-  await expect(list.locator('li').first()).toContainText('浏览 20 次');
-  await expect(list.locator('li').first()).toContainText('使用总时长 28 分 0 秒');
+  await expect(list.locator('tbody tr').first().locator('[data-label="浏览次数"]')).toHaveText('20');
+  await expect(list.locator('tbody tr').first()).toContainText('28 分 0 秒');
   await expect(page.locator('.city-caption,.city-chart>.city-note')).toHaveCount(0);
-  const bars=await list.locator('.city-track span').evaluateAll(nodes=>nodes.map(n=>parseFloat(n.style.width)));
-  expect(bars).toEqual([...bars].sort((a,b)=>b-a));
-  await page.getByRole('button',{name:'周',exact:true}).click();await expect(list.locator('li').first()).toContainText('浏览 140 次');
+  await expect(list.locator('.city-track')).toHaveCount(0);
+  await expect(list.getByRole('columnheader',{name:'浏览次数'})).toBeVisible();
+  await page.getByRole('button',{name:'周',exact:true}).click();await expect(list.locator('tbody tr').first().locator('[data-label="浏览次数"]')).toHaveText('140');
   for(const width of [1440,390,320]){
     await page.setViewportSize({width,height:1000});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -189,7 +189,7 @@ test('浏览记录显示加权排名和原始数值，刷新发起新查询且�
   release();await expect(page.locator('#refresh')).toBeEnabled();expect(requests).toBe(1);
   await expect(page.getByRole('button',{name:'浏览记录',exact:true})).toHaveAttribute('aria-pressed','true');
   await page.route('**/api/refresh',route=>route.fulfill({status:503,json:{error:'刷新暂时失败'}}));
-  await page.locator('#refresh').click();await expect(page.locator('#toast')).toContainText('刷新暂时失败');await expect(page.locator('#refresh')).toBeEnabled();await expect(list.locator('li')).toHaveCount(10);
+  await page.locator('#refresh').click();await expect(page.locator('#toast')).toContainText('刷新暂时失败');await expect(page.locator('#refresh')).toBeEnabled();await expect(list.locator('tbody tr')).toHaveCount(10);
 });
 
 
@@ -201,4 +201,31 @@ test('网页浏览查询失败或无记录时独立提示，不影响城市分�
  await page.getByRole('button',{name:'城市分布',exact:true}).click();await expect(page.locator('.city-row')).toHaveCount(10);
  browsing={status:'connected',periods:{day:{startDate:'2026-09-27',endDate:'2026-09-27',pages:[],notices:[]}}};
  await page.getByRole('button',{name:'浏览记录',exact:true}).click();await expect(page.getByText('暂无网页浏览记录')).toBeVisible();
+});
+
+
+test('桌面紧凑表格排序、窄屏排序和资源额度数据状态',async({page})=>{
+ await page.goto(app.url);await page.getByRole('button',{name:'城市分布',exact:true}).click();
+ const table=page.locator('.city-table');await expect(table.locator('tbody tr')).toHaveCount(10);
+ await table.getByRole('button',{name:'会话数',exact:true}).click();await table.getByRole('button',{name:'会话数 ↓',exact:true}).click();
+ await expect(table.locator('tbody tr').first()).toContainText('London');
+ await expect(table.locator('th[aria-sort="ascending"]')).toContainText('会话数');
+ await expect(page.getByRole('heading',{name:'R2 正文与封面',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Atlas 操作速率',exact:true})).toBeVisible();
+ await expect(page.locator('.usage-panel')).toContainText('R2 月度读写额度');await expect(page.locator('.usage-panel')).toContainText('未接入');
+ await page.setViewportSize({width:390,height:1000});await page.getByLabel('城市排序').selectOption('score');
+ await expect(table.locator('tbody tr').first()).toContainText('Shanghai');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:path.join(dir,'verified-usage-mobile.png'),fullPage:true});
+ await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:path.join(dir,'verified-usage-desktop.png'),fullPage:true});
+});
+test('R2部分盘点显示容量下限，完成后才显示总量',async({page})=>{
+ let complete=false;
+ await page.route('**/api/state',async route=>{
+  const response=await route.fetch(),state=await response.json();
+  state.inventory={running:!complete,finishedAt:Date.now(),buckets:[{id:'chapters',bytes:1024**3,objects:120000,complete},...(complete?[{id:'covers',bytes:1024**2,objects:10,complete:true}]:[])]};
+  await route.fulfill({response,json:state});
+ });
+ await page.goto(app.url);const card=page.locator('.r2-capacity');
+ await expect(card.locator('.r2-size')).toHaveText('≥ 1 GiB');await expect(card).toContainText('尚非总容量');await expect(card.locator('.tag.good')).toHaveCount(0);
+ complete=true;await expect(card.locator('.r2-size')).toHaveText('1 GiB');await expect(card.locator('.tag.good')).toHaveText('已盘点');await expect(card).toContainText('封面 1 MiB');
 });

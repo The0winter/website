@@ -1,3 +1,4 @@
+import {assessUsage} from './usage.mjs';
 export const isNumber=value=>typeof value==='number'&&Number.isFinite(value);
 export const percentage=(used,total)=>isNumber(used)&&isNumber(total)&&total>0?used/total*100:null;
 export const capacityTone=value=>!isNumber(value)?'unknown':value>=90?'danger':value>=80?'warning':'good';
@@ -48,6 +49,7 @@ export function assessHealth(snapshot) {
     const bucket=modules.r2.data.buckets?.find(b=>b.id===id);
     if(bucket?.status!=='ok')add(bucket?.status==='error'?'danger':'unknown',`${id==='chapters'?'正文':'封面'}存储访问尚未通过`,id==='chapters'?'可能影响读取小说；结合正文抽查结果定位。':'可能影响封面显示，正文是否正常请看阅读抽查。','storage');
   }
+  issues.push(...assessUsage(snapshot).alerts);
   const order={danger:0,warning:1,unknown:2};issues.sort((a,b)=>order[a.level]-order[b.level]);
   const level=issues[0]?.level||'good';
   const title=level==='danger'?'有异常需要处理':level==='warning'?'有风险需要留意':level==='unknown'?(checks.length===4&&checks.every(c=>c.level==='good')?'访问抽查正常，部分状态待确认':'部分状态尚未确认'):'已检查的关键项目正常';

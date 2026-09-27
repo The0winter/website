@@ -9,7 +9,9 @@ import {readTraffic} from './traffic.mjs';
 
 export const defaults = {host:'ubuntu@51.79.242.0',identity:path.join(os.homedir(),'.ssh','ovh_website_ed25519'),site:'https://jiutianxiaoshuo.com',atlasLimitMiB:null,gaPropertyId:'',gaCredentialsPath:process.env.GOOGLE_APPLICATION_CREDENTIALS||'',analyticsDays:30};
 export function validateConfig(input={}) {
-  const value={...defaults,...input};
+  const value={atlasOpsWarning:70,atlasOpsDanger:90,...defaults,...input};
+  for(const key of ['atlasOpsWarning','atlasOpsDanger']){value[key]=Number(value[key]);if(!Number.isFinite(value[key])||value[key]<1||value[key]>1e7)throw Error('数据库速率提醒阈值无效');}
+  if(value.atlasOpsDanger<value.atlasOpsWarning)throw Error('数据库紧急阈值不能低于提醒阈值');
   if(!/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(value.host))throw Error('SSH 主机格式应为 user@host');
   if(typeof value.identity!=='string'||!path.isAbsolute(value.identity)||/[\r\n\0]/.test(value.identity))throw Error('SSH 密钥需要绝对路径');
   const site=new URL(value.site);if(site.protocol!=='https:'||site.username||site.password||site.pathname!=='/'||site.search||site.hash)throw Error('网站地址需要 HTTPS 根地址');
@@ -21,7 +23,7 @@ export function validateConfig(input={}) {
   value.gaCredentialsPath=String(value.gaCredentialsPath||'').trim();
   if(value.gaCredentialsPath&&(!path.isAbsolute(value.gaCredentialsPath)||/[\r\n\0]/.test(value.gaCredentialsPath)))throw Error('谷歌授权文件需要绝对路径');
   value.analyticsDays=Number(value.analyticsDays);if(![7,30,90].includes(value.analyticsDays))throw Error('统计范围应为 7、30 或 90 天');
-  return Object.fromEntries(['host','identity','site','atlasLimitMiB','gaPropertyId','gaCredentialsPath','analyticsDays'].map(k=>[k,value[k]]));
+  return Object.fromEntries(['host','identity','site','atlasLimitMiB','atlasOpsWarning','atlasOpsDanger','gaPropertyId','gaCredentialsPath','analyticsDays'].map(k=>[k,value[k]]));
 }
 export function runRemote(kind,config,signal,request={}) {
   if(!['server','atlas','r2','inventory','business','traffic'].includes(kind))return Promise.reject(Error('未知采集类型'));

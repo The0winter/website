@@ -36,7 +36,15 @@ export async function remoteSnapshot(kind, request = {}, readBusiness, readTraff
       const start=Date.now();await connection.db.command({ping:1});const pingMs=Date.now()-start;
       const stats=await connection.db.command({dbStats:1,scale:1});
       let cluster=null;try{const s=await connection.db.command({atlasSize:1});cluster={logicalBytes:s.atlasSize,dataBytes:s.totals?.dataSize,indexBytes:s.totals?.indexSize,databases:s.totals?.numDatabases};}catch{}
-      return {sampledAt,pingMs,database:stats.db,dataBytes:stats.dataSize,indexBytes:stats.indexSize,storageBytes:stats.storageSize,objects:stats.objects,collections:stats.collections,indexes:stats.indexes,cluster};
+      let runtime={status:'unavailable'};
+      try {
+        const s=await connection.db.admin().command({serverStatus:1}),{createHash}=await import('node:crypto');
+        const keys=['insert','query','update','delete','getmore','command'],counts=keys.map(k=>Number(s.opcounters?.[k]));
+        runtime={status:'available',sampledAt:new Date().toISOString(),node:createHash('sha256').update(`${s.host}:${s.pid}`).digest('hex').slice(0,16),uptime:s.uptime,
+          operations:counts.every(n=>Number.isFinite(n)&&n>=0)?counts.reduce((a,b)=>a+b,0):null,
+          connections:{current:s.connections?.current??null,available:s.connections?.available??null}};
+      }catch{ /* The size report remains usable without serverStatus permission. */ }
+      return {sampledAt,pingMs,database:stats.db,dataBytes:stats.dataSize,indexBytes:stats.indexSize,storageBytes:stats.storageSize,objects:stats.objects,collections:stats.collections,indexes:stats.indexes,cluster,runtime};
     } finally {await connection.close();}
   }
   if (kind === 'r2' || kind === 'inventory') {

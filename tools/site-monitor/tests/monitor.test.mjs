@@ -10,6 +10,7 @@ import {createMonitor,projectRoot} from '../server.mjs';
 import retention from '../../storage-maintenance.cjs';
 import storage from '../storage-policy.cjs';
 import {workspace,removeWorkspace,fixtureCollectors} from './fixture.mjs';
+import {assessUsage} from '../usage.mjs';
 import {crossesBox,placeTooltip} from '../tooltip-layout.mjs';
 
 test('提示框避让整条线段和孤立点，包含斜线穿框、水平线及垂直线',()=>{
@@ -96,4 +97,37 @@ test('R2 盘点受请求预算约束，部分数据绝不标记为完成',async 
   await fetch(app.baseUrl+'/api/inventory',{method:'POST',headers:{'x-monitor-token':app.token},body:'{}'});
   for(let i=0;i<50&&app.snapshot().inventory.running;i++)await new Promise(r=>setTimeout(r,5));
   const state=app.snapshot();assert.equal(calls,40);assert.equal(state.inventory.buckets.length,2);assert.ok(state.inventory.buckets.every(b=>b.pages===200&&!b.complete&&!('cursor'in b)));assert.match(state.inventory.error,/上限/);
+});
+
+
+test('Atlas速率按相邻同节点采样求差，重启、切换和失效间隔不伪造速率',async()=>{
+ let at=Date.parse('2026-09-27T00:00:00Z'),operations=100,node='one',uptime=1000;
+ const session=new MonitorSession({atlas:async()=>({sampledAt:new Date(at).toISOString(),runtime:{status:'available',sampledAt:new Date(at).toISOString(),node,uptime,operations}})},{clock:()=>at});
+ await session.refresh('atlas');assert.equal(session.modules.atlas.data.operationsPerSecond,null);
+ at+=60000;uptime+=60;operations+=120;await session.refresh('atlas');assert.equal(session.modules.atlas.data.operationsPerSecond,2);
+ node='two';at+=60000;operations+=120;await session.refresh('atlas');assert.equal(session.modules.atlas.data.operationsPerSecond,null);
+ at+=60000;operations=1;uptime=1;await session.refresh('atlas');assert.equal(session.modules.atlas.data.operationsPerSecond,null);
+ at+=240000;operations=1000;uptime+=240;await session.refresh('atlas');assert.equal(session.modules.atlas.data.operationsPerSecond,null);await session.close();
+});
+
+test('额度提醒使用真实计数与可配置阈值，旧数据和缺失分钟不当作正常',()=>{
+ const now=Date.parse('2026-09-27T00:10:00Z'),minute=Math.floor(now/60000);
+ const snapshot={now,config:{atlasOpsWarning:70,atlasOpsDanger:90},modules:{atlas:{status:'ok',data:{operationsPerSecond:95,runtime:{status:'available',connections:{current:450,available:50}}}},server:{status:'ok',data:{api:{buckets:Array.from({length:5},(_,i)=>({minute:minute-5+i,requests:20,errors:1}))}}}}};
+ const usage=assessUsage(snapshot);assert.equal(usage.alerts.length,3);assert.equal(usage.connectionRatio,90);assert.equal(usage.errorRatio,5);assert.equal(usage.requests,100);
+ snapshot.modules.atlas.stale=true;snapshot.modules.server.data.api.buckets.pop();const unknown=assessUsage(snapshot);assert.equal(unknown.operations,null);assert.equal(unknown.connectionTone,'unknown');assert.equal(unknown.httpTone,'unknown');assert.equal(unknown.alerts.length,0);
+ assert.throws(()=>validateConfig({atlasOpsWarning:100,atlasOpsDanger:50}));
+});
+
+test('R2完整盘点缓存跨启动复用，缺失或部分盘点不会覆盖上次完整缓存',async t=>{
+ const root=setup(t),config={...defaults,atlasLimitMiB:512};let calls=0;
+ const remote=async()=>{calls++;return {bytes:100,objects:2,pages:1,complete:true,groups:{}};};
+ let app=await createMonitor({root,config,collect:fixtureCollectors(),start:false,autoInventory:true,remote});
+ for(let i=0;i<50&&app.snapshot().inventory.running;i++)await new Promise(r=>setTimeout(r,5));
+ assert.equal(calls,2);assert.equal(app.snapshot().inventory.buckets.length,2);await app.close();
+ app=await createMonitor({root,config,collect:fixtureCollectors(),start:false,autoInventory:true,remote});
+ assert.equal(calls,2);assert.equal(app.snapshot().inventory.buckets[0].bytes,100);await app.close();
+ app=await createMonitor({root,config,collect:fixtureCollectors(),start:false,remote:async()=>({status:'error'})});
+ await fetch(app.baseUrl+'/api/inventory',{method:'POST',headers:{'x-monitor-token':app.token},body:'{}'});
+ for(let i=0;i<50&&app.snapshot().inventory.running;i++)await new Promise(r=>setTimeout(r,5));
+ assert.ok(app.snapshot().inventory.error);assert.equal(JSON.parse(fs.readFileSync(path.join(root,'.runtime/site-monitor/inventory.json'),'utf8')).inventory.buckets[0].bytes,100);await app.close();
 });
