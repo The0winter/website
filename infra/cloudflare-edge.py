@@ -149,6 +149,7 @@ def main():
                 for path, data in changes.items():
                     write(path, data)
                 run('nginx', '-t')
+                os.chmod(LOG, 0o640)
                 run('logrotate', '--debug', str(ROTATE))
                 run('systemctl', 'reload', 'nginx')
             except Exception:
