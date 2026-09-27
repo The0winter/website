@@ -9,6 +9,7 @@ import Footer from "@/components/Footer";
 import BookPrefetchSession from "@/components/BookPrefetchSession";
 import BookNavigation from "@/components/BookNavigation";
 import LoginNavigation from "@/components/LoginNavigation";
+import AuthPages from "@/components/AuthPages";
 import LibraryPrefetch from "@/components/LibraryPrefetch";
 import {MobileWriterProvider} from "@/components/MobileWriterLaunch";
 import { Suspense } from 'react';
@@ -68,7 +69,7 @@ export default function RootLayout({
             
             {/* ✅ 修改点：增加了 dark:bg 和 transition，让搜索页等其他页面也能适配夜间模式 */}
             <main className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] transition-colors duration-300">
-              {children}
+              <AuthPages>{children}</AuthPages>
             </main>
             
             <Footer />

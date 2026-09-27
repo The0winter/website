@@ -31,7 +31,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 for (const name of ['书架', '我']) {
-  test(`${name}: a slow guest navigation retains home and never paints a protected page`, async ({ page }, testInfo) => {
+  test(`${name}: guest entry opens immediately even while the login route request is held`, async ({ page }, testInfo) => {
     const login = gate();
     await page.route('**/login?_rsc=*', async route => { await login.promise; await route.continue(); });
     await page.goto(base);
@@ -41,16 +41,15 @@ for (const name of ['书架', '我']) {
       Object.assign(window, { navigationFrames: frames });
       function sample() {
         const visible = (selector: string) => Array.from(document.querySelectorAll<HTMLElement>(selector)).some(element => element.getBoundingClientRect().height > 0 && getComputedStyle(element).display !== 'none');
-        frames.push({ path: location.pathname, chrome: visible('[data-site-chrome]'), blank: !visible('.mobile-home, .login-page') });
+        frames.push({ path: location.pathname, chrome: visible('nav[data-site-chrome]'), blank: !visible('.mobile-home, .login-page') });
         if (frames.length < 600) requestAnimationFrame(sample);
       }
       requestAnimationFrame(sample);
     });
     await link(page, name).click();
-    await expect(link(page, name).getByRole('status')).toHaveCount(1);
-    await expect(home(page)).toBeVisible();
-    await expect(page.locator('[data-site-chrome]:visible')).toHaveCount(0);
-    await expect(link(page, name)).toHaveCSS('opacity', '0.55');
+    await expect(page.locator('.login-card')).toBeVisible();
+    await expect(page.getByPlaceholder('请输入用户名')).toBeEditable();
+    await expect(page.locator('nav[data-site-chrome]:visible')).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath(`pending-${name}.png`) });
     login.release();
     await expect(page.locator('.login-card')).toBeVisible();
@@ -61,17 +60,18 @@ for (const name of ['书架', '我']) {
   });
 }
 
-test('slow forum navigation dims only the chosen item and draws no blue loading bar', async ({ page }, testInfo) => {
+test('slow forum navigation keeps its section transition and draws no blue loading bar', async ({ page }, testInfo) => {
   const forum = gate();
   await page.route('**/forum?_rsc=*', async route => { await forum.promise; await route.continue(); });
   await page.goto(base);
   const bar = await page.locator('.mh-bottom').boundingBox();
   await link(page, '论坛').click();
   const status = link(page, '论坛').getByRole('status');
-  await expect(status).toHaveCount(1);
-  expect((await status.boundingBox())!.width).toBeLessThanOrEqual(1);
-  await expect(status).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  await expect(link(page, '论坛')).toHaveCSS('opacity', '0.55');
+  // Main sections now reserve native history immediately, so their transition
+  // supplies feedback instead of Next's pending-link status.
+  await expect(status).toHaveCount(0);
+  await expect(page.locator('html')).toHaveAttribute('data-mobile-section-transition', /animating|loading/);
+  await expect(page.locator('[data-section-pane="incoming"]')).toBeVisible();
   expect(await page.locator('.mh-bottom').boundingBox()).toEqual(bar);
   await page.screenshot({ path: testInfo.outputPath('pending-forum.png') });
   forum.release();
@@ -94,7 +94,7 @@ for (const signedIn of [false, true]) {
     await expect(link(page, '我')).toHaveAttribute('aria-busy', 'true');
     await expect(page).toHaveURL(base + '/');
     await expect(home(page)).toBeVisible();
-    await expect(page.locator('[data-site-chrome]:visible')).toHaveCount(0);
+    await expect(page.locator('nav[data-site-chrome]:visible')).toHaveCount(0);
     session.release();
     await expect(page).toHaveURL(base + (signedIn ? '/profile' : '/login'));
     if (signedIn) await expect(page.getByRole('button', { name: '退出登录', exact: true })).toBeVisible();

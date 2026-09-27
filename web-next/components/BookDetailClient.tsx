@@ -26,6 +26,7 @@ import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, X, ChevronRight, Chev
 import BookArticles from './BookArticles';
 import './book-detail.css';
 import { useAuth } from '@/contexts/AuthContext';
+import {openLogin} from '@/lib/mobile-auth-navigation';
 
 // --- 组件：星星显示 ---
 const StarRating = ({ rating, size = 5, interactive = false, onRate }: { rating: number, size?: number, interactive?: boolean, onRate?: (r: number) => void }) => {
@@ -195,7 +196,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   const [submittingReview, setSubmittingReview] = useState(false);
   const [showReviewForm, setShowReviewForm] = useState(false);
   useEffect(() => {
-    if (showReviewForm && !authLoading && !userId) router.push('/login');
+    if (showReviewForm && !authLoading && !userId) openLogin(router);
   }, [showReviewForm, authLoading, userId, router]);
 
   // --- 初始化逻辑 ---
@@ -273,7 +274,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   // --- 操作：收藏 ---
   const handleToggleBookmark = async () => {
     if (!user) {
-      router.push('/login');
+      openLogin(router);
       return;
     }
     if (loading) return; 
@@ -301,14 +302,14 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
   // --- 操作：评论相关 ---
   const openReviewForm = () => {
-    if (!authLoading && !user) return router.push('/login');
+    if (!authLoading && !user) return openLogin(router);
     setCommunityTab('reviews');
     setShowReviewForm(true);
     requestAnimationFrame(() => document.getElementById('reviews-section')?.scrollIntoView({block:'start',behavior:'smooth'}));
   };
 
   const handleSubmitReview = async (myRating: number, myContent: string) => {
-    if (!user) return router.push('/login');
+    if (!user) return openLogin(router);
     if (submittingReview || myRating < 1 || myRating > 5) return;
 
     setSubmittingReview(true);

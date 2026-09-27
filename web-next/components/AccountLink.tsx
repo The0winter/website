@@ -7,6 +7,7 @@ import type { AuthUser } from '@/lib/api';
 import Link from './PrefetchLink';
 import {beginMobileSectionTransition} from '@/lib/mobile-section-navigation';
 import {navigateMobileRoot} from '@/lib/mobile-root-history';
+import {navigateMobileAuth} from '@/lib/mobile-auth-navigation';
 
 type Props = Omit<ComponentProps<typeof Link>, 'href' | 'onNavigate'> & { href: '/library' | '/profile' };
 
@@ -20,7 +21,7 @@ export default function AccountLink({ href, children, ...props }: Props) {
   useEffect(() => { if (!loading) proceed.current?.(user); }, [loading, user]);
   useEffect(() => () => cleanup.current?.(), []);
 
-  return <Link {...props} href={loading || user ? href : '/login'} aria-busy={waiting || undefined}
+  return <Link {...props} href={user ? href : '/login'} aria-busy={waiting || undefined}
     onNavigate={event => {
       if (!loading) return;
       event.preventDefault();
@@ -46,7 +47,7 @@ export default function AccountLink({ href, children, ...props }: Props) {
         setWaiting(false);
         if (location.href === source) {
           const destination = sessionUser ? href : '/login';
-          if (navigateMobileRoot(destination)) return;
+          if (navigateMobileAuth(destination) || navigateMobileRoot(destination)) return;
           beginMobileSectionTransition(destination);
           router.push(destination);
         }

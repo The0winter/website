@@ -7,6 +7,7 @@ import { canPrefetchHref, currentPrefetchPolicy, observeBookVisibility, serverPr
 import {navigateBookLink} from '@/lib/book-navigation';
 import {beginMobileSectionTransition} from '@/lib/mobile-section-navigation';
 import {navigateMobileRoot} from '@/lib/mobile-root-history';
+import {navigateMobileAuth} from '@/lib/mobile-auth-navigation';
 
 type Props = Omit<ComponentProps<typeof Link>, 'prefetch' | 'ref'> & {
   prefetchMode?: 'visible' | 'intent';
@@ -43,7 +44,7 @@ export default function PrefetchLink({ children, href, prefetchMode = 'visible',
     onNavigate={event => {
       let cancelled = false;
       onNavigate?.({preventDefault() { cancelled = true; event.preventDefault(); }});
-      if (!cancelled && typeof href === 'string' && (navigateMobileRoot(href) || !beginMobileSectionTransition(href) && navigateBookLink(href))) {
+      if (!cancelled && typeof href === 'string' && (navigateMobileAuth(href) || navigateMobileRoot(href) || !beginMobileSectionTransition(href) && navigateBookLink(href))) {
         event.preventDefault();
       }
     }}
