@@ -1,8 +1,22 @@
 # Cloudflare 网站防护
 
-2026-09-27 完成主站代理、防刷及源站入口配置。此次只更新 Cloudflare 和 Nginx；保留主线程已上线的 Atlas 节流版本 `fd207d8`，未切换应用 release、重启 API/前端或修改业务数据。
+2026-09-27 19:21 UTC 因整站加载缓慢和超时，已将主域名及 www 恢复为 **DNS only**，Nginx 源站入口恢复 **observe**。主站当前不经过 Cloudflare 代理。Atlas 节流版本 `fd207d8`、数据库、备份、R2 图片和邮件配置保留。
 
-## 当前配置
+## 当前状态与回退原因
+
+- 主域名 A 记录仍为 `51.79.242.0`，www CNAME 仍指向主域名；只撤回本次启用的橙云代理。HTTPS 证书、HTTP/2 直连、站内认证及 Nginx 原有限速保留。
+- Cloudflare 规则仍保存，但 **DNS only 的主站请求不会经过 Cloudflare WAF/限速/CDN**，不能将这些规则描述为当前生效。源站不能保留仅允许 Cloudflare 的入口限制，否则直连用户会收到 403。
+- 真实浏览器在普通网络预取模式下复现：首页文档约 4–15 秒，点书约 3–12 秒；同一线上代码经源站对照约 1.6–2.4 秒。单请求健康检查和页面能打开不足以证明性能正常。
+- 请求关联显示，一次目录 API 在应用中耗时 406 ms，Nginx 对外请求历时 6.252 秒；其他约 600 ms 的 API 也出现 4–10 秒的回传等待。服务器没有内存/CPU 耗尽或应用重启证据。
+- 临时将 Cloudflare 回源改为 HTTP/1.1 后，源站长等待明显减少，但外部浏览器仍复现 9.9 秒首页和超过 10 秒的加载超时，因此没有把这项缓解当成最终修复。最终撤回新代理，并恢复源站原有 HTTP/2。证据支持代理链路引入回归，尚不能精确断言是 Cloudflare 内部实现还是具体网络路径。
+- 回退顺序：先切换源站到 `observe` 并验证外网直连 200，再将主域名及 www 改为 DNS only。公网解析及 HTTPS 已确认直达原服务器。DNS 缓存及已有连接可能需要一段时间退出。
+- 诊断日志新增 `protocol`、`upstreamSeconds`，用于区分应用处理与向外传输的耗时，不新增查询参数、正文或凭据记录。
+
+本次不切换应用 release、不重建前端、不重启 API。回退快照位于 `/var/lib/test1-edge-backups/20260927T192027613232Z` 和 `/var/lib/test1-edge-backups/20260927T192032-restore-direct`。详细证据在 `.runtime/task-artifacts/detail-slow-20260927/`。
+
+验收入口仍为 `cloudflare-edge-live.spec.ts`，现在默认检查直连；必须显式设置 `TEST1_EDGE_LIVE=1` 才访问线上。覆盖手机/桌面首页点书、重复访问、正文、翻章、完整目录、排行和登录，保留普通链接预取，首页及详情导航各设 8 秒上限，首次导航前隔离 Google Analytics。若将来重新试用代理，需要额外设置 `TEST1_EDGE_EXPECT_PROXY=1`，并在不同网络下确认重复导航无回归；不能只凭一次快速的健康检查再次开启全站代理。
+
+## 首次接入配置（以下为回退前记录）
 
 - `jiutianxiaoshuo.com` 的 A 记录、`www` 的 CNAME 从 DNS only 切换为 Proxied；IP、CNAME 目标、邮件和图片记录不变。公开 DNS 已返回 Cloudflare 地址。
 - SSL/TLS 保持 Full (strict)。既有 DDoS 防护、浏览器完整性检查和 `Allow_search_engine` 规则保留。
@@ -36,7 +50,7 @@ python3 cloudflare-edge.py --mode enforce --apply
 
 需应急恢复直连时，先用 `--mode observe --apply` 恢复原直连可用状态并验证，再在 Cloudflare 将主域名/www 调回 DNS only。不要先关橙云而仍保留源站入口限制。上述应急步骤会减少防护，只在故障回退需要时执行。单独回退限速可在 Cloudflare 停用这一个规则，不涉及其他规则。
 
-## 验收和后续观察
+## 首次接入的功能检查（未充分覆盖性能）
 
 - Cloudflare 路径：首页、书籍、目录、正文、登录页、robots、sitemap、健康接口成功；www 保持 308 到主域名。两处网络观测均出现 CF-Ray。
 - 手机 390px、桌面 1440px 阅读与翻章、登录页验收通过，首次导航前隔离 Google Analytics，未提交登录或创建业务内容。测试入口为 `TEST1_EDGE_LIVE=1 npm run test:browser -- cloudflare-edge-live.spec.ts`，默认不对线上发请求。

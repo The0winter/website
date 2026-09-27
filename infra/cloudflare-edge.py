@@ -60,7 +60,7 @@ map $uri $test1_trace_public {{
     "~^/(book(?:/|$)|books(?:/|$)|ranking(?:/|$)|sitemap[^/]*\\.xml$|sitemaps/|robots\\.txt$|api/(books|chapters)(/|$))" 1;
 }}
 # No query strings, cookies, authorization, request bodies or personal endpoints.
-log_format test1_public_traffic escape=json '{{"time":"$time_iso8601","requestId":"$request_id","method":"$request_method","path":"$uri","status":$status,"seconds":$request_time,"bytes":$body_bytes_sent,"client":"$remote_addr","peer":"$realip_remote_addr","cloudflare":$test1_from_cloudflare,"ray":"$test1_edge_ray","userAgent":"$http_user_agent"}}';
+log_format test1_public_traffic escape=json '{{"time":"$time_iso8601","requestId":"$request_id","method":"$request_method","path":"$uri","status":$status,"seconds":$request_time,"upstreamSeconds":"$upstream_response_time","protocol":"$server_protocol","bytes":$body_bytes_sent,"client":"$remote_addr","peer":"$realip_remote_addr","cloudflare":$test1_from_cloudflare,"ray":"$test1_edge_ray","userAgent":"$http_user_agent"}}';
 '''
 
 
