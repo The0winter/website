@@ -39,7 +39,8 @@ export default function MobileSectionShells() {
     return registerMobileSectionShells(root);
   }, []);
   return <><div hidden inert ref={mount}/>{shadow && createPortal(<>
-    <div data-mobile-section-shell="/ranking"><RankingFrame/></div>
+    {/* Crawlers can include closed shadow trees; only the real route owns an H1. */}
+    <div data-mobile-section-shell="/ranking"><RankingFrame pageHeading={false}/></div>
     <div data-mobile-section-shell="/library" className="library-page">
       <div className="library-inner"><div data-section-shell-header/>
         <section className="shelf-panel"><LibraryToolbar sort={sort} empty={!shelf.rows?.length}/>

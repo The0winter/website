@@ -19,17 +19,18 @@ export function RankingSkeleton() {
 }
 
 // The pre-mounted entry frame and the real route share exactly the same layout.
-export default function RankingFrame({activeRank = 'day', category = '全部', categoriesRef, onCategory, onRank, back, busy = true, children}: {
+export default function RankingFrame({activeRank = 'day', category = '全部', categoriesRef, onCategory, onRank, back, busy = true, pageHeading = true, children}: {
   activeRank?: string; category?: string; categoriesRef?: Ref<HTMLElement>;
   onCategory?: (name: string, event: MouseEvent<HTMLButtonElement>) => void;
-  onRank?: (id: RankId) => void; back?: ReactNode; busy?: boolean; children?: ReactNode;
+  onRank?: (id: RankId) => void; back?: ReactNode; busy?: boolean; pageHeading?: boolean; children?: ReactNode;
 }) {
   const rank = RANKS.find(item => item.id === activeRank) ?? RANKS[0];
+  const Title = pageHeading ? 'h1' : 'div';
   return <div className="ranking-page"><div className="ranking-shell">
     <header className="ranking-header">
       <div className="ranking-titlebar">
         {back ?? <button type="button" className="ranking-back" aria-label="返回首页"><ArrowLeft size={21}/></button>}
-        <h1 className="ranking-title">排行榜<span>发现值得读的故事</span></h1>
+        <Title className="ranking-title">排行榜<span>发现值得读的故事</span></Title>
       </div>
       <nav ref={categoriesRef} className="ranking-categories" aria-label="小说分类">
         {CATEGORIES.map(name => <button key={name} type="button" aria-pressed={category === name} onClick={event => onCategory?.(name, event)}>{name}</button>)}

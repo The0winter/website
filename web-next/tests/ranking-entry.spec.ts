@@ -41,6 +41,12 @@ test('cold ranking starts moving before the route response on a throttled Androi
     await expect(page.locator('.ranking-navigation-loading')).toBeVisible();
     await expect.poll(() => blocked).toBeGreaterThan(0);
     await expect(page.locator('main .ranking-page')).toHaveCount(0);
+    const previewTitle = page.locator('.ranking-navigation-loading .ranking-title');
+    await expect(previewTitle).toHaveJSProperty('tagName', 'DIV');
+    const titleStyle = await previewTitle.evaluate(element => {
+      const style = getComputedStyle(element);
+      return {font: style.fontFamily, size: style.fontSize, weight: style.fontWeight, lineHeight: style.lineHeight, height: element.getBoundingClientRect().height};
+    });
     const timing = await page.evaluate(() => (window as unknown as {rankingEntryTiming: {tap: number; animation: number; styleReads: number}}).rankingEntryTiming);
     expect(timing.animation - timing.tap).toBeGreaterThanOrEqual(0);
     expect(timing.animation - timing.tap).toBeLessThan(350);
@@ -50,6 +56,12 @@ test('cold ranking starts moving before the route response on a throttled Androi
     release();
     await expect(page.locator('.ranking-navigation-loading')).toHaveCount(0);
     await expect(page.locator('main .ranking-header')).toBeVisible();
+    const pageTitle = page.locator('main h1.ranking-title');
+    await expect(pageTitle).toContainText('排行榜');
+    expect(await pageTitle.evaluate(element => {
+      const style = getComputedStyle(element);
+      return {font: style.fontFamily, size: style.fontSize, weight: style.fontWeight, lineHeight: style.lineHeight, height: element.getBoundingClientRect().height};
+    })).toEqual(titleStyle);
     await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
   } finally {release(); await cdp.send('Emulation.setCPUThrottlingRate', {rate: 1});}
 });
