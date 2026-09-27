@@ -8,6 +8,7 @@ import storage from './storage-policy.cjs';
 import {collectors,validateConfig,runRemote} from './collectors.mjs';
 import {MonitorSession} from './session.mjs';
 import {validateCredentials} from './analytics.mjs';
+import {hasCloudflareCredentials} from './cloud-usage.mjs';
 
 // Directory file URLs retain a trailing separator; retention requires a
 // normalized root so its descendant check does not compare a double separator.
@@ -23,7 +24,9 @@ export async function createMonitor({root=projectRoot,collect,config:configInput
   root=path.resolve(root);
   let config;try{config=validateConfig(configInput??JSON.parse(fs.readFileSync(safeFile(root,storage.BASE+'/config.json'),'utf8')));}catch{config=validateConfig(configInput);}
   const token=crypto.randomBytes(32).toString('hex');
-  let session=new MonitorSession(collect||collectors(config)),inventory={running:false,buckets:[],error:null},scanController,scanPromise,closing=false,updating=false;
+  const cloudCredentialsPath=safeFile(root,storage.BASE+'/cloud-credentials.json');
+  const makeCollectors=()=>collect||collectors(config,{cloudCredentialsPath});
+  let session=new MonitorSession(makeCollectors()),inventory={running:false,buckets:[],error:null},scanController,scanPromise,closing=false,updating=false;
   const inventoryFile=storage.BASE+'/inventory.json';
   try {
     const file=safeFile(root,inventoryFile);
@@ -61,7 +64,7 @@ export async function createMonitor({root=projectRoot,collect,config:configInput
       }
     }})();
   }
-  function refreshInventory(){if(!closing&&!updating&&!inventory.running&&(!inventory.finishedAt||Date.now()-inventory.finishedAt>=86400000))void scan();}
+  function refreshInventory(){if(!hasCloudflareCredentials(cloudCredentialsPath)&&!closing&&!updating&&!inventory.running&&(!inventory.finishedAt||Date.now()-inventory.finishedAt>=86400000))void scan();}
   const server=http.createServer(async(req,res)=>{
     res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
     res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
@@ -87,17 +90,17 @@ export async function createMonitor({root=projectRoot,collect,config:configInput
         if(['/api/config','/api/range','/api/analytics/credentials'].includes(url.pathname)&&updating){json(res,409,{error:'正在更新设置，请稍后重试'});return;}
         if(url.pathname==='/api/range'){
           const next=validateConfig({...config,analyticsDays:value.days});updating=true;
-          try{atomic(root,storage.BASE+'/config.json',next);config=next;await session.reset(['analytics','business'],collect||collectors(config));json(res,200,{ok:true});}finally{updating=false;}return;
+          try{atomic(root,storage.BASE+'/config.json',next);config=next;await session.reset(['analytics','business'],makeCollectors());json(res,200,{ok:true});}finally{updating=false;}return;
         }
         if(url.pathname==='/api/analytics/credentials'){
           const credentials=validateCredentials(value.credentials);const next=validateConfig({...config,gaPropertyId:value.propertyId,gaCredentialsPath:safeFile(root,storage.BASE+'/google-credentials.json')});
           if(!next.gaPropertyId)throw Error('请先填写谷歌资源 ID');updating=true;
-          try{atomic(root,storage.BASE+'/google-credentials.json',credentials);atomic(root,storage.BASE+'/config.json',next);config=next;await session.reset(['analytics','realtime'],collect||collectors(config));json(res,200,{ok:true});}finally{updating=false;}return;
+          try{atomic(root,storage.BASE+'/google-credentials.json',credentials);atomic(root,storage.BASE+'/config.json',next);config=next;await session.reset(['analytics','realtime'],makeCollectors());json(res,200,{ok:true});}finally{updating=false;}return;
         }
         if(url.pathname==='/api/config'){
           const next=validateConfig({...config,...value});updating=true;
           try{atomic(root,storage.BASE+'/config.json',next);scanController?.abort();await scanPromise;const paused=session.paused;await session.close();
-          config=next;inventory={running:false,buckets:[],error:null};session=new MonitorSession(collect||collectors(config));session.paused=paused;session.start();json(res,200,{ok:true});}finally{updating=false;if(autoInventory)refreshInventory();}return;
+          config=next;inventory={running:false,buckets:[],error:null};session=new MonitorSession(makeCollectors());session.paused=paused;session.start();json(res,200,{ok:true});}finally{updating=false;if(autoInventory)refreshInventory();}return;
         }
         if(url.pathname==='/api/export'){
           if(!['json','csv'].includes(value.format))throw Error('导出格式无效');

@@ -6,6 +6,7 @@ import {remoteSnapshot} from './remote.mjs';
 import {googleCollectors} from './analytics.mjs';
 import {readBusiness} from './business.mjs';
 import {readTraffic} from './traffic.mjs';
+import {cloudCollectors} from './cloud-usage.mjs';
 
 export const defaults = {host:'ubuntu@51.79.242.0',identity:path.join(os.homedir(),'.ssh','ovh_website_ed25519'),site:'https://jiutianxiaoshuo.com',atlasLimitMiB:null,gaPropertyId:'',gaCredentialsPath:process.env.GOOGLE_APPLICATION_CREDENTIALS||'',analyticsDays:30};
 export function validateConfig(input={}) {
@@ -69,4 +70,4 @@ export async function collectSite(config,signal,{fetchImpl=fetch}={}) {
   }else checks.push({id:'catalog',label:'章节目录',status:'skipped',error:'书籍列表未通过'},{id:'chapter',label:'章节正文',status:'skipped',error:'书籍列表未通过'});
   return {sampledAt,status:checks[0].status==='ok'?200:null,latencyMs:checks[0].latencyMs,url:config.site,checks};
 }
-export function collectors(config) {return {...Object.fromEntries(['server','atlas','r2','site','business','traffic'].map(kind=>[kind,signal=>kind==='site'?collectSite(config,signal):runRemote(kind,config,signal,kind==='business'?{days:config.analyticsDays}:{})])),...googleCollectors(config)};}
+export function collectors(config,{cloudCredentialsPath}={}) {return {...Object.fromEntries(['server','atlas','r2','site','business','traffic'].map(kind=>[kind,signal=>kind==='site'?collectSite(config,signal):runRemote(kind,config,signal,kind==='business'?{days:config.analyticsDays}:{})])),...googleCollectors(config),...cloudCollectors(cloudCredentialsPath)};}

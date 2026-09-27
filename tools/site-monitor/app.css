@@ -93,7 +93,7 @@
 .list-mobile-sort{display:none}
 .resource-grid:has(.r2-capacity){grid-template-columns:repeat(4,minmax(0,1fr))}
 .r2-size{font-size:19px;font-variant-numeric:tabular-nums;margin:3px 0}.r2-actions{display:flex;gap:12px;margin-top:3px}.r2-actions .text-button{font-size:11px}
-.usage-panel{margin-bottom:18px}.usage-panel .capacity-heading{margin-top:16px}.usage-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.usage-panel{margin-bottom:18px}.usage-panel .capacity-heading{margin-top:16px}.usage-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .usage-card{padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:8px;min-width:0}.usage-card>div{display:flex;justify-content:space-between;gap:6px;align-items:center}.usage-card h3{font-size:12px}.usage-card>strong{display:block;font-size:20px;margin:6px 0;font-variant-numeric:tabular-nums}.usage-card>strong small{font-size:11px;font-weight:400}.usage-card p,.usage-footnote{font-size:11px;line-height:1.7;color:var(--muted)}.usage-footnote{margin-top:9px}
 @media(max-width:1180px){.usage-grid,.resource-grid:has(.r2-capacity){grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){

@@ -212,7 +212,7 @@ test('桌面紧凑表格排序、窄屏排序和资源额度数据状态',async(
  await expect(table.locator('th[aria-sort="ascending"]')).toContainText('会话数');
  await expect(page.getByRole('heading',{name:'R2 正文与封面',exact:true})).toBeVisible();
  await expect(page.getByRole('heading',{name:'Atlas 操作速率',exact:true})).toBeVisible();
- await expect(page.locator('.usage-panel')).toContainText('R2 月度读写额度');await expect(page.locator('.usage-panel')).toContainText('未接入');
+ await expect(page.locator('.usage-panel')).toContainText('R2 本月写入/列表');await expect(page.locator('.usage-panel')).toContainText('未接入');
  await page.setViewportSize({width:390,height:1000});await page.getByLabel('城市排序').selectOption('score');
  await expect(table.locator('tbody tr').first()).toContainText('Shanghai');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:path.join(dir,'verified-usage-mobile.png'),fullPage:true});
