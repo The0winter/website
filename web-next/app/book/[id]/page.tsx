@@ -30,17 +30,20 @@ function normalizeCoverImage(coverImage?: string): string {
   return `${PUBLIC_IMAGE_HOST}${coverImage.startsWith('/') ? '' : '/'}${coverImage}`;
 }
 
-const getBook = cache(async (id: string): Promise<Book | null> => {
+type DetailData = {book: Book; chapters: Chapter[]; catalog: CatalogPage<Chapter> | null; totalWords: number | null; milestones: MilestoneData | null};
+
+const getDetail = cache(async (id: string): Promise<DetailData | null> => {
   if (!/^[a-f0-9]{24}$/i.test(id)) return null;
   try {
     const baseUrl = getApiBaseUrl(); // 动态获取：服务端走内网，客户端走公网
-    const res = await fetch(`${baseUrl}/books/${id}`, { 
+    const res = await fetch(`${baseUrl}/books/${id}/detail`, {
       cache: 'no-store'
     });
     if (res.status===404) return null;
     if (!res.ok) throw new Error('作品服务暂不可用');
     
-    const book: Book = await res.json();
+    const detail: DetailData = await res.json();
+    const {book} = detail;
     
     // 规范化封面地址，防止传给前端和 SEO 的图片路径是相对路径
     book.cover_image = normalizeCoverImage(book.cover_image);
@@ -49,58 +52,17 @@ const getBook = cache(async (id: string): Promise<Book | null> => {
       book.coverImage = normalizeCoverImage(book.coverImage);
     }
     
-    return book;
+    return detail;
   } catch (error) {
     throw error;
   }
 });
 
-async function getChapters(id: string, order: 'asc' | 'desc' = 'desc', limit = 30): Promise<CatalogPage<Chapter> | undefined> {
-  try {
-    const baseUrl = getApiBaseUrl(); // 动态获取：服务端走内网，客户端走公网
-    const res = await fetch(`${baseUrl}/books/${id}/chapters?order=${order}&page=1&limit=${limit}`, {
-      cache: 'no-store'
-    });
-    if (!res.ok) return undefined;
-    const header = res.headers.get('X-Total-Count');
-    const count = header === null ? NaN : Number(header);
-    return { rows: await res.json(), total: Number.isSafeInteger(count) && count >= 0 ? count : null, pageSize: limit };
-  } catch (error) {
-    console.error('首批目录读取失败', error);
-    return undefined;
-  }
-}
-
-async function getTotalWords(id: string): Promise<number | null> {
-  try {
-    const res = await fetch(`${getApiBaseUrl()}/books/${id}/statistics`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('作品统计暂不可用');
-    const { totalWords } = await res.json();
-    if (!Number.isSafeInteger(totalWords) || totalWords < 0) throw new Error('作品统计无效');
-    return totalWords;
-  } catch (error) {
-    console.error('作品统计读取失败', error);
-    // Keep the book readable without displaying an incomplete or false zero count.
-    return null;
-  }
-}
-
-async function getMilestones(id: string): Promise<MilestoneData | null> {
-  try {
-    const response = await fetch(`${getApiBaseUrl()}/books/${id}/milestones`, {cache: 'no-store'});
-    if (!response.ok) return null;
-    return await response.json();
-  } catch {
-    // Keep a stable entry on failure; opening the sheet lets the reader retry.
-    return null;
-  }
-}
-
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const book = await getBook(id);
-
-  if (!book) notFound();
+  const detail = await getDetail(id);
+  if (!detail) notFound();
+  const {book} = detail;
 
   const metadata = publicMetadata(bookPageTitle(book), bookDescription(book), `/book/${id}`);
   
@@ -117,21 +79,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function BookDetailPage({ params }: Props) {
   const { id } = await params;
   
-  // 并行请求书籍和章节数据
-  const [book, catalog, firstChapter, totalWords, milestones] = await Promise.all([
-    getBook(id),
-    getChapters(id),
-    getChapters(id, 'asc'),
-    getTotalWords(id),
-    getMilestones(id),
-  ]);
-  
-  if (!book) {
-    notFound();
-  }
+  // Metadata and the page share one request-scoped read.
+  const detail = await getDetail(id);
+  if (!detail) notFound();
+  const {book, chapters, catalog, totalWords, milestones} = detail;
+  const firstChapter = catalog ?? undefined;
 
   // Render only the visible preview; the client fills the complete catalog in the background.
-  const chapters = catalog?.rows ?? [];
   // Compute once on the server to keep relative-time boundaries stable during hydration.
   const updatedLabel = formatRelativeUpdate(book.lastUpdated);
 

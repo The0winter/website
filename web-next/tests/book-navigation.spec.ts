@@ -190,7 +190,9 @@ for (const origin of ['direct details', 'search', 'direct reader', 'legacy reade
 test('Back cancels a slow home-to-detail animation on home before leaving for the previous page', async ({page}) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'connection', {value: {saveData: true, addEventListener() {}, removeEventListener() {}}}));
   await page.goto(`${base}/search`);
-  await page.getByRole('link', {name: '返回首页', exact: true}).click(); await home(page);
+  // A new document gives Home a genuine preceding visit. The mobile "return
+  // home" control intentionally collapses the in-app stack to its root.
+  await page.goto(base); await home(page);
   let requested = false;
   await page.route(`**/book/${book}?_rsc=*`, async route => {
     requested = true;
@@ -226,7 +228,9 @@ test('reader entry uses chapter loading and exit slides back after details are r
   await page.route(`**/book/${book}/${first}?_rsc=*`, async route => { await new Promise(resolve => setTimeout(resolve, 650)); await route.continue(); });
   await page.getByRole('link', {name: '立即阅读', exact: true}).click(); await ready(page);
   await page.keyboard.press('Control+ArrowRight'); await ready(page, second);
-  await page.keyboard.press('m'); await page.locator('.reader-return:visible').click(); await details(page);
+  // Mobile browser mode uses system Back; its return header exists only in
+  // fullscreen (desktop has a persistent header of its own).
+  await page.goBack(); await details(page);
   await expect(page.getByRole('link', {name: '继续阅读', exact: true})).toHaveAttribute('href', `/book/${book}/${second}`);
   const animations = await page.evaluate(() => (window as Window & {bookAnimations?: unknown[]}).bookAnimations);
   expect(animations).toEqual([

@@ -21,7 +21,7 @@ test('Back restores visited details and home without route requests and retains 
   await page.goto(base);
   await page.getByRole('combobox').fill('山海');
   await page.getByRole('combobox').press('Escape');
-  const card = page.locator(`.mh-section a[href="${detail}"]`).last();
+  const card = page.locator(`.mobile-home a[href="${detail}"]:visible`).last();
   await card.scrollIntoViewIfNeeded();
   // Clicking may scroll the card away from the fixed bottom navigation first.
   // Capture the actual departure position, not the earlier scroll-into-view.

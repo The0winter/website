@@ -4,6 +4,7 @@ import Author from '../models/Author.js';
 import {libraryRoutes} from './library.js';
 import {paragraphCommentRoutes} from './paragraph-comments.js';
 import {catalogRoutes} from './catalog.js';
+import {bookDetailRoutes} from './book-detail.js';
 import User from '../models/User.js';
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
@@ -29,6 +30,7 @@ export function readingRoutes(app,auth) {
   libraryRoutes(app,auth);
   paragraphCommentRoutes(app,auth);
   catalogRoutes(app);
+  bookDetailRoutes(app);
   app.get('/api/books/:bookId/milestones',asyncRoute(async(req,res)=>{
     const book = await Book.findOne({_id:req.params.bookId,deletedAt:null}).select('views statisticsSeed milestoneHistory milestonesInitializedAt').maxTimeMS(3000).lean();
     if (!book) fail(404,'作品不可用');
