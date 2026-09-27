@@ -47,6 +47,8 @@ for (const [width, height, touch, clippedScrollWidth] of [
       await expect(page.locator('.reader-tools')).toHaveAttribute('aria-hidden', 'false');
       await tap('center');
       await expect(page.locator('.reader-tools')).toHaveAttribute('aria-hidden', 'true');
+      await expect(reader).toHaveAttribute('data-reader-previous', /.+/);
+      await expect(reader).toHaveAttribute('data-reader-next', /.+/);
       const previous = await reader.getAttribute('data-reader-previous');
       const next = await reader.getAttribute('data-reader-next');
       expect(previous).toBeTruthy(); expect(next).toBeTruthy();
