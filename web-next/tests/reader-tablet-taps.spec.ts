@@ -4,12 +4,13 @@ const base = process.env.READER_TABLET_BASE || 'http://127.0.0.1:3000';
 const book = process.env.READER_TABLET_BOOK || '000000000000000000000101';
 const chapter = process.env.READER_TABLET_CHAPTER || '000000000000000000000102';
 
-for (const [width, height, touch, clippedScrollWidth] of [
+for (const [width, height, touch, clippedScrollWidth, ignoredSingleColumn] of [
   [768, 1024, true], [820, 1180, true], [1024, 1366, true],
   [1194, 834, true], [1366, 1024, true], [390, 844, true], [1440, 900, false],
   [820, 1180, true, true],
+  [1194, 834, true, false, true],
 ] as const) {
-  test.describe(`${touch ? 'touch' : 'mouse'} ${width}x${height}${clippedScrollWidth ? ' clipped column measurement' : ''}`, () => {
+  test.describe(`${touch ? 'touch' : 'mouse'} ${width}x${height}${clippedScrollWidth ? ' clipped column measurement' : ''}${ignoredSingleColumn ? ' Safari single-column fallback' : ''}`, () => {
     test.use({viewport:{width, height}, hasTouch:touch, isMobile:touch});
     test('side taps turn one page, and cross chapters only at the boundary', async ({page}, info) => {
       await page.addInitScript(clipped => {
@@ -29,6 +30,13 @@ for (const [width, height, touch, clippedScrollWidth] of [
       const number = window.locator('> .reader-page-surface [data-reader-page]');
       await expect(reader).toHaveAttribute('data-reader-ready', 'true');
       await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
+      if (ignoredSingleColumn) {
+        // Released Safari branches treat column-count:1 as ordinary block flow.
+        // Exercise that behavior even on newer WebKit builds that fixed it.
+        await page.addStyleTag({content:'.reader-columns {column-count:auto!important}'});
+        await page.setViewportSize({width:width-1, height});
+        await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      }
       await expect(number).toHaveText(/^1\/(?:[2-9]|\d{2,})$/);
       const total = Number((await number.innerText()).split('/')[1]);
       const tap = async (side: 'left' | 'right' | 'center') => {

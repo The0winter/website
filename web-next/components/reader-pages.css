@@ -34,11 +34,14 @@
 .reader-pages-root[data-mode=scroll] .reader-page-window { touch-action:pan-y pinch-zoom; }
 .reader-pages-root[data-mode=scroll] .reader-text-window { overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; touch-action:pan-y pinch-zoom; scrollbar-width:none; }
 .reader-pages-root[data-mode=scroll] .reader-text-window::-webkit-scrollbar { display:none; }
-.reader-pages-root[data-mode=scroll] .reader-columns { height:auto; column-count:auto; display:flow-root; }
+.reader-pages-root[data-mode=scroll] .reader-columns { height:auto; column-count:auto; column-width:auto; display:flow-root; }
 .reader-scroll-window { overflow-anchor:none; }
 .reader-scroll-chapter { padding-bottom:48px; }
 .reader-scroll-end { height:1px; }
-.reader-columns { height:100%; column-fill:auto; column-count:1; column-gap:40px; width:100%; text-align:justify; overflow-wrap:break-word; overflow-wrap:anywhere; -webkit-text-size-adjust:100%; text-size-adjust:100%; font-weight:400; letter-spacing:.035em; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+/* Safari releases can treat column-count:1 alone as ordinary block flow.
+   An explicit width establishes columns there too. The frame never exceeds
+   the viewport, so 100vw still produces exactly one column per sheet. */
+.reader-columns { height:100%; column-fill:auto; column-count:1; column-width:100vw; column-gap:40px; width:100%; text-align:justify; overflow-wrap:break-word; overflow-wrap:anywhere; -webkit-text-size-adjust:100%; text-size-adjust:100%; font-weight:400; letter-spacing:.035em; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
 .reader-columns h1 { font-size:1.4em; font-family:inherit; font-weight:700; line-height:1.5; letter-spacing:.01em; margin:16px 0 32px; break-after:avoid; overflow-wrap:anywhere; }
 .reader-paragraph { text-indent:2em; margin:0 0 var(--reader-paragraph-gap); line-height:inherit; orphans:1; widows:1; }
 .reader-paragraph:last-child { margin-bottom:0; }
