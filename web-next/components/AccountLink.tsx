@@ -23,7 +23,11 @@ export default function AccountLink({ href, children, ...props }: Props) {
 
   return <Link {...props} href={user ? href : '/login'} aria-busy={waiting || undefined}
     onNavigate={event => {
-      if (!loading) return;
+      const side = href === '/library' ? 'left' : 'right';
+      if (!loading) {
+        if (!user && navigateMobileAuth('/login', side)) event.preventDefault();
+        return;
+      }
       event.preventDefault();
       cleanup.current?.();
       setWaiting(true);
@@ -47,7 +51,7 @@ export default function AccountLink({ href, children, ...props }: Props) {
         setWaiting(false);
         if (location.href === source) {
           const destination = sessionUser ? href : '/login';
-          if (navigateMobileAuth(destination) || navigateMobileRoot(destination)) return;
+          if (navigateMobileAuth(destination, side) || navigateMobileRoot(destination)) return;
           beginMobileSectionTransition(destination);
           router.push(destination);
         }

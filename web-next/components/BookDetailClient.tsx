@@ -274,7 +274,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   // --- 操作：收藏 ---
   const handleToggleBookmark = async () => {
     if (!user) {
-      openLogin(router);
+      openLogin(router, 'left');
       return;
     }
     if (loading) return; 

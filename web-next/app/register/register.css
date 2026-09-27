@@ -36,7 +36,7 @@ body:has(.register-page), body:has(.register-page) > main { background: var(--ho
   .register-submit:not(:disabled):hover, .register-send:not(:disabled):hover { filter: brightness(.94); }
 }
 @media (max-width: 767px) {
-  .register-page { gap: 12px; padding: max(12px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom)); }
+  .register-page { min-height:100vh; min-height:var(--auth-viewport-height, 100vh); gap: 12px; padding: max(12px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom)); }
   .register-card { padding: 25px 22px 18px; }
   .register-heading { margin-bottom: 22px; }
   .register-heading h1 { margin-top: 14px; font-size: 24px; }

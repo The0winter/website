@@ -1,3 +1,4 @@
+import {navigateMobileAuth} from './mobile-auth-navigation';
 type Router = { back: () => void; replace: (href: string) => void };
 type RegistrationEntry = { href: string; returnTo: string; canGoBack: boolean };
 let previousHref = '';
@@ -39,5 +40,5 @@ export function leaveRegistration(router: Router) {
 export function registrationLogin(router: Router) {
   const source = entry();
   if (source?.canGoBack && /^\/login(?:[?#]|$)/.test(source.returnTo)) router.back();
-  else router.replace('/login');
+  else if (!navigateMobileAuth('/login', 'left', true)) router.replace('/login');
 }
