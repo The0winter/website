@@ -91,6 +91,19 @@ export function captureMobileSection(source: HTMLElement, top: number, height: n
     rail.style.overflowX = 'clip';
     for (const child of rail.children) (child as HTMLElement).style.translate = `${-rails[index].scrollLeft}px 0`;
   });
+  if (fullHome) {
+    // Offscreen shelves contribute height, but none of their cards can appear
+    // in this fixed viewport. Keep their layout slots without laying out and
+    // painting dozens of cloned covers when the incoming page starts moving.
+    const sections = source.querySelectorAll<HTMLElement>('.mh-section');
+    content.querySelectorAll<HTMLElement>('.mh-section').forEach((section, index) => {
+      const rect = sections[index].getBoundingClientRect();
+      if (rect.bottom <= top || rect.top >= top + height) {
+        section.replaceChildren();
+        Object.assign(section.style, {height: `${rect.height}px`, minHeight: '0', boxSizing: 'border-box'});
+      }
+    });
+  }
   // Root-scoped font variables do not resolve identically inside a shadow
   // tree. Preserve the source font so the frame and real route use the same face.
   content.style.fontFamily = getComputedStyle(source).fontFamily;
