@@ -3,7 +3,7 @@ import { cache } from 'react';
 import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import ReaderClient from '@/components/ReaderClient';
-import type { Book, Chapter } from '@/lib/api';
+import type { ReaderBook, Chapter } from '@/lib/api';
 import { getApiBaseUrl } from '@/utils/api'; // 新增：引入我们的智能请求地址工具
 import {chapterHeading, chapterPageTitle} from '@/lib/seo';
 
@@ -19,7 +19,7 @@ type Props = {
 };
 
 type ReaderData = {
-  book: Book | null;
+  book: ReaderBook | null;
   chapter: Chapter | null;
 };
 
@@ -30,30 +30,15 @@ const getReaderData = cache(async (bookId: string, chapterId: string): Promise<R
   if (![bookId, chapterId].every(id => /^[a-f0-9]{24}$/i.test(id))) return {book: null, chapter: null};
   const baseUrl = getApiBaseUrl(); // 动态获取：服务端走本地 5000 端口，客户端走公网
 
-  try {
-    const [bookRes, chapterRes] = await Promise.all([
-      fetch(`${baseUrl}/books/${bookId}`, { cache: 'no-store' }),
-      fetch(`${baseUrl}/chapters/${chapterId}?navigation=1`, { cache: 'no-store' }),
-    ]);
-
-    if (bookRes.status === 404 || chapterRes.status === 404) {
-      return { book: null, chapter: null };
-    }
-
-    if (!bookRes.ok || !chapterRes.ok) throw new Error('阅读服务暂不可用');
-    const [book, chapter] = await Promise.all([
-      bookRes.json() as Promise<Book>,
-      chapterRes.json() as Promise<Chapter>,
-    ]);
-
-    if (chapter?.bookId !== bookId) return {book:null,chapter:null};
-    return { book, chapter };
-  } catch (error) {
-    throw error;
-  }
+  const response = await fetch(`${baseUrl}/chapters/${chapterId}?navigation=1&reader=1`, {cache: 'no-store'});
+  if (response.status === 404) return {book: null, chapter: null};
+  if (!response.ok) throw new Error('阅读服务暂不可用');
+  const {book, chapter} = await response.json() as ReaderData;
+  if (book?.id !== bookId || chapter?.bookId !== bookId || chapter?.id !== chapterId) return {book: null, chapter: null};
+  return {book, chapter};
 });
 
-function getDescription(book: Book, chapter: Chapter): string {
+function getDescription(book: ReaderBook, chapter: Chapter): string {
   const title = chapterHeading(chapter);
   const plainContent = (chapter.content || '')
     .replace(/<[^>]+>/g, ' ')

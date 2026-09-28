@@ -48,6 +48,8 @@ test('compact lists preserve exact results and detail previews share reads while
     const chapter=await Chapter.create({bookId:book._id,title:'Original chapter',chapter_number:1,content:'正文',word_count:2});
     const originalFind=Chapter.find.bind(Chapter); let scans=0;
     t.mock.method(Chapter,'find',(...args)=>{scans++;return originalFind(...args);});
+    const originalAggregate=Chapter.aggregate.bind(Chapter);
+    t.mock.method(Chapter,'aggregate',(...args)=>{scans++;return originalAggregate(...args);});
     const path=`/api/books/${book._id}/detail`;
     const concurrent=await Promise.all(Array.from({length:6},()=>get(path)));
     assert.equal(scans,2,'one shared index scan and one shared preview query');
@@ -61,7 +63,10 @@ test('compact lists preserve exact results and detail previews share reads while
     assert.equal(scans,4);
     commands.length=0;
     await get(`/api/chapters/${chapter._id}?navigation=1`);
-    if (client) assert.ok(commands.some(c=>c.find==='books' && c.projection?.writeVersion && !c.projection.statisticsSeed));
+    if (client) {
+      const projection=commands.find(c=>c.aggregate==='chapters')?.pipeline.find(stage=>stage.$lookup)?.$lookup.pipeline[0].$project;
+      assert.ok(projection?.writeVersion && !projection.statisticsSeed, 'joined access check excludes editorial data');
+    }
     commands.length=0;
     await get(`/api/books/${book._id}/reviews`);
     if (client) assert.ok(commands.some(c=>c.find==='books' && c.projection?.statisticsSeed),'rating seeds remain available to reviews');

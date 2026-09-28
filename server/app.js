@@ -34,6 +34,7 @@ import User from './models/User.js';
 import Book from './models/Book.js';
 import {readBookIndex} from './services/book-reading-index.js';
 import {readLiveBook} from './services/book-version.js';
+import {readerBookResponse} from './services/reader-book.js';
 import Chapter from './models/Chapter.js';
 import ForumPost from './models/ForumPost.js';  
 import ForumReply from './models/ForumReply.js';
@@ -509,6 +510,10 @@ app.get('/api/forum/replies/:id/comments', async (req, res) => {
 
 app.get('/api/books/:id', async (req, res) => {
     try {
+      if (req.query.fields === 'reader') {
+        const book = await readLiveBook(req.params.id, res.locals.workAccess);
+        return res.json(readerBookResponse(book));
+      }
       const book = await Book.findOne({_id:req.params.id,deletedAt:null}).populate('author_id', 'username id');
       if (!book) return res.status(404).json({ error: 'Book not found' });
       res.json({ ...book.toObject(), id: book._id.toString() });
@@ -545,7 +550,8 @@ app.get('/api/chapters/:id', async (req, res) => {
       navigation = {previousId: index.ids[position - 1] ?? null, nextId: index.ids[position + 1] ?? null,
         chapterIndex: position, chapterTotal: index.ids.length, catalogVersion: index.version};
     } else await readLiveBook(chapter.bookId, res.locals.workAccess);
-    res.json({ ...await chapterResponse(chapter), ...navigation, bookId: chapter.bookId.toString() });
+    const response = { ...await chapterResponse(chapter), ...navigation, bookId: chapter.bookId.toString() };
+    res.json(req.query.reader === '1' ? {book: readerBookResponse(res.locals.workAccess.book), chapter: response} : response);
 
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });

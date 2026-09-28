@@ -19,7 +19,7 @@ import {
   Bookmark, BookmarkCheck, Moon, X, 
   Check, Sun, Info, Library, Minus, Plus, Maximize, Minimize,
 } from 'lucide-react';
-import { booksApi, bookmarksApi, Book, Chapter } from '@/lib/api';
+import { booksApi, bookmarksApi, ReaderBook, Chapter } from '@/lib/api';
 import RecordBookVisit from './RecordBookVisit';
 import { useReadingSettings } from '@/contexts/ReadingSettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -57,7 +57,7 @@ class BoundedMap<K,V> extends Map<K,V> {
   set(key:K,value:V){super.delete(key);super.set(key,value);while(this.size>this.maximum){const oldest=this.keys().next();if(!oldest.done)super.delete(oldest.value);}return this;}
 }
 // 🔥 [新增] 全局书籍缓存池 (防止切换章节时书名/封面闪烁)
-const bookCache = new BoundedMap<string, Book>(3);
+const bookCache = new BoundedMap<string, ReaderBook>(3);
 const settingsCache = {
   themeColor: 'cream' as 'gray' | 'cream' | 'green' | 'blue',
   fontFamily: 'sans' as 'sans' | 'serif' | 'kai',
@@ -76,7 +76,7 @@ function useIsDesktop() {
   return useSyncExternalStore(subscribeViewport, () => window.innerWidth >= 1024, () => false);
 }
 
-function ReaderContent({ initialBook = null, initialChapter = null }: { initialBook?: Book | null; initialChapter?: Chapter | null }) {
+function ReaderContent({ initialBook = null, initialChapter = null }: { initialBook?: ReaderBook | null; initialChapter?: Chapter | null }) {
   const params = useParams();
   const pathname=usePathname();
   //const searchParams = useSearchParams();
@@ -88,7 +88,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   const chapterIdParam = pathname?.split('/')[3] || params.chapterId as string;
   const { user } = useAuth();
   const [isBookmarked, setIsBookmarked] = useState(false);
-  const [book, setBook] = useState<Book | null>(initialBook || null);
+  const [book, setBook] = useState<ReaderBook | null>(initialBook || null);
   const [chapter, setChapter] = useState<Chapter | null>(initialChapter || null);
   
   // 只有当缓存里【既没有书也没有章节】时，才显示 loading
@@ -228,7 +228,7 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
     const serverChapter=initialChapter?.id===chapterIdParam?initialChapter:null;
     if(serverChapter)chapterCache.set(serverChapter.id,serverChapter);
     if(initialBook?.id===bookId)bookCache.set(bookId,initialBook);
-    void Promise.all([loadReaderChapter(bookId,chapterIdParam),bookCache.get(bookId) || booksApi.getById(bookId)]).then(([next,book])=>{
+    void Promise.all([loadReaderChapter(bookId,chapterIdParam),bookCache.get(bookId) || booksApi.getForReading(bookId)]).then(([next,book])=>{
       if(!active || sequence!==navigationSequence.current)return;
       setChapter(next);setBook(book);if(book)bookCache.set(bookId,book);setLoading(false);setNavigating(false);setNavigationError('');
     }).catch(error=>{if(active && sequence===navigationSequence.current){failedChapter.current=chapterIdParam;setNavigationError(error instanceof Error?error.message:'章节加载失败');setLoading(false);setNavigating(false);}});
@@ -698,7 +698,7 @@ if (loading) return (
   );
 }
 
-export default function ReaderPage({ initialBook = null, initialChapter = null }: { initialBook?: Book | null; initialChapter?: Chapter | null }) {
+export default function ReaderPage({ initialBook = null, initialChapter = null }: { initialBook?: ReaderBook | null; initialChapter?: Chapter | null }) {
   const params = useParams();
   // Reset chapter presentation while the versioned catalog survives in its cache.
   const componentKey = params?.id ? String(params.id) : 'default';

@@ -104,6 +104,8 @@ export interface Book {
   profiles?: Profile;
 }
 
+export type ReaderBook = Pick<Book, 'id' | 'title' | 'author' | 'cover_image' | 'category' | 'status' | 'writeVersion'>;
+
 export interface Chapter {
   catalogVersion?: number;
   chapterIndex?: number;
@@ -182,6 +184,10 @@ export const booksApi = {
 
   getById: async (id: string): Promise<Book | null> => {
     return apiCall<Book | null>(`/books/${id}`);
+  },
+
+  getForReading: async (id: string): Promise<ReaderBook | null> => {
+    return apiCall<ReaderBook | null>(`/books/${id}?fields=reader`);
   },
 
   getMyBooks: async (authorId?: string, page = 1): Promise<Book[]> => {

@@ -11,4 +11,5 @@ export const bookCatalog = versionedBookCache(async (bookId, version) => {
   await verifyBookVersion(bookId, version);
   return {rows: chapters.map(chapter => ({id: String(chapter._id), title: chapter.title, chapter_number: chapter.chapter_number})),
     indices: new Map(chapters.map((chapter, index) => [String(chapter._id), index])), volumes: buildCatalogVolumes(chapters)};
-}, value => value.rows.reduce((bytes, row) => bytes + 256 + 2 * row.title.length, 256) + 512 * value.volumes.length, {name:'catalog'});
+}, value => value.rows.reduce((bytes, row) => bytes + 256 + 2 * row.title.length, 256) + 512 * value.volumes.length,
+{name: 'catalog', maxEntries: 256, maxBytes: 32 * 1024 * 1024});

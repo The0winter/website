@@ -45,6 +45,7 @@ test('warm public reads have bounded query counts and retain fresh bodies, delet
     server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
     const base = `http://127.0.0.1:${server.address().port}/api`, path = `/books/${book._id}`, body = `/chapters/${chapter._id}`;
     const commands = observeReads(t);
+    const bodyReads = mongoose.connection.transport ? 2 : 1;
     const request = async (url, {status = 200, reads, method = 'GET'} = {}) => {
       commands.length = 0;
       const response = await fetch(base + url, {method});
@@ -55,13 +56,13 @@ test('warm public reads have bounded query counts and retain fresh bodies, delet
     };
     await request(body + '?navigation=1'); await request(path + '/catalog');
     for (let i = 0; i < 10; i++) {
-      const result = await request(body + '?navigation=1', {reads: 2});
+      const result = await request(body + '?navigation=1', {reads: bodyReads});
       assert.equal(result.content, 'original'); assert.equal(result.chapterTotal, 1);
       assert.equal(result.previousId, null); assert.equal(result.nextId, null);
     }
-    await request(body, {reads: 2});
-    await request(body + '/?navigation=1', {reads: 2});
-    await request(body + '?navigation=1', {reads: 2, method: 'HEAD'});
+    await request(body, {reads: bodyReads});
+    await request(body + '/?navigation=1', {reads: bodyReads});
+    await request(body + '?navigation=1', {reads: bodyReads, method: 'HEAD'});
     await request(path + '/catalog', {reads: 1});
     await request(path + '/catalog/version', {reads: 1});
     await request(path + '/statistics', {reads: 1});
@@ -83,7 +84,7 @@ test('warm public reads have bounded query counts and retain fresh bodies, delet
         await Chapter.updateOne({_id: chapter._id}, {$set: {...ref, word_count: content.length}, $unset: {content: ''}}, {session});
       });
       assert.equal((await request(body + '?navigation=1')).content, content);
-      const warmed = await request(body + '?navigation=1', {reads: 2});
+      const warmed = await request(body + '?navigation=1', {reads: bodyReads});
       assert.equal(warmed.content, content); assert.equal(warmed.contentKey, undefined);
       assert.equal((await request(path + '/statistics', {reads: 1})).totalWords, content.length);
     }
@@ -119,6 +120,17 @@ test('concurrent cold readers share validation; edits during a build never becom
       const query = find(...args), lean = query.lean.bind(query);
       query.lean = async (...options) => {
         const rows = await lean(...options); scans++;
+        const callback = afterScan; afterScan = undefined;
+        if (callback) await callback();
+        return rows;
+      };
+      return query;
+    });
+    const aggregate = Chapter.aggregate.bind(Chapter);
+    t.mock.method(Chapter, 'aggregate', (...args) => {
+      const query = aggregate(...args), exec = query.exec.bind(query);
+      query.exec = async (...options) => {
+        const rows = await exec(...options); scans++;
         const callback = afterScan; afterScan = undefined;
         if (callback) await callback();
         return rows;

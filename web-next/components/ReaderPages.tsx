@@ -12,7 +12,7 @@ import {readerPaperPosition} from '@/lib/reader-paper';
 import {observeReaderSize} from '@/lib/reader-viewport';
 import {readerFullscreenPending, serverFullscreenSnapshot, subscribeReaderFullscreen} from '@/lib/reader-fullscreen';
 import {useAuth} from '@/contexts/AuthContext';
-import type {Book,Chapter} from '@/lib/api';
+import type {ReaderBook,Chapter} from '@/lib/api';
 import {useReaderPageTurn,type ReaderTurnMode} from './useReaderPageTurn';
 import './reader-pages.css';
 
@@ -21,7 +21,7 @@ const subscribeHydration=()=>()=>{};
 const clientReady=()=>true;
 const serverReady=()=>false;
 export type ReaderPageProps={
-  book:Book; chapter:Chapter; chapterIndex:number; chapterTotal:number|null;
+  book:ReaderBook; chapter:Chapter; chapterIndex:number; chapterTotal:number|null;
   fontFamily:string; fontSize:number; lineHeight:number; paragraphGap:string;
   theme:{bg:string;text:string;panel:string}; paper:boolean; dark:boolean; pageWidth:number;
   previousId:string|null; nextId:string|null; navigating:boolean; blocked:boolean;
