@@ -137,7 +137,8 @@ test('different sites overlap, shared domains stay serial and retain pacing acro
   const clocks = [], order = [], phases = [], progress = [];
   const batch = await collectAdapted({...options(dir), sites: configured, inventory: [], concurrency: 2,
     onPhase: (_, item) => phases.push(item.title), onProgress: p => progress.push(p.title),
-    clientFactory: config => { clocks.push(config.pacing); active++; maximum = Math.max(maximum, active); return {close: async () => { active--; }}; },
+    adaptivePacing: true,
+    clientFactory: config => { assert.equal(config.adaptivePacing, true); clocks.push(config.pacing); active++; maximum = Math.max(maximum, active); return {close: async () => { active--; }}; },
     acquireBook: async (spec, opts) => {
       order.push(spec.title); opts.onProgress({title: spec.title});
       if (spec.title === '甲一') { releaseFirst(); await second; }

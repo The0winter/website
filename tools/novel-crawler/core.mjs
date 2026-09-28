@@ -289,7 +289,7 @@ async function acquireRaw(input, options = {}) {
     }
     atomicWrite(specFile, spec);
     const shouldStop = () => options.signal?.aborted || options.shouldStop?.();
-    const client = options.client || makeClient({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser, onStatus: options.onStatus, shouldStop, signal: options.signal});
+    const client = options.client || makeClient({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, adaptivePacing: options.adaptivePacing, retries: spec.retries, timeoutMs: spec.timeoutMs, refresh: options.refresh, browser: spec.browser, onStatus: options.onStatus, shouldStop, signal: options.signal});
     const initialStats = {...client.stats};
     const started = Date.now(), chapters = [], failures = [], signatureCache = reading ? new Map() : undefined;
     let catalog = [], source, evidence, report, exportFile, descriptionStatus, paused = false, reusedExport = false;

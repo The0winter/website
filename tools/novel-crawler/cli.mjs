@@ -14,6 +14,7 @@ const help = `小说采集（Node 22；EPUB 另需 Python 3）
   node tools/novel-crawler/cli.mjs report --job 任务ID [--mode download]
   node tools/novel-crawler/cli.mjs validate --file downloads/文件.json
 可选：--state-dir 路径，--output-dir 路径，--refresh（重取缓存及章节）。
+--adaptive-pacing：HTTP 连续正常响应后逐步缩短间隔，异常后恢复保守间隔。
 新站需先编写声明式 JSON 提取规则，参阅 docs/智能找书与采集.md。
 正文和原始页面只写本地；终端输出统计，不输出章节正文。`;
 
@@ -23,6 +24,7 @@ try {
     help: {type: 'boolean'}, spec: {type: 'string'}, title: {type: 'string'}, author: {type: 'string'},
     'state-dir': {type: 'string'}, 'output-dir': {type: 'string'}, samples: {type: 'string'},
     'max-new': {type: 'string'}, refresh: {type: 'boolean'}, job: {type: 'string'}, mode: {type: 'string'}, file: {type: 'string'},
+    'adaptive-pacing': {type: 'boolean'},
   }});
   const command = positionals[0];
   if (values.help || !command) { console.log(help); }
@@ -43,7 +45,7 @@ try {
       maintainDefaultCache = stateDir === defaultStateDir;
       if (maintainDefaultCache) retention.queueAutomatic();
       if (command === 'probe' && values['max-new'] !== undefined) throw Error('--max-new 仅用于分批下载，试采必须完成选中的样本');
-      const result = await acquire(JSON.parse(fs.readFileSync(values.spec, 'utf8')), {mode: command, stateDir, publisherCategories: true, outputDir: values['output-dir'], samples: integer('samples', 4, 30), maxNew: integer('max-new', 1, 20000), refresh: values.refresh, onProgress: data => {
+      const result = await acquire(JSON.parse(fs.readFileSync(values.spec, 'utf8')), {mode: command, stateDir, publisherCategories: true, outputDir: values['output-dir'], samples: integer('samples', 4, 30), maxNew: integer('max-new', 1, 20000), refresh: values.refresh, adaptivePacing: values['adaptive-pacing'], onProgress: data => {
         if (data.downloaded <= 1 || data.downloaded % 20 === 0 || data.downloaded === data.total) console.error(JSON.stringify(data));
       }});
       const {issues, missing = [], ...summary} = result;

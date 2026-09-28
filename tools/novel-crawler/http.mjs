@@ -7,6 +7,7 @@ import {load} from 'cheerio';
 import {hash, atomicWrite, readJson} from './storage.mjs';
 import {rejectedPage} from './diagnostics.mjs';
 import {lockBrowserProfile, sessionCookies} from './browser-session.mjs';
+import {requestPacing} from './request-pacing.mjs';
 import retention from '../storage-maintenance.cjs';
 
 export function httpUrl(value, base) {
@@ -29,7 +30,7 @@ export function decode(bytes, contentType = '', encoding) {
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, retries = 2, retryNetworkErrors = false, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal, launchBrowser, pacing}) {
+export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, retries = 2, retryNetworkErrors = false, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal, launchBrowser, pacing, adaptivePacing = false}) {
   const hosts = new Set(allowedHosts.map(h => h.toLowerCase()));
   const resourceHosts = new Set(browserOptions.resourceHosts || []);
   const actions = [
@@ -44,10 +45,9 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
   // Also space out search, detail lookup and a new worker's first request.
   // A library source lane shares this clock across its sequential clients.
   const clock = pacing || {lastRequest: Date.now()};
-  clock.delayMs = Math.max(clock.delayMs || 0, delayMs);
-  const spacing = () => Math.max(0, clock.lastRequest + clock.delayMs - Date.now(), (clock.blockedUntil || 0) - Date.now());
-  const defer = ms => { clock.blockedUntil = Math.max(clock.blockedUntil || 0, Date.now() + ms); };
-  const stats = {requests: 0, cacheHits: 0, retries: 0, bytes: 0};
+  const pacer = requestPacing({clock, delayMs, adaptive: adaptivePacing});
+  const {spacing, defer} = pacer;
+  const stats = {requests: 0, cacheHits: 0, retries: 0, bytes: 0, httpPacingWaitMs: 0, httpRequestMs: 0};
   let browser, page, closingBrowser, launchPromise, releaseProfile, sessionReady = false, manualAction = false;
   let temporaryProfile, visibleRequested = false, visibleWaiter, isHeadless = true;
   let savedCookies = profileDir ? sessionCookies(profileDir, [...hosts, ...resourceHosts]) : null;
@@ -411,14 +411,20 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
     if (request && (request.method !== 'POST' || !request.form || typeof request.form !== 'object')) throw Error('目录接口只支持显式 POST form 请求');
     let url = original, activeRequest = request;
     for (let redirects = 0; redirects <= 5; redirects++) {
-      let response;
+      let response, elapsedMs;
       for (let attempt = 0; attempt <= retries; attempt++) {
-        await wait(spacing());
-        clock.lastRequest = Date.now();
+        const waitingAt = Date.now();
+        await wait(spacing(true));
+        stats.httpPacingWaitMs += Date.now() - waitingAt;
+        pacer.start();
+        const requestedAt = Date.now();
         stats.requests++;
         try {
           response = await axios({url, signal, method: activeRequest ? 'POST' : 'GET', data: activeRequest ? new URLSearchParams(activeRequest.form).toString() : undefined, timeout: timeoutMs, responseType: 'arraybuffer', maxRedirects: 0, maxContentLength: maxBytes, maxBodyLength: maxBytes, validateStatus: () => true, headers: {'User-Agent': 'NovelCollector/1.0', Accept: '*/*', ...(activeRequest ? {'Content-Type': 'application/x-www-form-urlencoded'} : {})}});
         } catch (error) {
+          elapsedMs = Date.now() - requestedAt;
+          stats.httpRequestMs += elapsedMs;
+          pacer.failed();
           stopped();
           if (attempt === retries || error.code === 'ERR_BAD_RESPONSE') throw Error(`下载失败：${url}（${error.code || error.message}）`);
           stats.retries++;
@@ -429,7 +435,10 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
           onStatus?.({kind: 'active', message: '正在重试读取网页…'});
           continue;
         }
+        elapsedMs = Date.now() - requestedAt;
+        stats.httpRequestMs += elapsedMs;
         if (response.status === 429 || response.status >= 500) {
+          pacer.failed();
           const raw = response.headers['retry-after'];
           const backoff = raw ? (/^\d+$/.test(raw) ? Number(raw) * 1000 : Date.parse(raw) - Date.now()) : 1000 * 2 ** attempt;
           defer(Math.max(delayMs, Number.isFinite(backoff) ? backoff : 1000));
@@ -458,13 +467,14 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
       const meta = {url, original, fetchedAt: new Date().toISOString(), hash: hash(body), contentType: response.headers['content-type'] || '', bytes: body.length};
       atomicWrite(bodyPath, body);
       atomicWrite(metaPath, meta);
+      pacer.succeeded(elapsedMs);
       return {...meta, body};
     }
     throw Error('重定向次数超过限制');
   }
   async function get(input, options) {
     try { return await getPage(input, options); }
-    catch (error) { visibleWaiter?.reject(error); visibleWaiter = null; error.url ||= String(input); throw error; }
+    catch (error) { if (!options?.render) pacer.failed(); visibleWaiter?.reject(error); visibleWaiter = null; error.url ||= String(input); throw error; }
   }
   const releaseCache = retention.cacheActivity(cacheDir);
   return {get, assertUrl, stats, showBrowser, close: async () => {

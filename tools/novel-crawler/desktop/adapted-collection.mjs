@@ -81,7 +81,7 @@ function reportProblems(report) {
   return {summary: summary || '质量检查未通过，已保留检查点，未完成入库', problems};
 }
 
-export async function collectAdapted({stateDir, outputDir, sites, signal, shouldStop = () => false, onLibrary = () => {}, onPhase = () => {}, onProgress, onStatus, onClient = () => {}, inventory, books, acquireBook = acquire, clientFactory = makeClient, concurrency = 2}) {
+export async function collectAdapted({stateDir, outputDir, sites, signal, shouldStop = () => false, onLibrary = () => {}, onPhase = () => {}, onProgress, onStatus, onClient = () => {}, inventory, books, acquireBook = acquire, clientFactory = makeClient, concurrency = 2, adaptivePacing = false}) {
   if (![1, 2].includes(concurrency)) throw Error('适配采集同时处理的来源数只能为1或2');
   const identity = book => `${normalized(book.title)}\0${normalized(book.author)}`;
   let selected;
@@ -150,7 +150,7 @@ export async function collectAdapted({stateDir, outputDir, sites, signal, should
         onProgress: value => { context.progress = value; publish(true); }, onStatus: status};
       // Use the approved extraction rules verbatim, including TXT boundaries,
       // cleanup, variant and aliases. The client alone enforces headless mode.
-      client = clientFactory({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, pacing, retries: spec.retries, retryNetworkErrors: true, timeoutMs: spec.timeoutMs, browser: {...spec.browser, headless: true}, signal, shouldStop: stopped, onStatus: status});
+      client = clientFactory({cacheDir: path.join(stateDir, 'cache'), profileDir: browserProfile(stateDir, spec.sourceUrl), allowedHosts: spec.allowedHosts, delayMs: spec.delayMs, pacing, adaptivePacing, retries: spec.retries, retryNetworkErrors: true, timeoutMs: spec.timeoutMs, browser: {...spec.browser, headless: true}, signal, shouldStop: stopped, onStatus: status});
       context.client = client; options.client = client; publish();
       let report = await acquireBook(spec, {...options, mode: direct ? 'download' : 'probe'});
       if (!direct && !stopped() && !report.paused && report.structuralPass) {
