@@ -1,7 +1,7 @@
 import UserAvatar from './UserAvatar';
 import Link from './PrefetchLink';
 
-export type Reply={_id:string;content:string;createdAt:string;user:{_id:string;username:string;avatar?:string;avatarColor?:string}};
+export type Reply={_id:string;content:string;createdAt:string;user:{_id:string;username:string;avatar?:string;avatarColor?:string;isDeleted?:boolean}};
 export default function BookReviewReply({reply}:{reply:Reply}) {
   const name=reply.user?.username||'已注销用户';
   const href=/^[a-f\d]{24}$/i.test(reply.user?._id)?`/user/${reply.user._id}`:null;

@@ -47,7 +47,22 @@ test('review replies are authorized, single level, retry safe and cursor paginat
     assert.equal(new Set([...first.data.items,...second.data.items].map(row=>row._id)).size,14);
     assert.equal((await request(endpoint+'?cursor=invalid')).status,400);
     const previews=await request(`/api/books/${book.id}/reviews?limit=10`);assert.equal(previews.data[0].replyCount,14);assert(previews.data[0].replyPreview.content.startsWith('后续回复'));
+    assert.equal(previews.data[0].replyPreview.user._id,user.id);
+    assert.equal(previews.data[0].replyPreview.user.username,user.username);
+    const matchingReply=[...first.data.items,...second.data.items].find(row=>row._id===previews.data[0].replyPreview._id);
+    assert.deepEqual(previews.data[0].replyPreview.user,matchingReply.user,'Preview and full thread must resolve the same author');
     assert(!('likedBy' in previews.data[0]));
+    const formerUser=await User.create({username:'已离开的书友',email:'former@example.test',password:await bcrypt.hash('Local-test-12345',10)});
+    const formerReply=await ReviewReply.create({book:book._id,review:review._id,user:formerUser._id,content:'保留的回复',createdAt:new Date(Date.now()+2000)});
+    await User.deleteOne({_id:formerUser._id});
+    const afterDeletion=await request(`/api/books/${book.id}/reviews?limit=10`);
+    assert.equal(afterDeletion.data[0].replyPreview._id,formerReply.id);
+    assert.deepEqual(afterDeletion.data[0].replyPreview.user,{_id:'',username:'已注销用户',isDeleted:true});
+    const tail=await request(endpoint+'?cursor='+first.data.cursor);
+    assert.deepEqual(tail.data.items.find(row=>row._id===formerReply.id).user,afterDeletion.data[0].replyPreview.user);
+    await Review.updateOne({_id:review._id},{$set:{user:formerUser._id}});
+    const deletedReviewAuthor=await request(`/api/books/${book.id}/reviews?limit=10`);
+    assert.equal(deletedReviewAuthor.data[0].user.isDeleted,true);
     await Book.updateOne({_id:book._id},{$set:{deletedAt:new Date()}});
     assert.equal((await request(endpoint)).status,404);assert.equal((await write(endpoint,{...body,requestId:crypto.randomUUID()})).status,404);
   }finally{await new Promise(resolve=>server.close(resolve));await mongoose.disconnect();await db.stop();}
