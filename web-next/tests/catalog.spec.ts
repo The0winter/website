@@ -48,6 +48,8 @@ for (const origin of ['detail', 'reader']) for (const width of [390, 1440]) test
       if (origin === 'detail') await page.getByRole('button', {name: width < 768 ? /^目录 / : /^查看完整目录/}).click();
       else {
         await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready', 'true');
+        await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
+        await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
         await page.keyboard.press('m'); await page.locator('.reader-tools:visible').getByRole('button', {name: '目录', exact: true}).click();
       }
     };
@@ -76,7 +78,7 @@ for (const origin of ['detail', 'reader']) for (const width of [390, 1440]) test
     expect(frames.every(frame => frame.current)).toBe(true);
     expect(Math.max(...frames.map(frame => frame.top)) - Math.min(...frames.map(frame => frame.top))).toBeLessThan(2);
     expect(requests[0].searchParams.get('anchor')).toBe(String(chapterIds[999]));
-    expect(Number(requests[0].searchParams.get('limit'))).toBe(128);
+    expect(Number(requests[0].searchParams.get('limit'))).toBe(401);
     // Dragging to an unloaded tail uses the other request slot while the prefix remains blocked.
     await dialog.getByRole('scrollbar').focus(); await page.keyboard.press('End');
     await expect(dialog.getByRole('link', {name: '第1238章 目录验证', exact: true})).toBeInViewport();
@@ -156,10 +158,12 @@ test('book statistics are complete in the first HTML and stable across hydration
       expect(html).toContain('3.71万字');
       const updatedLabel=formatRelativeUpdate('2026-09-09T18:30:00Z');
       expect(html).toContain(updatedLabel);
-      const words=page.getByText('连载中 | 3.71万字',{exact:true}).filter({visible:true});
+      const words=settings.viewport.width < 768 ? page.locator('.book-stat-count').first()
+        : page.getByText('连载中 | 3.71万字',{exact:true}).filter({visible:true});
       const date=page.getByText(updatedLabel,{exact:false}).filter({visible:true});
       await expect(page.getByRole('region',{name:'章节目录'})).toHaveAttribute('aria-busy','false');
       await expect(words).toBeVisible();
+      if (settings.viewport.width < 768) await expect(words).toHaveText('3万字');
       await expect(date).toHaveCount(1);
       release();
       await expect(page.getByRole('region',{name:'章节目录'})).toHaveAttribute('aria-busy','false');

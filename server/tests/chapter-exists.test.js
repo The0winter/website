@@ -9,7 +9,7 @@ import {createApp} from '../app.js';
 import {readConfig} from '../config.js';
 import Book from '../models/Book.js';
 import Chapter from '../models/Chapter.js';
-import {bookCatalog} from '../services/catalog-volumes.js';
+import {bookReadingIndex} from '../services/book-reading-index.js';
 
 test('chapter document preflight uses one projected lookup and preserves ownership, deletion and private access', async t => {
   const db=await TestDatabase.create();await connectDatabase(db.getUri());
@@ -30,14 +30,14 @@ test('chapter document preflight uses one projected lookup and preserves ownersh
   } finally {server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await mongoose.disconnect();await db.stop();}
 });
 
-test('chapter preflight reuses a current catalog but rechecks edits and private access', async t => {
+test('chapter preflight reuses a current position index but rechecks edits and private access', async t => {
   const db=await TestDatabase.create();await connectDatabase(db.getUri());
   const config=readConfig({APP_ENV:'test',DATABASE_URL:db.getUri(),JWT_SECRET:crypto.randomBytes(40).toString('hex')});
   const server=createApp(config).listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
   try {
     const book=await Book.create({title:'Cached book',author:'A',writeVersion:0});
     const chapter=await Chapter.create({bookId:book._id,title:'Chapter',chapter_number:1,content:'Body'});
-    await bookCatalog(String(book._id),'0');
+    await bookReadingIndex(String(book._id),'0');
     const query=Chapter.findOne.bind(Chapter);let calls=0;
     t.mock.method(Chapter,'find',()=>{throw Error('Existence checks must not refresh a full catalog');});
     t.mock.method(Chapter,'findOne',(...args)=>{calls++;return query(...args);});

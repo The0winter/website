@@ -8,24 +8,26 @@ const response = (offset: number, count: number, total = 10000, version = '0') =
 
 test('a deep anchor is the first request and shared observers reuse its window', async () => {
   const calls: string[] = []; let release!: () => void; const gate = new Promise<void>(resolve => {release = resolve;});
-  globalThis.fetch = async input => {calls.push(String(input)); await gate; return response(7936, 128);};
+  globalThis.fetch = async input => {calls.push(String(input)); await gate; return response(7800, 401);};
   const catalog = new BookCatalog('book', '0');
   const a = catalog.watch('chapter-8000', false), b = catalog.watch('chapter-8000', false);
-  expect(calls).toHaveLength(1); expect(calls[0]).toContain('anchor=chapter-8000'); expect(calls[0]).toContain('limit=128');
+  expect(calls).toHaveLength(1); expect(calls[0]).toContain('anchor=chapter-8000'); expect(calls[0]).toContain('limit=401');
   release(); await expect.poll(() => catalog.getSnapshot().indices.get('chapter-8000')).toBe(8000);
   expect(catalog.getSnapshot().rows.has(0)).toBe(false);
   a(); b(); const c = catalog.watch('chapter-8001', false); expect(calls).toHaveLength(1); c(); catalog.dispose();
 });
 
-test('an urgent scroll request can run while background filling is delayed', async () => {
+test('a scrollbar jump cancels nearby prefetch and prioritizes the visible range', async () => {
   const calls: URL[] = []; let release!: () => void; const gate = new Promise<void>(resolve => {release = resolve;});
   globalThis.fetch = async input => {
     const url = new URL(String(input), 'http://local'); calls.push(url);
-    if (url.searchParams.has('anchor')) return response(7936, 128);
-    if (url.searchParams.get('limit') === '2048') await gate;
+    if (url.searchParams.has('anchor')) return response(7800, 401);
+    if (Number(url.searchParams.get('offset')) > 8000) await gate;
     const offset = Number(url.searchParams.get('offset')); return response(offset, Math.min(Number(url.searchParams.get('limit')), 10000 - offset));
   };
   const catalog = new BookCatalog('book', '0'), close = catalog.watch('chapter-8000', true);
+  await expect.poll(() => catalog.getSnapshot().rows.has(8000)).toBe(true);
+  catalog.ensureRange(8190, 8200);
   await expect.poll(() => calls.length).toBe(2);
   catalog.ensureRange(1000, 1030);
   await expect.poll(() => catalog.getSnapshot().rows.has(1000)).toBe(true);
@@ -65,11 +67,11 @@ test('saved data mode fetches only requested windows; complete SSR catalogs need
 });
 
 test('batch selection distinguishes initial visibility, background work and constrained links', () => {
-  expect(catalogStrategy(375)).toEqual({initial: 375, batch: 2048, background: true});
-  expect(catalogStrategy(10000).initial).toBe(128);
-  expect(catalogStrategy(375, {downlink: .5})).toEqual({initial: 128, batch: 512, background: true});
+  expect(catalogStrategy(375)).toEqual({initial: 375, batch: 256, radius: 200, background: true});
+  expect(catalogStrategy(10000).initial).toBe(401);
+  expect(catalogStrategy(375, {downlink: .5})).toEqual({initial: 128, batch: 128, radius: 64, background: true});
   expect(catalogStrategy(10000, {saveData: true}).background).toBe(false);
-  expect(catalogStrategy(50000).background).toBe(false);
+  expect(catalogStrategy(50000).background).toBe(true);
 });
 
 test('very large catalogs keep a bounded cache and reload discarded ranges on demand', async () => {
@@ -149,4 +151,69 @@ test('a newer chapter version supersedes an in-flight version check without stal
   await expect.poll(() => catalog.getSnapshot().rows.size).toBe(12);
   release(); await new Promise(resolve => setTimeout(resolve, 0));
   expect(catalog.getSnapshot().version).toBe('1'); first(); second(); catalog.dispose();
+});
+
+test('idle open catalogs stop at the current window; scrolling buffers neighbors without filling the book', async () => {
+  const calls: URL[] = [];
+  globalThis.fetch = async input => {
+    const url = new URL(String(input), 'http://local'); calls.push(url);
+    return url.searchParams.has('anchor') ? response(7800, 401)
+      : response(Number(url.searchParams.get('offset')), Number(url.searchParams.get('limit')));
+  };
+  const catalog = new BookCatalog('bounded', '0'), close = catalog.watch('chapter-8000', true);
+  await expect.poll(() => catalog.getSnapshot().rows.size).toBe(401);
+  await new Promise(resolve => setTimeout(resolve, 30));
+  expect(calls).toHaveLength(1);
+  catalog.ensureRange(8190, 8200);
+  await expect.poll(() => catalog.getSnapshot().rows.has(8400)).toBe(true);
+  expect(catalog.getSnapshot().rows.size).toBe(601);
+  const count = calls.length; await new Promise(resolve => setTimeout(resolve, 30));
+  expect(calls).toHaveLength(count); expect(catalog.getSnapshot().rows.has(0)).toBe(false);
+  close(); catalog.dispose();
+});
+
+test('prefetch failures preserve readable rows and a later visible request can recover', async () => {
+  let fail = true, calls = 0;
+  globalThis.fetch = async input => {
+    const url = new URL(String(input), 'http://local'); calls++;
+    if (url.searchParams.has('anchor')) return response(7800, 401);
+    return fail ? new Response('', {status: 503}) : response(Number(url.searchParams.get('offset')), Number(url.searchParams.get('limit')));
+  };
+  const catalog = new BookCatalog('recover', '0'), close = catalog.watch('chapter-8000', true);
+  await expect.poll(() => catalog.getSnapshot().rows.has(8000)).toBe(true);
+  catalog.ensureRange(8190, 8200);
+  await expect.poll(() => calls).toBe(2);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(catalog.getSnapshot().error).toBe(''); expect(catalog.getSnapshot().rows.has(8000)).toBe(true);
+  fail = false; catalog.ensureRange(8300, 8320);
+  await expect.poll(() => catalog.getSnapshot().rows.has(8300)).toBe(true);
+  expect(catalog.getSnapshot().error).toBe(''); close(); catalog.dispose();
+});
+
+test('closing the last observer cancels pending title downloads and ignores late responses', async () => {
+  let release!: () => void, signal: AbortSignal | null | undefined;
+  const gate = new Promise<void>(resolve => {release = resolve;});
+  globalThis.fetch = async (_input, init) => {signal = init?.signal; await gate; return response(7800, 401);};
+  const catalog = new BookCatalog('closed', '0'), close = catalog.watch('chapter-8000', true);
+  close(); expect(signal?.aborted).toBe(true); release();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(catalog.getSnapshot().rows.size).toBe(0); catalog.dispose();
+});
+
+test('two visible volumes separated by a collapsed volume both load, without downloading the gap', async () => {
+  const calls: URL[] = [];
+  globalThis.fetch = async input => {
+    const url = new URL(String(input), 'http://local'); calls.push(url);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    return url.searchParams.has('anchor') ? response(4800, 401)
+      : response(Number(url.searchParams.get('offset')), Number(url.searchParams.get('limit')));
+  };
+  const catalog = new BookCatalog('folded', '0'), close = catalog.watch('chapter-5000', true);
+  await expect.poll(() => catalog.getSnapshot().rows.has(5000)).toBe(true);
+  catalog.ensureRanges([{start: 1000, end: 1010}, {start: 9000, end: 9010}]);
+  await expect.poll(() => catalog.getSnapshot().rows.has(1000) && catalog.getSnapshot().rows.has(9000)).toBe(true);
+  await expect.poll(() => catalog.getSnapshot().rows.has(800) && catalog.getSnapshot().rows.has(9210)).toBe(true);
+  expect(catalog.getSnapshot().rows.has(6000)).toBe(false);
+  expect(catalog.getSnapshot().rows.size).toBeLessThan(1300);
+  close(); catalog.dispose();
 });

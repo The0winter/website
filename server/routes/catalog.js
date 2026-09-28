@@ -1,6 +1,7 @@
 import {asyncRoute} from '../security.js';
 import {fail} from '../services/content.js';
-import {bookCatalog} from '../services/catalog-volumes.js';
+import {readCatalogWindow} from '../services/catalog-volumes.js';
+import {bookReadingIndex} from '../services/book-reading-index.js';
 import {BookVersionChanged, readLiveBook} from '../services/book-version.js';
 import Chapter from '../models/Chapter.js';
 
@@ -18,7 +19,7 @@ export function catalogRoutes(app) {
     const {bookId, chapterId} = req.params;
     if (!id(bookId) || !id(chapterId)) fail(400, '章节参数无效');
     const book = await readLiveBook(bookId, res.locals.workAccess);
-    const cached = bookCatalog.peek(bookId, versionOf(book));
+    const cached = bookReadingIndex.peek(bookId, versionOf(book));
     if (cached) {
       if (!(await cached).indices.has(chapterId.toLowerCase())) fail(404, '章节不存在');
     } else {
@@ -44,14 +45,11 @@ export function catalogRoutes(app) {
     if (version !== undefined && version !== revision) return res.status(409).json({error: '目录已更新', version: revision});
     let catalog;
     try {
-      catalog = await bookCatalog(bookId, revision);
+      catalog = await readCatalogWindow(bookId, revision, {anchor, offset: requestedOffset, limit});
     } catch (error) {
       if (error instanceof BookVersionChanged) return res.status(409).json({error: error.message, version: error.version});
       throw error;
     }
-    const total = catalog.rows.length;
-    const activeIndex = anchor ? catalog.indices.get(anchor) ?? null : null;
-    const offset = anchor ? (activeIndex === null || total <= limit ? 0 : Math.max(0, activeIndex - Math.floor(limit / 2))) : Math.min(requestedOffset, total);
-    res.json({offset, total, activeIndex, version: revision, volumes: catalog.volumes, rows: catalog.rows.slice(offset, offset + limit)});
+    res.json(catalog);
   }));
 }

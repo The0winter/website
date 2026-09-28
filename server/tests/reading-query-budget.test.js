@@ -148,7 +148,7 @@ test('concurrent cold readers share validation; edits during a build never becom
       assert.equal(result.reason.version, '1');
     }
     assert.equal(scans, 1, 'both readers share the rejected build');
-    assert.equal((await bookCatalog(book._id, 1)).rows[0].title, 'Words 8');
+    assert.equal((await bookCatalog(book._id, 1)).total, 1);
     afterScan = () => edit(12);
     const index = await readBookIndex(book._id);
     assert.equal(index.version, 2); assert.equal(index.totalWords, 12, 'retry uses the new publication');

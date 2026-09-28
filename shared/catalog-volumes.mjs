@@ -2,6 +2,9 @@
 const digits = '0-9０-９零〇一二三四五六七八九十百千万萬两兩';
 const volumeStart = new RegExp(`^(?:第[${digits}]+卷|卷[${digits}]+)`, 'u');
 const chapterStart = new RegExp(`第[${digits}]+[章回节節]`, 'u');
+// Shared with MongoDB's compact volume summary: a prefix before an actual
+// chapter, or a bare numbered volume heading.
+export const catalogVolumePattern = `^(${volumeStart.source.slice(1)}[\\s\\S]*?)${chapterStart.source}|^(${volumeStart.source.slice(1)})$`;
 
 // Only numbered volume prefixes define legacy title boundaries. “正文”,
 // “番外” and numbering resets are chapter text, never sticky classifications.
@@ -22,20 +25,32 @@ export function splitCatalogTitle(title = '') {
 
 /** @param {{id?: string, _id?: unknown, title: string, volume_title?: string, volume_number?: number}[]} chapters */
 export function buildCatalogVolumes(chapters) {
+  return buildCatalogVolumeRuns(chapters.map((chapter, index) => {
+    const explicit = typeof chapter.volume_title === 'string' && chapter.volume_title.trim();
+    return {id: String(chapter.id ?? chapter._id ?? index), count: 1,
+      title: explicit || splitCatalogTitle(chapter.title).volume,
+      explicit: Boolean(explicit), number: chapter.volume_number};
+  }));
+}
+
+/** Consecutive equal markers can be counted in the database without sending titles.
+ * @param {{id: string, count: number, title: string, explicit: boolean, number?: number}[]} runs */
+export function buildCatalogVolumeRuns(runs) {
   /** @type {CatalogVolume[]} */
   const volumes = [];
   let title = '';
   let number;
-  chapters.forEach((chapter, index) => {
-    const explicit = typeof chapter.volume_title === 'string' && chapter.volume_title.trim();
-    const newNumber = explicit ? chapter.volume_number : number;
-    title = explicit || splitCatalogTitle(chapter.title).volume || title;
+  let index = 0;
+  runs.forEach(run => {
+    const newNumber = run.explicit ? run.number : number;
+    title = run.title || title;
     let volume = volumes[volumes.length - 1];
     if (!volume || volume.title !== title || newNumber !== number) {
-      volume = {id: String(chapter.id ?? chapter._id ?? index), title, start: index, count: 0};
+      volume = {id: run.id, title, start: index, count: 0};
       volumes.push(volume);
     }
-    volume.count++;
+    volume.count += run.count;
+    index += run.count;
     number = newNumber;
   });
   // An empty array means a flat catalog, not an empty book. Keep an unlabelled

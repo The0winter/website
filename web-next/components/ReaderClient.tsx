@@ -449,7 +449,7 @@ if (loading) return (
       </div>
 
       <BookCatalogSheet open={showCatalog} onClose={closeBookCatalog} bookId={bookId} bookTitle={book.title}
-        catalog={catalog.snapshot} onRange={catalog.ensureRange}
+        catalog={catalog.snapshot} onRanges={catalog.ensureRanges}
         activeChapterId={chapter.id} onPrefetch={prefetchChapter}
         onSelect={id => selectReaderCatalogChapter(() => goToChapter(id,true))}
         onRetry={catalog.retry}/>

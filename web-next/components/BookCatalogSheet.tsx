@@ -8,14 +8,14 @@ import Link from './PrefetchLink';
 import CatalogScrollbar from './CatalogScrollbar';
 import {formatChapterTitle} from '@/lib/catalog-title';
 import {beginChapterEntry, currentChapterEntry, subscribeChapterEntry} from '@/lib/chapter-entry';
-import type {CatalogSnapshot, CatalogVolume} from '@/lib/book-catalog';
+import type {CatalogSnapshot, CatalogVolume, CatalogRange} from '@/lib/book-catalog';
 import {catalogLayout} from '@/lib/catalog-layout';
 import {splitCatalogTitle} from '../../shared/catalog-volumes.mjs';
 import './book-detail.css';
 
 type Props = {
   open: boolean; onClose: () => void; bookId: string; bookTitle: string; catalog: CatalogSnapshot;
-  onRange: (start: number, end: number) => void; onRetry: () => void;
+  onRanges: (ranges: readonly CatalogRange[]) => void; onRetry: () => void;
   activeChapterId?: string;
   activeChapterLabel?: string;
   onSelect?: (id: string, title: string) => void; onPrefetch?: (id: string) => void;
@@ -123,7 +123,7 @@ function VolumeCatalog(props: VolumeProps) {
   return <CatalogVolumeRows {...props} view={view} onToggle={toggle}/>;
 }
 
-function CatalogVolumeRows({bookId, catalog, onRange, onRetry, activeChapterId, activeChapterLabel = '正在阅读', onSelect, onPrefetch, columns, volumes, activeIndex, view, onToggle}: VolumeProps & {view: View; onToggle: (id: string) => void}) {
+function CatalogVolumeRows({bookId, catalog, onRanges, onRetry, activeChapterId, activeChapterLabel = '正在阅读', onSelect, onPrefetch, columns, volumes, activeIndex, view, onToggle}: VolumeProps & {view: View; onToggle: (id: string) => void}) {
   const listId = useId();
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
   const [listHeight, setListHeight] = useState(0);
@@ -137,12 +137,14 @@ function CatalogVolumeRows({bookId, catalog, onRange, onRetry, activeChapterId, 
     return chapterStart === null ? `volume:${group.volume.id}` : `chapter:${chapterStart}`;
   }, [layout]);
   const rangeChanged = useCallback(({startIndex, endIndex}: {startIndex: number; endIndex: number}) => {
+    const ranges: CatalogRange[] = [];
     for (const group of layout.groups) {
       const start = Math.max(startIndex, group.start), end = Math.min(endIndex, group.start + group.rows - 1);
-      if (start <= end) onRange(group.volume.start + (start - group.start) * columns,
-        Math.min(group.volume.start + group.volume.count - 1, group.volume.start + (end - group.start + 1) * columns - 1));
+      if (start <= end) ranges.push({start: group.volume.start + (start - group.start) * columns,
+        end: Math.min(group.volume.start + group.volume.count - 1, group.volume.start + (end - group.start + 1) * columns - 1)});
     }
-  }, [layout, onRange, columns]);
+    onRanges(ranges);
+  }, [layout, onRanges, columns]);
   useLayoutEffect(() => {
     if (!scroller || ready) return;
     let frame = 0, stableFrames = 0, previousTop = -1, previousHeight = -1;

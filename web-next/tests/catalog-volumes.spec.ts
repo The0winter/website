@@ -32,6 +32,8 @@ const open = async(page: Page, origin: string, width: number)=>{
   if(origin==='detail')await page.getByRole('button',{name:width<768?/^目录 /:/^查看完整目录/}).click();
   else {
     await expect(page.locator('.reader-pages-root:visible')).toHaveAttribute('data-reader-ready','true');
+    await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
+    await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
     await page.keyboard.press('m');await page.locator('.reader-tools:visible').getByRole('button',{name:'目录',exact:true}).click();
   }
   await expect(page.locator('.book-catalog-scroll-area')).toHaveAttribute('data-ready','true');

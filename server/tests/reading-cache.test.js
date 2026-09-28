@@ -59,7 +59,7 @@ test('200 chapter reads share one order index; catalogs rebuild only after publi
     const anchor = String(chapters[200]._id);
     const first = await get(path + `/catalog?anchor=${anchor}`);
     assert.equal(first.activeIndex, 199); assert.equal(first.total, 500);
-    assert.equal(commands.filter(({sql}) => sql.includes('FROM "chapters"')).length, 1);
+    assert.equal(commands.filter(({sql}) => sql.includes('FROM "chapters"')).length, 3, 'one local volume summary and two bounded title pages');
     commands.length = 0;
     now += 24 * 3600_000;
     await Promise.all(Array.from({length: 10}, () => get(path + `/catalog?anchor=${anchor}&version=0`)));
@@ -115,11 +115,11 @@ test('version caches deduplicate work, bound memory, retry failures and isolate 
     const id = new mongoose.Types.ObjectId();
     await Book.create({_id: id, title: 'Old database'});
     await Chapter.create({bookId: id, title: 'Old chapter', content: 'a', chapter_number: 1});
-    assert.equal((await bookCatalog(id, 0)).rows.length, 1);
+    assert.equal((await bookCatalog(id, 0)).total, 1);
     assert.equal((await bookReadingIndex(id, 0)).ids.length, 1);
     await mongoose.disconnect(); await mongoose.connect(another.getUri());
     await Book.create({_id: id, title: 'New database'});
-    assert.equal((await bookCatalog(id, 0)).rows.length, 0);
+    assert.equal((await bookCatalog(id, 0)).total, 0);
     assert.equal((await bookReadingIndex(id, 0)).ids.length, 0);
   } finally {await mongoose.disconnect(); await fixture.stop(); await another.stop();}
 });

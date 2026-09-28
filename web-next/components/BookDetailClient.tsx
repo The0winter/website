@@ -645,7 +645,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
 
       <BookCatalogSheet open={showAllChapters} onClose={closeBookCatalog} bookId={book.id} bookTitle={book.title}
         activeChapterId={recentChapterId ?? undefined} activeChapterLabel="上次读到"
-        catalog={catalog.snapshot} onRange={catalog.ensureRange}
+        catalog={catalog.snapshot} onRanges={catalog.ensureRanges}
         onRetry={catalog.retry}/>
 
 

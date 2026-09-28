@@ -4,6 +4,7 @@ import {buildCatalogVolumes} from '../../shared/catalog-volumes.mjs';
 export type CatalogChapter = {id: string; title: string; chapter_number: number; volume_title?: string; volume_number?: number};
 export type CatalogSeed = {rows: CatalogChapter[]; total: number | null};
 export type CatalogVolume = {id: string; title: string; start: number; count: number};
+export type CatalogRange = {start: number; end: number};
 export type CatalogSnapshot = {
   rows: ReadonlyMap<number, CatalogChapter>; indices: ReadonlyMap<string, number>;
   total: number | null; version?: string; generation: number; resolved: ReadonlySet<string>; error: string;
@@ -13,12 +14,13 @@ type WindowData = {rows: CatalogChapter[]; offset: number; total: number; versio
 type Job = {offset: number; limit: number; anchor?: string; background: boolean};
 export type CatalogNetwork = {saveData?: boolean; effectiveType?: string; downlink?: number};
 
-// Measured against 375- and 10,000-chapter catalogs. Keep the initial view small
-// on constrained links; amortize request latency when filling a large catalog.
+// Open around the reader, then buffer only the vicinity of the visible rows.
+// A long book must not turn one catalog opening into a full-book download.
 export function catalogStrategy(total: number | null, network: CatalogNetwork = {}) {
   const constrained = network.saveData || /(^|-)2g$|3g/.test(network.effectiveType ?? '') || (network.downlink !== undefined && network.downlink < 1.5);
-  return {initial: !constrained && total !== null && total <= 512 ? Math.max(1, total) : 128,
-    batch: constrained ? 512 : 2048, background: !network.saveData && !/2g/.test(network.effectiveType ?? '') && (total === null || total <= 20000)};
+  return {initial: Math.max(1, Math.min(total ?? Infinity, constrained ? 128 : 401)),
+    batch: constrained ? 128 : 256, radius: constrained ? 64 : 200,
+    background: !network.saveData && !/2g/.test(network.effectiveType ?? '')};
 }
 const empty = (): CatalogSnapshot => ({rows: new Map(), indices: new Map(), total: null, generation: 0, resolved: new Set(), error: ''});
 
@@ -36,6 +38,8 @@ export class BookCatalog {
   private network: CatalogNetwork = {};
   private failed?: Job;
   private revisions = 0;
+  private focus?: readonly CatalogRange[];
+  private backgroundFailed = false;
   constructor(readonly bookId: string, version?: string, seed?: CatalogSeed) {
     this.snapshot = {...empty(), version};
     if (seed?.total !== null && seed?.total !== undefined) {
@@ -51,6 +55,7 @@ export class BookCatalog {
   private reset(version?: string, cancelValidation = true) {
     if (cancelValidation) {this.validation?.abort(); this.validation = undefined;}
     this.failed = undefined; this.validationFailed = false;
+    this.focus = undefined; this.backgroundFailed = false;
     this.epoch++; for (const controller of this.active.values()) controller.abort(); this.active.clear(); this.queue = [];
     this.publish({...empty(), version, generation: this.epoch});
   }
@@ -66,7 +71,11 @@ export class BookCatalog {
     return () => {
       this.backgroundOwners.delete(owner);
       this.owners.delete(owner);
-      if (!this.owners.size) {this.validation?.abort(); this.validation = undefined;}
+      if (!this.owners.size) {
+        this.validation?.abort(); this.validation = undefined;
+        for (const controller of this.active.values()) controller.abort();
+        this.active.clear(); this.queue = []; this.focus = undefined;
+      }
       if (!this.backgroundOwners.size) {
         this.queue = this.queue.filter(job => !job.background);
         for (const [job, controller] of this.active) if (job.background) {controller.abort(); this.active.delete(job);}
@@ -104,20 +113,35 @@ export class BookCatalog {
   }
   private locate(anchor?: string) {
     const {indices, resolved, total, rows} = this.snapshot;
+    const position = anchor ? indices.get(anchor) : 0;
+    if (position !== undefined) this.focus = [{start: position, end: position}];
+    this.backgroundFailed = false;
     if (this.snapshot.volumes && (anchor ? indices.has(anchor) || resolved.has(anchor) : total !== null && (rows.has(0) || total === 0))) return;
     this.enqueue({anchor, offset: 0, limit: catalogStrategy(total, this.network).initial, background: false});
   }
-  ensureRange = (start: number, end: number) => {
+  ensureRange = (start: number, end: number) => this.ensureRanges([{start, end}]);
+  ensureRanges = (ranges: readonly CatalogRange[]) => {
     const {total, rows} = this.snapshot;
     if (total === null || total === 0) return;
-    start = Math.max(0, start); end = Math.min(total - 1, end);
-    const missing = Array.from({length: Math.max(0, end - start + 1)}, (_, i) => start + i).find(i => !rows.has(i));
-    if (missing === undefined) return;
-    const limit = Math.min(128, total);
-    const offset = Math.max(0, Math.min(missing - Math.floor(limit / 4), total - limit));
-    // Discard queued positions that have already scrolled out of view.
-    this.queue = this.queue.filter(job => job.anchor || job.background);
-    this.enqueue({offset, limit, background: false});
+    const visible = ranges.map(({start, end}) => ({start: Math.max(0, start), end: Math.min(total - 1, end)})).filter(range => range.end >= range.start);
+    if (!this.focus || this.focus.length !== visible.length || this.focus.some((range, i) => range.start !== visible[i].start || range.end !== visible[i].end)) this.backgroundFailed = false;
+    this.focus = visible;
+    // A scrollbar jump supersedes speculative work at the previous position.
+    const radius = catalogStrategy(total, this.network).radius;
+    this.queue = this.queue.filter(job => job.anchor);
+    for (const [job, controller] of this.active) {
+      if (!job.anchor && visible.every(({start, end}) => job.offset > end + radius || job.offset + job.limit <= start - radius)) {
+        controller.abort(); this.active.delete(job);
+      }
+    }
+    for (const {start, end} of visible) {
+      const missing = Array.from({length: end - start + 1}, (_, i) => start + i).find(i => !rows.has(i));
+      if (missing === undefined) continue;
+      const limit = Math.min(128, total);
+      const offset = Math.max(0, Math.min(missing - Math.floor(limit / 4), total - limit));
+      this.enqueue({offset, limit, background: false});
+    }
+    this.pump();
   };
   retry = () => {
     const failed = this.failed; this.failed = undefined; this.revisions = 0;
@@ -139,13 +163,19 @@ export class BookCatalog {
       void this.read(job, controller, this.epoch);
     }
     // Only one speculative request at a time, leaving a slot for scrolling.
-    if (this.active.size || !this.backgroundOwners.size || !catalogStrategy(this.snapshot.total, this.network).background) return;
+    if (this.active.size || !this.backgroundOwners.size || !this.focus || this.backgroundFailed || !catalogStrategy(this.snapshot.total, this.network).background) return;
     const {total, rows} = this.snapshot;
     if (total === null) return;
-    let offset = 0; while (offset < total && rows.has(offset)) offset++;
-    if (offset === total) return;
-    const limit = Math.min(catalogStrategy(total, this.network).batch, total - offset);
-    this.enqueue({offset, limit, background: true});
+    const strategy = catalogStrategy(total, this.network);
+    for (const range of this.focus) {
+      const end = Math.min(total, range.end + strategy.radius + 1);
+      let offset = Math.max(0, range.start - strategy.radius);
+      while (offset < end && rows.has(offset)) offset++;
+      if (offset === end) continue;
+      let limit = 1;
+      while (limit < strategy.batch && offset + limit < end && !rows.has(offset + limit)) limit++;
+      this.enqueue({offset, limit, background: true}); return;
+    }
   }
   private async read(job: Job, controller: AbortController, epoch: number) {
     try {
@@ -164,6 +194,11 @@ export class BookCatalog {
       if (epoch !== this.epoch || controller.signal.aborted) return;
       if (!Array.isArray(data.rows) || !Number.isSafeInteger(data.total) || data.total < 0 || !Number.isSafeInteger(data.offset) || data.offset < 0 || data.offset + data.rows.length > data.total || data.rows.some(row => !row.id || typeof row.title !== 'string' || !Number.isFinite(row.chapter_number))) throw Error('目录数据无效，请重试');
       if (this.snapshot.version !== undefined && this.snapshot.version !== data.version) throw Error('目录版本不一致，请重试');
+      if (!this.focus && !job.background) {
+        const anchorIndex = job.anchor ? data.rows.findIndex(row => row.id === job.anchor) : -1;
+        const position = data.activeIndex ?? (anchorIndex < 0 ? data.offset : data.offset + anchorIndex);
+        this.focus = [{start: position, end: position}];
+      }
       const volumes = data.volumes ?? (data.offset === 0 && data.rows.length === data.total ? buildCatalogVolumes(data.rows) : []);
       if (!Array.isArray(volumes)) throw Error('分卷数据无效，请重试');
       let covered = 0;
@@ -187,7 +222,8 @@ export class BookCatalog {
       this.publish({rows, indices, resolved, total: data.total, version: data.version, generation: this.epoch, error: '', volumes: sameVolumes ? previousVolumes : volumes});
     } catch (error) {
       if (epoch !== this.epoch || controller.signal.aborted) return;
-      this.failed = job; this.publish({...this.snapshot, error: error instanceof Error ? error.message : '目录暂不可用，请重试'});
+      if (job.background) this.backgroundFailed = true;
+      else {this.failed = job; this.publish({...this.snapshot, error: error instanceof Error ? error.message : '目录暂不可用，请重试'});}
     } finally {
       this.active.delete(job); if (epoch === this.epoch) this.pump();
     }

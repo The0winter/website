@@ -51,6 +51,7 @@ test('entering from details and using browser Back does not create a back loop',
   await expect(root(page)).toHaveAttribute('data-reader-ready', 'true');
   await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
   expect(await page.evaluate(() => history.length)).toBe(entries + 1);
+  await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
   await page.keyboard.press('Control+ArrowRight');
   await expect(page).toHaveURL(`${detail}/${second}`);
   await page.keyboard.press('m');
@@ -155,14 +156,15 @@ test('a long catalog retries, stays virtualized, and preserves ascending order',
   await page.keyboard.press('m');
   await page.locator('.reader-tools:visible').getByRole('button', {name: '目录', exact: true}).click();
   const dialog = page.getByRole('dialog', {name: '全部目录'});
-  await expect(dialog.getByRole('alert')).toBeVisible();
-  failing = false; await dialog.getByRole('button', {name: '重试'}).click();
   await expect(dialog.getByRole('region')).toHaveAttribute('aria-busy', 'false');
   await expect(dialog.locator('[aria-current="location"]')).toBeVisible();
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
   expect(await dialog.locator('.book-catalog-chapter').count()).toBeLessThan(60);
   await expect(dialog.getByRole('button', {name: /正序|倒序/})).toHaveCount(0);
   await expect(dialog.locator('.book-catalog-chapter').first().locator('span').first()).toHaveText('第1章 目录验证');
   await dialog.locator('.book-catalog-list').evaluate(el => {el.scrollTop = el.scrollHeight;});
+  await expect(dialog.getByRole('alert')).toBeVisible();
+  failing = false; await dialog.getByRole('button', {name: '重试'}).click();
   await expect(dialog.getByRole('link', {name: '第1238章 目录验证', exact: true})).toBeVisible();
   expect(await dialog.locator('.book-catalog-chapter').count()).toBeLessThan(60);
   await page.goBack(); await expect(dialog).not.toBeVisible(); await expect(page).toHaveURL(reader);

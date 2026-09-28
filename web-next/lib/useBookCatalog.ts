@@ -14,5 +14,5 @@ export function useBookCatalog(bookId: string, version: number | undefined, anch
     const network = (navigator as Navigator & {connection?: CatalogNetwork}).connection;
     return catalog.watch(anchor, policy === 'visible', network, version, true);
   }, [catalog, anchor, open, policy, version]);
-  return {snapshot, ensureRange: catalog.ensureRange, retry: catalog.retry};
+  return {snapshot, ensureRange: catalog.ensureRange, ensureRanges: catalog.ensureRanges, retry: catalog.retry};
 }
