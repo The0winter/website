@@ -19,7 +19,7 @@ export default function BookLoadingShell() {
       <div className="book-loading-intro">
         <div aria-hidden="true" className="book-loading-stats">{[0,1,2].map(key=><div key={key}><div className="book-loading-line"/><div className="book-loading-line book-loading-short"/></div>)}</div>
         <div aria-hidden="true" className="book-loading-paragraph"><div className="book-loading-line"/><div className="book-loading-line"/><div className="book-loading-line book-loading-short"/></div>
-        <div className="book-loading-brand"><LoadingLogo size={28}/><p role="status"><LoadingText>正在打开书籍</LoadingText></p></div>
+        <div className="book-loading-brand"><LoadingLogo/><p role="status"><LoadingText branded>正在打开书籍</LoadingText></p></div>
       </div>
       <div aria-hidden="true" className="book-loading-reviews">
         {[0,1].map(key=><div className="book-loading-review" key={key}><div className="book-loading-avatar"/><div className="book-loading-paragraph"><div className="book-loading-line book-loading-short"/><div className="book-loading-line"/><div className="book-loading-line"/></div></div>)}

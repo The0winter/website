@@ -252,7 +252,7 @@ export default function WriterDashboard({entry}: {entry: string}) {
   if (user && returningToWorks) return <div className="writer-page min-h-screen flex items-center justify-center" role="status"><LoadingText>作品已创建，正在返回我的作品</LoadingText></div>;
   if (user && showCreateBookModal) return creator;
 
-  if (authLoading || !user) return <div className="writer-page min-h-screen flex flex-col gap-4 items-center justify-center" role="status"><LoadingLogo/><p><LoadingText>正在准备创作中心</LoadingText></p></div>;
+  if (authLoading || !user) return <div className="writer-page min-h-screen flex flex-col gap-4 items-center justify-center" role="status"><LoadingLogo/><p><LoadingText branded>正在准备创作中心</LoadingText></p></div>;
 
   return (
     <div className="writer-page min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">

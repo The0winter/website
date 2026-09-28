@@ -1,6 +1,7 @@
 import {animateElement, type BrowserAnimation} from './browser-animation';
 import {bookLoadingPanel} from './book-loading-panel';
 import {getImageProps} from 'next/image';
+import {LOADING_LOGO_SIZE, LOADING_TEXT_SIZE} from './loading-brand';
 import {captureMobileSection, mobileRankingShell} from './mobile-section-snapshot';
 
 type Direction = 'enter' | 'exit';
@@ -82,11 +83,13 @@ function bookLoadingPage(href: string, label = '书籍') {
   panel.setAttribute('aria-label', `正在打开${label}`);
   panel.setAttribute('aria-busy', 'true');
   const logo = document.createElement('img');
-  const {props} = getImageProps({src:'/icon.png',alt:'',width:36,height:36});
+  const {props} = getImageProps({src:'/icon.png',alt:'',width:LOADING_LOGO_SIZE,height:LOADING_LOGO_SIZE});
   logo.srcset = props.srcSet ?? ''; logo.src = props.src;
-  logo.alt = ''; logo.width = 36; logo.height = 36; logo.className = 'loading-logo';
+  logo.alt = ''; logo.width = LOADING_LOGO_SIZE; logo.height = LOADING_LOGO_SIZE; logo.className = 'loading-logo';
+  Object.assign(logo.style, {width: `${LOADING_LOGO_SIZE}px`, height: `${LOADING_LOGO_SIZE}px`});
   const message = document.createElement('p');
   message.className = 'loading-text';
+  message.style.fontSize = `${LOADING_TEXT_SIZE}px`;
   message.setAttribute('role', 'status');
   const text = document.createElement('span');
   text.textContent = `正在打开${label}`;

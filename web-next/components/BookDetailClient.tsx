@@ -580,7 +580,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             {loadingChapters && chapters.length === 0 ? (
                <div className="py-6 md:py-10 text-center text-gray-500 flex flex-col items-center">
                   <LoadingLogo className="mb-2"/>
-                  <p className="text-xs md:text-sm"><LoadingText>加载目录</LoadingText></p>
+                  <p className="text-xs md:text-sm"><LoadingText branded>加载目录</LoadingText></p>
                </div>
             ) : chapters.length === 0 ? (
               !chapterError && <p className="text-gray-600 text-sm">暂无章节</p>
