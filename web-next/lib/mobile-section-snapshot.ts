@@ -99,7 +99,7 @@ export function captureMobileSection(source: HTMLElement, top: number, height: n
   if (!header) content.querySelectorAll<HTMLElement>('.library-search-header, .forum-masthead').forEach(bar => {bar.style.position = 'static';});
   Object.assign(content.style, {position: 'relative', top: `${box.top - top}px`, left: `${box.left}px`, width: `${box.width}px`, margin: '0'});
   if (fullHome) {
-    // A home-to-ranking transition needs only these two positioned controls,
+    // A home-to-detail/ranking transition needs only these positioned controls,
     // not computed style and scroll reads for every book in both desktop/mobile DOMs.
     for (const selector of ['.mh-topbar', '.mh-bottom']) {
       const original = source.querySelector<HTMLElement>(selector);

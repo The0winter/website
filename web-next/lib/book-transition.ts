@@ -179,7 +179,12 @@ export function transitionBookPage(href: string, direction: Direction, navigate:
   // the route immediately (including a cached detail page).
   const ranking = new URL(href, location.origin).pathname === '/ranking';
   const rankingEntry = ranking && direction === 'enter' && matchMedia('(max-width: 767px)').matches;
-  const home = rankingEntry ? document.querySelector<HTMLElement>('.mobile-home:not(.mobile-home-browse)') : null;
+  // A featured-home entry only needs the visible mobile surface. Walking every
+  // element in the document (including the hidden desktop list) blocks both
+  // the first animation frame and the route request on slower mobile engines.
+  const mobileHomeEntry = direction === 'enter' && matchMedia('(max-width: 767px)').matches &&
+    (ranking || /^\/book\/[^/?#]+$/.test(href));
+  const home = mobileHomeEntry ? document.querySelector<HTMLElement>('.mobile-home:not(.mobile-home-browse)') : null;
   const snapshot = home ? captureMobileSection(home, 0, innerHeight, true, true).element : freezeBookPage();
   if (home) {
     snapshot.className = 'book-transition-snapshot';
