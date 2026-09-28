@@ -123,7 +123,7 @@ app.use(mongoSanitize());
 app.get('/health/live', (req, res) => res.json({status:'live'}));
 app.get('/health/metrics', async (req,res)=>{
   if(!allowMetrics(req))return res.status(404).end();
-  res.set('Cache-Control','private, no-store').json({...metrics.snapshot(),databaseReady:await databaseReady(),databaseBackend:mongoose.connection.transport?.remote?'d1':mongoose.connection.transport?'sqlite':'mongodb',databaseUsage:mongoose.connection.transport?.metrics ?? mongoUsageSnapshot(),readGuard:readProtection.guard.snapshot(),bookCaches:bookCacheMetrics()});
+  res.set('Cache-Control','private, no-store').json({...metrics.snapshot(),databaseReady:await databaseReady(),databaseBackend:mongoose.connection.transport?.remote?'d1':mongoose.connection.transport?'sqlite':'mongodb',databaseUsage:mongoose.connection.transport?.metrics ?? mongoUsageSnapshot(),readGuard:readProtection.guard.snapshot(),searchCrawlers:readProtection.searchVerifier.snapshot(),bookCaches:bookCacheMetrics()});
 });
 app.get('/health/ready', async (req, res) => {const ready=await databaseReady();res.status(ready?200:503).json({ready});});
 app.use('/api', async (req, res, next) => await databaseReady() ? next() : res.status(503).json({error:'数据库暂不可用'}));

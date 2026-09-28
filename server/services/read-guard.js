@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 import jwt from 'jsonwebtoken';
 import {ipKeyGenerator} from 'express-rate-limit';
+import {createSearchCrawlerVerifier, canonicalCrawlerIp} from './search-crawler.js';
 
 const hour = 3600000, cookieAge = 7 * 24 * hour;
 const loopback = address => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(address);
@@ -19,7 +20,7 @@ export function readTarget(path) {
 // retained; capacity pressure evicts old state, never rejects the whole site.
 export function createReadGuard(config, {clock = Date.now, maxActors = 5000, maxChapters = 100000} = {}) {
   const mode = config.readGuardMode || (config.mode === 'production' ? 'enforce' : 'off');
-  const actors = new Map(), counters = {allowed:0, blocked:0, observed:0, evictions:0, reasons:{}};
+  const actors = new Map(), counters = {allowed:0, blocked:0, observed:0, evictions:0, reasons:{}, verifiedSearch:{google:0,bing:0,baidu:0}};
   const cookieName = config.mode === 'production' ? '__Host-reader-access' : 'reader-access';
   let storedChapters = 0;
   const hash = value => crypto.createHmac('sha256', config.jwtSecret).update('read-guard-v1:' + value).digest('hex');
@@ -54,34 +55,40 @@ export function createReadGuard(config, {clock = Date.now, maxActors = 5000, max
     } else counters.allowed++;
     return {status, reason, retryAfter:status === 429 ? Math.max(1, Math.min(300, Math.ceil(retryAfter))) : undefined, setCookie:status === 200 ? setCookie : undefined};
   }
-  function check(input) {
+  function check(input, verifiedSearch = null) {
     const target = readTarget(input.path);
     const method = input.method || 'GET';
     if (mode === 'off' || !target || (!['GET','HEAD'].includes(method) && !(method === 'POST' && /^\/book\//i.test(input.path)))) return {status:200};
     const now = clock();
     // Training/bulk crawlers are distinct from user-triggered AI/search agents.
     if (/(?:\bClaudeBot\b|\bGPTBot\b|\bCCBot\b|\bBytespider\b|\bDiffbot\b|\bOmgilibot\b)/i.test(input.userAgent || '')) return verdict(403, 'bulk-crawler', 0);
-    const who = identity(input, now), {key, kind, setCookie} = who;
+    // This second argument comes only from the server verifier. Client headers,
+    // cookies and delegated JSON cannot mark a caller as verified.
+    const search = ['google','bing','baidu'].includes(verifiedSearch) && canonicalCrawlerIp(input.ip);
+    const who = search ? {key:hash('search:' + verifiedSearch + ':' + search), kind:'search', setCookie:null} : identity(input, now);
+    const {key, kind, setCookie} = who;
+    if (search) counters.verifiedSearch[verifiedSearch]++;
+    const burst = search ? 120 : 80, refill = search ? 10 : 5;
     for (const [id, state] of actors) {if (now - state.lastAt < hour) break; drop(id);}
     let state = actors.get(key);
-    if (!state) state = {lastAt:now, tokens:80, tokenAt:now, chapters:new Map()};
+    if (!state) state = {lastAt:now, tokens:burst, tokenAt:now, chapters:new Map()};
     else actors.delete(key);
     actors.set(key, state);state.lastAt = now;
-    state.tokens = Math.min(80, state.tokens + Math.max(0, now - state.tokenAt) / 1000 * 5);state.tokenAt = now;
+    state.tokens = Math.min(burst, state.tokens + Math.max(0, now - state.tokenAt) / 1000 * refill);state.tokenAt = now;
     for (const [id, at] of state.chapters) {if (now - at < hour) break; state.chapters.delete(id);storedChapters--;}
     const shortMs = kind === 'crawler' ? 60000 : 120000;
     const shortLimit = kind === 'crawler' ? 30 : kind === 'unidentified' ? 480 : 120;
     const hourLimit = kind === 'crawler' ? 300 : kind === 'unidentified' ? 2400 : 600;
     let decision;
-    if (state.tokens < 1) decision = verdict(429, 'request-burst', (1 - state.tokens) / 5, setCookie);
+    if (state.tokens < 1) decision = verdict(429, 'request-burst', (1 - state.tokens) / refill, setCookie);
     else {
       state.tokens--;
       const recent = [...state.chapters.values()].filter(at => now - at < shortMs);
-      if (target.chapter && !state.chapters.has(target.chapter) && (recent.length >= shortLimit || state.chapters.size >= hourLimit)) {
+      if (!search && target.chapter && !state.chapters.has(target.chapter) && (recent.length >= shortLimit || state.chapters.size >= hourLimit)) {
         const wait = Math.max(recent.length >= shortLimit ? shortMs - (now - recent[0]) : 0, state.chapters.size >= hourLimit ? hour - (now - state.chapters.values().next().value) : 0);
         decision = verdict(429, 'chapter-scan', wait / 1000, setCookie);
       } else {
-        if (target.chapter && !state.chapters.has(target.chapter)) {state.chapters.set(target.chapter, now);storedChapters++;}
+        if (!search && target.chapter && !state.chapters.has(target.chapter)) {state.chapters.set(target.chapter, now);storedChapters++;}
         decision = verdict(200, 'allowed', 0, setCookie);
       }
     }
@@ -91,18 +98,26 @@ export function createReadGuard(config, {clock = Date.now, maxActors = 5000, max
   return {check, snapshot:() => ({mode, ...structuredClone(counters), actors:actors.size, rememberedChapters:storedChapters})};
 }
 
-export function installReadGuard(app, config) {
+export function installReadGuard(app, config, {searchVerifier = createSearchCrawlerVerifier()} = {}) {
   const guard = createReadGuard(config);
+  const enabled = (config.readGuardMode || (config.mode === 'production' ? 'enforce' : 'off')) !== 'off';
+  const decide = async input => {
+    let verified = null;
+    if (enabled && readTarget(input.path) && ['GET','HEAD'].includes(input.method) && !/(?:ClaudeBot|GPTBot|CCBot|Bytespider|Diffbot|Omgilibot)/i.test(input.userAgent || '')) {
+      try {verified = await searchVerifier.verify(input);} catch { /* Verification failure keeps the ordinary policy. */ }
+    }
+    return guard.check(input, verified);
+  };
   const headers = (res, result) => {
     if (result.setCookie) res.append('Set-Cookie', result.setCookie);
     if (result.retryAfter) res.set('Retry-After', String(result.retryAfter));
     res.set('Cache-Control', 'private, no-store');
   };
   // Runs before JSON parsing, readiness/auth checks, SSR and every database read.
-  app.use((req, res, next) => {
+  app.use(async (req, res, next) => {
     if (internalRead(req) || (loopback(req.socket.remoteAddress) && equal(process.env.MONITOR_SECRET, req.headers['x-monitor-secret']))) return next();
     if (!readTarget(req.path)) return next();
-    const result = guard.check({path:req.path, method:req.method, cookie:req.headers.cookie, userAgent:req.headers['user-agent'], ip:req.ip});
+    const result = await decide({path:req.path, method:req.method, cookie:req.headers.cookie, userAgent:req.headers['user-agent'], ip:req.ip});
     if (result.setCookie) res.append('Set-Cookie', result.setCookie);
     if (result.status === 200) return next();
     headers(res, {...result, setCookie:null});
@@ -110,11 +125,12 @@ export function installReadGuard(app, config) {
   });
   return {
     guard,
-    delegated(req, res) {
+    searchVerifier,
+    async delegated(req, res) {
       if (!internalRead(req)) return res.status(404).end();
       const value = req.body;
       if (!value || typeof value.path !== 'string' || value.path.length > 300 || typeof value.ip !== 'string' || !net.isIP(value.ip) || typeof value.cookie !== 'string' || value.cookie.length > 8192 || typeof value.userAgent !== 'string' || value.userAgent.length > 1000 || !['GET','HEAD','POST'].includes(value.method)) return res.status(400).end();
-      const result = guard.check(value);headers(res, result);
+      const result = await decide(value);headers(res, result);
       return res.status(200).json({status:result.status, retryAfter:result.retryAfter});
     }
   };
