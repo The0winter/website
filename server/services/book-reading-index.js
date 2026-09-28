@@ -13,7 +13,7 @@ export const bookReadingIndex = versionedBookCache(async (bookId, version) => {
   const ids = chapters.map(chapter => String(chapter._id));
   return {ids, indices: new Map(ids.map((id, index) => [id, index])),
     totalWords: chapters.reduce((total, chapter) => total + (chapter.word_count || 0), 0)};
-}, value => 128 * value.ids.length + 256);
+}, value => 128 * value.ids.length + 256, {name:'readingIndex'});
 
 export async function readBookIndex(bookId, access) {
   for (let attempt = 0; attempt < 3; attempt++) {

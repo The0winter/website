@@ -21,15 +21,15 @@ test('missing documents return 404 before streaming, and outages remain retryabl
   }
 });
 
-test('chapter belongs to the requested book; only catalog metadata is fetched', async () => {
-  let active: number | null = null;
+test('chapter belongs to the requested book; one lightweight existence check replaces catalog loading', async () => {
+  let exists = false;
   globalThis.fetch = async input => {
-    expect(String(input)).toBe(`http://127.0.0.1:5000/api/books/${book}/catalog?anchor=${chapter}&limit=1`);
-    return Response.json({activeIndex: active, rows: [{id: chapter}]});
+    expect(String(input)).toBe(`http://127.0.0.1:5000/api/books/${book}/chapter-exists/${chapter}`);
+    return Response.json({exists});
   };
   const request = new NextRequest(`https://jiutianxiaoshuo.com/book/${book}/${chapter}`);
   expect((await proxy(request)).status).toBe(404);
-  active = 0;
+  exists = true;
   expect((await proxy(request)).headers.get('x-middleware-next')).toBe('1');
 });
 

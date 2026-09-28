@@ -12,17 +12,41 @@ function unavailable(status: 404 | 503) {
 // Validate document requests before streaming; SPA/prefetch requests keep their
 // existing fast navigation path. Chapter checks read catalog metadata, never R2.
 export async function proxy(request: NextRequest) {
-  if (!['GET', 'HEAD'].includes(request.method) || request.headers.get('rsc') === '1') return NextResponse.next();
   const path = request.nextUrl.pathname;
-  if (path === '/forum/create') return NextResponse.next();
+  let readerCookie: string | null = null;
+  const finish = (response: NextResponse) => {
+    if (readerCookie) response.headers.append('Set-Cookie', readerCookie);
+    return response;
+  };
+  // HTML, RSC navigation and prefetch share the same API-owned visitor budget.
+  // nginx overwrites X-Forwarded-For; this web server only listens on loopback.
+  if (['GET', 'HEAD', 'POST'].includes(request.method) && path.startsWith('/book/') && process.env.READ_GUARD_MODE !== 'off' && (process.env.NODE_ENV === 'production' || process.env.INTERNAL_API_SECRET)) {
+    try {
+      const url = new URL(getApiBaseUrl());url.pathname = '/internal/reader-guard';url.search = '';
+      const cookie = ['__Host-reader-access', 'reader-access', '__Host-session', 'session'].map(name => request.cookies.get(name)).filter(Boolean).map(item => `${item!.name}=${item!.value}`).join('; ');
+      const response = await safeFetch(url, {method:'POST', cache:'no-store', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({path, method:request.method, cookie, userAgent:(request.headers.get('user-agent') || '').slice(0,1000), ip:request.headers.get('x-forwarded-for')?.split(',')[0].trim() || '127.0.0.1'}), signal:AbortSignal.timeout(3000)});
+      if (!response.ok) return unavailable(503);
+      const decision: {status:number; retryAfter?:number} = await response.json();
+      readerCookie = response.headers.get('set-cookie');
+      if (decision.status === 403 || decision.status === 429) {
+        const title = decision.status === 429 ? '打开章节过于频繁' : '此自动采集客户端无法读取作品';
+        const retry = Math.max(1, Math.min(300, decision.retryAfter || 60));
+        return finish(new NextResponse(`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title></head><body style="font-family:system-ui,sans-serif;background:#faf7f2;color:#302b27"><main style="max-width:32rem;margin:18vh auto;padding:2rem;text-align:center"><h1>${title}</h1><p>${decision.status === 429 ? `请等待约 ${retry} 秒后重试，当前阅读进度会保留。` : '请使用普通浏览器打开此页面。'}</p><a href="/">返回首页</a></main></body></html>`, {status:decision.status, headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'private, no-store','X-Robots-Tag':'noindex',...(decision.status === 429 ? {'Retry-After':String(retry)} : {})}}));
+      }
+      if (decision.status !== 200) return unavailable(503);
+    } catch {return unavailable(503);}
+  }
+  if (!['GET', 'HEAD'].includes(request.method) || request.headers.get('rsc') === '1') return finish(NextResponse.next());
+  if (path === '/forum/create') return finish(NextResponse.next());
   const match = /^\/(book|author|forum)(?:\/(question))?\/([^/]+)(?:\/([^/]+))?$/.exec(path);
-  if (!match) return NextResponse.next();
+  if (!match) return finish(NextResponse.next());
   const [, kind, question, id, chapter] = match;
   if (!/^[a-f0-9]{24}$/i.test(id) || (chapter && !/^[a-f0-9]{24}$/i.test(chapter)) || (question && kind !== 'forum') || (chapter && kind !== 'book')) return unavailable(404);
   const parent = kind === 'forum' && !question ? request.nextUrl.searchParams.get('fromQuestion') : null;
   const answerParent = parent && parent !== 'undefined' ? parent : null;
   if (answerParent && (!/^[a-f0-9]{24}$/i.test(answerParent) || request.nextUrl.searchParams.getAll('fromQuestion').length !== 1)) return unavailable(404);
-  const endpoint = kind === 'book' ? chapter ? `/books/${id}/catalog?anchor=${chapter}&limit=1` : `/books/${id}` : kind === 'author' ? `/authors/${id}` : answerParent ? `/forum/posts/${answerParent}/replies?target=${id}` : `/forum/posts/${id}`;
+  const endpoint = kind === 'book' ? chapter ? `/books/${id}/chapter-exists/${chapter}` : `/books/${id}` : kind === 'author' ? `/authors/${id}` : answerParent ? `/forum/posts/${answerParent}/replies?target=${id}` : `/forum/posts/${id}`;
   try {
     const response = await safeFetch(getApiBaseUrl() + endpoint, {cache: 'no-store'});
     if (response.status === 404) return unavailable(404);
@@ -32,10 +56,10 @@ export async function proxy(request: NextRequest) {
       if (!Array.isArray(replies) || !replies.some((reply: {id: string}) => reply.id?.toLowerCase() === id.toLowerCase())) return unavailable(404);
     }
     if (chapter) {
-      const catalog = await response.json();
-      if (catalog.activeIndex === null || !catalog.rows?.some((row: {id: string}) => row.id.toLowerCase() === chapter.toLowerCase())) return unavailable(404);
+      const result = await response.json();
+      if (result.exists !== true) return finish(unavailable(404));
     }
-    return NextResponse.next();
+    return finish(NextResponse.next());
   } catch { return unavailable(503); }
 }
 

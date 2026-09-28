@@ -5,5 +5,8 @@ export default function robots(): MetadataRoute.Robots {
   if (process.env.SITE_INDEXING !== 'enabled') return {rules: {userAgent: '*', disallow: '/'}};
   // Crawlers must be able to read the noindex metadata on account/search pages.
   // Authentication protects private content; robots.txt does not.
-  return {rules: {userAgent: '*', allow: '/', disallow: ['/api/', '/health/']}, sitemap: siteOrigin + '/sitemap.xml'};
+  return {rules: [
+    {userAgent: '*', allow: '/', disallow: ['/api/', '/health/']},
+    {userAgent: ['ClaudeBot', 'GPTBot', 'CCBot', 'Bytespider', 'Diffbot', 'Omgilibot'], disallow: ['/book/', '/api/', '/health/']},
+  ], sitemap: siteOrigin + '/sitemap.xml'};
 }

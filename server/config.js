@@ -31,5 +31,7 @@ export function readConfig(env = process.env) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid PORT');
   const trafficMode=env.TRAFFIC_ANALYTICS||(mode==='production'?'observe':'off');
   if(!['off','observe'].includes(trafficMode))throw new Error('Invalid TRAFFIC_ANALYTICS');
-  return { mode, uri, origins, port, host: env.HOST || '127.0.0.1', jwtSecret: env.JWT_SECRET, trustProxy, writeMode, trafficMode };
+  const readGuardMode=env.READ_GUARD_MODE||(mode==='production'?'enforce':'off');
+  if(!['off','observe','enforce'].includes(readGuardMode))throw new Error('Invalid READ_GUARD_MODE');
+  return { mode, uri, origins, port, host: env.HOST || '127.0.0.1', jwtSecret: env.JWT_SECRET, trustProxy, writeMode, trafficMode, readGuardMode };
 }

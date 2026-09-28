@@ -3,6 +3,8 @@ import {chapterResponse} from './services/chapter-storage.js';
 import {pagination} from './services/pagination.js';
 import {createRequestMetrics,allowMetrics} from './services/observability.js';
 import {trackDatabaseRequest, mongoUsageSnapshot} from './services/mongo-usage.js';
+import {installReadGuard} from './services/read-guard.js';
+import {bookCacheMetrics} from './services/versioned-book-cache.js';
 import { readingRoutes } from './routes/reading.js';
 import { importRoutes } from './routes/import.js';
 import {libraryImportRoutes} from './routes/library-import.js';
@@ -53,6 +55,8 @@ app.use((req,res,next)=>{
   const start=performance.now();res.once('finish',()=>{if(config.mode==='production'||process.env.LOG_REQUESTS==='enabled')console.log(JSON.stringify({requestId:req.requestId,method:req.method,route:req.route?.path||'unmatched',status:res.statusCode,durationMs:Math.round(performance.now()-start)}));});next();
 });
 app.set('trust proxy', config.trustProxy==='loopback'?'loopback':false);
+const readProtection = installReadGuard(app, config);
+app.post('/internal/reader-guard', express.json({limit:'12kb'}), readProtection.delegated);
 
 
 
@@ -119,7 +123,7 @@ app.use(mongoSanitize());
 app.get('/health/live', (req, res) => res.json({status:'live'}));
 app.get('/health/metrics', async (req,res)=>{
   if(!allowMetrics(req))return res.status(404).end();
-  res.set('Cache-Control','private, no-store').json({...metrics.snapshot(),databaseReady:await databaseReady(),databaseBackend:mongoose.connection.transport?.remote?'d1':mongoose.connection.transport?'sqlite':'mongodb',databaseUsage:mongoose.connection.transport?.metrics ?? mongoUsageSnapshot()});
+  res.set('Cache-Control','private, no-store').json({...metrics.snapshot(),databaseReady:await databaseReady(),databaseBackend:mongoose.connection.transport?.remote?'d1':mongoose.connection.transport?'sqlite':'mongodb',databaseUsage:mongoose.connection.transport?.metrics ?? mongoUsageSnapshot(),readGuard:readProtection.guard.snapshot(),bookCaches:bookCacheMetrics()});
 });
 app.get('/health/ready', async (req, res) => {const ready=await databaseReady();res.status(ready?200:503).json({ready});});
 app.use('/api', async (req, res, next) => await databaseReady() ? next() : res.status(503).json({error:'数据库暂不可用'}));
