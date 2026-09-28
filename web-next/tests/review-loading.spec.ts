@@ -103,7 +103,7 @@ for(const width of [320,1440])test(`empty comments appear only after a successfu
   }finally{response.release();}
 });
 
-test('opening all comments retains the preview while the next batch loads',async({page})=>{
+test('opening all comments hides cached previews behind skeletons until the batch is ready',async({page})=>{
   await setup(page);await page.setViewportSize({width:390,height:844});
   const next=gate();
   await page.route(`**/api/books/${book}/reviews?*`,async route=>{
@@ -116,7 +116,9 @@ test('opening all comments retains the preview while the next batch loads',async
     await page.getByRole('button',{name:'查看全部评论',exact:true}).click();
     const sheet=page.getByRole('dialog',{name:'全部评论'});
     await expect(sheet.getByRole('status').filter({hasText:'正在加载评论'})).toBeVisible();
-    await expect(sheet.getByText('预览评论',{exact:true})).toBeVisible();
+    await expect(sheet.getByText('预览评论',{exact:true})).toHaveCount(0);
+    await expect(sheet.locator('.book-review-skeleton-row')).toHaveCount(5);
     next.release();await expect(sheet.getByText('后续评论',{exact:true})).toBeVisible();
+    await expect(sheet.getByText('预览评论',{exact:true})).toBeVisible();
   }finally{next.release();}
 });

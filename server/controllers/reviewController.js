@@ -5,6 +5,7 @@ import {readLiveBook} from '../services/book-version.js';
 import {pagination} from '../services/pagination.js';
 import {asyncRoute} from '../security.js';
 import {fail} from '../services/content.js';
+import {withReplyPreviews} from '../services/review-replies.js';
 
 function readCursor(value,bookId) {
   if(value===undefined)return null;
@@ -37,5 +38,5 @@ export const getReviews=asyncRoute(async(req,res)=>{
   res.set('X-Book-Rating',String(summary.rating));
   res.set('X-Rating-Summary',JSON.stringify(summary));
   res.set('X-Review-Distribution',JSON.stringify(Object.fromEntries(distribution.map(row=>[row._id,row.count]))));
-  res.json(page.map(row=>({...row,user:row.user||{_id:'',username:'已注销用户',avatar:''}})));
+  res.json(await withReplyPreviews(page.map(row=>({...row,user:row.user||{_id:'',username:'已注销用户',avatar:''}}))));
 });

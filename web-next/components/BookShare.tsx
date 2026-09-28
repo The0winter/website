@@ -4,6 +4,7 @@ import {useEffect, useId, useRef, useState, useSyncExternalStore} from 'react';
 import {Check, ChevronRight, Copy, Share2, X} from 'lucide-react';
 import {bookShareOpen, closeBookShare, openBookShare, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import {browserShareHint, hasQQShare, hasUCShare, isAndroidQQBrowser, prepareQQShare, shareWithQQ, shareWithUC, webShareData} from '@/lib/book-sharing';
+import {consumeShareReminder} from '@/lib/share-reading';
 
 export default function BookShare({bookId, title}: {bookId: string; title: string}) {
   const id = useId();
@@ -22,7 +23,23 @@ export default function BookShare({bookId, title}: {bookId: string; title: strin
   const [copied, setCopied] = useState(false);
   const [manual, setManual] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [reminder,setReminder]=useState(false);
   const shareTitle = `《${title.trim()}》 - 九天小说站`;
+
+  useEffect(()=>{
+    let timer:ReturnType<typeof setTimeout>,hide:ReturnType<typeof setTimeout>;
+    const check=()=>{
+      clearTimeout(timer);
+      timer=setTimeout(()=>{
+        const rect=toggle.current?.getBoundingClientRect();
+        if(location.pathname!==`/book/${bookId}`||!window.matchMedia('(max-width:767px)').matches||bookShareOpen(bookId)||!rect||rect.width===0||rect.bottom<0||rect.top>innerHeight)return;
+        if(consumeShareReminder(bookId)){setReminder(true);hide=setTimeout(()=>setReminder(false),9000);}
+      },850);
+    };
+    check();const unsubscribe=subscribeBookNavigation(check);
+    window.addEventListener('pageshow',check);document.addEventListener('visibilitychange',check);
+    return()=>{unsubscribe();clearTimeout(timer);clearTimeout(hide);window.removeEventListener('pageshow',check);document.removeEventListener('visibilitychange',check);};
+  },[bookId]);
 
   useEffect(() => {
     if (!open) return;
@@ -140,9 +157,13 @@ export default function BookShare({bookId, title}: {bookId: string; title: strin
 
   return <div className="book-share">
     <button ref={toggle} type="button" className="book-share-toggle" aria-label="分享书籍" aria-expanded={open} aria-controls={id}
-      onClick={() => open ? closeBookShare() : openBookShare(bookId)}>
+      onClick={() => {setReminder(false);if(open)closeBookShare();else openBookShare(bookId);}}>
       <Share2 size={25} strokeWidth={1.5} aria-hidden="true"/>
     </button>
+    {reminder&&!open&&<div className="book-share-reminder" role="status">
+      <button type="button" className="book-share-reminder-message" onClick={()=>{setReminder(false);openBookShare(bookId);}}>喜欢的话，请多多分享 <span aria-hidden="true">😊</span></button>
+      <button type="button" className="book-share-reminder-close" aria-label="关闭分享提示" onClick={()=>setReminder(false)}><X size={14}/></button>
+    </div>}
     <div ref={panel} id={id} className="book-share-panel" role="dialog" aria-labelledby={`${id}-title`} data-open={open} inert={!open}>
       <header><h2 id={`${id}-title`}>分享这本书</h2><button type="button" aria-label="关闭分享" onClick={closeBookShare}><X size={21} aria-hidden="true"/></button></header>
       <div className="book-share-copy">

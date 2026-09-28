@@ -2,6 +2,7 @@ import {cancelBookTransition, transitionBookPage} from './book-transition';
 import {cancelChapterEntry, currentChapterEntry} from './chapter-entry';
 import {installRankingCache, loadRanking, trackRankingReading} from './ranking-cache';
 import {installReaderFullscreenBack} from './reader-fullscreen';
+import {installShareReading,trackShareReading} from './share-reading';
 
 type Route = {kind: 'home' | 'author' | 'profile' | 'library' | 'ranking' | 'detail' | 'reader'; href: string; bookId?: string};
 type RankingView = {activeRank: string; category: string};
@@ -50,6 +51,7 @@ function entryFor(route: Route, flow = crypto.randomUUID()): Entry {
 function notify() {
   if (current?.kind === 'ranking') rankingVisit = current;
   trackRankingReading(current?.flow, current?.kind === 'reader' && !overlay(current));
+  trackShareReading(current?.bookId, current?.kind === 'reader' && !overlay(current));
   listeners.forEach(listener => listener());
 }
 function mark(entry: Entry) {
@@ -243,6 +245,7 @@ function onPopState(event: PopStateEvent) {
 export function installBookNavigation(value: Router) {
   router = value;
   const removeRankingCache = installRankingCache();
+  const removeShareReading = installShareReading();
   const removeFullscreenBack = installReaderFullscreenBack(() => {
     if (current?.kind !== 'reader' || current.href !== location.pathname || pending && pending.href !== current.href) return;
     // Reuse the actual predecessor and Next's cached route, just like the
@@ -254,6 +257,7 @@ export function installBookNavigation(value: Router) {
   window.addEventListener('pagehide', cancelBookTransition);
   return () => {
     removeRankingCache();
+    removeShareReading();
     removeFullscreenBack();
     window.removeEventListener('popstate', onPopState, true);
     window.removeEventListener('pagehide', cancelBookTransition);

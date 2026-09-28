@@ -17,6 +17,7 @@ import {workAccess} from '../services/work-access.js';
 import {readLiveBook} from '../services/book-version.js';
 import {writerRoutes} from './writer.js';
 import {reviewReactionRoutes} from './review-reactions.js';
+import {reviewReplyRoutes} from './review-replies.js';
 import {pagination} from '../services/pagination.js';
 import {asyncRoute} from '../security.js';
 import {createChapter,lockBook,chargeQuota,validateChapter,fail,jsonDoc,contentHash} from '../services/content.js';
@@ -31,6 +32,7 @@ function bookFields(body){
 export function contentRoutes(app,auth) {
   workAccess(app,auth);
   reviewReactionRoutes(app,auth);
+  reviewReplyRoutes(app,auth);
   writerRoutes(app,auth);
   app.get('/api/books/:id/reviews/mine',auth.authenticate,asyncRoute(async(req,res)=>{
     await readLiveBook(req.params.id,res.locals.workAccess);

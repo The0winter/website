@@ -1,6 +1,6 @@
 'use client';
 
-import {Heart,HeartCrack,Star} from 'lucide-react';
+import {ChevronRight,Heart,HeartCrack,Star} from 'lucide-react';
 import {useRouter} from 'next/navigation';
 import Link from './PrefetchLink';
 import UserAvatar from './UserAvatar';
@@ -8,10 +8,11 @@ import {ratingLabel} from '@/lib/rating';
 import {formatCompactCount} from '@/lib/compact-count';
 import {useReviewReactions} from '@/lib/useReviewReactions';
 import {displayReviewContent} from '@/lib/review-content';
+import BookReviewReply,{type Reply} from './BookReviewReply';
 
-export type Review={_id:string;isTestData?:boolean;sourceExcerpt?:{platform:string;author:string;url:string;publishedAt?:string;kind?:'excerpt'|'paraphrase'};rating:number;content:string;createdAt:string;user:{_id:string;id?:string;username:string;avatar?:string;avatarColor?:string}};
+export type Review={_id:string;replyCount?:number;replyPreview?:Reply|null;isTestData?:boolean;sourceExcerpt?:{platform:string;author:string;url:string;publishedAt?:string;kind?:'excerpt'|'paraphrase'};rating:number;content:string;createdAt:string;user:{_id:string;id?:string;username:string;avatar?:string;avatarColor?:string}};
 
-export default function BookReviewList({bookId,reviews,userId,compact=false}:{bookId:string;reviews:Review[];userId:string;compact?:boolean}) {
+export default function BookReviewList({bookId,reviews,userId,compact=false,onReply,onViewReplies}:{bookId:string;reviews:Review[];userId:string;compact?:boolean;onReply?:(review:Review)=>void;onViewReplies?:(review:Review)=>void}) {
   const router=useRouter();
   const feedback=useReviewReactions(bookId,reviews.map(row=>row._id).join(','),userId);
   return <>
@@ -34,6 +35,7 @@ export default function BookReviewList({bookId,reviews,userId,compact=false}:{bo
               <p className="book-review-content">{displayReviewContent(review)}</p>
               <footer className="book-review-footer">
                 <time dateTime={review.createdAt} title={review.createdAt.slice(0,10)}>{review.createdAt.slice(0,4)===String(new Date().getFullYear())?review.createdAt.slice(5,10):review.createdAt.slice(0,10)}</time>
+                {onReply&&<button type="button" className="book-review-reply-action" onClick={()=>onReply(review)}>回复</button>}
                 <div className="book-review-reactions" role="group" aria-label="评论反馈">
                   {(['like','dislike'] as const).map(choice=>{
                     const label=choice==='like'?'喜欢':'不喜欢',count=(choice==='like'?row?.likes:row?.dislikes)||0,active=row?.reaction===choice,Icon=choice==='like'?Heart:HeartCrack;
@@ -42,6 +44,10 @@ export default function BookReviewList({bookId,reviews,userId,compact=false}:{bo
                   })}
                 </div>
               </footer>
+              {onViewReplies&&Boolean(review.replyCount)&&<div className="book-review-reply-preview">
+                {review.replyPreview&&<BookReviewReply reply={review.replyPreview}/>}
+                {(review.replyCount||0)>1&&<button type="button" className="book-review-view-replies" onClick={()=>onViewReplies(review)}>查看 {review.replyCount} 条回复<ChevronRight size={15} aria-hidden="true"/></button>}
+              </div>}
             </div>
           </div>
         </article>;

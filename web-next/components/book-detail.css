@@ -163,6 +163,36 @@
 .book-review-error { margin:8px 0; font-size:13px; color:#a34747; }
 .book-review-error button { text-decoration:underline; }
 .book-review-loading { padding:24px 0; text-align:center; color:var(--home-muted,#9a9388); font-size:14px; line-height:24px; }
+.book-review-skeleton { display:flex; flex-direction:column; gap:28px; width:100%; padding:4px 0 12px; }
+.book-review-skeleton-row { display:flex; gap:12px; }
+.book-review-skeleton-row>div { flex:1; min-width:0; }
+.book-review-skeleton i { display:block; background:linear-gradient(100deg,#ebe6df 20%,#f5f1eb 45%,#ebe6df 70%); background-size:220% 100%; animation:book-review-shimmer 1.6s ease-in-out infinite; border-radius:5px; }
+.book-review-skeleton .book-review-skeleton-avatar { flex-shrink:0; width:32px; height:32px; border-radius:50%; }
+.book-review-skeleton-name { width:90px; height:16px; margin:5px 0 17px; }
+.book-review-skeleton-line { width:100%; height:13px; margin-bottom:12px; }
+.book-review-skeleton-line.short { width:72%; }
+.book-review-skeleton-date { width:65px; height:10px; margin-top:17px; }
+@keyframes book-review-shimmer { to { background-position:-220% 0; } }
+.book-review-reply-action { flex-shrink:0; min-height:32px; padding:2px 3px; margin-left:2px; color:#817567; cursor:pointer; font-size:13px; }
+.book-review-reply-action:focus-visible,.book-review-view-replies:focus-visible { outline:2px solid #936139; outline-offset:2px; border-radius:6px; }
+.book-review-reply-preview { margin-top:14px; }
+.book-review-reply { display:flex; align-items:flex-start; gap:10px; }
+.book-review-reply .book-review-body { flex:1; }
+.book-review-reply-preview .book-review-avatar { width:26px; height:26px; }
+.book-review-reply-preview .book-review-name { font-size:14px; }
+.book-review-reply-preview .book-review-content { font-size:15px; line-height:25px; }
+.book-review-reply-preview .book-review-footer time { font-size:12px; }
+.book-review-view-replies { display:inline-flex; align-items:center; gap:10px; min-height:34px; max-width:100%; margin:10px 0 0; padding:4px 12px; border-radius:18px; background:#f1ede7; color:#82715e; font-size:13px; cursor:pointer; }
+.book-review-thread { padding-top:18px; }
+.book-review-thread-parent { margin-bottom:22px; padding-bottom:20px; border-bottom:6px solid #f3efe9; }
+.book-review-thread h3 { font-size:15px; font-weight:500; margin:0 0 22px; }
+.book-review-thread h3 small { font-size:14px; color:#938779; margin-left:5px; }
+.book-review-thread-list { display:flex; flex-direction:column; gap:26px; }
+.book-review-reply-composer .book-review-compose-bar { align-items:center; gap:7px; }
+.book-review-reply-composer .book-review-compose-send { min-height:40px; flex-shrink:0; }
+.book-review-reply-cancel { display:grid; place-items:center; flex-shrink:0; min-width:32px; height:40px; color:#938779; cursor:pointer; }
+@media(max-width:360px) { .book-review-reactions { gap:10px; } .book-review-sheet-body { padding-inline:16px; } .book-review-footer { gap:5px; } }
+@media(prefers-reduced-motion:reduce) { .book-review-skeleton i { animation:none; } }
 @media(hover:hover) {
   .book-review-reactions button:not(:disabled):hover { color:#d84b55; background:#fff5f5; }
 }
@@ -253,6 +283,14 @@
 }
 .book-share { position:absolute; top:0; right:0; width:44px; height:44px; }
 .book-share-toggle { border:0; background:transparent; cursor:pointer; }
+.book-share-reminder { position:absolute; top:51px; right:4px; z-index:3; display:flex; align-items:center; width:max-content; max-width:calc(100vw - 32px); padding:5px 5px 5px 14px; border:1px solid #e7d5b9; border-radius:15px; background:#fff6e7; color:#775a35; box-shadow:0 6px 24px #49361e1c; animation:book-share-reminder-in .3s ease-out; transform-origin:calc(100% - 17px) top; font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif; }
+.book-share-reminder::before { content:''; position:absolute; top:-6px; right:12px; width:10px; height:10px; background:#fff6e7; border-top:1px solid #e7d5b9; border-left:1px solid #e7d5b9; transform:rotate(45deg); }
+.book-share-reminder-message { min-height:34px; font-size:13px; line-height:22px; white-space:nowrap; cursor:pointer; }
+.book-share-reminder-message span { display:inline-block; margin-left:3px; font-size:17px; }
+.book-share-reminder-close { display:grid; place-items:center; width:30px; height:34px; margin-left:6px; color:#a18c70; cursor:pointer; }
+@keyframes book-share-reminder-in { from { opacity:0; transform:translateY(-5px) scale(.94); } to { opacity:1; transform:none; } }
+@media(min-width:768px) { .book-share-reminder { display:none; } }
+@media(prefers-reduced-motion:reduce) { .book-share-reminder { animation:none; } }
 .book-share-panel { position:absolute; z-index:2; top:50px; right:8px; width:min(360px,calc(100vw - 24px)); max-height:calc(100vh - 84px - env(safe-area-inset-top)); max-height:calc(100dvh - 84px - env(safe-area-inset-top)); overflow-y:auto; overscroll-behavior:contain; padding:8px 14px 10px; border:1px solid #e8e2d7; border-radius:18px; background:#fffdf9; color:#332f2a; box-shadow:0 12px 42px #17141130; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; visibility:hidden; opacity:0; pointer-events:none; transform:scale(.18); transform-origin:calc(100% - 14px) -28px; transition:transform 400ms cubic-bezier(.22,.7,.25,1),opacity 400ms ease,visibility 0s 400ms; }
 .book-share-panel[data-open=true] { visibility:visible; opacity:1; pointer-events:auto; transform:scale(1); transition-delay:0s; }
 .book-share-panel header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px; }
