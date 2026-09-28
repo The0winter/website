@@ -41,8 +41,8 @@ test('share reminder is white, compact and still opens sharing',async({page},inf
   await page.goBack();await expect(page).toHaveURL(detail);await expect(page.getByRole('dialog',{name:'分享这本书'})).toBeHidden();
 });
 
-for(const width of [390,1440]) test(`detail entry uses the shared skeleton and small central brand at ${width}`,async({page},info)=>{
-  await page.setViewportSize({width,height:844});await page.goto(base+'/search?q='+encodeURIComponent(query));
+for(const [width,height] of [[320,667],[390,844],[430,932],[1440,900]]) test(`detail entry leaves natural space around the shared loading brand at ${width}`,async({page},info)=>{
+  await page.setViewportSize({width,height});await page.goto(base+'/search?q='+encodeURIComponent(query));
   let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
   await page.route(`**/book/${book}?_rsc=*`,async route=>{await gate;await route.continue();});
   try{
@@ -51,9 +51,16 @@ for(const width of [390,1440]) test(`detail entry uses the shared skeleton and s
     await expect(shell.locator('.book-loading-cover')).toBeVisible();
     const brand=shell.locator('.book-loading-brand');await expect(brand.locator('img')).toHaveCSS('width','28px');
     await expect(brand).toHaveCSS('font-size','14px');
+    await expect(brand).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+    await expect(brand).toHaveCSS('box-shadow','none');
     await expect.poll(async()=>Math.abs((await brand.boundingBox())!.x+(await brand.boundingBox())!.width/2-width/2)).toBeLessThan(1);
-    const box=(await brand.boundingBox())!;expect(Math.abs(box.y+box.height/2-422)).toBeLessThan(1);
-    await page.screenshot({path:info.outputPath(`final-loading-${width}.png`)});
+    const box=(await brand.boundingBox())!;
+    const introduction=(await shell.locator('.book-loading-intro>.book-loading-paragraph').boundingBox())!;
+    const review=(await shell.locator('.book-loading-review').first().boundingBox())!;
+    expect(box.y-introduction.y-introduction.height).toBeGreaterThanOrEqual(20);
+    expect(review.y-box.y-box.height).toBeGreaterThanOrEqual(20);
+    expect(box.y+box.height).toBeLessThan(height-72);
+    await page.screenshot({path:info.outputPath(`final-loading-${width}.png`),animations:'disabled'});
     release();await expect(page.locator('.book-detail:visible')).toHaveAttribute('data-book-id',book);
     await expect(page.locator('.book-navigation-loading')).toHaveCount(0);
   }finally{release();}
