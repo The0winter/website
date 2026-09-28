@@ -23,11 +23,14 @@ export default function BookShelf({books, title}: {books: Book[]; title: string}
       return <BookLink className="mh-shelf-book" key={book.id} href={`/book/${book.id}`}>
         <div className="mh-shelf-cover">
           <ShelfCover book={book}/>
+        </div>
+        <h3>{book.title}</h3>
+        <div className="mh-shelf-meta">
+          <p>{book.category?.split('>').pop() || '综合'}</p>
           <span className="mh-book-rating" data-nosnippet="" data-rated={score !== '暂无评分'} aria-label={`评分：${ratingLabel(book.rating)}`} title={ratingLabel(book.rating)}>
             <Star aria-hidden="true"/>{score === '暂无评分' ? '—' : score}
           </span>
         </div>
-        <h3>{book.title}</h3><p>{book.category?.split('>').pop() || '综合'}</p>
       </BookLink>;
     })}
   </div>;
