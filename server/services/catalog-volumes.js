@@ -52,14 +52,47 @@ export const bookCatalog = versionedBookCache(async (bookId, version) => {
 {name: 'catalog', maxEntries: 512, maxBytes: 8 * 1024 * 1024});
 
 export const CATALOG_PAGE_SIZE = 256;
-const catalogPage = versionedBookCache(async (key, version) => {
+const pendingPages = new WeakMap();
+function loadCatalogPage(key, version) {
   const [bookId, page] = key.split(':');
-  const chapters = await Chapter.find({bookId, deletedAt: null}).select('_id title chapter_number')
-    .sort({chapter_number: 1}).skip(Number(page) * CATALOG_PAGE_SIZE).limit(CATALOG_PAGE_SIZE)
-    .batchSize(CATALOG_PAGE_SIZE).setOptions({singleBatch: true}).maxTimeMS(3000).lean();
-  await verifyBookVersion(bookId, version);
-  return chapters.map(chapter => ({id: String(chapter._id), title: chapter.title, chapter_number: chapter.chapter_number}));
-}, rows => rows.reduce((bytes, row) => bytes + 256 + 2 * row.title.length, 256),
+  const db = mongoose.connection.db, groupKey = `${bookId}:${version}`;
+  let groups = pendingPages.get(db);
+  if (!groups) {groups = new Map(); pendingPages.set(db, groups);}
+  let pages = groups.get(groupKey);
+  if (!pages) {
+    pages = new Map(); groups.set(groupKey, pages);
+    // Cache fixed pages independently, but read adjacent misses in one command.
+    // Coalesce this turn's readers without downloading gaps between their views.
+    queueMicrotask(async () => {
+      groups.delete(groupKey);
+      const ranges = [];
+      for (const index of [...pages.keys()].sort((a, b) => a - b)) {
+        const range = ranges.at(-1);
+        if (range && index === range.at(-1) + 1 && range.length < 8) range.push(index);
+        else ranges.push([index]);
+      }
+      try {
+        const results = await Promise.all(ranges.map(async range => {
+          const limit = range.length * CATALOG_PAGE_SIZE;
+          const chapters = await Chapter.find({bookId, deletedAt: null}).select('_id title chapter_number')
+            .sort({chapter_number: 1}).skip(range[0] * CATALOG_PAGE_SIZE).limit(limit)
+            .batchSize(limit).setOptions({singleBatch: true}).maxTimeMS(3000).lean();
+          return {range, rows: chapters.map(chapter => ({id: String(chapter._id), title: chapter.title, chapter_number: chapter.chapter_number}))};
+        }));
+        await verifyBookVersion(bookId, version);
+        for (const {range, rows} of results) range.forEach((index, i) => {
+          const pageRows = rows.slice(i * CATALOG_PAGE_SIZE, (i + 1) * CATALOG_PAGE_SIZE);
+          for (const waiter of pages.get(index)) waiter.resolve(pageRows);
+        });
+      } catch (error) {for (const waiters of pages.values()) for (const waiter of waiters) waiter.reject(error);}
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const index = Number(page), waiters = pages.get(index) ?? [];
+    waiters.push({resolve, reject}); pages.set(index, waiters);
+  });
+}
+const catalogPage = versionedBookCache(loadCatalogPage, rows => rows.reduce((bytes, row) => bytes + 256 + 2 * row.title.length, 256),
 {name: 'catalogPages', maxEntries: 512, maxBytes: 32 * 1024 * 1024});
 
 const anchorPosition = versionedBookCache(async (key, version) => {
@@ -71,21 +104,19 @@ const anchorPosition = versionedBookCache(async (key, version) => {
 }, () => 256, {name: 'catalogAnchors', maxEntries: 2048, maxBytes: 1024 * 1024});
 
 export async function readCatalogWindow(bookId, version, {anchor, offset: requestedOffset, limit}) {
-  const summary = bookCatalog(bookId, version);
   const reading = bookReadingIndex.peek(bookId, version);
   // Opening from a book/reader normally reuses the already warm position index.
   // Direct catalog requests count to their anchor without downloading all IDs.
   const position = anchor ? (reading ? reading.then(index => index.indices.get(anchor.toLowerCase()) ?? null)
     : anchorPosition(`${bookId}:${anchor.toLowerCase()}`, version)) : Promise.resolve(null);
-  const window = (async () => {
-    const activeIndex = await position;
-    const total = reading ? (await reading).ids.length : (await summary).total;
-    const offset = anchor ? (activeIndex === null || total <= limit ? 0 : Math.max(0, activeIndex - Math.floor(limit / 2))) : Math.min(requestedOffset, total);
-    const end = Math.min(total, offset + limit), first = Math.floor(offset / CATALOG_PAGE_SIZE);
-    const pages = await Promise.all(Array.from({length: end <= offset ? 0 : Math.ceil(end / CATALOG_PAGE_SIZE) - first},
-      (_, i) => catalogPage(`${bookId}:${first + i}`, version)));
-    return {offset, activeIndex, rows: pages.flat().slice(offset % CATALOG_PAGE_SIZE, offset % CATALOG_PAGE_SIZE + end - offset)};
-  })();
-  const [catalog, rows] = await Promise.all([summary, window]);
-  return {...catalog, ...rows, version: String(version)};
+  const [catalog, activeIndex] = await Promise.all([bookCatalog(bookId, version), position]);
+  const {total} = catalog;
+  const offset = anchor ? (activeIndex === null || total <= limit ? 0 : Math.max(0, activeIndex - Math.floor(limit / 2))) : Math.min(requestedOffset, total);
+  const end = Math.min(total, offset + limit), first = Math.floor(offset / CATALOG_PAGE_SIZE);
+  // Reuse the summary query's connection for a cold title window instead of
+  // opening extra Atlas connections for individual pages on the critical path.
+  const pages = await Promise.all(Array.from({length: end <= offset ? 0 : Math.ceil(end / CATALOG_PAGE_SIZE) - first},
+    (_, i) => catalogPage(`${bookId}:${first + i}`, version)));
+  return {...catalog, offset, activeIndex, version: String(version),
+    rows: pages.flat().slice(offset % CATALOG_PAGE_SIZE, offset % CATALOG_PAGE_SIZE + end - offset)};
 }

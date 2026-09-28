@@ -36,11 +36,18 @@ test('Atlas cold catalog sends bounded title pages and compact volumes, includin
     const bytes = replies.reduce((sum, reply) => sum + mongoose.mongo.BSON.calculateObjectSize(reply), 0);
     assert.ok(bytes < 160000, `${bytes} BSON bytes`);
     for (const command of finds.filter(command => command.projection?.title)) {
-      assert.equal(command.limit, 256); assert.equal(command.singleBatch, true);
+      assert.ok(command.limit <= 2048); assert.equal(command.singleBatch, true);
     }
+    assert.equal(finds.filter(command => command.projection?.title).length, 1, 'adjacent misses share one database command');
     const count = replies.length;
     assert.deepEqual(await readCatalogWindow(id, '0', {anchor, offset: 0, limit: 401}), result);
     assert.equal(replies.length, count, 'warm window reuses the summary, anchor and title pages');
+    const previousFinds = finds.length;
+    const [head, tail] = await Promise.all([readCatalogWindow(id, '0', {offset: 0, limit: 128}), readCatalogWindow(id, '0', {offset: 9500, limit: 128})]);
+    assert.equal(head.rows[0].id, String(live[0]._id)); assert.equal(tail.rows[0].id, String(live[9500]._id));
+    const distant = finds.slice(previousFinds).filter(command => command.projection?.title);
+    assert.equal(distant.length, 2, 'separate views must never cause a query across the intervening chapters');
+    assert.ok(distant.every(command => command.limit === 256));
     const all = [];
     for (let offset = 0; offset < live.length; offset += 2048) all.push(...(await readCatalogWindow(id, '0', {offset, limit: 2048})).rows);
     assert.deepEqual(all.map(row => row.id), live.map(row => String(row._id)), 'paging visits every live chapter exactly once');

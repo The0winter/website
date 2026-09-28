@@ -59,7 +59,7 @@ test('200 chapter reads share one order index; catalogs rebuild only after publi
     const anchor = String(chapters[200]._id);
     const first = await get(path + `/catalog?anchor=${anchor}`);
     assert.equal(first.activeIndex, 199); assert.equal(first.total, 500);
-    assert.equal(commands.filter(({sql}) => sql.includes('FROM "chapters"')).length, 3, 'one local volume summary and two bounded title pages');
+    assert.equal(commands.filter(({sql}) => sql.includes('FROM "chapters"')).length, 2, 'one local volume summary and one coalesced title window');
     commands.length = 0;
     now += 24 * 3600_000;
     await Promise.all(Array.from({length: 10}, () => get(path + `/catalog?anchor=${anchor}&version=0`)));
