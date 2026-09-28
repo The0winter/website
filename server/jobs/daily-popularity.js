@@ -7,6 +7,7 @@ import Daily from '../models/ReadDaily.js';
 import {dayKey} from '../services/content.js';
 import {connectDatabase} from '../database/index.js';
 import {ensureDailyFeatured} from '../services/daily-featured.js';
+import {allowsAutomaticStatistics, promotionWindow} from '../services/book-promotion-policy.js';
 
 const validDay = day => /^\d{4}-\d{2}-\d{2}$/.test(day || '') && new Date(day + 'T00:00:00Z').toISOString().slice(0, 10) === day;
 const nextDay = day => new Date(Date.parse(day + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
@@ -65,9 +66,13 @@ export async function seedDailyPopularity({startDay, now = new Date(), apply = f
   const previewById = new Map(previewRows.map(row => [row._id, row]));
   const report = {day: today, startDay, mode: apply ? 'apply' : 'preview', books: books.length, added: 0, views: 0, pendingBooks: 0, refreshed: 0};
   for (const candidate of books) {
+    // Expired works do not backfill missed days or restart after re-publication.
+    if (!allowsAutomaticStatistics(candidate, now)) continue;
+    const lastDay = promotionWindow(candidate)?.lastDay;
+    const through = lastDay && lastDay < today ? lastDay : today;
     let day = firstMissingDay(candidate, startDay), days = 0;
     // Bound recovery work. Subsequent hourly runs continue from the checkpoint.
-    for (; day <= today && days < 31; day = nextDay(day), days++) {
+    for (; day <= through && days < 31; day = nextDay(day), days++) {
       if (shouldStop()) throw Object.assign(Error('Daily popularity paused'), {name: 'AbortError'});
       if (!apply) {
         const row = previewById.get(`${candidate._id}:${day}`);
@@ -76,7 +81,8 @@ export async function seedDailyPopularity({startDay, now = new Date(), apply = f
       }
       const added = await mongoose.connection.transaction(async session => {
         const book = await Book.findById(candidate._id).session(session);
-        if (!book || book.deletedAt || book.visibility === 'private' || firstMissingDay(book, startDay) > day) return null;
+        if (!book || book.deletedAt || book.visibility === 'private' || !allowsAutomaticStatistics(book, now)
+          || (promotionWindow(book)?.lastDay && day > promotionWindow(book).lastDay) || firstMissingDay(book, startDay) > day) return null;
         await Book.updateOne({_id: book._id}, {$inc: {milestoneVersion: 1}}, {session, timestamps: false});
         const id = `${book._id}:${day}`, existing = await Daily.findById(id).session(session);
         let views = 0, initialized = false;
@@ -95,7 +101,7 @@ export async function seedDailyPopularity({startDay, now = new Date(), apply = f
       });
       if (added?.initialized) {report.added++; report.views += added.views;}
     }
-    if (day <= today) report.pendingBooks++;
+    if (day <= through) report.pendingBooks++;
   }
   if (apply) report.refreshed = await refreshBookPeriods(now, shouldStop);
   return report;

@@ -250,12 +250,7 @@ export default function HomePageClient({
     if (pathname === '/') return scheduleBookDetailCodeWarmup();
   }, [pathname]);
   const allBooks = initialBooks;
-  const featuredBooks = useMemo(() => {
-    if (initialFeaturedBooks.length > 0) return initialFeaturedBooks.slice(0, 3);
-    return [...initialBooks]
-      .sort((a: Book, b: Book) => (b.views || 0) - (a.views || 0))
-      .slice(0, 3);
-  }, [initialBooks, initialFeaturedBooks]);
+  const featuredBooks = initialFeaturedBooks.slice(0, 3);
   const [selectedCategory, setSelectedCategory] = useState('all'); 
   const [loading, setLoading] = useState(false);
   const [categoryBooks, setCategoryBooks] = useState(initialBooks);
@@ -378,11 +373,7 @@ export default function HomePageClient({
   }; 
 
   const { recList, weekList, dayList } = useMemo(() => {
-    const rec = initialRecommendedBooks.length ? initialRecommendedBooks : [...allBooks].sort((a: Book, b: Book) => {
-        const scoreA = ((a.rating || 0) * 100 * 0.6) + ((a.weekly_views || 0) * 0.4);
-        const scoreB = ((b.rating || 0) * 100 * 0.6) + ((b.weekly_views || 0) * 0.4);
-        return scoreB - scoreA;
-    }).slice(0, 5);
+    const rec = initialRecommendedBooks.slice(0, 5);
 
     const week = initialWeekRankBooks.length > 0
       ? initialWeekRankBooks.slice(0, 5)

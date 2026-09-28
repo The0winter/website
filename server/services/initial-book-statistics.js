@@ -3,6 +3,7 @@ import Book from '../models/Book.js';
 import Bookmark from '../models/Bookmark.js';
 import Review from '../models/Review.js';
 import {ratingSummary} from './book-statistics.js';
+import {allowsAutomaticStatistics} from './book-promotion-policy.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const noise = (book, field) => crypto.createHash('sha256').update(`book-baseline-v1\0${book._id}\0${field}`).digest().readUInt32BE() / 0x100000000;
@@ -26,12 +27,13 @@ function needsBase(seed) {
   return !seed || seed.source === 'rating-samples-v1' || !validCount(seed.views) || !validCount(seed.favorites);
 }
 
-export function needsBookStatistics(book) {
-  return !book.deletedAt && book.visibility !== 'private' && (needsBase(book.statisticsSeed) || !validVotes(book.statisticsSeed?.ratingSample?.votes));
+export function needsBookStatistics(book, {now = new Date()} = {}) {
+  return !book.deletedAt && book.visibility !== 'private' && allowsAutomaticStatistics(book, now)
+    && (needsBase(book.statisticsSeed) || !validVotes(book.statisticsSeed?.ratingSample?.votes));
 }
 
 export function initialStatisticsPlan(book, {favorites = 0, readerAverage = 0, readerCount = 0, comments = 0, now = new Date(), runId = `book-baseline-v1:${book._id}`} = {}) {
-  if (!needsBookStatistics(book)) return null;
+  if (!needsBookStatistics(book, {now})) return null;
   const target = baselineTargets(book);
   const previous = book.statisticsSeed?.toObject?.() || book.statisticsSeed;
   const missingBase = needsBase(previous);
@@ -59,7 +61,7 @@ export function initialStatisticsPlan(book, {favorites = 0, readerAverage = 0, r
 // Call within the upload/publication transaction. Missing data and new chapters
 // commit together; a conflict or a retry cannot leave or duplicate a baseline.
 export async function ensureBookStatistics(book, {session, writeAudit, runId, now = new Date()} = {}) {
-  if (!needsBookStatistics(book)) return false;
+  if (!needsBookStatistics(book, {now})) return false;
   if (!session?.inTransaction()) throw Error('Statistics initialization requires the book transaction');
   await Book.updateOne({_id:book._id}, {$inc:{milestoneVersion:1}}, {session, timestamps:false});
   const [stats] = await Review.aggregate([{$match:{book:book._id,isTestData:{$ne:true}}}, {$group:{_id:null, average:{$avg:'$rating'}, count:{$sum:1}}}]).session(session);

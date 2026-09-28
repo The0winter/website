@@ -18,6 +18,7 @@ import {dayKey,fail} from '../services/content.js';
 import {rankedBooks,rankingViewFields} from '../services/ranking.js';
 import {discoveryBooks} from '../services/discovery.js';
 import {dailyFeaturedBooks} from '../services/daily-featured.js';
+import {homeRecommendationFilter} from '../services/book-promotion-policy.js';
 import {readBookIndex} from '../services/book-reading-index.js';
 import {bookMilestones, recordBookMilestones} from '../services/book-milestones.js';
 
@@ -52,7 +53,7 @@ export function readingRoutes(app,auth) {
     const {orderBy='views',order='desc',author_id,q,category}=req.query;
     if(!['views','weekly_views','daily_views','monthly_views','updatedAt','createdAt','rating','composite','discovery','featured_daily',...Object.keys(rankingViewFields)].includes(orderBy)||!['asc','desc'].includes(order))fail(400,'排序参数无效');
     const limit=integer(req.query.limit,20,100),page=integer(req.query.page,1,100000);
-    const filter={deletedAt:null,...publicWork};
+    const filter={deletedAt:null,...publicWork,...(req.query.recommendation==='home'?homeRecommendationFilter:{})};
     if(author_id){if(typeof author_id!=='string'||!/^[a-f0-9]{24}$/i.test(author_id))fail(400,'作者ID无效');filter.$and=[{$or:[{author_id:new mongoose.Types.ObjectId(author_id)},{author_profile_id:new mongoose.Types.ObjectId(author_id)}]}];}
     if(category)filter.category=String(category).slice(0,80);
     if(q){if(typeof q!=='string'||q.length>100)fail(400,'搜索关键词过长');const escaped=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');filter.$or=[{title:{$regex:escaped,$options:'i'}},{author:{$regex:escaped,$options:'i'}}];}

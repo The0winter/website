@@ -1,11 +1,12 @@
 import {createHash} from 'node:crypto';
 import Book from '../models/Book.js';
 import {dayKey} from './content.js';
+import {homeRecommendationFilter, isDoubanChineseTop100} from './book-promotion-policy.js';
 
 // The raw-view order (including its ID tie-break) matches the browsing chart.
 // Prefer the entire long tail before using popular books to fill a small library.
 export function selectDiscoveryBooks(books, limit = 57, now = new Date()) {
-  const ranked = [...new Map(books.map(book => [String(book._id), book])).values()]
+  const ranked = [...new Map(books.filter(book => !isDoubanChineseTop100(book)).map(book => [String(book._id), book])).values()]
     .sort((a, b) => (b.views || 0) - (a.views || 0) || String(a._id).localeCompare(String(b._id)));
   const day = dayKey(now), dayStart = new Date(`${day}T00:00:00+08:00`).getTime();
   const categories = new Map(), authors = new Map(), selected = [];
@@ -36,7 +37,8 @@ export async function discoveryBooks(filter, skip, limit, now = new Date(), proj
   // Rotation only needs these small fields. Fetch descriptions/audit history
   // for the requested page, rather than transferring them for the whole library.
   // A bounded metadata batch avoids the default 101-row first-batch round trip.
-  const books = await Book.find(filter).select('_id views rating lastUpdated updatedAt category author')
+  filter = {$and: [filter, homeRecommendationFilter]};
+  const books = await Book.find(filter).select('_id title views rating lastUpdated updatedAt category author')
     .batchSize(1000).maxTimeMS(3000).lean();
   // Discovery is a finite feed, not an unbounded ranking page.
   const feed = selectDiscoveryBooks(books, 59, now);

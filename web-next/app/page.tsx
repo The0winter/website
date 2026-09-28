@@ -57,16 +57,16 @@ export default async function Page() {
   // 并行拉取首页所需的各个板块数据，极大提高 SSR 渲染速度 [cite: 35]
   const [allBooks, featuredBooks, weekRankBooks, dayRankBooks, recentBooks, recommendedBooks, discoveryBooks, bannerBooks] = await Promise.all([
     fetchBooks(),
-    fetchBooks({ orderBy: 'views', order: 'desc', limit: '3' }),
+    fetchBooks({ orderBy: 'views', order: 'desc', limit: '3', recommendation: 'home' }),
     fetchBooks({ orderBy: 'weekly_views', order: 'desc', limit: '5' }),
     fetchBooks({ orderBy: 'daily_views', order: 'desc', limit: '5' }),
     fetchBooks({ orderBy: 'updatedAt', order: 'desc', limit: '12' }),
-    fetchBooks({ orderBy: 'composite', order: 'desc', limit: '5' }),
+    fetchBooks({ orderBy: 'composite', order: 'desc', limit: '5', recommendation: 'home' }),
     fetchBooks({ orderBy: 'discovery', limit: '59' }),
     fetchBooks({ orderBy: 'featured_daily', limit: '3' }),
   ]);
 
-  const seoRecommendedBooks = (featuredBooks.length > 0 ? featuredBooks : allBooks).slice(0, 12);
+  const seoRecommendedBooks = featuredBooks.slice(0, 12);
   const seoRecentBooks = (recentBooks.length > 0 ? recentBooks : allBooks).slice(0, 12);
 
   return (
