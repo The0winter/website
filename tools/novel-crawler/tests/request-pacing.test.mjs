@@ -26,13 +26,13 @@ function simulate(adaptive, responseMs = 20, delayMs = 2000) {
 test('healthy serial requests accelerate within the floor; slow or default clients do not', () => {
   const fixed = simulate(false), adaptive = simulate(true);
   assert.equal(adaptive.intervals[0], 2000);
-  assert.ok(adaptive.intervals.every(ms => ms >= 500 && ms <= 2000));
-  assert.equal(adaptive.intervals.at(-1), 500);
-  assert.ok(adaptive.time < fixed.time / 3);
+  assert.ok(adaptive.intervals.every(ms => ms >= 1000 && ms <= 2000));
+  assert.equal(adaptive.intervals.at(-1), 1000);
+  assert.ok(adaptive.time < fixed.time / 1.8);
   assert.ok(fixed.intervals.every(ms => ms === 2000));
   assert.ok(simulate(true, 1200).intervals.every(ms => ms === 2000));
   assert.ok(simulate(true, 20, 200).intervals.every(ms => ms === 200));
-  assert.equal(simulate(true, 20, 4000).intervals.at(-1), 1000);
+  assert.equal(simulate(true, 20, 4000).intervals.at(-1), 2000);
 });
 
 test('source cooldown and conservative recovery survive changing books and options', () => {
@@ -40,7 +40,7 @@ test('source cooldown and conservative recovery survive changing books and optio
   const clock = {}, options = {clock, delayMs: 2000, adaptive: true, now: () => time};
   const first = requestPacing(options);
   for (let i = 0; i < 80; i++) first.succeeded(20);
-  assert.equal(first.spacing(true), 500);
+  assert.equal(first.spacing(true), 1000);
   assert.equal(first.spacing(), 2000); // Browser navigation remains conservative.
   const fixed = requestPacing({...options, adaptive: false});
   assert.equal(fixed.spacing(true), 2000);

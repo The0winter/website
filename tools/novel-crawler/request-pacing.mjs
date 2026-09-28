@@ -26,7 +26,7 @@ export function requestPacing({clock = {}, delayMs, adaptive = false, now = Date
       if (elapsedMs > state.intervalMs / 2) { state.healthy = 0; return; }
       if (++state.healthy < 12) return;
       state.healthy = 0;
-      const floor = Math.min(clock.delayMs, Math.max(500, Math.ceil(clock.delayMs / 4)));
+      const floor = Math.min(clock.delayMs, Math.max(1000, Math.ceil(clock.delayMs / 2)));
       state.intervalMs = Math.max(floor, Math.ceil(state.intervalMs * 0.75));
     },
     failed() {
