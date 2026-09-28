@@ -281,11 +281,11 @@
 }
 .book-share { position:absolute; top:0; right:0; width:44px; height:44px; }
 .book-share-toggle { border:0; background:transparent; cursor:pointer; }
-.book-share-reminder { position:absolute; top:51px; right:4px; z-index:3; display:flex; align-items:center; width:max-content; max-width:calc(100vw - 32px); padding:5px 5px 5px 14px; border:1px solid #e7d5b9; border-radius:15px; background:#fff6e7; color:#775a35; box-shadow:0 6px 24px #49361e1c; animation:book-share-reminder-in .3s ease-out; transform-origin:calc(100% - 17px) top; font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif; }
-.book-share-reminder::before { content:''; position:absolute; top:-6px; right:12px; width:10px; height:10px; background:#fff6e7; border-top:1px solid #e7d5b9; border-left:1px solid #e7d5b9; transform:rotate(45deg); }
+.book-share-reminder { position:absolute; top:48px; right:4px; z-index:3; display:flex; align-items:center; width:max-content; max-width:calc(100vw - 32px); padding:1px 2px 1px 10px; border:1px solid #e8e3dd; border-radius:10px; background:#fff; color:#554c43; box-shadow:0 4px 14px #2d251514; animation:book-share-reminder-in .3s ease-out; transform-origin:calc(100% - 17px) top; font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif; }
+.book-share-reminder::before { content:''; position:absolute; top:-5px; right:12px; width:8px; height:8px; background:#fff; border-top:1px solid #e8e3dd; border-left:1px solid #e8e3dd; transform:rotate(45deg); }
 .book-share-reminder-message { min-height:34px; font-size:13px; line-height:22px; white-space:nowrap; cursor:pointer; }
 .book-share-reminder-message span { display:inline-block; margin-left:3px; font-size:17px; }
-.book-share-reminder-close { display:grid; place-items:center; width:30px; height:34px; margin-left:6px; color:#a18c70; cursor:pointer; }
+.book-share-reminder-close { display:grid; place-items:center; width:28px; height:34px; margin-left:3px; color:#958b81; cursor:pointer; }
 @keyframes book-share-reminder-in { from { opacity:0; transform:translateY(-5px) scale(.94); } to { opacity:1; transform:none; } }
 @media(min-width:768px) { .book-share-reminder { display:none; } }
 @media(prefers-reduced-motion:reduce) { .book-share-reminder { animation:none; } }

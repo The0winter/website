@@ -1,4 +1,9 @@
 .book-loading { --loading-block:#eae5dd; min-height:100vh; min-height:100dvh; padding-bottom:100px; background:#f7f5f2; }
+.book-loading-brand { position:fixed; z-index:1; top:50%; left:50%; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:8px; width:max-content; max-width:calc(100vw - 32px); padding:12px 18px; border-radius:12px; background:#fffdf9ed; color:#62564b; font:14px/1.8 Arial,"Microsoft YaHei",sans-serif; text-align:center; }
+.book-loading-brand p { margin:0; }
+.book-loading-retry { display:flex; justify-content:center; gap:12px; }
+.book-navigation-loading.book-navigation-skeleton { display:block; padding:0; background:#f7f5f2; text-align:initial; }
+.book-navigation-loading.book-navigation-skeleton>.book-loading { display:block; }
 .book-loading-hero { padding:calc(8px + env(safe-area-inset-top)) 16px 0; background:#303937; color:#fffaf0; --loading-block:#ffffff24; }
 .book-loading-nav { display:flex; align-items:center; justify-content:space-between; height:44px; margin-bottom:4px; }
 .book-loading-nav a { display:grid; place-items:center; width:44px; height:44px; margin-left:-8px; border-radius:8px; }

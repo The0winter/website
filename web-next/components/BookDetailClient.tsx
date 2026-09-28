@@ -20,7 +20,7 @@ import {displayRatingCount, formatRating, ratingLabel} from '@/lib/rating';
 import {compactCountParts} from '@/lib/compact-count';
 import {beginChapterEntry} from '@/lib/chapter-entry';
 import {lastReadChapter, serverLastReadChapter, subscribeReadingSession} from '@/lib/reading-session';
-import {openBookCatalog, closeBookCatalog, bookCatalogOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
+import {openBookCatalog, closeBookCatalog, bookCatalogOpen, openBookReviews, closeBookReviews, bookReviewsOpen, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import { useRouter } from 'next/navigation';
 import { BookOpen, Bookmark, BookmarkCheck, Loader2, Star, X, ChevronRight, ChevronDown, ChevronUp, PenLine } from 'lucide-react';
 import BookArticles from './BookArticles';
@@ -179,9 +179,18 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   // --- 评论相关状态 ---
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewCursor,setReviewCursor]=useState<string|null>(null);
-  const [reviewSheetOpen,setReviewSheetOpen]=useState(false);
+  const reviewSheetOpen=useSyncExternalStore(subscribeBookNavigation,()=>bookReviewsOpen(book.id),serverCatalogClosed);
+  const setReviewSheetOpen=(open:boolean)=>open?openBookReviews(book.id):closeBookReviews();
   const [reviewReplyTarget,setReviewReplyTarget]=useState<Review|null>(null),[reviewThread,setReviewThread]=useState<Review|null>(null);
   const [reactionRefresh,setReactionRefresh]=useState(0);
+  useEffect(()=>{
+    let wasOpen=bookReviewsOpen(book.id);
+    return subscribeBookNavigation(()=>{
+      const open=bookReviewsOpen(book.id);
+      if(wasOpen&&!open){setReviewReplyTarget(null);setReviewThread(null);setReactionRefresh(value=>value+1);}
+      wasOpen=open;
+    });
+  },[book.id]);
   const [reviewTotal,setReviewTotal]=useState(book.numReviews ?? 0);
   const [reviewRefresh,setReviewRefresh]=useState(0);
   const [reviewResult,setReviewResult]=useState<{key:string;error:string}|null>(null);
@@ -544,7 +553,7 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
             {reviewTotal>0 && <button className="book-review-view-all" aria-haspopup="dialog" onClick={()=>setReviewSheetOpen(true)}><span>查看全部评论<ChevronRight size={16}/></span></button>}
             {reviewSheetOpen && <BookReviewSheet key={book.id} bookId={book.id} userId={userId} preview={reviewsLoading||reviewError?[]:reviews} cursor={reviewsLoading||reviewError?'':reviewCursor} total={reviewTotal}
               initialReply={reviewReplyTarget} initialThread={reviewThread}
-              onClose={()=>{setReviewSheetOpen(false);setReviewReplyTarget(null);setReviewThread(null);setReactionRefresh(value=>value+1);}}
+              onClose={closeBookReviews}
               personalReview={myReview} personalLoading={authLoading||personalLoading} personalError={personalError} onRetryPersonal={()=>setReviewRefresh(value=>value+1)}
               onSaved={()=>{setReviewRefresh(value=>value+1);setReactionRefresh(value=>value+1);setShowReviewForm(false);}}/>}
             </div>

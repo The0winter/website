@@ -7,6 +7,7 @@ import {installMobileRootHistory} from '@/lib/mobile-root-history';
 import {installMobileHomePosition, syncMobileHomePosition} from '@/lib/mobile-home-position';
 import './book-navigation.css';
 import ChapterLoadingPage from './ChapterLoadingPage';
+import BookLoadingShell from './BookLoadingShell';
 import {isReaderPath, releaseReaderFullscreen} from '@/lib/reader-fullscreen';
 
 export default function BookNavigation() {
@@ -24,5 +25,5 @@ export default function BookNavigation() {
     if (pathname === location.pathname) syncMobileHomePosition(pathname + (search ? `?${search}` : ''));
     if (pathname === location.pathname && !isReaderPath(pathname)) void releaseReaderFullscreen();
   }, [pathname]);
-  return <ChapterLoadingPage/>;
+  return <><ChapterLoadingPage/><div id="book-loading-template" hidden inert aria-hidden="true"><BookLoadingShell/></div></>;
 }

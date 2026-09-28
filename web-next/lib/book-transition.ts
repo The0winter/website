@@ -1,4 +1,5 @@
 import {animateElement, type BrowserAnimation} from './browser-animation';
+import {bookLoadingPanel} from './book-loading-panel';
 import {getImageProps} from 'next/image';
 import {captureMobileSection, mobileRankingShell} from './mobile-section-snapshot';
 
@@ -73,6 +74,8 @@ function rankingLoadingPage(href: string) {
 }
 
 function bookLoadingPage(href: string, label = '书籍') {
+  const skeleton = bookLoadingPanel(href);
+  if (skeleton) return skeleton;
   const panel = document.createElement('div');
   panel.className = 'book-transition-snapshot book-navigation-loading';
   panel.tabIndex = -1;

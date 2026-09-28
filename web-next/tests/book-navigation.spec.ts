@@ -46,7 +46,7 @@ for (const width of [390, 1440]) {
     await expect.poll(() => requested).toBe(true);
     await expect(page.locator('html')).toHaveAttribute('data-book-transition-phase', 'loading');
     await expect(page.locator('.book-transition-snapshot')).toHaveCount(2);
-    await expect(page.locator('.book-navigation-loading')).toHaveCSS('background-color', width < 768 ? 'rgb(244, 236, 230)' : 'rgb(248, 249, 250)');
+    await expect(page.locator('.book-navigation-loading')).toHaveCSS('background-color', 'rgb(247, 245, 242)');
     await details(page);
     expect(await page.evaluate(() => history.length)).toBe(length + 1);
     expect(await page.evaluate(() => (window as Window & {bookAnimations?: unknown[]}).bookAnimations)).toEqual([{
@@ -93,7 +93,7 @@ for (const origin of ['/ranking', '/search?q=山海', '/author/00000000000000000
         await link.click();
         const loader = page.locator('.book-navigation-loading');
         await expect(loader).toBeVisible();
-        await expect(loader).toHaveCSS('background-color', width < 768 ? 'rgb(244, 236, 230)' : 'rgb(248, 249, 250)');
+        await expect(loader).toHaveCSS('background-color', 'rgb(247, 245, 242)');
         const x = await loader.evaluate(element => element.getBoundingClientRect().left);
         expect(x).toBeGreaterThan(0); expect(x).toBeLessThan(width);
         await expect(page.locator('.book-transition-snapshot')).toHaveCount(2);
@@ -132,8 +132,11 @@ for (const width of [320, 1440]) {
   test(`every ranking card area opens details and returns to the selected ranking at ${width}px`, async ({page}) => {
     await page.setViewportSize({width, height: 844});
     await page.goto(base + '/ranking');
+    await expect.poll(()=>page.evaluate(()=>history.state?.bookNavigation?.kind)).toBe('ranking');
     await page.getByRole('button', {name: '周榜', exact: true}).click();
     await page.getByRole('button', {name: '玄幻', exact: true}).click();
+    await expect(page.getByRole('button', {name: '周榜', exact: true})).toHaveAttribute('aria-pressed','true');
+    await expect(page.getByRole('button', {name: '玄幻', exact: true})).toHaveAttribute('aria-pressed','true');
     const card = page.locator('.ranking-card').first();
     await expect(card).toBeVisible();
     const length = await page.evaluate(() => history.length);
