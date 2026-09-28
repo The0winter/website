@@ -18,6 +18,7 @@ import Script from 'next/script';
 import { GoogleAnalytics } from '@next/third-parties/google';
 import {siteDescription, siteOrigin, siteTitle} from '@/lib/seo';
 import {siteThemeScript} from '@/lib/site-theme';
+import siteIcon from './icon.png';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -40,8 +41,8 @@ export const metadata: Metadata = {
   keywords: ["小说", "免费小说", "在线阅读", "热门小说", "九天小说站", "电子书"],
 
   icons: {
-    icon: "/icon.png", 
-    shortcut: "/icon.png",
+    // The shared favicon lives in the persistent root head below. Keeping it
+    // out of route metadata prevents removal/reinsertion on client navigation.
     apple: "/apple-icon.png", // 针对 iPhone/iPad 添加到主屏幕的图标
   },
 };
@@ -53,7 +54,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh" suppressHydrationWarning>
-      <head><script id="site-theme-init" dangerouslySetInnerHTML={{__html: siteThemeScript}} /></head>
+      <head>
+        {/* Static imports get a content hash and immutable caching; changing the
+            image changes its URL without revalidating it on each book visit. */}
+        <link rel="icon" href={siteIcon.src} type="image/png" />
+        <script id="site-theme-init" dangerouslySetInnerHTML={{__html: siteThemeScript}} />
+      </head>
       <body className={inter.className}>
         <BookPrefetchSession />
         <BookNavigation />
