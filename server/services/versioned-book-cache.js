@@ -9,7 +9,7 @@ export function versionedBookCache(load, sizeOf, {maxEntries = 128, maxBytes = 1
   const databases = new WeakMap();
   const counters = {hits:0, loads:0, versionChanges:0, evictions:0, oversized:0, failures:0};
   if (name) cacheCounters.set(name, counters);
-  return (bookId, version) => {
+  const read = (bookId, version) => {
     const db = mongoose.connection.db;
     let cache = databases.get(db);
     if (!cache) {cache = new Map(); databases.set(db, cache);}
@@ -41,4 +41,15 @@ export function versionedBookCache(load, sizeOf, {maxEntries = 128, maxBytes = 1
     while (cache.size > maxEntries) {cache.delete(cache.keys().next().value); counters.evictions++;}
     return entry.promise;
   };
+  // Reuse already loaded metadata without turning an existence check into a
+  // complete catalog load. Only the current database and exact version qualify.
+  read.peek = (bookId, version) => {
+    const cache = databases.get(mongoose.connection.db), key = String(bookId);
+    const found = cache?.get(key);
+    if (found?.version !== String(version ?? 0)) return undefined;
+    counters.hits++;
+    cache.delete(key); cache.set(key, found);
+    return found.promise;
+  };
+  return read;
 }

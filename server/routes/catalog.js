@@ -17,9 +17,14 @@ export function catalogRoutes(app) {
   app.get('/api/books/:bookId/chapter-exists/:chapterId', asyncRoute(async (req, res) => {
     const {bookId, chapterId} = req.params;
     if (!id(bookId) || !id(chapterId)) fail(400, '章节参数无效');
-    await readLiveBook(bookId, res.locals.workAccess);
-    const chapter = await Chapter.findOne({_id:chapterId, bookId, deletedAt:null}).select('_id').maxTimeMS(3000).lean();
-    if (!chapter) fail(404, '章节不存在');
+    const book = await readLiveBook(bookId, res.locals.workAccess);
+    const cached = bookCatalog.peek(bookId, versionOf(book));
+    if (cached) {
+      if (!(await cached).indices.has(chapterId.toLowerCase())) fail(404, '章节不存在');
+    } else {
+      const chapter = await Chapter.findOne({_id:chapterId, bookId, deletedAt:null}).select('_id').maxTimeMS(3000).lean();
+      if (!chapter) fail(404, '章节不存在');
+    }
     res.set('Cache-Control', 'private, no-store').json({exists:true});
   }));
   // Reopening a cached catalog checks only the book's primary key/version.
