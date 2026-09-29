@@ -30,7 +30,7 @@ export function previewBookCleaning(book) {
         beforeHash: hash(before.content), afterHash: hash(after.content),
         beforeVolume: {volume_title: before.volume_title, volume_number: before.volume_number},
         afterVolume: {volume_title: after.volume_title, volume_number: after.volume_number},
-        reasons: before.content !== after.content ? [...new Set(after.readingCleanup.changes.map(c => c.reason))] : ['volume'],
+        reasons: before.content !== after.content ? [...new Set(after.readingCleanup.changes.slice(before.readingCleanup?.changes?.length || 0).map(c => c.reason))] : ['volume'],
         removedCharacters: before.content.length - after.content.length});
     }
   }

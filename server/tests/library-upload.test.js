@@ -31,6 +31,7 @@ test('library sync uses the real import API and SQL models: R2 bodies, append, r
       const result = await response.json(); if (!response.ok) throw Error(result.error); return result;
     };
     const source = {title: '合成上传测试书', author: '测试作者', sourceUrl: 'https://example.test/book/sync', description: '原始简介', chapters: Array.from({length: 23}, (_, i) => chapter(i + 1))};
+    Object.assign(source.chapters[0], {volume_title: '第一卷', volume_number: 1});
     const inspect = input => inspectVersionedLibraryBook(input, {Book, Chapter, bodyHash});
     const plan = planUpload(source, await inspect(source));
     assert.equal(plan.newBook, true); assert.equal(plan.batches.length, 1);
@@ -47,7 +48,9 @@ test('library sync uses the real import API and SQL models: R2 bodies, append, r
     await Chapter.updateOne({_id: first._id}, {$set: {contentSha256: digest, contentKey: `chapters/sha256/${digest}.txt`}, $unset: {content: 1}});
     const online = await inspect(source);
     assert.equal(online.token, libraryRevision(await Book.findById(online.bookId).lean()));
-    assert.deepEqual(online.chapters, (await inspectLibraryBook(source, {Book, Chapter, bodyHash})).chapters);
+    // Both inspection paths cross a JSON boundary; absent optional fields are omitted.
+    assert.deepEqual(online.chapters, JSON.parse(JSON.stringify((await inspectLibraryBook(source, {Book, Chapter, bodyHash})).chapters)));
+    assert.equal(online.chapters[0].volume_title, '第一卷'); assert.equal(online.chapters[0].volume_number, 1);
     const findBook = t.mock.method(Book, 'find'), findChapter = t.mock.method(Chapter, 'find');
     const headers = await inspectLibraryHeaders(Array.from({length: 200}, () => source), {Book});
     assert.equal(headers.length, 200); assert.ok(headers.every(row => row.token === online.token));

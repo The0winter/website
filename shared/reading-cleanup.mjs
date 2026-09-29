@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
+import {sourceNoiseLineRule, stripSourceNoiseFragments} from './source-noise.mjs';
 
-export const readingCleanupVersion = 1;
+export const readingCleanupVersion = 2;
 const digest = value => createHash('sha256').update(value).digest('hex');
 const key = value => String(value || '').normalize('NFKC').replace(/^\d+[.、]\s*(?=第)/u, '').replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
 const colonHosts = new Set(['www.shudugu.org', 'shudugu.org', 'www.deqixs.org', 'deqixs.org', 'xszj.tw']);
@@ -38,10 +39,14 @@ export function cleanReadingContent(content, {title = '', author = '', link = ''
   };
   const keep = lines.map((text, index) => ({text, index})).filter(row => {
     const text = row.text.trim();
-    const reason = advertisements.some(rule => rule.test(text)) ? 'site-advertisement'
+    const siteRule = sourceNoiseLineRule(text, host, {line: row.index + 1});
+    const reason = siteRule ? 'source-noise:' + siteRule : advertisements.some(rule => rule.test(text)) ? 'site-advertisement'
       : colonHosts.has(host) && /^[:：]+$/u.test(text) ? 'site-colon' : null;
-    if (reason) removed.push({line: row.index + 1, reason, text: row.text});
-    return !reason;
+    if (reason) {removed.push({line: row.index + 1, reason, text: row.text});return false;}
+    const fragments = stripSourceNoiseFragments(row.text, host);
+    for (const fragment of fragments.removed) removed.push({line: row.index + 1, reason: 'source-noise:' + fragment.rule, text: fragment.text});
+    row.text = fragments.text;
+    return !fragments.removed.length || Boolean(row.text.trim());
   });
   let start = 0, end = keep.length, headers = 0;
   while (start < end && headers < 8) {
@@ -79,7 +84,7 @@ export function sourceContentHash(chapter) {
   const current = digest(String(chapter.content || ''));
   if (!chapter.readingCleanup) return current;
   const record = chapter.readingCleanup;
-  if (record.version !== readingCleanupVersion || record.contentHash !== current || !/^[a-f0-9]{64}$/u.test(record.sourceHash)) throw Error('阅读版清理记录与正文不一致');
+  if (![1, readingCleanupVersion].includes(record.version) || record.contentHash !== current || !/^[a-f0-9]{64}$/u.test(record.sourceHash)) throw Error('阅读版清理记录与正文不一致');
   return record.sourceHash;
 }
 
