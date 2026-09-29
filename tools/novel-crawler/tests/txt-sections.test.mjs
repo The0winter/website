@@ -33,6 +33,19 @@ test('zxcs search pairs title and author within each result card',()=>{
  const html='<a href="/book/1.html"><h3>《合成甲》（校对版全本）作者：甲</h3><p>广告</p></a><a href="/book/2.html"><h3>《合成乙》（校对版全本）作者：乙</h3></a><a href="/book/9.html">推荐</a>';
  assert.deepEqual(parseSearch(html,site.home,site).results.map(({title,author,url})=>({title,author,url})),[{title:'合成甲',author:'甲',url:'https://zxcs.zip/book/1.html'},{title:'合成乙',author:'乙',url:'https://zxcs.zip/book/2.html'}]);
 });
+test('zxcs keeps unnumbered opening chapters out of discarded metadata',()=>{
+ const resource=loadSites().sites.find(s=>s.id==='zxcs-zip').spec.resource;
+ for(const opening of ['引子','楔子','前言','序言','开始','引子：旧事']){
+  const body='　　故事从这里展开，留下后来事件的起因。\n　　开始\n　　缩进的正文保持原段落。';
+  const chapters=splitText(`合成书名\n作者：合成作者\n内容简介：书籍介绍\n卷一\n${opening}\n${body}\n第一章 新的开始\n　　第一章的故事。\n卷二 重逢\n第二章 回家\n　　第二章的故事。`,{resource:{...resource,endBefore:undefined}});
+  assert.deepEqual(chapters.map(c=>c.title),[opening,'第一章 新的开始','第二章 回家']);
+  assert.equal(chapters[0].content,body.trim());
+  assert.equal(chapters[0].sourceSection,'卷一');
+  assert.equal(chapters[2].sourceSection,'卷二 重逢');
+  assert.equal(chapters[1].content,'第一章的故事。');
+  assert.equal(chapters[2].content,'第二章的故事。');
+ }
+});
 test('TXT ZIP uses only an explicitly configured password and preserves the resource check',async t=>{
  // Synthetic single-chapter ZipCrypto fixture; password is public-test-password.
  const zip=Buffer.from('UEsDBBQAAQAAAPuzOl3a/6HSMAAAACQAAAAIAAAAYm9vay50eHRXVR6Oeh26mnO3uH+On0iAMEP6kNCn/RAia0Ul4ZvfjMu8opFAXCbYE6Y3iriZyM1QSwECFAAUAAEAAAD7szpd2v+h0jAAAAAkAAAACAAAAAAAAAAAAAAAgAEAAAAAYm9vay50eHRQSwUGAAAAAAEAAQA2AAAAVgAAAAAA','base64');
