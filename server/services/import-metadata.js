@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import {fail} from './content.js';
+import {normalizeAuthorName} from './author-identity.js';
 
 export function importMetadata(data) {
   const url = value => {
@@ -7,10 +8,10 @@ export function importMetadata(data) {
     catch {fail(400,'来源或封面网址无效');}
   };
   const sourceUrl=url(data.sourceUrl);
-  const name=typeof data.author==='string'?data.author.normalize('NFKC').trim():'未知';
+  const name=typeof data.author==='string'?normalizeAuthorName(data.author):'未知';
   if(!name||name.length>200)fail(400,'作者名无效');
   const authorUrl=data.authorSourceUrl===undefined?undefined:url(data.authorSourceUrl);
-  // Without an author URL, keep identities separate per book; names alone aren't identity.
+  // Preserve provenance separately from the shared public author identity.
   const sourceKey=crypto.createHash('sha256').update(authorUrl||`${sourceUrl}\0${name}`).digest('hex');
   const metadata={};
   for(const [field,max] of [['description',5000],['category',80]])if(data[field]!==undefined){if(typeof data[field]!=='string'||data[field].length>max)fail(400,'书籍元数据无效');metadata[field]=data[field];}

@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import {recordBookUpdate} from '../services/book-update-time.js';
 import Author from '../models/Author.js';
+import {importedAuthor,normalizeAuthorName,sameImportedAuthor} from '../services/author-identity.js';
 import Book from '../models/Book.js';
 import {ensureBookStatistics} from '../services/initial-book-statistics.js';
 import Chapter from '../models/Chapter.js';
@@ -40,10 +41,10 @@ export function libraryImportRoutes(app) {
       const book = await Book.findOne({sourceUrl: data.sourceUrl}).session(session);
       if (book) {
         if (!book.importManaged || book.author_id || book.deletedAt) fail(409, '来源作品已下架或归属不允许自动导入');
-        if (normalize(book.title) !== normalize(data.title) || normalize(book.author) !== author.name) fail(409, '网站书籍身份与本地文件不一致');
+        if (normalize(book.title) !== normalize(data.title) || normalizeAuthorName(book.author) !== author.name) fail(409, '网站书籍身份与本地文件不一致');
         if (book.author_profile_id) {
           const profile = await Author.findById(book.author_profile_id).session(session);
-          if (!profile || profile.sourceKey !== author.sourceKey) fail(409, '作者来源发生变化，需要明确核实');
+          if (!sameImportedAuthor(profile,author)) fail(409, '作者发生变化，需要明确核实');
         }
       } else if (await Book.exists({title: data.title, author: author.name}).session(session)) fail(409, '网站已有同名同作者的其他来源版本');
       const existing = book && numbers.length ? await Chapter.find({bookId: book._id, chapter_number: {$in: numbers}}).session(session).lean() : [];
@@ -71,7 +72,7 @@ export function libraryImportRoutes(app) {
       const previousToken = libraryRevision(book);
       if (!book) [book] = await Book.create([{title: data.title, author: author.name, sourceUrl: data.sourceUrl, importManaged: true, category: data.category || '未分类'}], {session});
       else book = await lockBook(book._id, {role: 'import'}, session);
-      const profile = await Author.findOneAndUpdate({sourceKey: author.sourceKey}, {$setOnInsert: author}, {upsert: true, new: true, session});
+      const profile = await importedAuthor(author,session);
       Object.assign(book, metadata, {author: profile.name, author_profile_id: profile._id});
       await book.save({session});
       await ensureBookStatistics(book,{session});

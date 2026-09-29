@@ -1,4 +1,5 @@
 import Author from '../models/Author.js';
+import {importedAuthor,sameImportedAuthor} from '../services/author-identity.js';
 import {recordBookUpdate} from '../services/book-update-time.js';
 import {ensureBookStatistics} from '../services/initial-book-statistics.js';
 import {importMetadata} from '../services/import-metadata.js';
@@ -42,7 +43,7 @@ export function importRoutes(app) {
       retiredCover=undefined;
       let book=await Book.findOne({sourceUrl:data.sourceUrl,importManaged:true}).session(session);
       if(book?.author_id)fail(409,'导入作品已绑定登录账号，需要人工核实归属');
-      if(book?.author_profile_id){const previous=await Author.findById(book.author_profile_id).session(session);if(!previous||previous.sourceKey!==author.sourceKey)fail(409,'作者来源发生变化，需要明确核实');}
+      if(book?.author_profile_id){const previous=await Author.findById(book.author_profile_id).session(session);if(!sameImportedAuthor(previous,author))fail(409,'作者发生变化，需要明确核实');}
       if(book?.deletedAt)fail(409,'来源对应作品已下架，须显式恢复');
       if(!book) {
         if(await Book.exists({sourceUrl:data.sourceUrl}).session(session))fail(409,'已有来源映射未经核实，需人工处理');
@@ -54,7 +55,7 @@ export function importRoutes(app) {
       if(!data.dryRun){
         const previousCover=book.cover_image;
         if(metadata.cover_image && metadata.cover_image!==previousCover)await claimImportedCover(metadata.cover_image,session);
-        const profile=await Author.findOneAndUpdate({sourceKey:author.sourceKey},{$setOnInsert:author},{upsert:true,new:true,session});
+        const profile=await importedAuthor(author,session);
         Object.assign(book,metadata,{author:profile.name,author_profile_id:profile._id});
         await book.save({session});
         await ensureBookStatistics(book,{session});

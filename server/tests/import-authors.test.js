@@ -48,9 +48,12 @@ test('import attribution, metadata, replay, rollback and account separation',asy
   assert.equal((await send({...sample,description:'must rollback',chapters:[{...sample.chapters[0],content:'conflict'}]})).status,409);
   assert.equal((await Book.findById(book._id)).description,updatedDescription);
   assert.equal((await send({...sample,author:'different'})).status,409);
-  await send({...sample,sourceUrl:'https://example.test/books/2'});assert.equal(await Author.countDocuments(),2);
+  await send({...sample,sourceUrl:'https://example.test/books/2'});assert.equal(await Author.countDocuments(),1);
   for(const n of [3,4])assert.equal((await send({...sample,sourceUrl:`https://example.test/books/${n}`,authorSourceUrl:'https://example.test/authors/1'})).status,200);
-  assert.equal(await Author.countDocuments(),3);
+  assert.equal(await Author.countDocuments(),1);
+  const combined=await (await fetch(base+'/api/books?author_id='+book.author_profile_id)).json();
+  assert.equal(combined.length,4);
+  assert.equal(new Set(combined.map(b=>String(b.author_profile_id))).size,1);
   assert.equal(await User.countDocuments(),1);
  }finally{
   if(server)await new Promise(r=>server.close(r));await mongoose.disconnect();await repl.stop();

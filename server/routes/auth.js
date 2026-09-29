@@ -4,6 +4,8 @@ import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Session from '../models/Session.js';
 import VerificationCode from '../models/VerificationCode.js';
+import UsernameReservation from '../models/UsernameReservation.js';
+import {normalizeUsername,usernameKey,usernameTaken,usernameTakenMessage} from '../services/username-identity.js';
 import sendMail from '../utils/sendEmail.js';
 import { asyncRoute, publicUser } from '../security.js';
 
@@ -27,17 +29,25 @@ export function authRoutes(app,auth,config) {
     res.json({message:'验证码已发送'});
   }));
   app.post('/api/auth/signup',asyncRoute(async(req,res) => {
-    const {email,password,username,code} = req.body;
-    if (typeof email !== 'string' || typeof username !== 'string' || !username.trim() || username.length > 40 || !validPassword(password) || typeof code !== 'string') return res.status(400).json({error:'请检查用户名、验证码及密码（8字符以上，最多72字节）'});
+    const {email,password,code} = req.body;
+    if (typeof email !== 'string' || typeof req.body.username !== 'string' || !validPassword(password) || typeof code !== 'string') return res.status(400).json({error:'请检查用户名、验证码及密码（8字符以上，最多72字节）'});
+    const username=normalizeUsername(req.body.username);
+    if (!username || username.length>40) return res.status(400).json({error:'用户名须为 1–40 个字符'});
+    if (await usernameTaken(username)) return res.status(409).json({error:usernameTakenMessage});
     const hash = await bcrypt.hash(password,12);
     const record = await VerificationCode.findOneAndUpdate({email,consumed:false,expiresAt:{$gt:new Date()},attempts:{$lt:5}},{$inc:{attempts:1}},{new:true});
     if (!record || record.code !== digest(email,code,config.jwtSecret)) return res.status(400).json({error:'验证码错误或已过期'});
+    if (await User.exists({email})) return res.status(409).json({error:'该邮箱已注册，请直接登录'});
     let user;
-    await mongoose.connection.transaction(async session => {
+    try { await mongoose.connection.transaction(async session => {
+      await UsernameReservation.create([{_id:usernameKey(username)}],{session});
       const consumed = await VerificationCode.updateOne({_id:record._id,code:record.code,consumed:false,expiresAt:{$gt:new Date()}},{$set:{consumed:true}},{session});
       if (!consumed.modifiedCount) { const e = new Error('验证码已使用'); e.status=409; throw e; }
       [user] = await User.create([{email,username,password:hash,role:'reader'}],{session});
-    });
+    }); } catch(error) {
+      if (error.code!==11000) throw error;
+      return res.status(409).json({error:await usernameTaken(username) ? usernameTakenMessage : '该邮箱已注册，请直接登录'});
+    }
     await auth.issue(res,user);
     res.status(201).json({user:{...publicUser(user),email:user.email},profile:publicUser(user)});
   }));
@@ -46,6 +56,7 @@ export function authRoutes(app,auth,config) {
     const password = req.body.password;
     if (typeof identifier !== 'string' || typeof password !== 'string' || Buffer.byteLength(password)>72) return res.status(400).json({error:'账号或密码无效'});
     let user = await User.findOne({$or:[{email:identifier},{username:identifier}]});
+    if(!user&&normalizeUsername(identifier)!==identifier)user=await User.findOne({username:normalizeUsername(identifier)});
     if (!user) return res.status(401).json({error:'账号或密码错误'});
     if (user.isTestAccount) return res.status(403).json({error:'测试展示账号不提供登录'});
     const now = Date.now();

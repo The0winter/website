@@ -93,8 +93,9 @@ export default function Register() {
           <div className="register-field">
             <label htmlFor="username">用户名</label>
             <input id="username" name="username" type="text" autoComplete="username" autoCapitalize="none"
-              maxLength={40} spellCheck={false} required placeholder="取一个喜欢的名字"
+              maxLength={40} spellCheck={false} required placeholder="取一个喜欢的名字" aria-describedby="register-username-hint"
               value={username} onChange={event => setUsername(event.target.value)} />
+            <p className="register-hint" id="register-username-hint">用户名一经使用将永久保留，不能重复注册。</p>
           </div>
           <div className="register-field">
             <label htmlFor="email">邮箱地址</label>

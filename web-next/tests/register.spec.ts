@@ -17,7 +17,9 @@ for (const [width, theme] of [[320, 'light'], [390, 'light'], [390, 'dark'], [76
     await page.setViewportSize({ width, height: 844 });
     await page.emulateMedia({ colorScheme: theme });
     await page.goto(base + '/register'); await atRegistration(page);
-    await expect(page.locator('nav, footer')).toHaveCount(0);
+    // The shared navigation stays mounted for return transitions, but auth
+    // pages must keep it out of view.
+    await expect(page.locator('nav:visible, footer:visible')).toHaveCount(0);
     const colors = await page.locator('.register-page').evaluate(element => ({
       background: getComputedStyle(element).backgroundColor,
       expected: getComputedStyle(element).getPropertyValue('--home-background').trim(),
@@ -28,8 +30,9 @@ for (const [width, theme] of [[320, 'light'], [390, 'light'], [390, 'dark'], [76
     for (const element of await page.locator('.register-page input, .register-page button').all()) {
       expect((await element.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     }
-    const back = (await page.getByRole('button', { name: '返回', exact: true }).boundingBox())!;
-    expect(back.x).toBeLessThan(35);expect(back.y).toBeLessThan(25);
+    const back = page.getByRole('button', { name: '返回', exact: true });
+    await expect.poll(async () => (await back.boundingBox())!.x).toBeLessThan(35);
+    await expect.poll(async () => (await back.boundingBox())!.y).toBeLessThan(25);
     await page.screenshot({ path: info.outputPath(`register-${width}-${theme}.png`), fullPage: true });
   });
 }
