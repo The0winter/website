@@ -40,10 +40,13 @@ test('maintenance preserves IDs, dates, annotations and original objects, checks
     const more=await Chapter.insertMany(Array.from({length:80},(_,i)=>({bookId:book._id,title:`第${i+2}章`,chapter_number:i+2,content:`原文${i}`,word_count:4})));
     const latest=await inspectCleaningBook(identity,deps);
     const transport=mongoose.connection.transport,query=transport.query.bind(transport);let queries=0;
+    const bulkWrite=Chapter.bulkWrite.bind(Chapter);let bulkWrites=0;
+    Chapter.bulkWrite=(...args)=>{bulkWrites++;return bulkWrite(...args);};
     transport.query=(...args)=>{queries++;return query(...args);};
     try {
       const result=await reviseCleaningBatch({...job,token:latest.token,chapters:more.map(c=>({id:String(c._id),title:c.title,number:c.chapter_number,beforeHash:sha(c.content),content:c.content+'。'}))},deps);
       assert.equal(result.updated,80);assert.ok(queries<15,`A revision batch used ${queries} reads; reads must not scale with chapter count`);
-    } finally {transport.query=query;}
+      assert.equal(bulkWrites,1,'Native MongoDB must also receive one batch, not per-chapter round trips');
+    } finally {transport.query=query;Chapter.bulkWrite=bulkWrite;}
   } finally {await mongoose.disconnect();await db.stop();}
 });

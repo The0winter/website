@@ -83,15 +83,17 @@ export async function reviseCleaningBatch(job, deps) {
     const nowComments = await ParagraphComment.find({chapter: {$in: job.chapters.map(c=>c.id)}}).session(session).lean();
     const signature = list => digest(JSON.stringify(list.map(c=>[String(c._id),c.paragraphKey,c.paragraphText]).sort((a,b)=>a[0].localeCompare(b[0]))));
     if (signature(nowComments) !== signature(comments)) fail('修订期间段落评论发生变化，请重新核对');
-    for (const c of job.chapters) {
+    const updates = job.chapters.map(c => {
       const prepared = stored.get(c.id), set = {word_count: c.content.length, ...chapterVolumeFields(c)}, unset = {};
       if (prepared) {
         if (prepared.contentKey) { Object.assign(set, {contentKey: prepared.contentKey, contentSha256: prepared.contentSha256}); unset.content = 1; }
         else { set.content = c.content; unset.contentKey = 1; unset.contentSha256 = 1; }
       }
       for (const field of ['volume_title', 'volume_number']) if (c[field] === undefined) unset[field] = 1;
-      await Chapter.updateOne({_id: c.id, bookId: book._id}, {$set: set, ...(Object.keys(unset).length ? {$unset: unset} : {})}, {session, timestamps: false});
-    }
+      return {updateOne: {filter: {_id: c.id, bookId: book._id}, update: {$set: set, ...(Object.keys(unset).length ? {$unset: unset} : {})}, timestamps: false}};
+    });
+    const written = await Chapter.bulkWrite(updates, {session, ordered: true, timestamps: false});
+    if (written.matchedCount !== job.chapters.length) fail('修订期间章节记录发生变化');
     for (const move of commentMoves) await ParagraphComment.updateOne({_id: move.id, paragraphKey: move.before}, {$set: {paragraphKey: move.after}}, {session, timestamps: false});
     result = {bookId: job.bookId, updated: job.chapters.length, bodyUpdates: changed.length, token: libraryRevision(book), backupFile};
   });
