@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import {chapterVolumeFields} from '../../shared/reading-cleanup.mjs';
 import {recordBookUpdate} from './book-update-time.js';
 import mongoose from 'mongoose';
 import Book from '../models/Book.js';
@@ -13,7 +14,8 @@ export const contentHash = data => crypto.createHash('sha256').update(JSON.strin
 export function validateChapter(body) {
   const number=body.chapter_number ?? body.chapterNumber;
   if ((body.title!==undefined && (typeof body.title!=='string' || body.title.length>100)) || typeof body.content!=='string' || !body.content.trim() || body.content.length>60000 || !Number.isSafeInteger(number) || number<1) fail(400,'章节标题、正文或编号无效');
-  return {title:body.title?.trim() || `第${number}章`,content:body.content,chapter_number:number,word_count:body.content.length};
+  let volume;try{volume=chapterVolumeFields(body);}catch(error){fail(400,error.message);}
+  return {title:body.title?.trim() || `第${number}章`,content:body.content,chapter_number:number,word_count:body.content.length,...volume};
 }
 export async function lockBook(bookId,actor,session,{includeDeleted=false}={}) {
   const filter={_id:bookId};
@@ -47,7 +49,7 @@ export async function createChapter(actor,bookId,body) {
     const existing=await Chapter.findOne({bookId,chapter_number:data.chapter_number}).session(session);
     if(existing) {
       if(existing.deletedAt) fail(409,'同一编号的章节已下架，请先恢复原章节');
-      if(existing.title!==data.title || existing.content!==data.content) fail(409,'同一编号已存在不同内容');
+      if(existing.title!==data.title || existing.content!==data.content || data.volume_title!==undefined && (existing.volume_title!==data.volume_title || existing.volume_number!==data.volume_number)) fail(409,'同一编号已存在不同内容');
       result=existing;return;
     }
     await chargeQuota(actor,data.content.length,session);

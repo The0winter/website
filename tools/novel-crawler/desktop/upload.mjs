@@ -32,7 +32,8 @@ export function planUpload(book, remote, prepared = prepareImport(book)) {
   for (const chapter of chapters) {
     const previous = existing.get(chapter.chapter_number);
     if (!previous) { pending.push(chapter); continue; }
-    if (previous.deleted || previous.title !== chapter.title || previous.hash !== bodyHash(chapter.content) || (previous.link && chapter.link && previous.link !== chapter.link)) {
+    if (previous.deleted || previous.title !== chapter.title || previous.hash !== bodyHash(chapter.content) || (previous.link && chapter.link && previous.link !== chapter.link) ||
+        chapter.volume_title !== undefined && (previous.volume_title !== chapter.volume_title || previous.volume_number !== chapter.volume_number)) {
       throw Error(`第 ${chapter.chapter_number} 章与网站已有内容冲突或已下架，已保留网站原章节`);
     }
   }

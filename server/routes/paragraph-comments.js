@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import crypto from 'node:crypto';
 import rateLimit from 'express-rate-limit';
 import Chapter from '../models/Chapter.js';
 import Book from '../models/Book.js';
@@ -55,9 +56,18 @@ export function paragraphCommentRoutes(app, auth) {
     const identity = {user:req.user.id, requestId};
     let row;
     try {
-      row = await ParagraphComment.findOneAndUpdate(identity, {$setOnInsert:{...identity,
-        book:chapter.bookId, chapter:chapter._id, paragraphKey:paragraph.key, paragraphText:paragraph.text, content:content.trim(),
-      }}, {upsert:true,new:true,runValidators:true,setDefaultsOnInsert:true});
+      await mongoose.connection.transaction(async session => {
+        // Serialize against chapter edits and maintenance without changing the
+        // book's publication date. A stale paragraph must never be orphaned.
+        const locked = await Book.findOneAndUpdate({_id:chapter.bookId,deletedAt:null}, {$inc:{writeVersion:1}}, {new:true,session,timestamps:false});
+        if (!locked) fail(404,'章节不可用');
+        const current = await Chapter.findOne({_id:chapter._id,deletedAt:null}).session(session).lean();
+        const fingerprint = c => typeof c.content==='string' ? crypto.createHash('sha256').update(c.content).digest('hex') : c.contentSha256;
+        if (!current || current.title!==chapter.title || fingerprint(current)!==fingerprint(chapter)) fail(409,'段落内容已更新，请刷新章节后重试');
+        row = await ParagraphComment.findOneAndUpdate(identity, {$setOnInsert:{...identity,
+          book:chapter.bookId, chapter:chapter._id, paragraphKey:paragraph.key, paragraphText:paragraph.text, content:content.trim(),
+        }}, {upsert:true,new:true,runValidators:true,setDefaultsOnInsert:true,session});
+      });
     } catch (error) {
       if (error.code !== 11000) throw error;
       row = await ParagraphComment.findOne(identity);

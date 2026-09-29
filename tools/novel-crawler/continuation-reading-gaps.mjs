@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import {sourceContentHash} from '../../shared/reading-cleanup.mjs';
 import path from 'node:path';
 import {readJson, hash} from './storage.mjs';
 import {preserveCatalogLabels} from './titles.mjs';
@@ -24,7 +25,7 @@ export function preservedReadingGap({stateDir, outputDir, file, spec, book, cata
       if (!source || !entry || source.position !== position || source.link !== entry.link || preserveCatalogLabels([entry], [{link: source.link, title: source.catalogTitle}])[0].title !== source.catalogTitle || identity(source.title)?.number !== firstNumber + position - start) break;
       if (position === start || position === end) {
         const old = position === start ? previous : current;
-        if (source.link !== old.link || source.contentHash !== hash(old.content) || identity(old.title)?.number !== identity(source.title)?.number) break;
+        if (source.link !== old.link || source.contentHash !== sourceContentHash(old) || identity(old.title)?.number !== identity(source.title)?.number) break;
       } else {
         const gap = gaps.find(g => g.position === position), checkpoint = readJson(path.join(dir, 'chapters', hash(source.link) + '.json'));
         if (!gap || !['truncated', 'placeholder'].includes(gap.kind) || !gap.reason?.trim() || !gap.evidence?.url || !gap.evidence?.detail || !Number.isFinite(Date.parse(gap.evidence.checkedAt)) || gap.link !== source.link || gap.contentHash !== source.contentHash || !checkpoint?.chapter || checkpoint.hash !== hash(checkpoint.chapter) || checkpoint.chapter.link !== source.link || checkpoint.chapter.chapter_number !== position || hash(checkpoint.chapter.content) !== gap.contentHash) break;

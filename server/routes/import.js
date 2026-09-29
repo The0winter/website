@@ -65,7 +65,7 @@ export function importRoutes(app) {
       for(const chapter of validated){
         const existing=await Chapter.findOne({bookId:book._id,chapter_number:chapter.chapter_number}).session(session);
         if(existing){
-          if(existing.deletedAt||existing.title!==chapter.title||existing.content!==chapter.content||(existing.sourceUrl&&chapter.sourceUrl&&existing.sourceUrl!==chapter.sourceUrl))fail(409,`章号 ${chapter.chapter_number} 已下架或内容冲突，需显式恢复/编辑原章节`);
+          if(existing.deletedAt||existing.title!==chapter.title||existing.content!==chapter.content||(existing.sourceUrl&&chapter.sourceUrl&&existing.sourceUrl!==chapter.sourceUrl)||(chapter.volume_title!==undefined&&(existing.volume_title!==chapter.volume_title||existing.volume_number!==chapter.volume_number)))fail(409,`章号 ${chapter.chapter_number} 已下架或内容冲突，需显式恢复/编辑原章节`);
           if(chapter.sourceUrl&&!existing.sourceUrl){enriched++;if(!data.dryRun){existing.sourceUrl=chapter.sourceUrl;await existing.save({session});}}else unchanged++;
         }
         else {inserted++;if(!data.dryRun)await Chapter.create([{...chapter,bookId:book._id}],{session});}

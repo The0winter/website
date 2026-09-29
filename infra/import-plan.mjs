@@ -1,8 +1,10 @@
 // Pure validation: no connection or credentials needed.
 import {chapterDuplicateIssues} from '../shared/chapter-duplicates.mjs';
+import {chapterVolumeFields, cleanBookForReading} from '../shared/reading-cleanup.mjs';
 
 export function prepareImport(book) {
   if(!book||!Array.isArray(book.chapters)||!book.chapters.length)throw Error('书籍必须包含章节');
+  book=cleanBookForReading(book);
   const validUrl=value=>{try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password&&value.length<=2000;}catch{return false;}};
   if(!validUrl(book.sourceUrl)||typeof book.title!=='string'||!book.title.trim()||book.title.length>200)throw Error('书名或来源网址无效');
   if(book.author!==undefined&&(typeof book.author!=='string'||!book.author.trim()||book.author.length>200))throw Error('作者名无效');
@@ -18,7 +20,7 @@ export function prepareImport(book) {
     if(typeof c.title!=='string'||!c.title.trim()||c.title.length>100||typeof c.content!=='string'||!c.content.trim()||c.content.length>60000)throw Error(`第 ${n} 章标题或正文无效（正文最多60000字符）`);
     const link=c.link??c.sourceUrl;
     if(link!==undefined&&!validUrl(link))throw Error(`第 ${n} 章链接无效`);
-    return {title:c.title.trim(),content:c.content,chapter_number:n,...(link===undefined?{}:{link})};
+    return {title:c.title.trim(),content:c.content,chapter_number:n,...chapterVolumeFields(c),...(link===undefined?{}:{link})};
   }).sort((a,b)=>a.chapter_number-b.chapter_number);
   const duplicates=chapterDuplicateIssues(chapters);
   if(duplicates.length)throw Error(`章节疑似重复，暂停整本导入，须先核对：${duplicates.slice(0,5).map(issue=>`第 ${issue.chapter} 项与第 ${issue.otherChapter} 项（${issue.code}）`).join('；')}`);

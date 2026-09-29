@@ -8,6 +8,7 @@ import {getCatalog, getChapter, getResource, refreshNextChapter} from './adapter
 import {navigationCatalog, mergeRecent, navigationReport} from './navigation.mjs';
 import {chapterQuality, qualityReport, sampleCatalog, normalizedTitle} from './quality.mjs';
 import {formatChapterForExport, preserveCatalogLabels} from './titles.mjs';
+import {cleanBookForReading} from '../../shared/reading-cleanup.mjs';
 import {prepareImport} from '../../infra/import-plan.mjs';
 import {failureDetails} from './diagnostics.mjs';
 import {browserProfile} from './browser-session.mjs';
@@ -44,6 +45,7 @@ export function validateSpec(input) {
   if (spec.category !== undefined && (typeof spec.category !== 'string' || spec.category.length > 80)) throw Error('分类须为不超过 80 字符的文本');
   if (spec.kind === 'html' && (!(spec.catalog?.links || spec.catalog?.json) || !spec.chapter?.content || !spec.chapter?.title)) throw Error('HTML 来源需配置目录及章节选择器');
   if (spec.catalog?.link && (spec.catalog.url || spec.catalog.json || spec.catalog.selectPages || spec.catalog.walk)) throw Error('目录入口 link 不能与 url、JSON、下拉或顺序目录混用');
+  if (spec.catalog?.volumeSelector !== undefined && (typeof spec.catalog.volumeSelector !== 'string' || !spec.catalog.volumeSelector.trim() || spec.catalog.json || spec.catalog.walk || spec.catalog.reverse || spec.catalog.orderAttribute)) throw Error('catalog.volumeSelector 只支持按 DOM 顺序读取的 HTML 目录');
   if (spec.catalog?.titlePattern !== undefined) {
     const pattern = spec.catalog.titlePattern;
     if (spec.catalog.json || typeof pattern !== 'string' || !pattern || pattern.length > 2000) throw Error('catalog.titlePattern 需要有效的 HTML 目录标题正则表达式');
@@ -188,12 +190,12 @@ export async function reviewReadingCatalogNumber(input, review, {stateDir = defa
 }
 
 function bookData(spec, chapters) {
-  return {
+  return cleanBookForReading({
     title: spec.title, author: spec.author, sourceUrl: spec.sourceUrl,
     ...(hasBookCategory(spec.category) ? categoryFields(spec) : {}),
     ...Object.fromEntries(['category', 'description', 'status', 'cover_image', 'authorSourceUrl'].filter(key => spec[key] !== undefined).map(key => [key, spec[key]])),
     chapters: [...chapters].sort((a, b) => a.chapter_number - b.chapter_number).map(formatChapterForExport),
-  };
+  });
 }
 
 function reportMarkdown(report) {

@@ -31,13 +31,13 @@ export async function inspectVersionedLibraryBook(job, {Book, Chapter, bodyHash}
     const partial = !!job.knownToken && job.knownToken === token && Array.isArray(job.numbers);
     if (partial && job.numbers.some(n => !Number.isSafeInteger(n) || n < 1)) fail('章节核对参数无效');
     const filter = {bookId: book._id, ...(partial ? {chapter_number: {$in: job.numbers}} : {})};
-    const rows = partial && !job.numbers.length ? [] : await Chapter.find(filter).select('chapter_number title content contentSha256 sourceUrl deletedAt').sort({chapter_number: 1}).lean();
+    const rows = partial && !job.numbers.length ? [] : await Chapter.find(filter).select('chapter_number title content contentSha256 sourceUrl deletedAt volume_title volume_number').sort({chapter_number: 1}).lean();
     // Do not associate a mixed, concurrently modified directory with a token.
     const after = await Book.findById(book._id).select(libraryBookFields).lean();
     if (libraryRevision(after) !== token) continue;
     return {book: Object.fromEntries(['title', 'author', 'sourceUrl', 'description', 'category', 'status'].map(key => [key, book[key]])),
       bookId: String(book._id), token, partial, chapters: rows.map(c => ({number: c.chapter_number, title: c.title, link: c.sourceUrl,
-        deleted: !!c.deletedAt, hash: typeof c.content === 'string' ? bodyHash(c.content) : c.contentSha256}))};
+        deleted: !!c.deletedAt, hash: typeof c.content === 'string' ? bodyHash(c.content) : c.contentSha256, ...(c.volume_title ? {volume_title:c.volume_title,volume_number:c.volume_number} : {})}))};
   }
   fail('核对期间网站作品连续变化，请再次上传核对；已完成批次保留');
 }

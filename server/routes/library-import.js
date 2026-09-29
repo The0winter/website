@@ -54,7 +54,8 @@ export function libraryImportRoutes(app) {
         const old = byNumber.get(chapter.chapter_number);
         if (!old) { missing.push(chapter); continue; }
         if (old.deletedAt || old.title !== chapter.title || !chapterBodyMatches(old, chapter.content) ||
-            (old.sourceUrl && chapter.sourceUrl && old.sourceUrl !== chapter.sourceUrl)) fail(409, `章号 ${chapter.chapter_number} 已下架或内容冲突，已保留网站原章节`);
+            (old.sourceUrl && chapter.sourceUrl && old.sourceUrl !== chapter.sourceUrl) ||
+            chapter.volume_title !== undefined && (old.volume_title !== chapter.volume_title || old.volume_number !== chapter.volume_number)) fail(409, `章号 ${chapter.chapter_number} 已下架或内容冲突，已保留网站原章节`);
       }
       return {book, missing};
     }

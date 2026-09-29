@@ -117,6 +117,7 @@ export async function getCatalog(spec, client) {
   Object.assign(actual, extractBookStatus($, spec.metadata.status, first));
   Object.assign(actual, extractBookCategory($, spec.metadata.category, first));
   const catalog = [], seenPages = new Set(), seenLinks = new Set();
+  let sourceSection, sourceSectionNumber = 0;
   let url = spec.catalog?.url ? client.assertUrl(httpUrl(spec.catalog.url, spec.sourceUrl)) : first.url;
   const config = spec.catalog;
   if (config?.link) url = client.assertUrl(httpUrl(selectValue($, typeof config.link === 'string' ? {selector: config.link, attribute: 'href'} : config.link), first.url));
@@ -157,7 +158,15 @@ export async function getCatalog(spec, client) {
     const doc = load(decode(page.body, page.contentType, spec.encoding));
     const links = doc(config.links);
     if (!links.length) throw Error(`目录页未匹配章节：${url}`);
-    for (const el of links.toArray()) {
+    const entries = config.volumeSelector ? doc(`${config.volumeSelector}, ${config.links}`) : links;
+    for (const el of entries.toArray()) {
+      if (config.volumeSelector && doc(el).is(config.volumeSelector)) {
+        if (doc(el).is(config.links)) throw Error('卷标题不能同时是章节链接');
+        sourceSection = doc(el).text().trim();
+        if (!sourceSection || sourceSection.length > 100) throw Error('目录卷标题缺失或异常');
+        sourceSectionNumber++;
+        continue;
+      }
       const a = doc(el), href = a.attr('href');
       if (!href) throw Error('目录项缺少链接');
       const link = client.assertUrl(httpUrl(href, page.url));
@@ -170,7 +179,7 @@ export async function getCatalog(spec, client) {
       const orderNode = config.orderAncestor ? a.closest(config.orderAncestor) : a;
       const sourceOrder = config.orderAttribute ? Number(orderNode.attr(config.orderAttribute)) : catalog.length + 1;
       if (!Number.isSafeInteger(sourceOrder) || sourceOrder < 1) throw Error('来源目录序号缺失或无效');
-      catalog.push({title, link, sourceOrder, ...(title !== sourceTitle ? {sourceCatalogTitle: sourceTitle} : {})});
+      catalog.push({title, link, sourceOrder, ...(sourceSection ? {sourceSection, sourceSectionNumber} : {}), ...(title !== sourceTitle ? {sourceCatalogTitle: sourceTitle} : {})});
       if (catalog.length > 20000) throw Error('目录超过20000项上限');
     }
     url = nextPage(doc, config.next, page.url, client);

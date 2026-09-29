@@ -14,9 +14,9 @@ export async function inspectLibraryBook(job, {Book, Chapter, bodyHash}) {
     return {book: null, chapters: []};
   }
   if (!book.importManaged || book.author_id || book.deletedAt) fail('网站作品已下架或归属不允许自动导入，请先核对');
-  const chapters = await Chapter.find({bookId: book._id}).select('chapter_number title content contentSha256 sourceUrl deletedAt').sort({chapter_number: 1}).lean();
+  const chapters = await Chapter.find({bookId: book._id}).select('chapter_number title content contentSha256 sourceUrl deletedAt volume_title volume_number').sort({chapter_number: 1}).lean();
   const summaries = chapters.map(c => ({number: c.chapter_number, title: c.title, link: c.sourceUrl, deleted: !!c.deletedAt,
-    hash: typeof c.content === 'string' ? bodyHash(c.content) : c.contentSha256}));
+    hash: typeof c.content === 'string' ? bodyHash(c.content) : c.contentSha256, volume_title: c.volume_title, volume_number: c.volume_number}));
   return {book: Object.fromEntries(['title', 'author', 'sourceUrl', 'description', 'category', 'status'].map(key => [key, book[key]])), bookId: String(book._id), chapters: summaries};
 }
 

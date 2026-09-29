@@ -1,3 +1,5 @@
+import {cleanChapterForReading} from '../../shared/reading-cleanup.mjs';
+
 // Formatting belongs at export, after source matching and checkpoint validation.
 // Sites often switch full-width ASCII punctuation while rendering a catalog.
 // Keep the accepted label when the URL and position are identical. Do not strip
@@ -29,5 +31,5 @@ export function formatChapterForExport(chapter) {
       formatted[field] = title;
     }
   }
-  return formatted;
+  return cleanChapterForReading(formatted);
 }

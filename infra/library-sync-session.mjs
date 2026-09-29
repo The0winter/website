@@ -2,7 +2,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 
-export function createVpsLibrarySession({host = 'ubuntu@51.79.242.0', identity = path.join(os.homedir(), '.ssh', 'ovh_website_ed25519'), spawnProcess = spawn} = {}) {
+export function createVpsLibrarySession({host = 'ubuntu@51.79.242.0', identity = path.join(os.homedir(), '.ssh', 'ovh_website_ed25519'), spawnProcess = spawn, worker = 'library-sync-worker.mjs'} = {}) {
+  if (!['library-sync-worker.mjs', 'library-cleaning-worker.mjs'].includes(worker)) throw Error('网站同步入口无效');
   if (!/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(host)) throw Error('SSH 主机无效');
   let child, active, buffer = '', serial = 0, closed = false, exited;
   function settle(error, result) {
@@ -16,7 +17,7 @@ export function createVpsLibrarySession({host = 'ubuntu@51.79.242.0', identity =
     settle(Object.assign(Error(message), {fatal: true})); child?.kill();
   }
   function start() {
-    const command = 'sudo -n /opt/node-v22.23.2-linux-x64/bin/node --env-file=/etc/test1/api.env /srv/test1/current/infra/library-sync-worker.mjs';
+    const command = `sudo -n /opt/node-v22.23.2-linux-x64/bin/node --env-file=/etc/test1/api.env /srv/test1/current/infra/${worker}`;
     child = spawnProcess('ssh', ['-i', identity, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=2', host, command], {stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true});
     exited = new Promise(resolve => child.once('close', resolve));
     child.stderr.resume(); child.stdin.on('error', () => fail('网站连接中断，已完成批次保留'));

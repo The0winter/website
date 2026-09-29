@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import {cleanBookForReading, sourceContentHash} from '../../shared/reading-cleanup.mjs';
 import {mergeBookCategory} from './categories.mjs';
 import path from 'node:path';
 import {load} from 'cheerio';
@@ -86,7 +87,7 @@ function rawChapter(dir, entry) {
   return saved.chapter;
 }
 function fingerprint(entry, chapter) {
-  return {position: entry.chapter_number, link: entry.link, catalogTitle: entry.title, title: chapter.title, contentHash: hash(chapter.content)};
+  return {position: entry.chapter_number, link: entry.link, catalogTitle: entry.title, title: chapter.title, contentHash: sourceContentHash(chapter)};
 }
 export function verifyReadingSources(dir, state, catalog) {
   for (const [i, accepted] of state.sources.entries()) {
@@ -136,7 +137,7 @@ export function recordReadingNoticeReview(dir, spec, extraction, outputDir, {lin
   const catalog = readJson(path.join(dir, 'catalog.json'), []), entry = catalog.find(item => item.link === link);
   if (!entry || entry.chapter_number <= state.sources.length) throw Error('只能核对尚未纳入阅读版的新公告');
   const chapter = rawChapter(dir, entry);
-  if (readingChapterNumber(chapter.title) !== null || hash(chapter.content) !== contentHash) throw Error('公告正文哈希已变化或标题含正文章号');
+  if (readingChapterNumber(chapter.title) !== null || sourceContentHash(chapter) !== contentHash) throw Error('公告正文哈希已变化或标题含正文章号');
   const quality = qualityReport([entry], [chapter], [], 'probe');
   if (quality.issues.some(issue => issue.level !== 'info' && issue.code !== 'short-outlier')) throw Error('公告正文未通过质量检查');
   const review = {link, title: chapter.title, contentHash, reason: reason.trim(), evidence: chapter.provenance, reviewedAt: new Date().toISOString()};
@@ -144,7 +145,7 @@ export function recordReadingNoticeReview(dir, spec, extraction, outputDir, {lin
   return review;
 }
 
-const numberingFingerprint = chapter => ({link:chapter.link, title:normalizedTitle(chapter.title), contentHash:hash(chapter.content), sourcePosition:chapter.sourceChapterNumber || chapter.chapter_number});
+const numberingFingerprint = chapter => ({link:chapter.link, title:normalizedTitle(chapter.title), contentHash:sourceContentHash(chapter), sourcePosition:chapter.sourceChapterNumber || chapter.chapter_number});
 
 // Maintenance review of a mirror correcting its already-reviewed final ordinal.
 // Preserve every old chapter and checkpoint; only the next expected number changes.
@@ -161,12 +162,12 @@ export function recordReadingCatalogCorrection(dir, spec, extraction, outputDir,
     r.window.every((expected, i) => hash(numberingFingerprint(rawChapter(dir, previous[position - 3 + i]))) === hash(expected)));
   if (!accepted || !before || !after || !prior || before.name !== after.name || Math.abs(before.number - after.number) !== 1 || after.number !== prior.number + 1) throw Error('只能核对已经逐项验收过的末章编号错误');
   const quality = qualityReport([current], [incoming], [], 'probe');
-  if (incoming.link !== old.link || incoming.chapter_number !== position || incoming.title !== current.title || hash(incoming.content) !== hash(saved.content) ||
+  if (incoming.link !== old.link || incoming.chapter_number !== position || incoming.title !== current.title || sourceContentHash(incoming) !== sourceContentHash(saved) ||
       quality.issues.some(i => i.level !== 'info' && i.code !== 'short-outlier')) throw Error('编号修正必须核对同一章的完整正文，不能接受正文变化');
   if (!responses?.length || responses.some(r => !r.body?.length || hash(r.body) !== r.hash)) throw Error('编号修正缺少原始响应证据');
   const evidence = [...new Map(responses.map(r => [r.hash, {url:r.url,hash:r.hash,fetchedAt:r.fetchedAt}])).values()];
   for (const response of responses) atomicWrite(path.join(dir, 'reading-catalog-evidence', response.hash + '.bin'), response.body);
-  const correction = {position, link:old.link, catalogTitle:old.title, title:current.title, contentHash:hash(saved.content), reviewKey:accepted.key, evidence, reason:review.reason.trim(), reviewedAt:new Date().toISOString()};
+  const correction = {position, link:old.link, catalogTitle:old.title, title:current.title, contentHash:sourceContentHash(saved), reviewKey:accepted.key, evidence, reason:review.reason.trim(), reviewedAt:new Date().toISOString()};
   atomicWrite(stateFile(dir), seal({...state, catalogCorrections:[...(state.catalogCorrections || []).filter(r=>r.link!==old.link),correction]}));
   return correction;
 }
@@ -188,12 +189,12 @@ export function recordReadingNumberingReview(dir, spec, extraction, outputDir, {
         last.link !== links[0] || positions[0] !== state.sources.length - 1 ||
         !positions.every((p,i)=>p===positions[0]+i)) throw Error('边界编号核对必须包含原书末章及紧随其后的两个新章');
   } else if (!positions.every((p,i)=>p>=state.sources.length&&p===positions[0]+i)) throw Error('只能核对尚未收录的相邻三项，不能跳过缺章或修改旧映射');
-  const chapters=positions.map((p,i)=>{const c=rawChapter(dir,catalog[p]);if(hash(c.content)!==hashes[i]||normalizedTitle(c.title)!==normalizedTitle(catalog[p].title)||c.content.trim().length<100)throw Error('完整正文哈希或目录标题不匹配');return c;});
+  const chapters=positions.map((p,i)=>{const c=rawChapter(dir,catalog[p]);if(sourceContentHash(c)!==hashes[i]||normalizedTitle(c.title)!==normalizedTitle(catalog[p].title)||c.content.trim().length<100)throw Error('完整正文哈希或目录标题不匹配');return c;});
   checkNewIssues(qualityReport(positions.map(p=>catalog[p]),chapters,[],'probe'));
   const numbers=chapters.map(c=>readingChapterNumber(c.title));
   const anomalies=[1,2].filter(i=>numbers[i]!==numbers[i-1]+1);
   if (!numbers.every(Number.isSafeInteger)||anomalies.length!==1) throw Error('仅核对相邻三项中的一个来源编号错误');
-  if (boundaryWindow && (anomalies[0] !== 1 || hash(last.content) !== hashes[0] || normalizedTitle(last.title) !== normalizedTitle(chapters[0].title))) throw Error('边界核对只能验收旧末章之后的编号错误，旧题与完整正文必须一致');
+  if (boundaryWindow && (anomalies[0] !== 1 || sourceContentHash(last) !== hashes[0] || normalizedTitle(last.title) !== normalizedTitle(chapters[0].title))) throw Error('边界核对只能验收旧末章之后的编号错误，旧题与完整正文必须一致');
   const url=httpUrl(reference.url),raw=fs.readFileSync(reference.bodyFile),text=normalizedTitle(load(raw.toString('utf8')).text());
   const titles=reference.chapters,identities=Array.isArray(titles)&&titles.map(title=>chapterIdentity(String(title).replace(/^([0-9]+)[、.]\s*/u,'第$1章 ')));
   if (new URL(url).hostname===new URL(spec.sourceUrl).hostname||!raw.length||raw.length>2_000_000||hash(raw)!==reference.hash||
@@ -226,7 +227,7 @@ function orderedChapters(chapters, reviewedPrefix = 0, noticeReviews = [], numbe
         number = current; halfChapter = false;
       }
     } else if (!/^(?:番外|IF番外|(?:[一二三四五六七八九十0-9]+月)?总结|请假|公告|通知|活动|感言|后记|月票)/iu.test(title) &&
-      !noticeReviews.some(review => review.link === chapter.link && review.title === chapter.title && review.contentHash === hash(chapter.content))) {
+      !noticeReviews.some(review => review.link === chapter.link && review.title === chapter.title && review.contentHash === sourceContentHash(chapter))) {
       throw Error(`未识别的番外或公告标题，需要核对：“${chapter.title}”`);
     }
   }
@@ -268,7 +269,7 @@ function verifySourceOrderReview(review, catalog, raw, book, seen) {
   const omissions = new Set();
   for (const pair of review.pairs) {
     const omit = raw[pair.omit - 1], keep = raw[pair.keep - 1];
-    if (!Number.isInteger(pair.omit) || !Number.isInteger(pair.keep) || !omit || !keep || seen.has(omit.link) || !seen.has(keep.link) || omissions.has(omit.link) || pair.omitHash !== hash(omit.content) || pair.keepHash !== hash(keep.content) || typeof pair.reason !== 'string' || !pair.reason.trim()) throw Error('重复项核对与保留章节、正文哈希不匹配');
+    if (!Number.isInteger(pair.omit) || !Number.isInteger(pair.keep) || !omit || !keep || seen.has(omit.link) || !seen.has(keep.link) || omissions.has(omit.link) || pair.omitHash !== sourceContentHash(omit) || pair.keepHash !== sourceContentHash(keep) || typeof pair.reason !== 'string' || !pair.reason.trim()) throw Error('重复项核对与保留章节、正文哈希不匹配');
     const pairIssues = issues.filter(i => ((i.chapter === pair.omit && i.otherChapter === pair.keep) || (i.chapter === pair.keep && i.otherChapter === pair.omit)));
     // A duplicate of a near duplicate may only point to its identical copy in
     // the whole-book report. Recheck the explicitly pinned pair with the same
@@ -282,7 +283,7 @@ function verifySourceOrderReview(review, catalog, raw, book, seen) {
   }
   for (const gap of review.gaps || []) {
     const chapter = raw[gap.position - 1];
-    if (!Number.isInteger(gap.position) || !chapter || seen.has(chapter.link) || omissions.has(chapter.link) || gap.link !== chapter.link || gap.contentHash !== hash(chapter.content) || typeof gap.reason !== 'string' || !gap.reason.trim()) throw Error('缺文核对与来源位置、链接及正文哈希不匹配');
+    if (!Number.isInteger(gap.position) || !chapter || seen.has(chapter.link) || omissions.has(chapter.link) || gap.link !== chapter.link || gap.contentHash !== sourceContentHash(chapter) || typeof gap.reason !== 'string' || !gap.reason.trim()) throw Error('缺文核对与来源位置、链接及正文哈希不匹配');
     if (!gap.evidence || !/^https?:\/\//u.test(gap.evidence.url || '') || !Number.isFinite(Date.parse(gap.evidence.checkedAt)) || typeof gap.evidence.detail !== 'string' || !gap.evidence.detail.trim()) throw Error('缺文核对必须保存独立证据地址、时间和说明');
     if (gap.kind === 'placeholder') {
       if (!placeholderEvidence(chapter.content, chapter)) throw Error('缺文提示验收不能排除普通正文');
@@ -301,7 +302,7 @@ function verifySourceOrderReview(review, catalog, raw, book, seen) {
   const mapped = new Set();
   for (const item of review.titleMappings || []) {
     const chapter = raw[item.position - 1];
-    if (!Number.isInteger(item.position) || !chapter || !seen.has(chapter.link) || mapped.has(item.position) || item.link !== chapter.link || item.contentHash !== hash(chapter.content) || item.title !== chapter.title || item.catalogTitle !== chapter.catalogTitle || typeof item.reason !== 'string' || !item.reason.trim()) throw Error('标题差异核对与保留章节、标题及正文哈希不匹配');
+    if (!Number.isInteger(item.position) || !chapter || !seen.has(chapter.link) || mapped.has(item.position) || item.link !== chapter.link || item.contentHash !== sourceContentHash(chapter) || item.title !== chapter.title || item.catalogTitle !== chapter.catalogTitle || typeof item.reason !== 'string' || !item.reason.trim()) throw Error('标题差异核对与保留章节、标题及正文哈希不匹配');
     if (!item.evidence || !/^https?:\/\//u.test(item.evidence.url || '') || !Number.isFinite(Date.parse(item.evidence.checkedAt)) || typeof item.evidence.detail !== 'string' || !item.evidence.detail.trim() || !issues.some(i => i.code === 'title-mismatch' && i.chapter === item.position)) throw Error('标题差异验收需要已检测的差异和独立核对证据');
     mapped.add(item.position);
   }
@@ -382,21 +383,21 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
           const file = path.join(dir, 'reading-catalog-evidence', evidence.hash + '.bin');
           if (!fs.existsSync(file) || hash(fs.readFileSync(file)) !== evidence.hash) throw Error('目录编号修正的原始证据缺失或变化');
         }
-        if (previous?.sourceChapterNumber === correction.position && previous.link === correction.link && hash(previous.content) === correction.contentHash) {
+        if (previous?.sourceChapterNumber === correction.position && previous.link === correction.link && sourceContentHash(previous) === correction.contentHash) {
           reviewedTailNumber = readingChapterNumber(correction.title);
         }
       }
       if (missingTail.length > 0 && missingTail.length <= 3 && oldTail.length <= 8 && oldTail.every((source, i) => {
         if (source.position !== start + i + 1) return false;
         const number = readingChapterNumber(source.title);
-        if (number === null) return book.chapters.some(c => c.sourceChapterNumber === source.position && c.link === source.link && hash(c.content) === source.contentHash);
+        if (number === null) return book.chapters.some(c => c.sourceChapterNumber === source.position && c.link === source.link && sourceContentHash(c) === source.contentHash);
         const gap = state.sourceOrderReview?.gaps?.find(g => g.position === source.position);
         return number === readingChapterNumber(previous.title) + missingTail.indexOf(source) + 1 &&
           !book.chapters.some(c => c.sourceChapterNumber === source.position) && gap?.link === source.link && gap.contentHash === source.contentHash &&
           ['placeholder', 'truncated'].includes(gap.kind) && gap.reason?.trim() && gap.evidence?.url && gap.evidence?.detail && Number.isFinite(Date.parse(gap.evidence.checkedAt));
       })) reviewedTailNumber = readingChapterNumber(previous.title) + missingTail.length;
       orderedChapters(chapters, state.sourceOrderReview ? originalCount : 0, state.noticeReviews, state.numberingReviews, reviewedTailNumber);
-      const nextBook = {...book, ...Object.fromEntries(['description', 'status', 'cover_image', 'authorSourceUrl'].filter(key => spec[key] !== undefined).map(key => [key, spec[key]])), ...mergeBookCategory(book, spec), chapters};
+      const nextBook = cleanBookForReading({...book, ...Object.fromEntries(['description', 'status', 'cover_image', 'authorSourceUrl'].filter(key => spec[key] !== undefined).map(key => [key, spec[key]])), ...mergeBookCategory(book, spec), chapters});
       const nextQuality = editionQuality(nextBook, 'download', signatureCache);
       checkNewIssues(nextQuality, originalCount);
       prepareImport(nextBook);
@@ -417,7 +418,7 @@ export function updateReadingEdition({dir, state, spec, extraction, outputDir, c
     ...(state.numberingReviews?.length ? {acceptedSourceNumbering: state.numberingReviews} : {}),
     ...(state.catalogCorrections?.length ? {acceptedCatalogCorrections: state.catalogCorrections} : {}),
     completeAgainstSource: !!exportFile && !state.sourceOrderReview?.gaps?.length, completeSelectedScope: !!exportFile, sourceGaps: state.sourceOrderReview?.gaps || [], exportFile, reusedExport, readingAdded: added,
-    mappingFile: stateFile(dir), mapping: book.chapters.map(c => ({chapter_number: c.chapter_number, title: c.title, sourcePosition: c.sourceChapterNumber, sourceUrl: c.link, sourceHash: hash(c.content)})),
+    mappingFile: stateFile(dir), mapping: book.chapters.map(c => ({chapter_number: c.chapter_number, title: c.title, sourcePosition: c.sourceChapterNumber, sourceUrl: c.link, sourceHash: sourceContentHash(c)})),
     limitation: '沿用这本书已核对的来源映射，阅读版章序保持稳定。新发现的重复、乱码、章号跳转会暂停更新，旧阅读版和原始采集记录保留。只检查可检测异常，不能保证源站无删文或错配。',
   };
 }
