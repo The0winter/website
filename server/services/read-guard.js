@@ -20,7 +20,7 @@ export function readTarget(path) {
 // retained; capacity pressure evicts old state, never rejects the whole site.
 export function createReadGuard(config, {clock = Date.now, maxActors = 5000, maxChapters = 100000} = {}) {
   const mode = config.readGuardMode || (config.mode === 'production' ? 'enforce' : 'off');
-  const actors = new Map(), counters = {allowed:0, blocked:0, observed:0, evictions:0, reasons:{}, verifiedSearch:{google:0,bing:0,baidu:0}};
+  const actors = new Map(), counters = {allowed:0, blocked:0, observed:0, evictions:0, reasons:{}, verifiedSearch:{google:0,bing:0,baidu:0,yandex:0}};
   const cookieName = config.mode === 'production' ? '__Host-reader-access' : 'reader-access';
   let storedChapters = 0;
   const hash = value => crypto.createHmac('sha256', config.jwtSecret).update('read-guard-v1:' + value).digest('hex');
@@ -64,7 +64,7 @@ export function createReadGuard(config, {clock = Date.now, maxActors = 5000, max
     if (/(?:\bClaudeBot\b|\bGPTBot\b|\bCCBot\b|\bBytespider\b|\bDiffbot\b|\bOmgilibot\b)/i.test(input.userAgent || '')) return verdict(403, 'bulk-crawler', 0);
     // This second argument comes only from the server verifier. Client headers,
     // cookies and delegated JSON cannot mark a caller as verified.
-    const search = ['google','bing','baidu'].includes(verifiedSearch) && canonicalCrawlerIp(input.ip);
+    const search = ['google','bing','baidu','yandex'].includes(verifiedSearch) && canonicalCrawlerIp(input.ip);
     const who = search ? {key:hash('search:' + verifiedSearch + ':' + search), kind:'search', setCookie:null} : identity(input, now);
     const {key, kind, setCookie} = who;
     if (search) counters.verifiedSearch[verifiedSearch]++;

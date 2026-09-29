@@ -5,6 +5,7 @@ const providers = {
   google: /\b(?:Googlebot(?:-[a-z]+)?|Google-InspectionTool)\b/i,
   bing: /\b(?:bingbot|msnbot(?:-media)?|BingPreview)\b/i,
   baidu: /\bBaiduspider(?:-[a-z]+)?\b/i,
+  yandex: /\bYandexBot\b/i,
 };
 export function searchCrawlerProvider(userAgent) {
   const matches = Object.keys(providers).filter(key => providers[key].test(String(userAgent || '')));
@@ -31,6 +32,7 @@ function officialHost(provider, host) {
   if (!/^[a-z\d.-]{1,253}$/.test(name)) return false;
   if (provider === 'google') return name.endsWith('.googlebot.com') || /^(?:google-proxy-|rate-limited-proxy-)[a-z\d-]+\.google\.com$/.test(name);
   if (provider === 'bing') return name.endsWith('.search.msn.com');
+  if (provider === 'yandex') return ['.yandex.ru', '.yandex.net', '.yandex.com'].some(suffix => name.endsWith(suffix));
   return provider === 'baidu' && (name.endsWith('.baidu.com') || name.endsWith('.baidu.jp'));
 }
 
@@ -41,7 +43,7 @@ export function createSearchCrawlerVerifier({clock = Date.now, resolverFactory =
   maxEntries = 2048, maxPending = 16, timeoutMs = 1200, positiveMs = 6 * 3600000, negativeMs = 10 * 60000,
   transientMs = 30000, staleMs = 24 * 3600000} = {}) {
   const cache = new Map(), pending = new Map();
-  const counts = {lookups:0, cacheHits:0, staleHits:0, rejected:0, errors:0, busy:0, evictions:0, verified:{google:0,bing:0,baidu:0}};
+  const counts = {lookups:0, cacheHits:0, staleHits:0, rejected:0, errors:0, busy:0, evictions:0, verified:{google:0,bing:0,baidu:0,yandex:0}};
   function remember(key, value) {
     cache.delete(key);cache.set(key, value);
     while (cache.size > maxEntries) {cache.delete(cache.keys().next().value);counts.evictions++;}

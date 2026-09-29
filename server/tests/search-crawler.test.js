@@ -4,11 +4,11 @@ import assert from 'node:assert/strict';
 import {createSearchCrawlerVerifier, searchCrawlerProvider, canonicalCrawlerIp} from '../services/search-crawler.js';
 
 const ip = '192.0.2.10';
-const agents = {google:'Mozilla/5.0 (compatible; Googlebot/2.1)', bing:'bingbot/2.0', baidu:'Baiduspider/2.0'};
-const names = {google:'crawl-192-0-2-10.googlebot.com', bing:'msnbot-192-0-2-10.search.msn.com', baidu:'baiduspider-192-0-2-10.crawl.baidu.com'};
+const agents = {google:'Mozilla/5.0 (compatible; Googlebot/2.1)', bing:'bingbot/2.0', baidu:'Baiduspider/2.0', yandex:'Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)'};
+const names = {google:'crawl-192-0-2-10.googlebot.com', bing:'msnbot-192-0-2-10.search.msn.com', baidu:'baiduspider-192-0-2-10.crawl.baidu.com', yandex:'spider-192-0-2-10.yandex.com'};
 const dns = (name, addresses=[ip], extra={}) => ({reverse:async()=>[name],resolve4:async()=>addresses,resolve6:async()=>addresses,cancel(){},...extra});
 
-test('Google, Bing and Baidu require matching official PTR and forward IP, with bounded cached proof', async () => {
+test('Google, Bing, Baidu and Yandex require matching official PTR and forward IP, with bounded cached proof', async () => {
   for (const provider of Object.keys(agents)) {
     let now=1000, reverse=0, forward=0;
     const verifier=createSearchCrawlerVerifier({clock:()=>now,positiveMs:100,staleMs:200,resolverFactory:()=>dns(names[provider],[ip],{
@@ -32,6 +32,8 @@ test('normal browsers, ambiguous names and invalid addresses cannot initiate or 
   assert.equal(searchCrawlerProvider('Google-InspectionTool/1.0'),'google');
   assert.equal(searchCrawlerProvider('BingPreview/1.0'),'bing');
   assert.equal(searchCrawlerProvider('Baiduspider-render/2.0'),'baidu');
+  assert.equal(searchCrawlerProvider(agents.yandex),'yandex');
+  for (const userAgent of ['YandexImages/3.0','YandexCheckBot/3.0','YandexAdNet/1.0','FakeYandexBot','YandexBot Bingbot'])assert.equal(searchCrawlerProvider(userAgent),null);
   assert.equal(canonicalCrawlerIp('2001:0DB8:0:0:0:0:0:1'),'2001:db8::1');
   assert.equal(canonicalCrawlerIp('::ffff:c000:20a'),ip);
   assert.equal(canonicalCrawlerIp('fe80::1%eth0'),null);
@@ -47,13 +49,16 @@ test('spoofed PTR suffixes, forward mismatches and cross-provider identity do no
   }
   const verifier=createSearchCrawlerVerifier({resolverFactory:()=>dns(names.google)});
   assert.equal(await verifier.verify({ip,userAgent:agents.baidu}),null);
+  assert.equal(await verifier.verify({ip,userAgent:agents.yandex}),null);
 });
 
-test('official inspection proxy, Baidu Japan and IPv6 forward confirmation are supported', async () => {
+test('official inspection proxy, Baidu Japan, Yandex domains and IPv6 forward confirmation are supported', async () => {
   for (const [userAgent,host,source,answers,wanted] of [
     ['Google-InspectionTool','google-proxy-192-0-2-10.google.com',ip,[ip],'google'],
     ['Baiduspider','crawl-192-0-2-10.baidu.jp',ip,[ip],'baidu'],
     ['Googlebot','crawl-2001-db8-1.googlebot.com','2001:db8::1',['2001:0db8:0:0:0:0:0:1'],'google'],
+    ...['com','net','ru'].map(tld=>['YandexBot','spider-192-0-2-10.yandex.'+tld,ip,[ip],'yandex']),
+    ['YandexBot','spider-2001-db8-1.yandex.net','2001:db8::1',['2001:0db8:0:0:0:0:0:1'],'yandex'],
   ]) {
     const verifier=createSearchCrawlerVerifier({resolverFactory:()=>dns(host,answers)});
     assert.equal(await verifier.verify({ip:source,userAgent}),wanted);

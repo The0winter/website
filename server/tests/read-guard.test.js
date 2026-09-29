@@ -69,7 +69,7 @@ test('observation is reversible, memory stays bounded, local development stays u
 
 test('verified search crawlers have no chapter-count ceiling but retain their own burst protection', () => {
   let now=start;const guard=createReadGuard(config,{clock:()=>now});
-  for(const provider of ['google','bing','baidu']) {
+  for(const provider of ['google','bing','baidu','yandex']) {
     for(let n=1;n<=1000;n++) {
       now+=110;
       assert.equal(guard.check(input(n,'',{userAgent:provider==='baidu'?'Baiduspider':provider+'bot'}),provider).status,200);
@@ -77,33 +77,50 @@ test('verified search crawlers have no chapter-count ceiling but retain their ow
     assert.ok(guard.snapshot().verifiedSearch[provider]>=1000);
   }
   assert.equal(guard.snapshot().rememberedChapters,0);
-  let denied=0;
-  for(let n=0;n<150;n++)if(guard.check(input(n,'',{userAgent:'Googlebot'}),'google').status===429)denied++;
-  assert.ok(denied>0);
+  for(const provider of ['google','yandex']) {
+    let denied=0;
+    for(let n=0;n<150;n++)if(guard.check(input(n,'',{userAgent:provider+'bot'}),provider).status===429)denied++;
+    assert.ok(denied>0,provider+' retains burst protection');
+  }
   assert.equal(guard.check(input(9,'',{userAgent:'Mozilla/5.0'})).status,200,'normal reader has an independent budget');
 });
 
-test('client-supplied search labels never bypass verification on the HTML or API path', async () => {
+test('verified Yandex does not exempt other crawlers or unverified Yandex identities', () => {
+  let now=start;const guard=createReadGuard(config,{clock:()=>now});
+  for(const userAgent of ['YandexBot','Claude-SearchBot','MJ12bot']) {
+    const ip=userAgent==='YandexBot'?'192.0.2.20':userAgent==='Claude-SearchBot'?'192.0.2.21':'192.0.2.22';
+    for(let n=1;n<=31;n++) {
+      now+=1000;
+      assert.equal(guard.check(input(n,'',{ip,userAgent})).status,n<=30?200:429);
+    }
+  }
+  assert.equal(guard.snapshot().verifiedSearch.yandex,0);
+  assert.equal(guard.check(input(100,'',{userAgent:'YandexBot ClaudeBot'}),'yandex').status,403);
+  for(let n=1;n<=35;n++){now+=1000;assert.equal(guard.check(input(n,'',{ip:'192.0.2.23',userAgent:'YandexBot'}),'yandex').status,200);}
+  assert.equal(guard.snapshot().verifiedSearch.yandex,35);
+});
+
+for(const [provider,userAgent] of [['baidu','Baiduspider'],['yandex','YandexBot']])test(provider+': client-supplied search labels never bypass verification on the HTML or API path', async () => {
   const saved=process.env.INTERNAL_API_SECRET;process.env.INTERNAL_API_SECRET='s'.repeat(48);
   const app=express();app.set('trust proxy','loopback');let proofs=0;
-  const {delegated,guard}=installReadGuard(app,config,{searchVerifier:{verify:async ({ip})=>{proofs++;return ip==='192.0.2.15'?'baidu':null;}}});
+  const {delegated,guard}=installReadGuard(app,config,{searchVerifier:{verify:async ({ip})=>{proofs++;return ip==='192.0.2.15'?provider:null;}}});
   app.post('/internal/reader-guard',express.json(),delegated);
   app.get('/api/chapters/:id',(_req,res)=>res.json({ok:true}));
   const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));const base=`http://127.0.0.1:${server.address().port}`;
   try {
     for(let n=1;n<=31;n++) {
       const response=await fetch(base+'/internal/reader-guard',{method:'POST',headers:{'Content-Type':'application/json','x-internal-api-secret':process.env.INTERNAL_API_SECRET},
-        body:JSON.stringify(input(n,'',{path:`/book/${id(999)}/${id(n)}`,userAgent:'Baiduspider',verifiedSearch:'baidu'}))});
+        body:JSON.stringify(input(n,'',{path:`/book/${id(999)}/${id(n)}`,userAgent,verifiedSearch:provider}))});
       assert.equal((await response.json()).status,n<=30?200:429);
     }
-    assert.equal(guard.snapshot().verifiedSearch.baidu,0);
+    assert.equal(guard.snapshot().verifiedSearch[provider],0);
     for(let n=1;n<=35;n++) {
-      const response=await fetch(base+chapter(n),{headers:{'user-agent':'Baiduspider','x-forwarded-for':'192.0.2.15'}});
+      const response=await fetch(base+chapter(n),{headers:{'user-agent':userAgent,'x-forwarded-for':'192.0.2.15'}});
       assert.equal(response.status,200);
     }
-    assert.equal(guard.snapshot().verifiedSearch.baidu,35);assert.ok(proofs>0);
-    const response=await fetch(base+chapter(999),{headers:{'user-agent':'Baiduspider','x-forwarded-for':'192.0.2.16','x-verified-search':'baidu'}});
-    assert.equal(response.status,200);assert.equal(guard.snapshot().verifiedSearch.baidu,35,'an untrusted header grants no proof');
+    assert.equal(guard.snapshot().verifiedSearch[provider],35);assert.ok(proofs>0);
+    const response=await fetch(base+chapter(999),{headers:{'user-agent':userAgent,'x-forwarded-for':'192.0.2.16','x-verified-search':provider}});
+    assert.equal(response.status,200);assert.equal(guard.snapshot().verifiedSearch[provider],35,'an untrusted header grants no proof');
   } finally {server.closeAllConnections();await new Promise(resolve=>server.close(resolve));if(saved===undefined)delete process.env.INTERNAL_API_SECRET;else process.env.INTERNAL_API_SECRET=saved;}
 });
 
