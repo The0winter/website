@@ -1,0 +1,55 @@
+import '../../tools/test-env.cjs';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import mongoose from 'mongoose';
+import {TestDatabase} from '../database/testing.js';
+import {importForumArticles} from '../services/forum-import.js';
+import Book from '../models/Book.js';
+import User from '../models/User.js';
+import Post from '../models/ForumPost.js';
+import Reply from '../models/ForumReply.js';
+import Author from '../models/Author.js';
+import AdminLog from '../models/AdminLog.js';
+
+test('licensed production import previews, reuses public books, preserves feedback, and rejects changed or private records', async () => {
+  const db = await TestDatabase.create();
+  await mongoose.connect(db.getUri(), {autoIndex:false});
+  try {
+    for (const model of Object.values(mongoose.models)) await model.createIndexes();
+    const admin = await User.create({username:'资料管理员',email:'curator@example.test',password:'not-a-login-hash',role:'admin'});
+    const existing = await Book.create({title:'测试书',author:'测试作者',description:'原有简介',views:42});
+    const content = '<p>完整的合成书评正文。</p>';
+    const manifest = {version:1,usage:'public-licensed-reviews',batch:'production-import-test',book:{title:'测试书',author:'测试作者',description:'新简介'},question:{title:'如何评价测试书？',content:'<p>欢迎讨论。</p>'},articles:[{id:'review-1',title:'合成书评',content,sha256:crypto.createHash('sha256').update(content).digest('hex'),source:{title:'合成书评',author:'署名作者',url:'https://example.test/review',license:'CC BY-SA 4.0',licenseUrl:'https://creativecommons.org/licenses/by-sa/4.0/',publishedAt:'2024-01-01T00:00:00Z'}}]};
+    const preview = await importForumArticles(manifest);
+    assert.equal(preview.bookId, String(existing._id));
+    assert.deepEqual(preview.created, {books:0,questions:1,answers:1});
+    assert.equal(await Post.countDocuments(), 0);
+    assert.equal(await Reply.countDocuments(), 0);
+    await assert.rejects(importForumArticles({...manifest,usage:'local-noncommercial-test'}, {apply:true}), /公开/);
+    await assert.rejects(importForumArticles({...manifest,articles:[{...manifest.articles[0],content:'篡改正文'}]}, {apply:true}), /校验/);
+    const applied = await importForumArticles(manifest, {apply:true});
+    const reply = await Reply.findById(applied.answerIds[0]);
+    assert.equal(String(reply.author), String(admin._id));
+    assert.equal(reply.source.author, '署名作者');
+    await Reply.updateOne({_id:reply._id}, {$set:{likes:3,comments:2,likedBy:[admin._id]}});
+    const again = await importForumArticles(manifest, {apply:true});
+    assert.deepEqual(again.created, {books:0,questions:0,answers:0});
+    const preserved = await Reply.findById(reply._id).lean();
+    assert.equal(preserved.likes, 3); assert.equal(preserved.comments, 2);
+    assert.equal(preserved.likedBy.length, 1);
+    const book = await Book.findById(existing._id).lean();
+    assert.equal(book.description, '原有简介'); assert.equal(book.views, 42);
+    assert.equal(await User.countDocuments(), 1);
+    assert.equal(await AdminLog.countDocuments(), 1);
+    await Reply.updateOne({_id:reply._id}, {$set:{content:'<p>管理员的后续修改。</p>'}});
+    await assert.rejects(importForumArticles(manifest, {apply:true}), /已被修改/);
+    await Book.updateOne({_id:existing._id}, {$set:{visibility:'private'}});
+    await assert.rejects(importForumArticles({...manifest,batch:'second-batch'}, {apply:true}), /私密/);
+    const fresh = await importForumArticles({...manifest,batch:'fresh-book',book:{...manifest.book,title:'新书'}}, {apply:true});
+    assert.deepEqual(fresh.created, {books:1,questions:1,answers:1});
+    const imported = await Book.findById(fresh.bookId);
+    assert.equal((await Author.findById(imported.author_profile_id)).name, '测试作者');
+    assert.equal(await User.countDocuments(), 1, 'source authors are attribution, not new accounts');
+  } finally {await mongoose.disconnect();await db.stop();}
+});
