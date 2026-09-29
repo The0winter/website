@@ -2,10 +2,15 @@ import '../../test-env.cjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {hash} from '../storage.mjs';
-import {planCleaningSync} from '../../../infra/sync-cleaned-library.mjs';
+import {main,planCleaningSync} from '../../../infra/sync-cleaned-library.mjs';
 import {mergeCleaningReports} from '../clean-library.mjs';
 import {getCatalog} from '../adapters.mjs';
 import {cleanBookForReading} from '../../../shared/reading-cleanup.mjs';
+
+test('an explicitly verified online title cannot apply to a whole library', async () => {
+  await assert.rejects(main(['--online-title=已核实的新书名']),/单本书/);
+  await assert.rejects(main(['--file=book.json','--online-title=']),/单本书/);
+});
 
 test('historical sync verifies the baseline, handles a retry and preserves chapter identity', () => {
   const chapter={chapter_number:3,title:'第三章',link:'https://example.test/3',content:'正文',volume_title:'第一卷',volume_number:1};

@@ -28,7 +28,8 @@ export function planCleaningSync(book, report, remote) {
 
 export async function main(args=process.argv.slice(2)) {
   const opts=Object.fromEntries(args.filter(a=>a.includes('=')).map(a=>a.slice(2).split(/=(.*)/su).slice(0,2)));
-  if(args.some(a=>a!=='--apply'&&!/^--(?:summary|report-dir|file|run-id|restore)=/u.test(a)))throw Error('参数无效');
+  if(args.some(a=>a!=='--apply'&&!/^--(?:summary|report-dir|file|run-id|restore|online-title)=/u.test(a)))throw Error('参数无效');
+  if('online-title' in opts&&(!opts.file||!opts['online-title'].trim()))throw Error('已核实的线上书名只能配合 --file 指定单本书');
   const transport=createVpsLibrarySession({worker:'library-cleaning-worker.mjs'}),apply=args.includes('--apply');
   const root=path.resolve(fileURLToPath(new URL('..',import.meta.url)));
   try{
@@ -44,7 +45,7 @@ export async function main(args=process.argv.slice(2)) {
         await withLock(path.join(root,'.novel-crawler/book-locks',continuationKey(report)+'.lock'),async()=>{
           const bytes=fs.readFileSync(path.join(root,'downloads',item.file));
           if(hash(bytes)!==report.afterHash)throw Error('清理后本地文件又发生变化，已暂停此书同步');
-          const book=JSON.parse(bytes.toString('utf8')),identity={sourceUrl:book.sourceUrl,title:book.title,author:book.author};
+          const book=JSON.parse(bytes.toString('utf8')),identity={sourceUrl:book.sourceUrl,title:opts['online-title']||book.title,author:book.author};
           const remote=await transport({mode:'inspect',...identity});
           const evidenceFile=path.join(reportDir,continuationKey(book)+'-before.json');
           if(!fs.existsSync(evidenceFile))atomicWrite(evidenceFile,{identity,...remote});
