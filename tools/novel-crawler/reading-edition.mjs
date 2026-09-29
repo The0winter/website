@@ -321,10 +321,15 @@ export function adoptReadingEdition(dir, spec, extraction, file, outputDir, sour
   if (book.sourceUrl !== spec.sourceUrl) throw Error('阅读版来源地址不匹配');
   const raw = catalog.map(entry => rawChapter(dir, entry));
   const byLink = new Map(raw.map(chapter => [chapter.link, chapter]));
-  const seen = new Set();
-  for (const chapter of book.chapters) {
+  const expectedChapters = cleanBookForReading({...book, chapters: book.chapters.map(chapter => {
     const source = byLink.get(chapter.link);
-    const expected = source && {...formatChapterForExport(source), chapter_number: chapter.chapter_number, sourceChapterNumber: source.chapter_number, sourceChapterUrl: source.link};
+    if (!source) throw Error(`阅读版第 ${chapter.chapter_number} 项没有来源检查点`);
+    return {...formatChapterForExport(source), chapter_number: chapter.chapter_number, sourceChapterNumber: source.chapter_number, sourceChapterUrl: source.link};
+  })}).chapters;
+  const seen = new Set();
+  for (const [index, chapter] of book.chapters.entries()) {
+    const source = byLink.get(chapter.link);
+    const expected = expectedChapters[index];
     // Compare the entire selected chapter, not merely the body, so an adopted
     // artifact cannot smuggle altered titles, provenance or unrelated fields.
     if (!source || seen.has(chapter.link) || hash(chapter) !== hash(expected)) throw Error(`阅读版第 ${chapter.chapter_number} 项与来源检查点不匹配`);
