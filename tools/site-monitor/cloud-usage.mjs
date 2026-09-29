@@ -57,12 +57,25 @@ export function integrateNetwork(measurements,start,end) {
 
 export function cloudCollectors(file,{fetchImpl=fetch,clock=Date.now,readCredentials=()=>readCloudCredentials(file)}={}) {
   let oauth;
+  async function readJson(response,maxBytes){
+    const reader=response.body.getReader(),chunks=[];let size=0;
+    try{while(true){const p=await reader.read();if(p.done)break;size+=p.value.length;if(size>maxBytes)throw Error();chunks.push(p.value);}return JSON.parse(Buffer.concat(chunks).toString('utf8'));}
+    finally{await reader.cancel();}
+  }
   async function request(label,url,options,signal){
     let response;
     try {response=await fetchImpl(url,{...options,redirect:'error',signal:AbortSignal.any([...(signal?[signal]:[]),AbortSignal.timeout(20000)])});}
     catch {throw Error(`${label}连接失败或超时，请检查网络后刷新`);}
-    if(!response.ok){await response.body?.cancel();const status=response.status;throw Error(`${label}读取失败（HTTP ${status}）${status===401?'：授权可能已过期':status===403?'：请检查只读权限和本机出口 IP 白名单':status===429?'：请求过多，请稍后重试':''}`);}
-    try {const reader=response.body.getReader(),chunks=[];let size=0;try{while(true){const p=await reader.read();if(p.done)break;size+=p.value.length;if(size>4*1024**2)throw Error();chunks.push(p.value);}}finally{await reader.cancel();}return JSON.parse(Buffer.concat(chunks).toString('utf8'));}
+    if(!response.ok){
+      const status=response.status;let code;
+      // Inspect only bounded Atlas error codes. Never echo provider text, parameters or credentials.
+      if(label==='Atlas'&&status===403){try{code=(await readJson(response,16384)).errorCode;}catch{}}
+      else await response.body?.cancel();
+      if(code==='IP_ADDRESS_NOT_ON_ACCESS_LIST')throw Error('Atlas 管理 API 拒绝当前网络 IP（HTTP 403）：请在监控服务账号的 API Access List 中更新本机出口 IP；换网或切换 VPN 后需重新核对。');
+      if(code==='ACCESS_FORBIDDEN')throw Error('Atlas 管理 API 权限不足（HTTP 403）：请检查监控服务账号是否具有目标项目的 Project Read Only 权限。');
+      throw Error(`${label}读取失败（HTTP ${status}）${status===401?'：授权可能已过期':status===403?(label.startsWith('Atlas')?'：请检查只读权限和服务账号的 API Access List':'：请检查 Account Analytics Read 权限与授权有效期'):status===429?'：请求过多，请稍后重试':''}`);
+    }
+    try {return await readJson(response,4*1024**2);}
     catch {throw Error(`${label}未返回有效的统计数据`);}
   }
   return {

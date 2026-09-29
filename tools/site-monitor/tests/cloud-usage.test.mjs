@@ -62,6 +62,24 @@ test('Permission and provider failures never expose credential or response conte
   assert.equal((await empty.cloudflare()).status,'unconfigured');
 });
 
+test('Atlas distinguishes API IP restrictions from project permissions without exposing provider details',async()=>{
+  for(const [errorCode,expected,absent] of [
+    ['IP_ADDRESS_NOT_ON_ACCESS_LIST',/拒绝当前网络 IP.*HTTP 403.*服务账号的 API Access List.*VPN/,/权限不足/],
+    ['ACCESS_FORBIDDEN',/权限不足.*HTTP 403.*Project Read Only/,/拒绝当前网络 IP/],
+    ['secret-unknown',/读取失败.*HTTP 403.*只读权限.*API Access List/,/拒绝当前网络 IP/]
+  ]){
+    const c=cloudCollectors(null,{readCredentials:()=>credentials,fetchImpl:async url=>url.endsWith('/oauth/token')?response({access_token:'secret-access',expires_in:3600}):new Response(JSON.stringify({errorCode,detail:'secret-key',parameters:['secret-id']}),{status:403})});
+    await assert.rejects(c.atlasCloud(),e=>{assert.match(e.message,expected);assert.doesNotMatch(e.message,absent);assert.doesNotMatch(e.message,/secret-/);return true;});
+  }
+});
+
+test('Atlas preserves the HTTP failure when an error body is missing, invalid or oversized',async()=>{
+  for(const body of [null,'secret-invalid-json',JSON.stringify({errorCode:'IP_ADDRESS_NOT_ON_ACCESS_LIST',detail:'secret-'.repeat(3000)})]){
+    const c=cloudCollectors(null,{readCredentials:()=>credentials,fetchImpl:async url=>url.endsWith('/oauth/token')?response({access_token:'secret-access',expires_in:3600}):new Response(body,{status:403})});
+    await assert.rejects(c.atlasCloud(),e=>/HTTP 403/.test(e.message)&&!e.message.includes('secret-')&&!e.message.includes('拒绝当前网络 IP'));
+  }
+});
+
 test('Cloud warnings reject stale or previous-month totals and retain partial high-risk estimates',()=>{
   const cloud=summarizeR2(account,{start:'2026-09-01T00:00:00Z',end}),snapshot={now:Date.parse(end),modules:{cloudflare:{status:'ok',data:cloud},atlasCloud:{status:'ok',data:{status:'connected',referenceLimitBytes:10e9,inbound:{bytes:1e9,coverage:1},outbound:{bytes:9e9,coverage:.5}}},r2:{data:{buckets:[{id:'chapters',bucket:'chapters'},{id:'covers',bucket:'covers'}]}}}};
   const u=assessUsage(snapshot);assert.equal(u.r2ATone,'danger');assert.equal(u.r2BTone,'warning');assert.equal(u.transferTone,'danger');assert.equal(cloudStorage(snapshot).bytes,120);
