@@ -82,6 +82,17 @@ export function readingRoutes(app,auth) {
     const index = await readBookIndex(req.params.bookId, res.locals.workAccess);
     res.set('Cache-Control','no-store').json({totalWords:index.totalWords});
   }));
+  app.get('/api/books/:bookId/sitemap-chapters',asyncRoute(async(req,res)=>{
+    const page=integer(req.query.page,1,20000),book=res.locals.workAccess?.book;
+    // A public sitemap never includes an author's private/deleted work, even
+    // when the caller could otherwise read that work. Permissions stay live.
+    if(!book||book.deletedAt||book.visibility==='private')fail(404,'作品不可用');
+    const chapters=await Chapter.find({bookId:req.params.bookId,deletedAt:null}).select('_id')
+      .sort({chapter_number:1}).skip((page-1)*1000).limit(1000)
+      .setOptions({batchSize:1000,singleBatch:true}).maxTimeMS(3000).lean();
+    // No total, titles or reading-index load: this is exactly one sitemap page.
+    res.set('Cache-Control','no-store').json(chapters.map(chapter=>String(chapter._id)));
+  }));
   app.get('/api/books/:bookId/chapters',asyncRoute(async(req,res)=>{
     const limit=integer(req.query.limit,100,200),page=integer(req.query.page,1,100000);
     const filter={bookId:req.params.bookId,deletedAt:null};

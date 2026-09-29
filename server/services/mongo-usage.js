@@ -3,9 +3,11 @@ import mongoose from 'mongoose';
 
 const context = new AsyncLocalStorage(), clients = new WeakMap();
 const hourMs = 3600000;
-const purposes = new Set(['list', 'detail', 'reading', 'catalog', 'reviews', 'import', 'personal', 'forum', 'other', 'background']);
+const purposes = new Set(['list', 'detail', 'reading', 'catalog', 'sitemap', 'traffic', 'reviews', 'import', 'personal', 'forum', 'other', 'background']);
 
 function purposeOf(path) {
+  if (path === '/api/traffic/observe') return 'traffic';
+  if (path === '/api/sitemap-books' || /^\/api\/books\/(?:sitemap-pool|[^/]+\/sitemap-chapters)\/?$/.test(path)) return 'sitemap';
   if (path === '/api/books') return 'list';
   if (/^\/api\/books\/[^/]+(?:\/detail)?\/?$/.test(path)) return 'detail';
   if (/^\/api\/chapters\/[^/]+\/?$/.test(path)) return 'reading';

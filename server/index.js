@@ -19,7 +19,7 @@ try {
     stopCleanup();
     const timer = setTimeout(() => process.exit(1), 10000);
     timer.unref();
-    server.close(async () => { await mongoose.disconnect(); clearTimeout(timer); });
+    server.close(async () => { await app.locals.trafficObservationDrain?.(); await mongoose.disconnect(); clearTimeout(timer); });
   };
   process.on('SIGTERM', stop);
   process.on('SIGINT', stop);

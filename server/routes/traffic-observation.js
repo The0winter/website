@@ -4,7 +4,9 @@ import {createTrafficStore,validateTrafficEvent} from '../services/traffic-obser
 import {allowMetrics} from '../services/observability.js';
 
 export function trafficObservationRoutes(app,config) {
-  let store;
+  let store,database;
+  app.locals.trafficObservationMetrics=()=>store?.snapshot();
+  app.locals.trafficObservationDrain=()=>store?.drain();
   const limiter=rateLimit({windowMs:60000,limit:240,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'统计上报过于频繁'}});
   // Installed after ordinary same-origin + CSRF protection. A failure never changes reading access.
   app.post('/api/traffic/observe',limiter,async(req,res)=>{
@@ -13,7 +15,7 @@ export function trafficObservationRoutes(app,config) {
     if(config.trafficMode!=='observe'||mongoose.connection.transport)return res.status(204).end();
     let event;try{event=validateTrafficEvent(req.body);}catch{return res.status(400).json({error:'统计事件无效'});}
     try {
-      store ||= createTrafficStore(mongoose.connection.db,config.jwtSecret);
+      if(!store||database!==mongoose.connection.db){database=mongoose.connection.db;store=createTrafficStore(database,config.jwtSecret);}
       const secure=config.mode==='production',visitorName=secure?'__Host-traffic-visitor':'traffic-visitor',sessionName=secure?'__Host-traffic-session':'traffic-session';
       const result=await store.accept(event,{visitorCookie:req.cookies[visitorName],sessionCookie:req.cookies[sessionName],userAgent:req.headers['user-agent']});
       const options={httpOnly:true,secure,sameSite:'lax',path:'/'};

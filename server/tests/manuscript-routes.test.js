@@ -177,6 +177,7 @@ test("work metadata are private, transactional, revision protected and idempoten
       assert.equal((await owner.request('/api/writer/statistics?period=year')).status,400);
       assert.equal((await owner.request('/api/writer/statistics?end=2026-02-30')).status,400);
       assert.equal((await owner.request(`/api/books/${bid}`,'PATCH',{visibility:'private'})).status,200);
+      for(const reader of [guest,stranger,owner])assert.equal((await reader.request(`/api/books/${bid}/sitemap-chapters`)).status,404,'even an owner cannot expose private work in a public sitemap');
       for(const route of [`/api/books/${bid}`,`/api/books/${bid}/catalog`,`/api/books/${bid}/chapters`,`/api/books/${bid}/statistics`,`/api/books/${bid}/reviews`,`/api/chapters/${chapter.id}`,`/api/chapters/${chapter.id}/paragraph-comments`]) {
         assert.equal((await guest.request(route)).status,404,route);
         assert.equal((await stranger.request(route)).status,404,route);

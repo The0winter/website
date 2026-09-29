@@ -16,9 +16,9 @@ test('usage counts replies by concurrent purpose without retaining sensitive val
     client.emit('commandStarted',{...event,command:{password:'SECRET'}});
     setImmediate(()=>{client.emit('commandSucceeded',{...event,reply});resolve();});
   }));
-  await Promise.all([request('/api/books'),request('/api/chapters/abc'),request('/api/books/abc/detail')]);
+  await Promise.all([request('/api/books'),request('/api/chapters/abc'),request('/api/books/abc/detail'),request('/api/books/abc/sitemap-chapters'),request('/api/traffic/observe')]);
   const groups=usage.snapshot().buckets[0].purposes;
-  for (const purpose of ['list','reading','detail']) {
+  for (const purpose of ['list','reading','detail','sitemap','traffic']) {
     assert.equal(groups[purpose].commands,1);
     assert.equal(groups[purpose].estimatedBsonReplyBytes,mongoose.mongo.BSON.calculateObjectSize(reply));
   }
