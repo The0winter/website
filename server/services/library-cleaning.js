@@ -70,6 +70,12 @@ export async function reviseCleaningBatch(job, deps) {
   const stored = new Map((await storeBodies(changed)).map(c=>[c.id,c]));
   let result;
   await mongoose.connection.transaction(async session => {
+    // D1 otherwise performs a remote read for every updateOne. Prefetch the
+    // bounded batch inside this transaction; its revision guard still applies.
+    if (session.prefetch) await Promise.all([
+      session.prefetch(Chapter.collection.name, {_id: {$in: job.chapters.map(c=>c.id)}, bookId: job.bookId}),
+      session.prefetch(Book.collection.name, {_id: job.bookId}),
+    ]);
     const current = await inspect(session);
     const book = await Book.findOneAndUpdate({_id: current.book._id, importManaged: true, author_id: null, deletedAt: null}, {$inc: {writeVersion: 1}}, {new: true, session, timestamps: false});
     if (!book) fail('无法锁定修订作品');

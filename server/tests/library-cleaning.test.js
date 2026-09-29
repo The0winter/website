@@ -37,5 +37,13 @@ test('maintenance preserves IDs, dates, annotations and original objects, checks
     await restoreCleaningBackup(backups.at(-1),deps);assert.equal((await Chapter.findById(chapter._id)).content,chapter.content);
     await assert.rejects(restoreCleaningBackup(backups.at(-1),deps),/新的修改/);
     assert.deepEqual(validateChapter({title:'章',chapter_number:1,content:'文',volume_title:'卷',volume_number:2}),{title:'章',chapter_number:1,content:'文',word_count:1,volume_title:'卷',volume_number:2});
+    const more=await Chapter.insertMany(Array.from({length:80},(_,i)=>({bookId:book._id,title:`第${i+2}章`,chapter_number:i+2,content:`原文${i}`,word_count:4})));
+    const latest=await inspectCleaningBook(identity,deps);
+    const transport=mongoose.connection.transport,query=transport.query.bind(transport);let queries=0;
+    transport.query=(...args)=>{queries++;return query(...args);};
+    try {
+      const result=await reviseCleaningBatch({...job,token:latest.token,chapters:more.map(c=>({id:String(c._id),title:c.title,number:c.chapter_number,beforeHash:sha(c.content),content:c.content+'。'}))},deps);
+      assert.equal(result.updated,80);assert.ok(queries<15,`A revision batch used ${queries} reads; reads must not scale with chapter count`);
+    } finally {transport.query=query;}
   } finally {await mongoose.disconnect();await db.stop();}
 });
