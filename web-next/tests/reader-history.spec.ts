@@ -21,6 +21,18 @@ async function expectDetails(page: Page) {
   await expect(page.locator('html')).not.toHaveAttribute('data-book-transition', /.+/);
 }
 
+test('reading entry ignores an active book transition without creating a stuck loader',async({page})=>{
+  await page.goto(detail);await expectDetails(page);
+  await page.evaluate(()=>{document.documentElement.dataset.bookTransition='exit';});
+  await page.getByRole('link',{name:'立即阅读',exact:true}).click();
+  await expect(page).toHaveURL(detail);
+  await expect(page.locator('.chapter-loading-page')).toHaveCount(0);
+  await page.evaluate(()=>{delete document.documentElement.dataset.bookTransition;});
+  await page.getByRole('link',{name:'立即阅读',exact:true}).click();
+  await expect(root(page)).toHaveAttribute('data-reader-ready','true');
+  await expect(root(page)).toHaveAttribute('data-reader-chapter',first);
+});
+
 test('direct entry, chapter changes, reload and forward all keep Back pointed at details', async ({page}) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
