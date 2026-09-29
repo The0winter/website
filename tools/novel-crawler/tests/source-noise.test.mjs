@@ -12,6 +12,9 @@ test('source rules recognize complete obfuscated promotions without normalizing 
   const lines = [
     ['www.deqixs.org', '必应搜索“嘚齐小说网”可看本书最新更新章节！'],
     ['www.deqixs.org', 'www.deqixs.org'],
+    ['www.deqixs.org', '写到这里，请书友收藏我们的网址：www.deqixs.org看最新无错章节！'],
+    ['www.deqixs.org', '更新不易，记得分享，得奇小说网，www.deqixs.org,看最新章节！'],
+    ['www.deqixs.org', '请使用必应搜索：得奇小说网免费看最新章节'],
     ['www.deqixs.org', 'ｓuduɡu.ｃｃ首发更新，无错字。看不到地址输入速读谷的拼音后缀.ｃｃ即可进入首发更新站点。'],
     ['www.shudugu.org', '【写到这里我希望读者记一下我们域名101??????.??????】'],
     ['www.shudugu.org', '最⊥新⊥小⊥说⊥在⊥六⊥9⊥⊥书⊥⊥吧⊥⊥首⊥发！'],

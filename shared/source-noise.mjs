@@ -19,6 +19,7 @@ const wholeLines = [
   ['deqixs-glyph-promotion', mirrorHosts, /^[「」德得旗奇]{0,12}「小」「说」「网」「手打」「更新」$/u],
   ['deqixs-search-promotion', mirrorHosts, /^前往[「」]*必[「」]*应[「」]*搜[「」]*索[「」]*(?:[德得][「」]*[旗奇][「」]*)?小[「」]*说[「」]*网[「」]*可查看最[「」]*新章[「」]*节！$/u],
   ['deqixs-bing-promotion', mirrorHosts, /^必应搜索“嘚齐小说网”可看本书最新更新章节！$/u],
+  ['deqixs-address-promotion', mirrorHosts, /^(?:写到这里，请书友收藏我们的网址：www\.deqixs\.org看最新无错章节！|更新不易，记得分享，得奇小说网，www\.deqixs\.org,看最新章节！|请使用必应搜索：得奇小说网免费看最新章节)$/u],
   ['deqixs-invitation-promotion', mirrorHosts, /^最后一批邀请码1900人发放，官方反馈群1104270100$/u],
   ['deqixs-obfuscated-address', mirrorHosts, /^请\.访问\.得\.奇\.小\.说网看最新章节！地址：[\\a-zA-Z.]{8,120}$/u],
   ['deqixs-empty-font-address', mirrorHosts, /^地址：[\\.]{6,100}$/u],
