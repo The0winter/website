@@ -1,22 +1,21 @@
 'use client';
 import {useReadingSettings} from '@/contexts/ReadingSettingsContext';
 import {useForumView} from '@/lib/useForumView';
+import {useAuth} from '@/contexts/AuthContext';
+import ForumPostList from '@/components/ForumPostList';
+import {answerFeedItem, textToForumHtml} from '@/lib/forum-presentation';
+import {refreshForum} from '@/lib/forum-cache';
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft,
-  ChevronDown,
-  MessageCircle,
   Moon,
-  Plus,
   Send,
   Settings,
   Sun,
-  ThumbsUp,
   Type,
-  User
 } from 'lucide-react';
 import { forumApi, ForumPost, ForumReply } from '@/lib/api';
 
@@ -71,6 +70,7 @@ function QuestionSkeleton({ themeMode }: { themeMode: ThemeMode }) {
 }
 
 export default function QuestionPage() {
+  const {user} = useAuth();
   const router = useRouter();
   const params = useParams();
   const qid = params?.qid as string;
@@ -80,6 +80,8 @@ export default function QuestionPage() {
   const [answers, setAnswers] = useState<ForumReply[]>([]);
   const [answerPage,setAnswerPage]=useState(1);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [retry, setRetry] = useState(0);
   const [showEditor, setShowEditor] = useState(false);
   const [replyContent, setReplyContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -128,12 +130,14 @@ export default function QuestionPage() {
     const fetchData = async () => {
       try {
         setLoading(true);
+        setErrorMsg('');
         const [qData, rData] = await Promise.all([forumApi.getById(qid), forumApi.getReplies(qid,answerPage)]);
         if (!active) return;
+        if (qData.type === 'article') { router.replace(`/forum/${qData.id}`); return; }
         setQuestion(qData);
         setAnswers(rData);
       } catch (error) {
-        console.error('Load question failed:', error);
+        if (active) setErrorMsg(error instanceof Error ? error.message : '加载失败，请重试');
       } finally {
         if (active) setLoading(false);
       }
@@ -141,9 +145,11 @@ export default function QuestionPage() {
 
     fetchData();
     return () => { active = false; };
-  }, [qid,answerPage]);
+  }, [qid,answerPage,retry,router]);
 
   const handleSubmitReply = async () => {
+    if (isSubmitting) return;
+    if (!user) {router.push('/login'); return;}
     if (!replyContent.trim()) {
       alert('请输入回答内容');
       return;
@@ -156,7 +162,8 @@ export default function QuestionPage() {
 
     setIsSubmitting(true);
     try {
-      await forumApi.addReply(qid, { content: replyContent.replace(/\n/g, '<br/>') });
+      await forumApi.addReply(qid, { content: textToForumHtml(replyContent) });
+      refreshForum();
       setReplyContent('');
       setShowEditor(false);
       setAnswerPage(1);
@@ -176,22 +183,21 @@ export default function QuestionPage() {
   };
 
   return (
-    <div className={`min-h-screen ${theme.bg} pb-24 font-sans transition-colors duration-300`}>
+    <div className={`forum-reading min-h-screen ${theme.bg} pb-24 font-sans transition-colors duration-300`}>
       <div className={`sticky top-0 z-40 backdrop-blur-md border-b ${theme.border} ${themeMode === 'light' ? 'bg-white/92' : 'bg-[#121417]/92'}`}>
         <div className="max-w-[1000px] mx-auto px-4 h-14 md:h-16 flex items-center justify-between">
-          <button
-            onClick={() => router.back()}
+          <Link href="/forum" aria-label="返回论坛"
             className={`${theme.textSub} ${themeMode === 'light' ? 'hover:text-[#1f2329]' : 'hover:text-[#edf1f4]'} transition-colors flex items-center gap-1`}
           >
             <ArrowLeft className="w-5 h-5" />
-          </button>
+          </Link>
 
           <span className={`font-bold truncate max-w-[62vw] md:max-w-[520px] text-center text-[15px] opacity-95 ${theme.textMain}`}>
             {loading ? '加载中...' : question?.title}
           </span>
 
           <div className="relative" ref={settingsRef}>
-            <button onClick={() => setShowSettings((prev) => !prev)} className={`${theme.icon} transition-colors p-1.5`}>
+            <button aria-label="阅读设置" onClick={() => setShowSettings((prev) => !prev)} className={`${theme.icon} transition-colors p-1.5`}>
               <Settings className="w-5 h-5" />
             </button>
 
@@ -245,14 +251,15 @@ export default function QuestionPage() {
         </div>
       </div>
 
-      <div className="max-w-[1000px] mx-auto mt-3 md:mt-6 px-4">
+      <div className="forum-reading-shell max-w-[860px] mx-auto mt-3 md:mt-6 px-4">
         {loading ? (
           <QuestionSkeleton themeMode={themeMode} />
-        ) : !question ? (
-          <div className={`${theme.card} p-10 text-center ${theme.textSub} rounded-2xl border ${theme.border}`}>问题不存在</div>
+        ) : errorMsg || !question ? (
+          <div role="alert" className={`${theme.card} p-10 text-center ${theme.textSub} rounded-2xl border ${theme.border}`}>{errorMsg || '问题不存在'} <button className="underline" onClick={() => setRetry(value => value + 1)}>重试</button></div>
         ) : (
           <>
-            <section className={`${theme.card} mb-4 md:mb-6 p-5 md:p-8 rounded-2xl shadow-sm border ${theme.border}`}>
+            <section className={`forum-answer-card ${theme.card} mb-4 md:mb-6 p-5 md:p-8 rounded-2xl shadow-sm border ${theme.border}`}>
+              {question.bookId && <Link className="inline-block text-sm text-blue-600 mb-4" href={`/book/${question.bookId}`}>《{question.bookTitle || '相关书籍'}》 · 书籍讨论</Link>}
               {question.tags?.length ? (
                 <div className="flex flex-wrap gap-2 mb-4">
                   {question.tags.map((tag: string) => (
@@ -279,13 +286,10 @@ export default function QuestionPage() {
               <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-4 ${theme.border}`}>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setShowEditor(!showEditor)}
+                    onClick={() => {if (!user) router.push('/login'); else setShowEditor(!showEditor);}}
                     className={`px-4 md:px-6 py-2.5 rounded-lg text-sm font-medium transition-colors ${showEditor ? 'bg-[#eef0f2] text-[#606a76]' : 'bg-[#111827] text-white hover:bg-black'}`}
                   >
                     {showEditor ? '收起回答框' : '写回答'}
-                  </button>
-                  <button className={`px-4 md:px-5 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${theme.secondaryBtn}`}>
-                    <Plus className="w-4 h-4" /> 关注问题
                   </button>
                 </div>
                 <div className={`text-xs font-medium ${theme.textSub}`}>
@@ -299,6 +303,7 @@ export default function QuestionPage() {
                     <textarea
                       className={`w-full h-36 md:h-40 p-4 outline-none resize-none leading-relaxed ${theme.card} ${theme.textMain}`}
                       placeholder="开始写你的回答...（Ctrl + Enter 快速发布）"
+                      aria-label="回答内容" maxLength={12000}
                       style={{ fontSize: `${fontSize}px` }}
                       value={replyContent}
                       onChange={(e) => setReplyContent(e.target.value)}
@@ -332,52 +337,13 @@ export default function QuestionPage() {
               )}
             </section>
 
-            <div className="flex justify-between items-center px-1 pb-3">
+            <div className="flex justify-between items-center px-5 md:px-1 pb-3">
               <span className={`font-bold text-base ${theme.textMain}`}>{question?.comments||0} 个回答</span>
-              <span className={`flex items-center gap-1 text-sm cursor-pointer ${theme.textSub}`}>
-                默认排序 <ChevronDown className="w-4 h-4" />
-              </span>
+              <span className={`text-xs ${theme.textSub}`}>赞同优先</span>
             </div>
 
-            <nav aria-label="回答分页" className="flex gap-4 justify-center my-4"><button disabled={answerPage===1} onClick={()=>setAnswerPage(answerPage-1)}>上一页</button><span>第 {answerPage} 页</span><button disabled={answers.length<20} onClick={()=>setAnswerPage(answerPage+1)}>下一页</button></nav>
-            <div className="flex flex-col gap-3 md:gap-4">
-              {answers.map((answer) => (
-                <Link
-                  href={`/forum/${answer.id}?fromQuestion=${question.id}`}
-                  key={answer.id}
-                  className={`${theme.card} p-4 md:p-6 rounded-2xl shadow-sm border border-transparent hover:border-[#dbe1e8] hover:shadow-md transition-all duration-300 block group`}
-                >
-                  <div className="flex items-center gap-2.5 mb-3">
-                    <div className={`w-8 h-8 md:w-9 md:h-9 rounded-full flex items-center justify-center overflow-hidden ${themeMode === 'light' ? 'bg-[#f1f3f5] border border-[#f3f5f7]' : 'bg-[#2d333b] border border-[#353b43]'}`}>
-                      {answer.author?.avatar ? (
-                        <img src={answer.author.avatar} alt="avatar" className="w-full h-full object-cover" />
-                      ) : (
-                        <User className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
-                      )}
-                    </div>
-                    <span className={`text-sm font-bold ${theme.textMain}`}>{answer.author?.name || '匿名用户'}</span>
-                  </div>
-
-                  <div
-                    className={`leading-7 mb-4 line-clamp-3 group-hover:text-[#1f2329] transition-colors ${theme.textSub}`}
-                    style={{ fontSize: `${fontSize}px` }}
-                    dangerouslySetInnerHTML={{ __html: answer.content }}
-                  />
-
-                  <div className={`flex items-center gap-4 text-sm font-medium ${theme.textSub}`}>
-                    <span className="flex items-center gap-1.5">
-                      <ThumbsUp className="w-4 h-4" /> {formatCount(answer.votes || 0)}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <MessageCircle className="w-4 h-4" /> {formatCount(answer.comments || 0)}
-                    </span>
-                    <span className="text-xs ml-auto">{answer.time?.split(' ')[0] || ''}</span>
-                  </div>
-                </Link>
-              ))}
-
-              {answers.length === 0 && <div className={`py-12 text-center ${theme.textSub}`}>暂时还没有回答，来做第一个回答者吧。</div>}
-            </div>
+            <ForumPostList posts={answers.map(answer => answerFeedItem(question, answer))} loading={false} hideQuestion/>
+            {(question.comments > 20 || answerPage > 1) && <nav aria-label="回答分页" className="forum-pagination"><button disabled={answerPage === 1} onClick={() => setAnswerPage(p => p - 1)}>上一页</button><span>第 {answerPage} 页</span><button disabled={answerPage * 20 >= question.comments} onClick={() => setAnswerPage(p => p + 1)}>下一页</button></nav>}
           </>
         )}
       </div>

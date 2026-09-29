@@ -7,6 +7,8 @@ import User from '../models/User.js';
 import Post from '../models/ForumPost.js';
 import Reply from '../models/ForumReply.js';
 import Comment from '../models/ForumReplyComment.js';
+import {forumFeed} from '../services/forum-feed.js';
+import {pagination} from '../services/pagination.js';
 
 const plain=value=>safeHtml(value).replace(/<[^>]*>/g,'').trim();
 function fields(body,allowed){if(!body||Object.keys(body).some(k=>!allowed.includes(k)))fail(400,'包含不可修改字段');}
@@ -14,6 +16,12 @@ function content(value,max){if(typeof value!=='string'||value.length>max*4)fail(
 const recent=()=>({$gte:new Date(Date.now()-60000)});
 async function lockActor(req,session){if(!(await User.updateOne({_id:req.user.id,isBanned:{$ne:true}},{$inc:{contentVersion:1}},{session})).matchedCount)fail(403,'账户不可用');}
 export function forumWrites(app,auth){
+  app.get('/api/books/:id/discussions',asyncRoute(async(req,res)=>{
+    if(!await Book.exists({_id:req.params.id,deletedAt:null,visibility:{$ne:'private'}}))fail(404,'书籍不存在');
+    const {page}=pagination(req.query,20,20);
+    if(page>100)fail(400,'分页范围超限');
+    res.json(await forumFeed({bookId:req.params.id,page}));
+  }));
   app.get('/api/books/:id/articles',asyncRoute(async(req,res)=>{
     if(!/^[a-f0-9]{24}$/i.test(req.params.id))fail(400,'书籍ID无效');
     const page=Math.max(1,Math.min(10000,Number.parseInt(req.query.page,10)||1));
@@ -28,7 +36,7 @@ export function forumWrites(app,auth){
     if(!title||title.length>120||!['question','article'].includes(type)||(type==='question'&&!/[?？]\s*$/.test(title)))fail(400,'提问标题须以问号结尾，标题最多120字');
     const tags=Array.isArray(req.body.tags)?[...new Set(req.body.tags.map(t=>plain(t).slice(0,20)).filter(Boolean))].slice(0,8):[];
     const bookId=req.body.bookId;
-    if(bookId&&(typeof bookId!=='string'||!/^[a-f0-9]{24}$/i.test(bookId)||type!=='article'||!await Book.exists({_id:bookId,deletedAt:null})))fail(400,'关联书籍无效');
+    if(bookId&&(typeof bookId!=='string'||!/^[a-f0-9]{24}$/i.test(bookId)||!await Book.exists({_id:bookId,deletedAt:null,visibility:{$ne:'private'}})))fail(400,'关联书籍无效');
     let post;
     await mongoose.connection.transaction(async session=>{
       await lockActor(req,session);

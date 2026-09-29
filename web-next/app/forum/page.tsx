@@ -18,15 +18,8 @@ import {sectionSwipeThreshold} from '@/lib/section-swipe';
 import './forum.css';
 
 import ForumPostList from '@/components/ForumPostList';
+import {forumEntryHref, plainForumText} from '@/lib/forum-presentation';
 import ForumTabs, {FORUM_TABS as TABS, type FeedTab} from '@/components/ForumTabs';
-
-const HOT_TOPICS = [
-  '春招和秋招，哪个窗口更值得冲？',
-  'AI 工具是否会重塑内容行业门槛？',
-  '应届生第一份工作到底该看重什么？',
-  '跨专业转前端，如何准备作品集？',
-  '长期写作如何避免表达同质化？'
-];
 
 const currentTheme = {
   bg: 'bg-[var(--home-background)]',
@@ -55,6 +48,8 @@ export default function ForumPage() {
   
   const {user, loading: authLoading} = useAuth();
   const {posts: postsCache, loading: loadingState, errors} = useSyncExternalStore(subscribeForum, getForumSnapshot, serverForumSnapshot);
+  const matchesSearch = (post: import('@/lib/api').ForumPost) => !searchQuery.trim() || [post.title, post.excerpt, post.topReply?.title, post.topReply?.content, post.topReply?.author.name].some(value => value?.toLocaleLowerCase().includes(searchQuery.trim().toLocaleLowerCase()));
+  const topics = [...new Map((postsCache[activeTab] || []).filter(post => post.type === 'question').map(post => [post.id, post])).values()].slice(0,5);
 
   // ====== 滑动轮播专属状态 ======
   const activeIndex = TABS.findIndex(t => t.id === activeTab);
@@ -180,11 +175,11 @@ export default function ForumPage() {
           if (!realId) return null;
 
           const topReply = post.topReply || null;
-          const answerLink = topReply?.id ? `/forum/${topReply.id}?fromQuestion=${realId}` : `/forum/question/${realId}`;
+          const answerLink = forumEntryHref(post);
           
           // 热度计算：默认拿投票数作为热度，你之后可以根据后端实际算法替换
           const heat = topReply?.votes ?? post.votes ?? 0;
-          const excerpt = topReply?.content || '这个问题还没有回答，点击查看并参与讨论。';
+          const excerpt = topReply?.excerpt || plainForumText(topReply?.content || '') || post.excerpt || '这个问题还没有回答，点击查看并参与讨论。';
           
           // 前三名使用主题强调色和柔和暖色。
           const rank = index + 1;
@@ -196,7 +191,7 @@ export default function ForumPage() {
 
           return (
             <article
-              key={realId}
+              key={post.entryId || topReply?.id || realId}
               className={`flex gap-3 md:gap-4 px-4 md:px-6 py-4 md:py-5 ${index < tabPosts.length - 1 ? `border-b ${currentTheme.border}` : ''} hover:bg-black/[0.02] transition-colors`}
             >
               {/* 左侧：排名序号 */}
@@ -206,12 +201,12 @@ export default function ForumPage() {
 
               {/* 右侧：纯文本内容区域（占满剩余宽度） */}
               <div className="flex-1 min-w-0 flex flex-col justify-between">
-                <Link href={`/forum/question/${realId}`} className="block">
+                <Link href={answerLink} className="block">
                   <h2
                     className={`font-bold leading-snug tracking-tight ${currentTheme.textMain} hover:text-[var(--home-accent)] transition-colors line-clamp-2`}
                     style={{ fontSize: `${fontSize + 2}px` }}
                   >
-                    {post.title}
+                    {topReply?.title || post.title}
                   </h2>
                 </Link>
 
@@ -231,9 +226,7 @@ export default function ForumPage() {
                     <svg className="w-3.5 h-3.5 text-[var(--home-accent)] fill-current" viewBox="0 0 24 24"><path d="M17.5 12.5c0 2.8-2.2 5.5-5.5 5.5s-5.5-2.7-5.5-5.5c0-2.8 5.5-8.5 5.5-8.5s5.5 5.7 5.5 8.5z" /></svg>
                     {formatCount(heat)} 热度
                   </span>
-                  <button className="hover:text-[var(--home-accent)] transition-colors flex items-center gap-1">
-                    分享
-                  </button>
+                  <Link href={post.type === 'question' ? `/forum/question/${realId}` : answerLink} className="hover:text-[var(--home-accent)] transition-colors">{post.type === 'question' ? '查看问题' : '阅读文章'}</Link>
                 </div>
               </div>
             </article>
@@ -244,7 +237,7 @@ export default function ForumPage() {
   };
 
 return (
-    <div ref={feed} data-forum-theme="home" className={`forum-page min-h-screen ${currentTheme.bg} pb-24 md:pb-12 font-sans transition-colors duration-300`}
+    <div ref={feed} data-forum-theme="white" className={`forum-page min-h-screen ${currentTheme.bg} pb-24 md:pb-12 font-sans transition-colors duration-300`}
       onTouchStart={event => {if (matchMedia('(max-width: 767px)').matches) handleTouchStart(event);}}
       onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} onTouchCancel={handleTouchCancel}
       onClickCapture={event => {
@@ -272,7 +265,7 @@ return (
             {TABS.map(tab => (
               <div key={tab.id} className="forum-feed-panel w-full shrink-0" inert={tab.id!==activeTab} aria-hidden={tab.id!==activeTab}>
                 {errors[tab.id] && <div className="forum-feed-error" role="status">{errors[tab.id]}<button onClick={()=>loadForum(tab.id)}>重新加载</button></div>}
-                {(tab.id === activeTab || postsCache[tab.id]) && (!errors[tab.id] || postsCache[tab.id]) && (tab.id === 'hot' ? renderHotList(tab.id) : <ForumPostList posts={postsCache[tab.id]} loading={loadingState[tab.id]}/>)}
+                {(tab.id === activeTab || postsCache[tab.id]) && (!errors[tab.id] || postsCache[tab.id]) && (tab.id === 'hot' && !searchQuery.trim() ? renderHotList(tab.id) : <ForumPostList posts={postsCache[tab.id]?.filter(matchesSearch)} loading={loadingState[tab.id]}/>)}
               </div>
             ))}
           </div>
@@ -311,19 +304,18 @@ return (
           </div>
 
           <div className={`${currentTheme.card} rounded-2xl border ${currentTheme.border} p-5 shadow-sm`}>
-            <h3 className={`font-bold text-sm mb-4 ${currentTheme.textMain}`}>热门话题</h3>
+            <h3 className={`font-bold text-sm mb-4 ${currentTheme.textMain}`}>正在讨论</h3>
             <ul className="flex flex-col gap-3">
-              {HOT_TOPICS.map((topic, index) => (
-                <li key={topic} className="flex items-start gap-3 cursor-pointer group">
+              {topics.map((topic, index) => (
+                <li key={topic.id} className="flex items-start gap-3 group">
                   <span className={`text-[15px] font-bold w-4 text-center leading-5 ${index < 3 ? 'text-[var(--home-accent)]' : 'text-[var(--home-muted)]'}`}>
                     {index + 1}
                   </span>
-                  <span className="text-[14px] text-[var(--home-muted)] leading-snug group-hover:text-[var(--home-accent)] group-hover:underline line-clamp-2">
-                    {topic}
-                  </span>
+                  <Link href={`/forum/question/${topic.id}`} className="text-[14px] text-[var(--home-muted)] leading-snug group-hover:text-[var(--home-accent)] group-hover:underline line-clamp-2">{topic.title}</Link>
                 </li>
               ))}
             </ul>
+            {!topics.length && <p className="text-sm text-[var(--home-muted)]">从一本书、一个问题开始。</p>}
           </div>
         </aside>
       </div>

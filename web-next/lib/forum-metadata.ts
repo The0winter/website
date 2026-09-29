@@ -3,12 +3,22 @@ import {safeFetch} from '@/lib/request';
 import {getApiBaseUrl} from '@/utils/api';
 import {plainDescription, publicMetadata} from '@/lib/seo';
 
-export async function forumMetadata(id: string) {
+export async function forumMetadata(id: string, answerId?: string) {
   if (!/^[a-f0-9]{24}$/i.test(id)) notFound();
   const response = await safeFetch(`${getApiBaseUrl()}/forum/posts/${id}`, {cache: 'no-store'});
   if (response.status === 404) notFound();
   if (!response.ok) throw new Error('讨论暂时无法读取');
   const post = await response.json();
+  if(answerId) {
+    if(!/^[a-f0-9]{24}$/i.test(answerId) || post.type !== 'question') notFound();
+    const replyResponse = await safeFetch(`${getApiBaseUrl()}/forum/posts/${id}/replies?target=${answerId}`, {cache:'no-store'});
+    if(replyResponse.status === 404) notFound();
+    if(!replyResponse.ok) throw new Error('回答暂时无法读取');
+    const [answer] = await replyResponse.json();
+    if(!answer) notFound();
+    const title = answer.title || `${answer.author?.name || '书友'}对「${post.title}」的回答`;
+    return publicMetadata(`${title} - 书友社区 - 九天小说站`, plainDescription(answer.content || '', title), `/forum/${answerId}?fromQuestion=${id}`);
+  }
   const path = post.type === 'question' ? '/forum/question/' + id : '/forum/' + id;
   return publicMetadata(`${post.title} - 书友社区 - 九天小说站`, plainDescription(post.summary || post.content || '', post.title), path);
 }

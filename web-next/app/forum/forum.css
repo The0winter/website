@@ -1,5 +1,15 @@
-.forum-page { background:var(--home-background); color:var(--home-text); }
+.forum-page {
+  --home-background:var(--forum-bg); --home-surface:var(--forum-card); --home-text:var(--forum-text);
+  --home-muted:var(--forum-muted); --home-border:var(--forum-line); --home-soft:var(--forum-soft);
+  --home-accent:var(--forum-accent); --home-accent-soft:#eaf0fa;
+  background:var(--home-background); color:var(--home-text);
+}
 .forum-feed-track { display:flex; align-items:flex-start; width:100%; transition:transform 300ms ease-out; }
+.forum-page .forum-search { --suggest-bg:var(--forum-soft); --suggest-text:var(--forum-text); --suggest-muted:var(--forum-muted); --suggest-line:var(--forum-line); --suggest-accent:var(--forum-accent); }
+.forum-page .mh-bottom { background:color-mix(in srgb,var(--forum-card) 97%,transparent); border-color:var(--forum-line); }
+.forum-page .mh-bottom a { color:var(--forum-muted); }
+.forum-page .mh-bottom [aria-current=page] { color:var(--forum-accent); }
+.forum-page .mh-bottom [aria-current=page] svg { fill:color-mix(in srgb,var(--forum-accent) 8%,transparent); }
 .forum-feed-track[data-dragging] { transition:none; }
 .forum-feed-panel { min-width:0; overflow-wrap:break-word; }
 .forum-feed-error { padding:16px; color:var(--home-muted); font-size:14px; }

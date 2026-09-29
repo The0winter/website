@@ -1,29 +1,27 @@
 'use client';
-import {useEffect,useState} from 'react';
-import Link from 'next/link';
+import {useEffect, useState} from 'react';
 import {safeFetch} from '@/lib/request';
+import type {ForumPost} from '@/lib/api';
+import ForumPostList from './ForumPostList';
 
-type Article={_id:string;title:string;summary?:string;author?:{username?:string};createdAt:string};
-export default function BookArticles({bookId}:{bookId:string}){
-  const [items,setItems]=useState<Article[]>([]);
-  const [page,setPage]=useState(1);
-  const [total,setTotal]=useState(0);
-  const [loading,setLoading]=useState(true);
-  const [error,setError]=useState('');
-  const [retry,setRetry]=useState(0);
-  useEffect(()=>{
-    const controller=new AbortController();
-    setLoading(true);setError('');
-    safeFetch(`/api/books/${bookId}/articles?page=${page}`,{signal:controller.signal})
-      .then(async response=>{if(!response.ok)throw Error('文章加载失败，请重试');return response.json();})
-      .then(data=>{setItems(data.items);setTotal(data.total);})
-      .catch(error=>{if(!controller.signal.aborted)setError(error.message);})
-      .finally(()=>{if(!controller.signal.aborted)setLoading(false);});
-    return()=>controller.abort();
-  },[bookId,page,retry]);
-  return <div className="book-articles">
-    {loading?<p className="py-8 text-center text-gray-500">正在加载文章…</p>:error?<p role="alert">{error} <button onClick={()=>setRetry(v=>v+1)}>重试</button></p>:items.length?items.map(item=><Link key={item._id} href={`/forum/question/${item._id}`} className="block py-4 border-t border-gray-100"><h3 className="font-semibold text-gray-900">{item.title}</h3><p className="text-sm text-gray-500 line-clamp-2 mt-2">{item.summary}</p><p className="text-xs text-gray-400 mt-3">{item.author?.username||'书友'} · {item.createdAt.slice(0,10)}</p></Link>):<p className="py-10 text-center text-sm text-gray-400">还没有文章，来分享你的第一篇读后感吧</p>}
-    {total>20&&<nav aria-label="文章分页" className="flex justify-center gap-5 py-4"><button disabled={page===1} onClick={()=>setPage(p=>p-1)}>上一页</button><span>{page}</span><button disabled={page*20>=total} onClick={()=>setPage(p=>p+1)}>下一页</button></nav>}
+export default function BookArticles({bookId}: {bookId:string}) {
+  const [result, setResult] = useState<{key:string; items:ForumPost[]; total:number; error:string}>({key:'',items:[],total:0,error:''});
+  const [page, setPage] = useState(1);
+  const [retry, setRetry] = useState(0);
+  const key = `${bookId}:${page}:${retry}`;
+  const loading = result.key !== key;
+  const {items, total} = result;
+  const error = loading ? '' : result.error;
+  useEffect(() => {
+    const controller = new AbortController();
+    safeFetch('/api/books/' + bookId + '/discussions?page=' + page, {signal:controller.signal})
+      .then(async response => {if (!response.ok) throw Error('讨论加载失败，请重试'); return response.json();})
+      .then(data => {if (!controller.signal.aborted) setResult({key,items:data.items,total:data.total,error:''});})
+      .catch(error => {if (!controller.signal.aborted) setResult({key,items:[],total:0,error:error.message});});
+    return () => controller.abort();
+  }, [bookId, page, key]);
+  return <div className="book-articles forum-surface">
+    {error ? <p className="forum-list-state" role="alert">{error} <button onClick={() => setRetry(v => v + 1)}>重试</button></p> : <ForumPostList posts={items} loading={loading}/>}
+    {total > 20 && <nav aria-label="讨论分页" className="forum-pagination"><button disabled={page === 1} onClick={() => setPage(p => p - 1)}>上一页</button><span>{page} / {Math.ceil(total / 20)}</span><button disabled={page * 20 >= total} onClick={() => setPage(p => p + 1)}>下一页</button></nav>}
   </div>;
 }
-

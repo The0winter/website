@@ -4,8 +4,20 @@ import { getApiBaseUrl } from '@/utils/api';
 import type {ProfileTheme} from './profile-themes';
 export const API_BASE_URL = getApiBaseUrl();
 
+export interface ForumSource {
+  title: string;
+  author: string;
+  url: string;
+  license: string;
+  licenseUrl: string;
+  publishedAt?: string;
+}
+
 export interface ForumPost {
   id: string;
+  entryId?: string;
+  bookId?: string;
+  bookTitle?: string;
   title: string;
   excerpt?: string;
   content?: string;
@@ -13,6 +25,9 @@ export interface ForumPost {
   authorId?: string;
   topReply?: {
     id: string;
+    excerpt?: string;
+    title?: string;
+    source?: ForumSource;
     content: string;
     votes: number;
     comments: number;
@@ -34,6 +49,8 @@ export interface ForumPost {
 
 export interface ForumReply {
   id: string;
+  title?: string;
+  source?: ForumSource;
   content: string;
   votes: number;
   hasLiked?: boolean;
@@ -342,7 +359,7 @@ export const authApi = {
 
 export const forumApi = {
   getPosts: async (tab: string = 'recommend', page: number = 1): Promise<ForumPost[]> => {
-    return apiCall<ForumPost[]>(`/forum/posts?tab=${tab}&page=${page}`);
+    return apiCall<ForumPost[]>(`/forum/posts?tab=${tab}&page=${page}&view=answers`);
   },
 
   getById: async (id: string): Promise<ForumPost> => {

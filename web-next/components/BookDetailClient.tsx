@@ -522,14 +522,14 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
         </div>
 
         {/* === 第三部分：书友评价区 (⚠️ 利用 order-3 md:order-4 在手机端提到目录前面，电脑端仍为第4) === */}
-        <div id="reviews-section" className="book-community bg-white rounded-lg shadow-sm p-4 md:p-8 order-4">
+        <div id="reviews-section" data-discussions={communityTab === 'articles'} className="book-community bg-white rounded-lg shadow-sm p-4 md:p-8 order-4">
             <div className="book-community-header">
             <div className="community-tabs" role="tablist" aria-label="书友交流">
               <button id="reviews-tab" role="tab" aria-selected={communityTab === 'reviews'} aria-controls="reviews-panel" onClick={() => setCommunityTab('reviews')}>评论 <small>{reviewTotal}</small></button>
               <button id="articles-tab" role="tab" aria-selected={communityTab === 'articles'} aria-controls="articles-panel" onClick={() => setCommunityTab('articles')}>文章</button>
             </div>
             {communityTab === 'reviews' && !showReviewForm && <button className="book-review-compose" onClick={openReviewForm}>写书评</button>}
-            {communityTab === 'articles' && <Link className="book-article-compose" href={`/forum/create?type=article&bookId=${book.id}&bookTitle=${encodeURIComponent(book.title)}`}><PenLine size={14} aria-hidden="true"/>写文章</Link>}
+            {communityTab === 'articles' && <Link className="book-article-compose" href={`/forum/create?type=question&bookId=${book.id}&bookTitle=${encodeURIComponent(book.title)}`}><PenLine size={14} aria-hidden="true"/>发起讨论</Link>}
             </div>
             {communityTab === 'articles' && <div id="articles-panel" role="tabpanel" aria-labelledby="articles-tab"><BookArticles bookId={book.id} /></div>}
             <div id="reviews-panel" role="tabpanel" aria-labelledby="reviews-tab" aria-busy={reviewsLoading} hidden={communityTab !== 'reviews'}>

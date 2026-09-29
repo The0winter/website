@@ -1,98 +1,34 @@
 'use client';
 import Link from 'next/link';
 import {memo} from 'react';
-import {ThumbsUp, MessageCircle} from 'lucide-react';
+import {ArrowUpRight, MessageCircle, ThumbsUp} from 'lucide-react';
 import type {ForumPost} from '@/lib/api';
+import {forumEntryHref, plainForumText} from '@/lib/forum-presentation';
+import './forum-content.css';
 
-const currentTheme = {
-  card: 'md:bg-[var(--home-surface)]',
-  textMain: 'text-[var(--home-text)]',
-  textSub: 'text-[var(--home-muted)]',
-  border: 'border-[var(--home-border)]',
-};
-const fontSize = 16;
-
-function formatCount(value: number) {
-  if (!value) return '0';
-  if (value >= 10000) return `${(value / 10000).toFixed(1)}w`;
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
-  return String(value);
+function ForumPostList({posts = [], loading, hideQuestion = false}: {posts?: ForumPost[]; loading: boolean; hideQuestion?: boolean}) {
+  return <div className="forum-entry-list" aria-busy={loading}>
+    {loading ? <p className="forum-list-state" role="status">正在加载讨论…</p> : !posts.length ? <p className="forum-list-state">还没有讨论，来分享你的阅读感受吧。</p> : posts.map(post => {
+      const reply = post.topReply;
+      const href = forumEntryHref(post);
+      const author = reply?.source?.author || reply?.author?.name || (typeof post.author === 'string' ? post.author : post.author.name) || '书友';
+      const title = reply?.title || (hideQuestion && reply ? `${author}的回答` : post.title);
+      const excerpt = reply?.excerpt || plainForumText(reply?.content || '') || post.excerpt || '这个问题还没有回答，来聊聊你的看法。';
+      return <article key={post.entryId || reply?.id || post.id} className="forum-entry" data-entry-id={post.entryId || reply?.id || post.id}>
+        {!hideQuestion && reply && <Link className="forum-entry-question" href={'/forum/question/' + post.id}><span>问题</span>{post.title}</Link>}
+        <Link href={href} className="forum-entry-title"><h2>{title}</h2></Link>
+        <div className="forum-entry-author">
+          <span className="forum-letter-avatar" aria-hidden="true">{author.slice(0,1)}</span>
+          <span>{author}</span>{reply?.source && <small>书评原作者</small>}
+        </div>
+        <Link href={href} className="forum-entry-excerpt"><p>{excerpt}</p></Link>
+        <div className="forum-entry-meta">
+          <span><ThumbsUp size={14}/>{reply?.votes ?? post.votes ?? 0} 赞同</span>
+          <Link href={href + (href.includes('?') ? '&' : '?') + 'comments=1'}><MessageCircle size={14}/>{reply?.comments ?? post.comments ?? 0} 评论</Link>
+          <Link href={href} className="forum-read-link">{reply ? '阅读全文' : post.type === 'article' ? '阅读文章' : '查看问题'}<ArrowUpRight size={14}/></Link>
+        </div>
+      </article>;
+    })}
+  </div>;
 }
-
-function ForumPostList({posts: tabPosts = [], loading: isTabLoading}: {posts?: ForumPost[]; loading: boolean}) {
-
-    return (
-      <div className={`overflow-hidden md:rounded-2xl md:border ${currentTheme.border} ${currentTheme.card} w-full min-h-[50vh]`}>
-        {isTabLoading && (
-          <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>加载中...</div>
-        )}
-
-        {!isTabLoading && tabPosts.length === 0 && (
-          <div className={`p-10 text-center text-sm ${currentTheme.textSub}`}>暂无内容</div>
-        )}
-
-        {!isTabLoading && tabPosts.map((post, index) => {
-          const realId = post.id;
-          if (!realId) return null;
-
-          const topReply = post.topReply || null;
-          const answerLink = topReply?.id ? `/forum/${topReply.id}?fromQuestion=${realId}` : `/forum/question/${realId}`;
-          const answerVotes = topReply?.votes ?? post.votes ?? 0;
-          const answerComments = topReply?.comments ?? post.comments ?? 0;
-          const authorName = topReply?.author?.name || '暂无回答';
-          const excerpt = topReply?.content || '这个问题还没有回答，点击查看并参与讨论。';
-
-          return (
-            <article
-              key={realId}
-              className={`px-4 md:px-6 py-4 md:py-5 ${index < tabPosts.length - 1 ? `border-b ${currentTheme.border}` : ''}`}
-            >
-              <Link href={`/forum/question/${realId}`} className="block">
-                <h2
-                  className={`font-bold leading-[1.42] tracking-tight ${currentTheme.textMain} hover:text-[var(--home-accent)] transition-colors`}
-                  style={{ fontSize: `${fontSize + 4}px` }}
-                >
-                  {post.title}
-                </h2>
-              </Link>
-
-              <div className="mt-3 flex items-center gap-2">
-                <div className={`w-7 h-7 rounded-full overflow-hidden flex items-center justify-center bg-[var(--home-soft)]`}>
-                  {topReply?.author?.avatar ? (
-                    <img src={topReply.author.avatar} alt="avatar" loading="lazy" decoding="async" width={28} height={28} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className={`text-[11px] font-semibold ${currentTheme.textSub}`}>
-                      {authorName.slice(0, 1)}
-                    </span>
-                  )}
-                </div>
-                <span className={`text-sm font-medium ${currentTheme.textMain}`}>{authorName}</span>
-              </div>
-
-              <Link href={answerLink} className="block">
-                <p
-                  className={`mt-2 leading-[1.65] line-clamp-2 md:line-clamp-3 ${currentTheme.textSub} hover:text-[var(--home-text)] transition-colors`}
-                  style={{ fontSize: `${fontSize}px` }}
-                >
-                  {excerpt}
-                </p>
-              </Link>
-
-              <div className={`mt-3 flex items-center gap-5 text-[13px] ${currentTheme.textSub}`}>
-                <span className="inline-flex items-center gap-1.5">
-                  <ThumbsUp className="w-3.5 h-3.5" />
-                  {formatCount(answerVotes)}
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <MessageCircle className="w-3.5 h-3.5" />
-                  {formatCount(answerComments)}
-                </span>
-                <span className="ml-auto text-xs">{topReply ? '查看回答' : '去回答'}</span>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    );
-  }
 export default memo(ForumPostList);

@@ -1,4 +1,5 @@
 import { forumWrites } from './routes/forum-writes.js';
+import {forumFeed} from './services/forum-feed.js';
 import {chapterResponse} from './services/chapter-storage.js';
 import {pagination} from './services/pagination.js';
 import {createRequestMetrics,allowMetrics} from './services/observability.js';
@@ -308,6 +309,12 @@ app.get('/api/books/:id/reviews', getReviews);
 app.get('/api/forum/posts', async (req, res) => {
   try {
     const { tab = 'recommend' } = req.query;
+    if(req.query.view === 'answers') {
+      const {limit,skip} = pagination(req.query);
+      const page = Math.floor(skip / limit) + 1;
+      if(page>100) return res.status(400).json({error:'分页范围超限'});
+      return res.json((await forumFeed({tab,page,limit})).items);
+    }
     const currentUserId = await getOptionalUserId(req);
     const {limit,skip}=pagination(req.query);
 
@@ -394,9 +401,13 @@ app.get('/api/forum/posts/:id', async (req, res) => {
 
     if (!post) return res.status(404).json({ error: '帖子不存在' });
 
+    const book = post.bookId ? await Book.findOne({_id:post.bookId,deletedAt:null,visibility:{$ne:'private'}}).select('title').lean() : null;
+    if(post.bookId && !book) return res.status(404).json({error:'帖子不存在'});
+
     const {likedBy,...publicPost}=post;
     res.json({
       ...publicPost,
+      bookTitle: book?.title,
       id: post._id,
       votes:post.likes||0,comments:post.replyCount||0,created_at:post.createdAt,
       hasLiked: currentUserId
@@ -423,6 +434,8 @@ app.get('/api/forum/posts/:id/replies', async (req, res) => {
     }
     const {limit,skip}=pagination(req.query);
     const filter={postId:req.params.id};
+    const parent = await ForumPost.findById(req.params.id).select('bookId').lean();
+    if(parent?.bookId && !await Book.exists({_id:parent.bookId,deletedAt:null,visibility:{$ne:'private'}})) return res.status(404).json({error:'帖子不存在'});
     if(req.query.target){if(typeof req.query.target!=='string'||!/^[a-f0-9]{24}$/i.test(req.query.target))return res.status(400).json({error:'回答ID无效'});filter._id=req.query.target;}
     const replies = await ForumReply.find(filter)
       .populate('author', 'username _id')
@@ -431,15 +444,17 @@ app.get('/api/forum/posts/:id/replies', async (req, res) => {
 
     const formattedReplies = replies.map(r => ({
       id: r._id,
+      title: r.title,
+      source: r.source,
       content: r.content,
       votes: r.likes,
       hasLiked: currentUserId
         ? (r.likedBy || []).some(uid => String(uid) === currentUserId)
         : false,
       comments: r.comments,
-      time: new Date(r.createdAt).toLocaleString(),
+      time: new Date(r.createdAt).toISOString(),
       author: {
-        name: r.author?.username,
+        name: r.source?.author || r.author?.username,
         bio: '暂无介绍', // 以后可以在 User 表加 bio 字段
         avatar: '', 
         id: r.author?._id

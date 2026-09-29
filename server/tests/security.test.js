@@ -360,7 +360,9 @@ test('real MongoDB: CSRF, ownership, revocation and signup',async t => {
       assert.equal(list.data.items[0].author.username,'owner');
       assert.equal((await guest.request(`/api/books/${new mongoose.Types.ObjectId()}/articles`)).data.total,0);
       for(const bookId of ['invalid',String(new mongoose.Types.ObjectId())])assert.equal((await owner.write('/api/forum/posts','POST',{title:'无效关联',content:'内容',type:'article',bookId})).status,400);
-      assert.equal((await owner.write('/api/forum/posts','POST',{title:'问题？',content:'内容',type:'question',bookId:String(book._id)})).status,400);
+      const question=await owner.write('/api/forum/posts','POST',{title:'问题？',content:'内容',type:'question',bookId:String(book._id)});
+      assert.equal(question.status,201);assert.equal(question.data.bookId,String(book._id));
+      assert.equal((await guest.request(`/api/books/${book._id}/articles`)).data.total,1,'the legacy articles endpoint still excludes questions');
     });
     await t.test('logout and ban revoke previously valid cookies',async()=>{
       const oldCookie=owner.jar.get('session');
