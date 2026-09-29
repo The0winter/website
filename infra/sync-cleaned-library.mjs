@@ -21,7 +21,7 @@ export function planCleaningSync(book, report, remote) {
       content:local.content,...change.afterVolume});
   }
   const batches=[];let batch=[],bytes=0;
-  for(const patch of patches){const size=Buffer.byteLength(JSON.stringify(patch));if(batch.length && (batch.length>=120 || bytes+size>3.5*1024*1024)){batches.push(batch);batch=[];bytes=0;}batch.push(patch);bytes+=size;}
+  for(const patch of patches){const size=Buffer.byteLength(JSON.stringify(patch));if(batch.length && (batch.length>=200 || bytes+size>3.5*1024*1024)){batches.push(batch);batch=[];bytes=0;}batch.push(patch);bytes+=size;}
   if(batch.length)batches.push(batch);
   return {batches,missing,changed:patches.length};
 }
