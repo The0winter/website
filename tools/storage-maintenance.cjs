@@ -157,7 +157,7 @@ function snapshot(root, relative, tracked = [], checkedParents, check = () => {}
 }
 
 // Keep original responses cited by durable chapter/checkpoint/review metadata.
-function evidenceHashes(root, check) {
+function evidenceHashes(root, check, {exclude = new Set()} = {}) {
   const hashes = new Set();
   function collect(value, key) {
     // Prose is not a reference field. Avoid regex-scanning gigabytes of it,
@@ -171,6 +171,7 @@ function evidenceHashes(root, check) {
   }
   function visit(file) {
     check();
+    if (exclude.has(norm(path.relative(root,file)))) return;
     if (!fs.existsSync(file)) return;
     const stat = fs.lstatSync(file);
     if (stat.isSymbolicLink()) throw Error('Linked evidence path');
@@ -180,10 +181,11 @@ function evidenceHashes(root, check) {
   for (const relative of ['.novel-crawler/sources.json', '.novel-crawler/jobs', '.novel-crawler/continuations']) visit(inside(root, relative));
   return hashes;
 }
-function plan(root, {now = Date.now(), initial = false, policy = POLICY, processes = processSnapshot(), tracked = trackedFiles(root), scope, reserveBytes = 0} = {}) {
+function plan(root, {now = Date.now(), initial = false, policy = POLICY, processes = processSnapshot(), tracked = trackedFiles(root), scope, reserveBytes = 0, reviewed, expectedReview} = {}) {
   root = validateRoot(root);
   const blockers = [], busy = busyCategories(root, processes, blockers), candidates = [], protectedPaths = [], warnings = [], checkedParents = new Set();
   const check = pendingCheck(root); check(true);
+  if (reviewed) return require('./storage-reviewed-reclaim.cjs').plan(root, {reviewed, expectedReview, processes, tracked, check});
   function inspect(relative, category) {
     if (busy.has('all') || busy.has(category)) return null;
     const absolute = norm(path.resolve(root, relative)).toLowerCase();
@@ -313,9 +315,10 @@ function plan(root, {now = Date.now(), initial = false, policy = POLICY, process
 
 function execute(root, proposed, options = {}) {
   // Rebuild the allowlist from current state; never trust a saved path list.
-  const current = proposed.candidates.length ? plan(root, {...options, initial: proposed.initial, scope:proposed.scope, reserveBytes:proposed.reserveBytes||0}) : proposed;
+  const current = proposed.candidates.length ? plan(root, {...options, initial: proposed.initial, scope:proposed.scope, reserveBytes:proposed.reserveBytes||0, reviewed:proposed.reviewed, expectedReview:proposed.reviewHash}) : proposed;
   const allowed = new Map(current.candidates.map(x => [x.path, x]));
   const result = {startedAt: new Date().toISOString(), deleted: [], skipped: [], warnings: current.warnings, busy: current.busy, blockers: current.blockers || []};
+  if (proposed.reviewed) Object.assign(result,{reviewed:proposed.reviewed,reviewHash:current.reviewHash,protectedPaths:current.protectedPaths,missing:current.missing});
   const tracked = options.tracked || trackedFiles(root);
   const indexStamp = () => {
     const file = path.join(root, '.git/index');
@@ -335,10 +338,12 @@ function execute(root, proposed, options = {}) {
       if (!options.processes && item.category !== 'site-monitor') {
         if (Date.now() - lastProcessCheck > 1000 || item.files > 1) { lastProcesses = processSnapshot(); lastProcessCheck = Date.now(); }
         const live = lastProcesses, busy = busyCategories(root, live);
+        if (proposed.reviewed) require('./storage-reviewed-reclaim.cjs').recheck(root,item,live);
         const category = item.category;
         if (busy.has('all') || busy.has(category) || live.some(p => typeof p.command === 'string' && norm(p.command).toLowerCase().includes(norm(path.resolve(root, item.path)).toLowerCase()))) throw Error('New process is using this category or path');
         if (category === 'archived-backup' && live.some(p => typeof p.command === 'string' && norm(p.command).toLowerCase().includes(norm(path.resolve(root, path.dirname(item.path))).toLowerCase()))) throw Error('Archive task became active');
       }
+      if (proposed.reviewed && options.processes) require('./storage-reviewed-reclaim.cjs').recheck(root,item,options.processes);
       if (snapshot(root, item.path, tracked, undefined, check).fingerprint !== item.fingerprint) throw Error('Candidate changed during cleanup');
       fs.rmSync(inside(root, item.path), {recursive: true, force: false, maxRetries: 2, retryDelay: 100});
       result.deleted.push({path: item.path, bytes: item.bytes, files: item.files});
@@ -354,6 +359,7 @@ function execute(root, proposed, options = {}) {
 }
 function maintain({root = ROOT, apply = false, initial = false, ...options} = {}) {
   root = validateRoot(root);
+  if (options.reviewed) options.scope = 'reviewed';
   return lock(root, () => {
     const proposed = plan(root, {...options, initial});
     if (!apply) return proposed;
@@ -454,13 +460,18 @@ function activity(categories, {sweep = false} = {}) {
 function cacheActivity(cacheDir) {
   return path.resolve(cacheDir) === path.join(ROOT, '.novel-crawler/cache') ? activity(['crawler-cache']) : () => {};
 }
-module.exports = {POLICY, inside, snapshot, plan, execute, maintain, automatic, queueAutomatic, activity, cacheActivity, busyCategories, processSnapshot, trackedFiles, recordHistory, measureUsage, daily};
+module.exports = {POLICY, inside, snapshot, plan, execute, maintain, automatic, queueAutomatic, activity, cacheActivity, busyCategories, processSnapshot, trackedFiles, recordHistory, measureUsage, daily, evidenceHashes};
 if (require.main === module) {
   try {
     const args = process.argv.slice(2);
-    if (args.some(x => !['--apply', '--initial', '--auto', '--daily', '--site-monitor'].includes(x))) throw Error('Usage: node tools/storage-maintenance.cjs [--apply] [--initial] [--auto] [--daily] [--site-monitor]');
+    const reviewed=args.find(x=>x.startsWith('--reviewed-class3='))?.slice('--reviewed-class3='.length);
+    const expectedReview=args.find(x=>x.startsWith('--expected-review='))?.slice('--expected-review='.length);
+    if (args.filter(x=>x.startsWith('--reviewed-class3=')).length>1 || args.filter(x=>x.startsWith('--expected-review=')).length>1 || (args.some(x=>x.startsWith('--reviewed-class3=')) && !reviewed) || (args.some(x=>x.startsWith('--expected-review=')) && !expectedReview)) throw Error('Reviewed cleanup arguments must be nonempty and unique');
+    if (args.some(x => !['--apply', '--initial', '--auto', '--daily', '--site-monitor'].includes(x) && !x.startsWith('--reviewed-class3=') && !x.startsWith('--expected-review='))) throw Error('Usage: node tools/storage-maintenance.cjs [--apply] [--initial] [--auto] [--daily] [--site-monitor] [--reviewed-class3=task-manifest.json.gz] [--expected-review=SHA256]');
+    if ((reviewed && args.some(x=>['--auto','--daily','--initial','--site-monitor'].includes(x))) || (expectedReview && (!reviewed || !/^[a-f0-9]{64}$/.test(expectedReview)))) throw Error('Reviewed cleanup is an explicit standalone scope');
+    if (reviewed && args.includes('--apply') && !expectedReview) throw Error('Preview reviewed cleanup first and pass --expected-review=<reviewHash>');
     if (args.includes('--auto')) automatic();
     else if (args.includes('--daily')) console.log(JSON.stringify(daily(), null, 2));
-    else console.log(JSON.stringify(maintain({apply: args.includes('--apply'), initial: args.includes('--initial'), scope:args.includes('--site-monitor')?'site-monitor':undefined}), null, 2));
+    else console.log(JSON.stringify(maintain({apply: args.includes('--apply'), initial: args.includes('--initial'), scope:reviewed?'reviewed':args.includes('--site-monitor')?'site-monitor':undefined, reviewed, expectedReview}), null, 2));
   } catch (e) { console.error(e.message); process.exitCode = 1; }
 }
