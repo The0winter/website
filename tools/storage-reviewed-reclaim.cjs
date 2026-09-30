@@ -163,7 +163,7 @@ function plan(root, {reviewed, expectedReview, processes, tracked, check}) {
     catch (error) { if (error.code==='STORAGE_YIELD') throw error; protectedPath(item.path,error.message); }
   }
   // Cache bodies must disappear first; execute() retains metadata if body removal fails.
-  candidates.sort((a,b)=>(a.path.endsWith('.bin')?-1:0)-(b.path.endsWith('.bin')?-1:0) || a.path.localeCompare(b.path));
+  candidates.sort((a,b)=>(a.path.endsWith('.bin')?-1:0)-(b.path.endsWith('.bin')?-1:0) || b.bytes-a.bytes || a.path.localeCompare(b.path));
   return {root,scope:'reviewed',reviewed,reviewHash,createdAt:new Date().toISOString(),candidates,bytes:candidates.reduce((n,x)=>n+x.bytes,0),busy:[...busy],blockers,protectedPaths,missing,warnings:[],reviewedFileCount:manifest.files.length};
 }
 

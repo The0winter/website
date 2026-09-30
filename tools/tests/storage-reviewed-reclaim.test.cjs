@@ -104,3 +104,10 @@ test('own runtime ancestors are excluded regardless of process-list order',t=>{
   processes.push({pid:990003,parent:0,name:'node.exe',command:'node novel-crawler/download.mjs'});
   assert.ok(busyCategories(f.root,processes).has('crawler-cache'));
 });
+test('large reviewed outputs precede small captures while cache bodies still precede metadata',t=>{
+  const f=fixture(t),stem='.novel-crawler/cache/'+'f'.repeat(64);f.put('node_modules/pkg/a.js','code'.repeat(1000));f.put('artifacts/check/final.png','small');f.put(stem+'.bin','body');f.put(stem+'.json',JSON.stringify({hash:digest('body')}));
+  const p=f.review([f.entry('node_modules/pkg/a.js','dependency'),f.entry('artifacts/check/final.png','visual'),f.entry(stem+'.bin','loose-cache'),f.entry(stem+'.json','loose-cache')]);
+  const position=prefix=>p.candidates.findIndex(x=>x.path.startsWith(prefix));
+  assert.ok(position(stem+'.bin')<position(stem+'.json'));
+  assert.ok(position('node_modules')<position('artifacts'));
+});
