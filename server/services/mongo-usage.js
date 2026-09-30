@@ -28,6 +28,7 @@ export function trackDatabaseRequest(req, res, next) {
 export function observeMongoClient(client, {clock = Date.now, purpose = 'background', log = () => {}} = {}) {
   if (clients.has(client)) return clients.get(client);
   const buckets = new Map(), pending = new Map(), startedAt = new Date(clock()).toISOString();
+  const totals = {commands:0, failed:0, estimatedBsonReplyBytes:0, unmeasuredReplies:0};
   let untrackedCommands = 0, previousHour;
   const key = event => `${event.connectionId}:${event.requestId}`;
   function prune() {
@@ -46,6 +47,8 @@ export function observeMongoClient(client, {clock = Date.now, purpose = 'backgro
     const row = groups[group] ||= {commands:0, failed:0, estimatedBsonReplyBytes:0, unmeasuredReplies:0};
     row.commands++; row.failed += Number(failed); row.estimatedBsonReplyBytes += bytes;
     row.unmeasuredReplies += Number(!measured && !failed);
+    totals.commands++; totals.failed += Number(failed); totals.estimatedBsonReplyBytes += bytes;
+    totals.unmeasuredReplies += Number(!measured && !failed);
   }
   client.on('commandStarted', event => {
     const group = context.getStore() || purpose;
@@ -67,7 +70,7 @@ export function observeMongoClient(client, {clock = Date.now, purpose = 'backgro
   const usage = {snapshot() {
     prune();
     return {measurement:'estimated-uncompressed-command-reply-bson', startedAt, windowHours:48,
-      untrackedCommands, buckets:[...buckets].map(([hour, groups]) => ({hour, purposes:structuredClone(groups)}))};
+      untrackedCommands, totals:{...totals}, buckets:[...buckets].map(([hour, groups]) => ({hour, purposes:structuredClone(groups)}))};
   }};
   clients.set(client, usage);
   return usage;

@@ -2,7 +2,7 @@ import '../../test-env.cjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {hash} from '../storage.mjs';
-import {main,planCleaningSync} from '../../../infra/sync-cleaned-library.mjs';
+import {main,planCleaningSync,cleaningInspectionScope,verifyCleaningInspection} from '../../../infra/sync-cleaned-library.mjs';
 import {mergeCleaningReports} from '../clean-library.mjs';
 import {getCatalog} from '../adapters.mjs';
 import {cleanBookForReading} from '../../../shared/reading-cleanup.mjs';
@@ -26,6 +26,20 @@ test('historical sync verifies the baseline, handles a retry and preserves chapt
   const b={...a,beforeHash:'b',afterHash:'c',changes:[{...change,beforeHash:'middle',beforeVolume:change.afterVolume,reasons:['ad'],removedCharacters:2}]};
   const merged=mergeCleaningReports(a,b);assert.equal(merged.beforeHash,'a');assert.equal(merged.changes[0].beforeHash,change.beforeHash);assert.equal(merged.changes[0].removedCharacters,5);
   assert.throws(()=>mergeCleaningReports(a,{...b,beforeHash:'unrelated'}),/连续/);
+});
+
+test('scoped maintenance verifies the version chain and identities, including already-applied retries', () => {
+  assert.deepEqual(cleaningInspectionScope({changes:[{number:30},{number:4}]}),{numbers:[30,4]});
+  assert.throws(()=>cleaningInspectionScope({changes:[{number:4},{number:4}]}),/重复/);
+  assert.throws(()=>cleaningInspectionScope({changes:[{number:0}]}),/无效/);
+  const before={bookId:'book',token:'initial',chapters:[{id:'chapter',number:4,title:'章',link:'source'}]};
+  const after={...before,token:'final'};
+  verifyCleaningInspection(before,after,'final');
+  verifyCleaningInspection(before,before,'initial');
+  assert.throws(()=>verifyCleaningInspection(before,{...after,token:'concurrent'},'final'),/版本/);
+  assert.throws(()=>verifyCleaningInspection(before,{...after,bookId:'replacement'},'final'),/版本/);
+  assert.throws(()=>verifyCleaningInspection(before,{...after,chapters:[]},'final'),/身份/);
+  assert.throws(()=>verifyCleaningInspection(before,{...after,chapters:[{...before.chapters[0],number:9}]},'final'),/顺序/);
 });
 
 test('explicit HTML volume boundaries survive repeated names and pagination', async () => {

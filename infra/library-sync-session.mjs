@@ -35,7 +35,7 @@ export function createVpsLibrarySession({host = 'ubuntu@51.79.242.0', identity =
         active.resetTimer();
         if (message.type === 'progress') { try { active.onProgress(message); } catch { fail('保存上传进度失败，已完成批次保留'); } }
         else if (message.type === 'error') {
-          const error = Object.assign(Error(message.error), {fatal: !!message.fatal});
+          const error = Object.assign(Error(message.error), {fatal: !!message.fatal, ...(message.databaseUsage ? {databaseUsage:message.databaseUsage} : {})});
           settle(error); if (error.fatal) { closed = true; child.kill(); }
         } else if (message.type === 'result') settle(null, message.result);
       }

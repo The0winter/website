@@ -50,3 +50,28 @@ test('maintenance preserves IDs, dates, annotations and original objects, checks
     } finally {transport.query=query;Chapter.bulkWrite=bulkWrite;}
   } finally {await mongoose.disconnect();await db.stop();}
 });
+
+test('scoped cleanup reads only selected chapters and still detects changes to the whole book', async () => {
+  const db=await TestDatabase.create();await mongoose.connect(db.getUri(),{autoIndex:false,autoCreate:false});
+  try {
+    const book=await Book.create({title:'范围核对',author:'作者',sourceUrl:'https://example.test/scoped',importManaged:true});
+    const identity={title:book.title,author:book.author,sourceUrl:book.sourceUrl},deps={Book,Chapter};
+    const rows=await Chapter.insertMany(Array.from({length:60},(_,i)=>({bookId:book._id,title:`章${i+1}`,chapter_number:i+1,content:`正文${i+1}`,sourceUrl:`https://example.test/${i+1}`})));
+    await Chapter.updateOne({_id:rows[2]._id},{$set:{deletedAt:new Date()}});
+    await Chapter.updateOne({_id:rows[29]._id},{$set:{contentKey:'chapters/sha256/'+sha('R2正文')+'.txt',contentSha256:sha('R2正文')},$unset:{content:1}});
+    const full=await inspectCleaningBook(identity,deps);
+    const scoped=await inspectCleaningBook({...identity,numbers:[30,3,8,100]},deps);
+    assert.equal(scoped.scope,'selected');assert.deepEqual(scoped.chapters,full.chapters.filter(c=>[8,30].includes(c.number)));
+    assert.equal(scoped.chapters[1].hash,sha('R2正文'));
+    assert.deepEqual((await inspectCleaningBook({...identity,numbers:[]},deps)).chapters,[]);
+    await assert.rejects(inspectCleaningBook({...identity,numbers:[1,1]},deps),/范围/);
+    await assert.rejects(inspectCleaningBook({...identity,numbers:[1.1]},deps),/范围/);
+    await assert.rejects(inspectCleaningBook({...identity,numbers:null},deps),/范围/);
+    // A writer touching an unselected chapter advances the same book version.
+    await Book.updateOne({_id:book._id},{$inc:{writeVersion:1}});
+    await assert.rejects(inspectCleaningBook({...identity,numbers:[8],expectedToken:scoped.token},deps),/版本/);
+    const find=Chapter.find.bind(Chapter);
+    Chapter.find=(...args)=>{const query=find(...args),lean=query.lean.bind(query);query.lean=async()=>{const values=await lean();await Book.updateOne({_id:book._id},{$inc:{writeVersion:1}});return values;};return query;};
+    try{await assert.rejects(inspectCleaningBook({...identity,numbers:[8]},deps),/发生变化/);}finally{Chapter.find=find;}
+  } finally {await mongoose.disconnect();await db.stop();}
+});

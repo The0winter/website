@@ -6,6 +6,22 @@ import {atomicWrite, hash, readJson, withLock} from '../tools/novel-crawler/stor
 import {continuationKey} from '../tools/novel-crawler/continuation.mjs';
 
 const volume = c => JSON.stringify([c.volume_title || null, c.volume_number || null]);
+export function cleaningInspectionScope(report) {
+  const numbers = report.changes.map(c => c.number);
+  if (numbers.some(n => !Number.isSafeInteger(n) || n < 1) || new Set(numbers).size !== numbers.length) throw Error('清理报告含无效或重复序号');
+  // Retain the full-audit path for unusually large single-book reports.
+  return numbers.length <= 50000 ? {numbers} : {};
+}
+
+export function verifyCleaningInspection(before, after, expectedToken) {
+  if (after.bookId !== before.bookId || after.token !== expectedToken) throw Error('修订后书籍版本已变化，请重新核对');
+  const chapters = new Map(after.chapters.map(c => [c.id,c]));
+  for (const prior of before.chapters) {
+    const current = chapters.get(prior.id);
+    if (!current || prior.number !== current.number || prior.title !== current.title || prior.link !== current.link) throw Error('章节身份或顺序发生变化');
+  }
+}
+
 export function planCleaningSync(book, report, remote) {
   const chapters = new Map(book.chapters.map(c=>[c.chapter_number,c])), existing = new Map(remote.chapters.map(c=>[c.number,c]));
   if (chapters.size !== book.chapters.length || existing.size !== remote.chapters.length) throw Error('重复序号，已停止修订');
@@ -39,6 +55,17 @@ export async function main(args=process.argv.slice(2)) {
     const reportDir=path.resolve(opts['report-dir']);fs.mkdirSync(reportDir,{recursive:true});
     const runId=opts['run-id']||'reading-cleanup-'+new Date().toISOString().replace(/[:.]/g,'-');
     const result={apply,runId,startedAt:new Date().toISOString(),books:[],errors:[]};
+    const send = async job => {
+      try {
+        const response = await transport(job);
+        result.databaseUsage = response.databaseUsage || {measurement:'unavailable'};
+        return response;
+      } catch (error) {
+        if (error.databaseUsage) result.databaseUsage = error.databaseUsage;
+        else result.databaseUsage = {...(result.databaseUsage || {measurement:'unavailable'}), incomplete:true};
+        throw error;
+      }
+    };
     for(const item of input.books.filter(b=>b.changed&&(!opts.file||b.file===opts.file))){
       try{
         const report=readJson(item.reportFile);
@@ -46,7 +73,8 @@ export async function main(args=process.argv.slice(2)) {
           const bytes=fs.readFileSync(path.join(root,'downloads',item.file));
           if(hash(bytes)!==report.afterHash)throw Error('清理后本地文件又发生变化，已暂停此书同步');
           const book=JSON.parse(bytes.toString('utf8')),identity={sourceUrl:book.sourceUrl,title:opts['online-title']||book.title,author:book.author};
-          const remote=await transport({mode:'inspect',...identity});
+          const scope=cleaningInspectionScope(report);
+          const remote=await send({mode:'inspect',...identity,...scope});
           const evidenceFile=path.join(reportDir,continuationKey(book)+'-before.json');
           if(!fs.existsSync(evidenceFile))atomicWrite(evidenceFile,{identity,...remote});
           const receiptsFile=path.join(reportDir,continuationKey(book)+'-receipts.json');
@@ -54,15 +82,14 @@ export async function main(args=process.argv.slice(2)) {
           const plan=planCleaningSync(book,report,remote),receipts=savedReceipts?.receipts||[];
           let token=remote.token;
           for(const chapters of plan.batches){
-            const receipt=await transport({mode:'revise',...identity,bookId:remote.bookId,token,runId,chapters,preview:!apply});
+            const receipt=await send({mode:'revise',...identity,bookId:remote.bookId,token,runId,chapters,preview:!apply});
             if(apply)token=receipt.token;receipts.push(receipt);
             atomicWrite(receiptsFile,{file:item.file,title:item.title,runId,receipts});
           }
           if(apply){
-            const verified=await transport({mode:'inspect',...identity});
+            const verified=await send({mode:'inspect',...identity,...scope,expectedToken:token});
             if(planCleaningSync(book,report,verified).changed)throw Error('线上修订后复核不一致');
-            const after=new Map(verified.chapters.map(c=>[c.id,c]));
-            for(const before of remote.chapters){const current=after.get(before.id);if(!current||before.number!==current.number||before.title!==current.title||before.link!==current.link)throw Error('章节身份或顺序发生变化');}
+            verifyCleaningInspection(remote,verified,token);
             atomicWrite(path.join(reportDir,continuationKey(book)+'-verified.json'),verified);
           }
           result.books.push({file:item.file,title:item.title,bookId:remote.bookId,updated:plan.changed,missingOnline:plan.missing,verified:apply,batches:receipts.length});
@@ -70,7 +97,7 @@ export async function main(args=process.argv.slice(2)) {
       }catch(error){result.errors.push({file:item.file,title:item.title,error:error.message});if(error.fatal){atomicWrite(path.join(reportDir,apply?'verified-sync-summary.json':'preview-sync-summary.json'),result);break;}}
       atomicWrite(path.join(reportDir,apply?'verified-sync-summary.json':'preview-sync-summary.json'),result);
     }
-    console.log(JSON.stringify({apply,books:result.books.length,updated:result.books.reduce((n,b)=>n+b.updated,0),errors:result.errors,reportDir}));
+    console.log(JSON.stringify({apply,books:result.books.length,updated:result.books.reduce((n,b)=>n+b.updated,0),errors:result.errors,databaseUsage:result.databaseUsage,reportDir}));
     if(result.errors.length)process.exitCode=2;
   }finally{await transport.close();}
 }

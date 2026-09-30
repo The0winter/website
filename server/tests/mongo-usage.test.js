@@ -32,4 +32,7 @@ test('usage counts replies by concurrent purpose without retaining sensitive val
   assert.equal(usage.snapshot().buckets[1].purposes.background.failed,1);
   now+=48*3600000;
   assert.deepEqual(usage.snapshot().buckets,[]);
+  assert.deepEqual(usage.snapshot().totals,{commands:6,failed:1,estimatedBsonReplyBytes:5*mongoose.mongo.BSON.calculateObjectSize(reply),unmeasuredReplies:0},'maintenance totals survive hourly expiration');
+  const copy=usage.snapshot();copy.totals.commands=0;
+  assert.equal(usage.snapshot().totals.commands,6);
 });

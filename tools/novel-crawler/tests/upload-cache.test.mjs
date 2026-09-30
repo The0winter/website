@@ -235,7 +235,8 @@ test('persistent SSH protocol reuses one hidden connection, isolates request err
   const reply = value => child.stdout.write(JSON.stringify({protocol: 1, id: received.at(-1).id, ...value}) + '\n');
   const first = send({mode: 'headers', title: '`danger` $(secret)'}); child.stderr.write('PRIVATE');
   reply({type: 'result', result: {scope: 'a', headers: []}}); await first;
-  const second = send({mode: 'inspect'}); reply({type: 'error', fatal: false, error: 'conflict'}); await assert.rejects(second, /conflict/);
+  const second = send({mode: 'inspect'}); reply({type: 'error', fatal: false, error: 'conflict', databaseUsage:{commands:7,estimatedBsonReplyBytes:1234}});
+  await assert.rejects(second, error => error.message==='conflict' && error.databaseUsage.commands===7 && error.databaseUsage.estimatedBsonReplyBytes===1234);
   const third = send({mode: 'inspect'}); reply({type: 'result', result: {book: null, chapters: []}}); await third;
   assert.equal(spawned, 1); await send.close();
   const controller = new AbortController();

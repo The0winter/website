@@ -8,16 +8,22 @@ const bodyHash = c => typeof c.content === 'string' ? digest(c.content) : c.cont
 const volume = c => JSON.stringify([c.volume_title || null, c.volume_number || null]);
 const fail = message => { throw Object.assign(Error(message), {publicMessage: message}); };
 const fields = '_id bookId title chapter_number sourceUrl content contentKey contentSha256 volume_title volume_number word_count deletedAt updatedAt';
+const summaryFields = '_id title chapter_number sourceUrl content contentSha256 volume_title volume_number';
 const allowed = b => b?.importManaged && !b.author_id && !b.deletedAt;
 
 export async function inspectCleaningBook(identity, {Book, Chapter}) {
-  const matches = await Book.find({sourceUrl: identity.sourceUrl}).select(libraryBookFields + ' updatedAt').limit(2).lean();
+  const selected = identity.numbers !== undefined;
+  if (selected && (!Array.isArray(identity.numbers) || identity.numbers.length > 50000 || identity.numbers.some(n => !Number.isSafeInteger(n) || n < 1) || new Set(identity.numbers).size !== identity.numbers.length)) fail('核对章节范围无效');
+  const matches = await Book.find({sourceUrl: identity.sourceUrl}).select(libraryBookFields).limit(2).lean();
   const book = matches[0];
   if (matches.length !== 1 || !allowed(book) || book.title !== identity.title || book.author.normalize('NFKC').trim() !== identity.author.normalize('NFKC').trim()) fail('清理作品身份不唯一或归属不允许修订');
-  const chapters = await Chapter.find({bookId: book._id, deletedAt: null}).select(fields).sort({chapter_number: 1}).lean();
+  const token = libraryRevision(book);
+  if (identity.expectedToken !== undefined && identity.expectedToken !== token) fail('核对期间书籍版本已变化，请重新核对');
+  const chapters = selected && !identity.numbers.length ? [] : await Chapter.find({bookId: book._id, deletedAt: null,
+    ...(selected ? {chapter_number: {$in: identity.numbers}} : {})}).select(summaryFields).sort({chapter_number: 1}).lean();
   const after = await Book.findById(book._id).select(libraryBookFields).lean();
-  if (libraryRevision(book) !== libraryRevision(after)) fail('核对期间书籍发生变化，请重新核对');
-  return {bookId: String(book._id), token: libraryRevision(book), chapters: chapters.map(c => ({id: String(c._id), number: c.chapter_number, title: c.title, link: c.sourceUrl, hash: bodyHash(c), ...chapterVolumeFields(c)}))};
+  if (token !== libraryRevision(after)) fail('核对期间书籍发生变化，请重新核对');
+  return {bookId: String(book._id), token, scope: selected ? 'selected' : 'full', chapters: chapters.map(c => ({id: String(c._id), number: c.chapter_number, title: c.title, link: c.sourceUrl, hash: bodyHash(c), ...chapterVolumeFields(c)}))};
 }
 
 export async function reviseCleaningBatch(job, deps) {
@@ -29,9 +35,11 @@ export async function reviseCleaningBatch(job, deps) {
     chapterVolumeFields(c);
   }
   async function inspect(session = null) {
-    const book = await Book.findById(job.bookId).session(session).lean();
+    const book = await Book.findById(job.bookId).select(libraryBookFields).session(session).lean();
     if (!allowed(book) || book.title !== job.title || book.sourceUrl !== job.sourceUrl || libraryRevision(book) !== job.token) fail('书籍版本或归属已变化，暂停修订');
-    const rows = await Chapter.find({_id: {$in: job.chapters.map(c=>c.id)}, bookId: book._id}).select(fields).session(session).lean();
+    // Only the first read builds a recovery record. The transaction rechecks
+    // every identity, hash, volume and deletion guard without rereading object keys.
+    const rows = await Chapter.find({_id: {$in: job.chapters.map(c=>c.id)}, bookId: book._id}).select(session ? summaryFields + ' deletedAt' : fields).session(session).lean();
     const old = new Map(rows.map(c=>[String(c._id),c]));
     for (const c of job.chapters) {
       const prior = old.get(c.id);
@@ -77,7 +85,7 @@ export async function reviseCleaningBatch(job, deps) {
       session.prefetch(Book.collection.name, {_id: job.bookId}),
     ]);
     const current = await inspect(session);
-    const book = await Book.findOneAndUpdate({_id: current.book._id, importManaged: true, author_id: null, deletedAt: null}, {$inc: {writeVersion: 1}}, {new: true, session, timestamps: false});
+    const book = await Book.findOneAndUpdate({_id: current.book._id, importManaged: true, author_id: null, deletedAt: null}, {$inc: {writeVersion: 1}}, {new: true, session, timestamps: false}).select(libraryBookFields).lean();
     if (!book) fail('无法锁定修订作品');
     // A new comment arriving after preflight must be reviewed before committing.
     const nowComments = await ParagraphComment.find({chapter: {$in: job.chapters.map(c=>c.id)}}).session(session).lean();

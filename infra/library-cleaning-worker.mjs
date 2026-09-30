@@ -5,6 +5,7 @@ import {gzipSync, gunzipSync} from 'node:zlib';
 import {createInterface} from 'node:readline';
 import mongoose from '../server/node_modules/mongoose/index.js';
 import {connectDatabase} from '../server/database/index.js';
+import {mongoUsageSnapshot} from '../server/services/mongo-usage.js';
 import Book from '../server/models/Book.js';
 import Chapter from '../server/models/Chapter.js';
 import ParagraphComment from '../server/models/ParagraphComment.js';
@@ -23,6 +24,10 @@ function writeBackup(record) {
   return file;
 }
 let connected = false;
+function databaseUsage() {
+  const usage = mongoUsageSnapshot();
+  return usage ? {measurement:usage.measurement, startedAt:usage.startedAt, ...usage.totals, untrackedCommands:usage.untrackedCommands} : {measurement:'unavailable'};
+}
 try {
   for await (const line of createInterface({input: process.stdin, crlfDelay: Infinity})) {
     let message;
@@ -31,7 +36,7 @@ try {
       message = JSON.parse(line);
       if (message.protocol !== 1 || !Number.isSafeInteger(message.id)) throw Error('协议无效');
       const job = message.job;
-      if (!connected) { await connectDatabase(undefined,{monitorCommands:false}); connected = true; }
+      if (!connected) { await connectDatabase(); connected = true; }
       let result;
       if (job.mode === 'inventory') result = {books: await Book.find({importManaged:true,deletedAt:null,author_id:null}).select('_id title author sourceUrl').lean()};
       else if (job.mode === 'inspect') result = await inspectCleaningBook(job, models);
@@ -44,9 +49,9 @@ try {
         if (digest(bytes) !== path.basename(job.backupFile, '.json.gz')) throw Error('恢复清单校验失败');
         result = await restoreCleaningBackup(JSON.parse(bytes), models);
       } else throw Error('未知清理操作');
-      console.log(JSON.stringify({protocol:1,id:message.id,type:'result',result}));
+      console.log(JSON.stringify({protocol:1,id:message.id,type:'result',result:{...result,databaseUsage:databaseUsage()}}));
     } catch (error) {
-      console.log(JSON.stringify({protocol:1,id:message?.id,type:'error',error:error.publicMessage || '书库修订失败；原始恢复记录保留，请检查服务与日志'}));
+      console.log(JSON.stringify({protocol:1,id:message?.id,type:'error',error:error.publicMessage || '书库修订失败；原始恢复记录保留，请检查服务与日志',databaseUsage:databaseUsage()}));
     }
   }
 } finally { await mongoose.disconnect(); }
