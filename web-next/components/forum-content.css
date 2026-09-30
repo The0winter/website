@@ -2,7 +2,7 @@
   --forum-bg:#f6f7f9; --forum-card:#fff; --forum-text:#20242b; --forum-muted:#777e89;
   --forum-line:#edf0f3; --forum-soft:#f3f5f8; --forum-accent:#3d65b4;
   color:var(--forum-text);
-  font-family:Arial,"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",sans-serif;
+  font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
 }
 .dark :is(.forum-surface,.forum-page,.forum-reading) {
   --forum-bg:#121417; --forum-card:#1c2026; --forum-text:#edf0f5; --forum-muted:#a0a8b5;
@@ -45,8 +45,8 @@
 .book-articles .forum-entry { padding-inline:0; }.book-articles .forum-entry-list { border-radius:0; }
 @media(max-width:767px) {
   .forum-page { --forum-bg:#fff; }
-  .forum-entry-list { border-radius:0; }.forum-entry { padding:23px 20px; }
-  .forum-entry-title h2 { font-size:19px; }.forum-entry-excerpt { font-size:14px; }.forum-entry-excerpt p { -webkit-line-clamp:2; }
+  .forum-entry-list { border-radius:0; }.forum-entry { padding:22px 16px; }
+  .forum-entry-title h2 { font-size:20px; }.forum-entry-excerpt { font-size:16px; line-height:1.75; }.forum-entry-excerpt p { -webkit-line-clamp:3; }
   .forum-entry-meta { gap:14px; font-size:11px; }
   .forum-reading .forum-reading-shell { padding:0; margin-top:0; }
   .forum-reading .forum-answer-card { border:0; border-radius:0; padding:25px 21px; box-shadow:none; }

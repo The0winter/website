@@ -31,19 +31,20 @@ for (const width of [390,1440]) {
     await page.screenshot({path:info.outputPath(`final-forum-${width}.png`)});
     await panel.locator('.forum-entry-title').first().click();
     await expect(page).toHaveURL(new RegExp(`/forum/${first.entryId}\\?fromQuestion=${first.id}`));
-    await expect(page.locator('.forum-answer-card h2')).toHaveText(first.topReply.title);
-    const source = page.getByRole('complementary',{name:'文章来源与许可'});
+    await expect(page.locator('.qa-question h1')).toHaveText(manifest.question.title);
+    await expect(page.locator('.qa-answer')).toHaveCount(5);
+    await expect(page.locator('.qa-answer > h2')).toHaveCount(0);
+    const source = page.getByRole('complementary',{name:'文章来源与许可'}).first();
     await expect(source.getByRole('link',{name:'查看原文 ↗'})).toHaveAttribute('href',first.topReply.source.url);
-    await expect(page.locator('.forum-prose')).toBeVisible();
+    await expect(page.locator('.qa-body').first()).toBeVisible();
     await expect(page).toHaveTitle(new RegExp(first.topReply.title.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
     await page.screenshot({path:info.outputPath(`final-answer-${width}.png`)});
-    await page.locator('.forum-question-heading h1').click();
-    await expect(page).toHaveURL(base + `/forum/question/${first.id}`);
-    await expect(page.getByText('5 个回答',{exact:true})).toBeVisible();
-    await expect(page.locator('.forum-entry')).toHaveCount(5);
+    await page.getByRole('button',{name:'查看全部回答',exact:true}).click();
+    await expect(page.getByRole('dialog',{name:'全部 5 个回答'})).toBeVisible();
+    await expect(page.locator('.qa-directory-item')).toHaveCount(5);
     await page.screenshot({path:info.outputPath(`final-question-${width}.png`)});
-    await page.getByRole('link',{name:'《三体》 · 书籍讨论'}).click();
+    await page.getByRole('dialog').getByRole('link',{name:'查看相关书籍'}).click();
     await page.getByRole('tab',{name:'文章',exact:true}).click();
     await expect(page.locator('#articles-panel .forum-entry')).toHaveCount(5);
     await expect(page.locator('#reviews-section')).toHaveCSS('background-color','rgb(255, 255, 255)');
@@ -51,7 +52,7 @@ for (const width of [390,1440]) {
     await page.locator('#reviews-section').scrollIntoViewIfNeeded();
     await page.screenshot({path:info.outputPath(`final-book-discussions-${width}.png`)});
     await page.locator('#articles-panel .forum-entry-title').first().click();
-    await expect(page.locator('.forum-answer-card h2')).toHaveText(first.topReply.title);
+    await expect(page.locator('.qa-question h1')).toHaveText(manifest.question.title);
     expect(errors).toEqual([]);
   });
 }
@@ -65,11 +66,11 @@ test('all five rendered bodies preserve the collected text and source attributio
     expect(answer.content).toBe(expected.content);
     expect(answer.source.author).toBe(expected.source.author);
     await page.goto(`${base}/forum/${row.entryId}?fromQuestion=${row.id}`);
-    await expect(page.locator('.forum-prose')).toBeVisible();
-    const rendered = await page.locator('.forum-prose').textContent();
+    await expect(page.locator('.qa-body').first()).toBeVisible();
+    const rendered = await page.locator('.qa-body').first().textContent();
     const original = await page.evaluate(html => new DOMParser().parseFromString(html,'text/html').body.textContent, expected.content);
     expect(rendered?.replace(/\s/g,'')).toBe(original?.replace(/\s/g,''));
-    await expect(page.getByRole('link',{name:expected.source.license,exact:true})).toHaveAttribute('href',expected.source.licenseUrl);
+    await expect(page.locator('.qa-answer').first().getByRole('link',{name:expected.source.license,exact:true})).toHaveAttribute('href',expected.source.licenseUrl);
   }
 });
 
@@ -80,31 +81,31 @@ test('a reader can like, comment, reply, and revisit the same answer', async ({p
   const login = await page.request.post(base + '/api/auth/signin', {headers:{origin:base,'x-csrf-token':csrf.csrfToken},data:{email:'reader@example.test',password:'Local-test-12345'}});
   expect(login.ok()).toBeTruthy();
   await page.goto(`${base}/forum/${row.entryId}?fromQuestion=${row.id}`);
-  const like = page.getByRole('button',{name:'点赞回答',exact:true});
+  const like = page.getByRole('button',{name:'赞同当前回答',exact:true});
   await like.click();
-  await expect(page.getByRole('button',{name:'取消点赞回答',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'打开评论',exact:true}).click();
-  const dialog = page.getByRole('dialog',{name:'文章评论'});
+  await expect(page.getByRole('button',{name:'取消赞同当前回答',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'打开当前回答评论',exact:true}).click();
+  const dialog = page.getByRole('dialog',{name:'回答评论'});
   await expect(dialog).toBeVisible();
   const comment = `完整阅读后的本地测试评论 ${Date.now()}`;
   await dialog.getByRole('textbox',{name:'评论内容'}).fill(comment);
   await dialog.getByRole('button',{name:'发布评论',exact:true}).click();
   await expect(dialog.getByText(comment,{exact:true})).toBeVisible();
-  await dialog.locator('.rounded-xl').filter({has:page.getByText(comment,{exact:true})}).getByRole('button',{name:'回复',exact:true}).click();
+  await dialog.locator('.qa-comment').filter({has:page.getByText(comment,{exact:true})}).getByRole('button',{name:'回复',exact:true}).click();
   const child = '二级回复：也想聊聊这个观点。' + Date.now();
   await dialog.getByRole('textbox',{name:'评论内容'}).fill(child);
   await dialog.getByRole('button',{name:'发布评论',exact:true}).click();
   await expect(dialog.getByText(child,{exact:true})).toBeVisible();
   await page.screenshot({path:info.outputPath('final-answer-comments-mobile.png')});
-  await dialog.getByRole('button',{name:'关闭评论'}).click();
+  await dialog.getByRole('button',{name:'关闭弹窗'}).click();
   await expect(dialog).not.toBeVisible();
   await page.reload();
-  await expect(page.getByRole('button',{name:'取消点赞回答',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'打开评论',exact:true}).click();
+  await expect(page.getByRole('button',{name:'取消赞同当前回答',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'打开当前回答评论',exact:true}).click();
   await expect(dialog.getByText(comment,{exact:true})).toBeVisible();
-  await dialog.getByRole('button',{name:'关闭评论'}).click();
-  await page.getByRole('button',{name:'取消点赞回答',exact:true}).click();
-  await expect(page.getByRole('button',{name:'点赞回答',exact:true})).toBeVisible();
+  await dialog.getByRole('button',{name:'关闭弹窗'}).click();
+  await page.getByRole('button',{name:'取消赞同当前回答',exact:true}).click();
+  await expect(page.getByRole('button',{name:'赞同当前回答',exact:true})).toBeVisible();
 });
 
 test('discussion styles stay scoped after client navigation, including dark mode', async ({page}) => {
@@ -133,13 +134,12 @@ test('publish a book question, answer it, and keep standalone article comments w
   await page.getByRole('button',{name:'发布',exact:true}).click();
   await page.getByRole('button',{name:'确认发布',exact:true}).click();
   await expect(page).toHaveURL(/\/forum\/question\/[a-f0-9]{24}$/);
-  await expect(page.getByRole('link',{name:'《三体》 · 书籍讨论'})).toBeVisible();
-  await page.getByRole('button',{name:'写回答',exact:true}).click();
+  await expect(page.locator('.qa-question h1')).toHaveText(`哪些情节值得重读 ${stamp}？`);
+  await page.locator('.qa-topbar').getByRole('button',{name:'写回答',exact:true}).click();
   await page.getByRole('textbox',{name:'回答内容'}).fill('我的回答包含 <普通文字>，换行后继续。\n这是第二段。');
   await page.getByRole('button',{name:'发布回答',exact:true}).click();
-  await expect(page.getByText('1 个回答',{exact:true})).toBeVisible();
-  await page.locator('.forum-entry-title').click();
-  await expect(page.locator('.forum-prose')).toContainText('<普通文字>');
+  await expect(page.locator('.qa-answer')).toHaveCount(1);
+  await expect(page.locator('.qa-body')).toContainText('<普通文字>');
   await expect(page.getByRole('complementary',{name:'文章来源与许可'})).toHaveCount(0);
 
   await page.goto(`${base}/forum/create?type=article&bookId=${row.bookId}&bookTitle=${encodeURIComponent('三体')}`);

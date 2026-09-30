@@ -4,6 +4,7 @@ import {useReadingSettings} from '@/contexts/ReadingSettingsContext';
 import {useForumView} from '@/lib/useForumView';
 import ForumSourceCredit from '@/components/ForumSourceCredit';
 import ForumPostList from '@/components/ForumPostList';
+import ForumAnswerReader from '@/components/ForumAnswerReader';
 import {answerFeedItem, textToForumHtml} from '@/lib/forum-presentation';
 import {refreshForum} from '@/lib/forum-cache';
 
@@ -706,7 +707,16 @@ export default function PostDetailPage() {
 
   return (
     <Suspense fallback={<div>加载中...</div>}>
-      <PostContent />
+      <PostRoute />
     </Suspense>
   );
+}
+
+function PostRoute() {
+  const params = useParams();
+  const search = useSearchParams();
+  const questionId = search.get('fromQuestion');
+  const id = params?.postId;
+  if (questionId && typeof id === 'string') return <ForumAnswerReader key={`${questionId}:${id}`} questionId={questionId} initialAnswerId={id} openComments={search.get('comments') === '1'}/>;
+  return <PostContent/>;
 }

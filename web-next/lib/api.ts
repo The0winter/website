@@ -121,6 +121,17 @@ export interface Book {
   profiles?: Profile;
 }
 
+// Write endpoints return the stored document; GET endpoints return display DTOs.
+export interface ForumWriteResult {
+  id: string;
+  content: string;
+  createdAt: string;
+  likes?: number;
+  comments?: number;
+  parentCommentId?: string | null;
+  replyCount?: number;
+}
+
 export type ReaderBook = Pick<Book, 'id' | 'title' | 'author' | 'cover_image' | 'category' | 'status' | 'writeVersion'>;
 
 export interface Chapter {
@@ -370,7 +381,7 @@ export const forumApi = {
   },
 
   addReply: async (postId: string, data: { content: string }) => {
-    return apiCall<ForumReply>(`/forum/posts/${postId}/replies`, {
+    return apiCall<ForumWriteResult>(`/forum/posts/${postId}/replies`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -420,8 +431,8 @@ export const forumApi = {
   createReplyComment: async (
     replyId: string,
     data: { content: string; parentCommentId?: string | null }
-  ): Promise<ForumComment> => {
-    return apiCall<ForumComment>(`/forum/replies/${replyId}/comments`, {
+  ): Promise<ForumWriteResult> => {
+    return apiCall<ForumWriteResult>(`/forum/replies/${replyId}/comments`, {
       method: 'POST',
       body: JSON.stringify(data),
     });

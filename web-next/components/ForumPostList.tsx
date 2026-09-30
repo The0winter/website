@@ -12,14 +12,12 @@ function ForumPostList({posts = [], loading, hideQuestion = false}: {posts?: For
       const reply = post.topReply;
       const href = forumEntryHref(post);
       const author = reply?.source?.author || reply?.author?.name || (typeof post.author === 'string' ? post.author : post.author.name) || '书友';
-      const title = reply?.title || (hideQuestion && reply ? `${author}的回答` : post.title);
       const excerpt = reply?.excerpt || plainForumText(reply?.content || '') || post.excerpt || '这个问题还没有回答，来聊聊你的看法。';
       return <article key={post.entryId || reply?.id || post.id} className="forum-entry" data-entry-id={post.entryId || reply?.id || post.id}>
-        {!hideQuestion && reply && <Link className="forum-entry-question" href={'/forum/question/' + post.id}><span>问题</span>{post.title}</Link>}
-        <Link href={href} className="forum-entry-title"><h2>{title}</h2></Link>
+        {(!hideQuestion || !reply) && <Link href={href} className="forum-entry-title"><h2>{post.title}</h2></Link>}
         <div className="forum-entry-author">
           <span className="forum-letter-avatar" aria-hidden="true">{author.slice(0,1)}</span>
-          <span>{author}</span>{reply?.source && <small>书评原作者</small>}
+          <span>{author}</span>
         </div>
         <Link href={href} className="forum-entry-excerpt"><p>{excerpt}</p></Link>
         <div className="forum-entry-meta">
