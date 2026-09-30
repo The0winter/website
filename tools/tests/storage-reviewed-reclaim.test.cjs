@@ -2,7 +2,7 @@ require('../test-env.cjs');
 const fs=require('node:fs'), path=require('node:path'), os=require('node:os');
 const crypto=require('node:crypto'), {gzipSync}=require('node:zlib');
 const test=require('node:test'), assert=require('node:assert/strict');
-const {plan,execute,maintain}=require('../storage-maintenance.cjs');
+const {plan,execute,maintain,busyCategories}=require('../storage-maintenance.cjs');
 const digest=value=>crypto.createHash('sha256').update(value).digest('hex');
 function fixture(t) {
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'storage-reviewed-'));
@@ -97,4 +97,10 @@ test('known bundled app hosts do not block cleanup, while their project task chi
   assert.equal(plan(f.root,{...f.options,processes:processes.slice(2,3)}).candidates.length,0);
   processes.push({pid:990005,parent:990004,name:'node.exe',command:'node worker.mjs'});
   assert.equal(plan(f.root,{...f.options,processes}).candidates.length,0);
+});
+test('own runtime ancestors are excluded regardless of process-list order',t=>{
+  const f=fixture(t),processes=[{pid:990001,parent:0,name:'node.exe',command:'node test-env.cjs'},{pid:990002,parent:990001,name:'cmd.exe',command:'cmd.exe'},{pid:process.pid,parent:990002,name:'node.exe',command:'node --test'}];
+  assert.equal(busyCategories(f.root,processes).size,0);
+  processes.push({pid:990003,parent:0,name:'node.exe',command:'node novel-crawler/download.mjs'});
+  assert.ok(busyCategories(f.root,processes).has('crawler-cache'));
 });

@@ -90,7 +90,11 @@ function processSnapshot() {
 function busyCategories(root, processes, blockers = []) {
   const busy = new Set(), ancestors = new Set([process.pid, process.ppid]);
   const add = (pid, reason, categories) => { for (const c of categories) busy.add(c); blockers.push({pid, reason, categories}); };
-  for (let i = 0; i < processes.length; i++) for (const p of processes) if (ancestors.has(p.pid)) ancestors.add(p.parent);
+  for (let i = 0; i < processes.length; i++) {
+    const before = ancestors.size;
+    for (const p of processes) if (ancestors.has(p.pid)) ancestors.add(p.parent);
+    if (ancestors.size === before) break;
+  }
   for (const p of processes) {
     if (ancestors.has(p.pid)) continue;
     if (p.name && !/^(node|mongod|chrome|msedge|nginx)(\.exe)?$/i.test(p.name)) continue;
