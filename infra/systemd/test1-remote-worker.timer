@@ -1,0 +1,11 @@
+[Unit]
+Description=Resume queued Test1 remote batches after boot or interruption
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1min
+Unit=test1-remote-worker.service
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

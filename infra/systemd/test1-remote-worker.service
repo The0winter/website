@@ -1,0 +1,32 @@
+[Unit]
+Description=Test1 durable crawler queue (one bounded batch)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=test1-remote-worker
+Group=test1-remote-worker
+WorkingDirectory=/srv/test1-remote-worker/current
+Environment=NODE_ENV=production
+Environment=NOVEL_CRAWLER_PYTHON=python3
+Environment=LOCAL_STORAGE_MAINTENANCE=off
+ExecStart=/opt/node-v22.23.2-linux-x64/bin/node --max-old-space-size=640 infra/cloud/remote-worker.mjs run-next --require-backup
+ExecStopPost=+/opt/node-v22.23.2-linux-x64/bin/node --env-file=/etc/test1/api.env infra/cloud/backup-worker.mjs
+StateDirectory=test1-remote-worker
+StateDirectoryMode=0700
+UMask=0077
+Nice=10
+CPUQuota=60%
+MemoryHigh=768M
+MemoryMax=1G
+TasksMax=64
+TimeoutStartSec=2h
+TimeoutStopSec=20min
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/test1-remote-worker /var/cache/test1-remote-worker-backup /var/log/test1-remote-worker
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
