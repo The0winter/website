@@ -2,7 +2,7 @@ require('../test-env.cjs');
 const fs=require('node:fs'), path=require('node:path'), os=require('node:os');
 const crypto=require('node:crypto'), {gzipSync}=require('node:zlib');
 const test=require('node:test'), assert=require('node:assert/strict');
-const {plan,execute}=require('../storage-maintenance.cjs');
+const {plan,execute,maintain}=require('../storage-maintenance.cjs');
 const digest=value=>crypto.createHash('sha256').update(value).digest('hex');
 function fixture(t) {
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'storage-reviewed-'));
@@ -77,4 +77,24 @@ test('a live browser protects its profile even after its launching Node process 
   const p=f.review([f.entry(rel,'temp-cache')]);assert.equal(p.candidates.length,1);
   const command='chrome.exe --user-data-dir="'+path.join(f.root,'.runtime/test-tmp/novel-browser-ABC')+'"';
   assert.equal(execute(f.root,p,{...f.options,processes:[{pid:999999,parent:0,name:'chrome.exe',command}]}).deleted.length,0);
+});
+test('the locked maintenance entry applies the reviewed scope and records skipped audit changes',t=>{
+  const f=fixture(t);f.put('node_modules/pkg/a.js');f.put('artifacts/check/final.png');f.put('downloads/book.json','retained');
+  const p=f.review([f.entry('node_modules/pkg/a.js','dependency'),f.entry('artifacts/check/final.png','visual')]);
+  f.put('artifacts/check/final.png','new result');
+  const result=maintain({root:f.root,apply:true,...f.options,expectedReview:p.reviewHash});
+  assert.equal(result.deleted.length,1);assert.equal(result.protectedPaths.length,1);
+  assert.equal(fs.readFileSync(path.join(f.root,'artifacts/check/final.png'),'utf8'),'new result');
+  assert.equal(fs.readFileSync(path.join(f.root,'downloads/book.json'),'utf8'),'retained');
+  assert.ok(fs.existsSync(path.join(f.root,'.runtime/storage-maintenance/last-run.json')));
+  assert.ok(!fs.existsSync(path.join(f.root,'.runtime/storage-maintenance/maintenance.lock')));
+});
+test('known bundled app hosts do not block cleanup, while their project task children do',t=>{
+  const f=fixture(t);f.put('node_modules/cookies/index.js');const p=f.review([f.entry('node_modules/cookies/index.js','dependency')]);assert.equal(p.candidates.length,1);
+  const runtime='C:/Users/test/AppData/Local/OpenAI/Codex/runtimes/cua_node/version/bin/';
+  const processes=[{pid:990001,parent:0,name:'codex.exe',command:null},{pid:990002,parent:990001,name:'cmd.exe',command:'cmd.exe /c scripts/launch_codex_app_tools_mcp.cmd'},{pid:990003,parent:990002,name:'node.exe',command:runtime+'node.exe ./server.mjs'},{pid:990004,parent:990001,name:'node.exe',command:runtime+'node.exe '+runtime+'node_modules/@oai/cua-repl/bin/cua-repl.mjs'}];
+  assert.equal(plan(f.root,{...f.options,processes}).candidates.length,1);
+  assert.equal(plan(f.root,{...f.options,processes:processes.slice(2,3)}).candidates.length,0);
+  processes.push({pid:990005,parent:990004,name:'node.exe',command:'node worker.mjs'});
+  assert.equal(plan(f.root,{...f.options,processes}).candidates.length,0);
 });

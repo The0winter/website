@@ -83,7 +83,7 @@ function processSnapshot() {
   }
   // Include intermediate cmd/PowerShell parents so our own npm invocation is
   // excluded correctly. Only inspect commands of the relevant runtime types.
-  const script = 'Get-CimInstance Win32_Process | Select-Object @{n="pid";e={$_.ProcessId}},@{n="parent";e={$_.ParentProcessId}},@{n="name";e={$_.Name}},@{n="command";e={if ($_.Name -match "^(node|mongod|chrome|msedge|nginx)(.exe)?$") {$_.CommandLine}}} | ConvertTo-Json -Compress';
+  const script = 'Get-CimInstance Win32_Process | Select-Object @{n="pid";e={$_.ProcessId}},@{n="parent";e={$_.ParentProcessId}},@{n="name";e={$_.Name}},@{n="command";e={if ($_.Name -match "^(node|mongod|chrome|msedge|nginx|cmd)(.exe)?$") {$_.CommandLine}}} | ConvertTo-Json -Compress';
   const data = JSON.parse(execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {encoding: 'utf8', windowsHide: true, timeout: 15000, maxBuffer: 4 * 1024 ** 2}) || '[]');
   return (Array.isArray(data) ? data : [data]).map(p => ({...p, command: typeof p.command === 'string' ? p.command : null}));
 }
@@ -316,6 +316,9 @@ function plan(root, {now = Date.now(), initial = false, policy = POLICY, process
 function execute(root, proposed, options = {}) {
   // Rebuild the allowlist from current state; never trust a saved path list.
   const current = proposed.candidates.length ? plan(root, {...options, initial: proposed.initial, scope:proposed.scope, reserveBytes:proposed.reserveBytes||0, reviewed:proposed.reviewed, expectedReview:proposed.reviewHash}) : proposed;
+  return executeCurrent(root, proposed, current, options);
+}
+function executeCurrent(root, proposed, current, options) {
   const allowed = new Map(current.candidates.map(x => [x.path, x]));
   const result = {startedAt: new Date().toISOString(), deleted: [], skipped: [], warnings: current.warnings, busy: current.busy, blockers: current.blockers || []};
   if (proposed.reviewed) Object.assign(result,{reviewed:proposed.reviewed,reviewHash:current.reviewHash,protectedPaths:current.protectedPaths,missing:current.missing});
@@ -363,7 +366,9 @@ function maintain({root = ROOT, apply = false, initial = false, ...options} = {}
   return lock(root, () => {
     const proposed = plan(root, {...options, initial});
     if (!apply) return proposed;
-    const result = execute(root, proposed, options);
+    // The reviewed plan was just built synchronously under the maintenance lock. Keep
+    // per-item activity/fingerprint checks without scanning the whole library twice.
+    const result = options.reviewed ? executeCurrent(root, proposed, proposed, options) : execute(root, proposed, options);
     for (const folder of ['leases', 'pending']) for (const entry of entries(root, STATE + '/' + folder)) {
       if (!entry.isFile() || !/^[a-f0-9-]+\.json$/.test(entry.name)) continue;
       const file = inside(root, STATE + '/' + folder + '/' + entry.name);

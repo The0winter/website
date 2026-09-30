@@ -9,7 +9,7 @@ const norm = value => value.replaceAll('\\', '/').toLowerCase();
 const category = type => ({dependency:'clean-room', build:'build', visual:'artifacts', browser:'browser-cache', temporary:'temp', partial:'crawler-cache', cache:'crawler-cache'})[type];
 
 function typeFor(relative, reason) {
-  if (relative.split('/').some(name => /^\.env(?:\.|$)|^\.storage-keep$|^\.npmrc$|^\.pypirc$|^(?:Cookies|Login Data|Local State)$/i.test(name)) || /\.(?:pem|key|pfx|p12)$/i.test(relative)) return null;
+  if (relative.split('/').some(name => /^\.env(?:\.|$)|^\.storage-keep$|^\.npmrc$|^\.pypirc$/i.test(name)) || /^(?:Cookies|Login Data|Local State)$/i.test(path.posix.basename(relative)) || /\.(?:pem|key|pfx|p12)$/i.test(relative)) return null;
   if (reason === 'dependency' && /(?:^|\/)node_modules\//.test(relative)) return 'dependency';
   if (reason === 'dependency' && /^\.runtime\/(?:node-v[\d.]+-win-x64|mongodb-database-tools-windows-x86_64-[\d.]+|nginx-[\d.]+)\//.test(relative)) {
     // Local nginx configuration may have been customized; keep it with the source.
@@ -32,12 +32,23 @@ function ancestors(processes) {
   }
   return ids;
 }
-function activityError(root, types, relative, processes, busy, own = ancestors(processes)) {
+function toolHosts(root, processes) {
+  const byId = new Map(processes.map(p => [p.pid,p])), hosts = new Set(), project = norm(root);
+  for (const p of processes) {
+    const command = norm(p.command || '');
+    if (!command.includes('/openai/codex/runtimes/cua_node/') || command.includes(project)) continue;
+    if (/\/(?:\.tmp[^/ ]+\/(?:kernel|trusted-worker)\.js|cua-repl\/bin\/cua-repl\.mjs)(?:[" ]|$)/.test(command)) { hosts.add(p.pid); continue; }
+    const parent = byId.get(p.parent), grandparent = byId.get(parent?.parent), launch = norm(parent?.command || '');
+    if (/\.\/server\.mjs(?:[" ]|$)/.test(command) && /^cmd(?:\.exe)?$/i.test(parent?.name || '') && /^codex(?:\.exe)?$/i.test(grandparent?.name || '') && !launch.includes(project) && /(?:^|[/ "'])launch_(?:codex_app_tools|code_review)_mcp\.cmd(?:[" '\t]|$)/.test(launch)) hosts.add(p.pid);
+  }
+  return hosts;
+}
+function activityError(root, types, relative, processes, busy, own = ancestors(processes), hosts = toolHosts(root,processes)) {
   if (busy.has('all')) return 'An unknown or unreadable runtime is active';
   for (const type of types) if (busy.has(category(type)) || (type === 'partial' && busy.has('snapshots'))) return 'An active task protects this category';
   const absolute = norm(path.resolve(root, relative));
   for (const p of processes) {
-    if (own.has(p.pid) || typeof p.command !== 'string') continue;
+    if (own.has(p.pid) || hosts.has(p.pid) || typeof p.command !== 'string') continue;
     const command = norm(p.command);
     if (command.includes('/openai/codex/runtimes/cua_node/') && /\/\.tmp[^/ ]+\/(?:kernel|trusted-worker)\.js(?:[" ]|$)/.test(command)) continue;
     if (command.includes(absolute)) return 'Path referenced by an active process';
@@ -72,7 +83,7 @@ function plan(root, {reviewed, expectedReview, processes, tracked, check}) {
   if (expectedReview && expectedReview !== reviewHash) throw Error('Reviewed manifest changed after preview');
   const manifest = JSON.parse(gunzipSync(raw, {maxOutputLength:128 * 1024 ** 2}).toString('utf8'));
   if (manifest.version !== 1 || manifest.classification !== 3 || !Array.isArray(manifest.files) || manifest.files.length > 250000) throw Error('Invalid class-3 manifest');
-  const blockers = [], busy = api.busyCategories(root, processes, blockers), trackedSet = new Set(tracked), checkedParents = new Set(), own = ancestors(processes);
+  const blockers = [], busy = api.busyCategories(root, processes, blockers), trackedSet = new Set(tracked), checkedParents = new Set(), own = ancestors(processes), hosts = toolHosts(root,processes);
   const records = new Map(), approved = new Map(), protectedPaths = [], missing = [], pinCache = new Map();
   const protectedPath = (relative, reason) => protectedPaths.push({path:relative,reason});
   function pinned(relative) {
@@ -95,7 +106,7 @@ function plan(root, {reviewed, expectedReview, processes, tracked, check}) {
       const stat = fs.lstatSync(api.inside(root,record.path,checkedParents));
       if (!stat.isFile() || stat.isSymbolicLink()) throw Error('Not an ordinary file');
       if (stat.size !== record.bytes || Math.abs(stat.mtimeMs-record.mtimeMs) > 3) throw Error('Changed since the audit');
-      const active = activityError(root,[type],record.path,processes,busy,own); if (active) throw Error(active);
+      const active = activityError(root,[type],record.path,processes,busy,own,hosts); if (active) throw Error(active);
       const verified = type === 'partial' ? partialProof(root,record) : undefined;
       approved.set(record.path,{type,proof:verified?.proof,references:verified?.references});
     } catch (error) {
