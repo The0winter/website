@@ -1,0 +1,6 @@
+Inter Variable 4.1 (normal, weight 100-900)
+Author: Rasmus Andersson
+Source: https://rsms.me/inter/font-files/InterVariable.woff2?v=4.1
+Project: https://rsms.me/inter/
+License: SIL Open Font License 1.1; see inter-OFL.txt.
+Vendored unchanged so clean/offline builds do not need Google's font service.

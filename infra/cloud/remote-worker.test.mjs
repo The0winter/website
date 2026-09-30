@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import {queueJob, runNext, listJobs, classify} from './remote-worker.mjs';
-import {resticEnvironment} from './backup-worker.mjs';
+import {queueJob, runNext, listJobs, classify, resumeJob, workerLock} from './remote-worker.mjs';
+import {resticEnvironment, backupWorker} from './backup-worker.mjs';
 
 const spec = base => ({version: 1, kind: 'html', title: '云端恢复测试', author: '测试作者', sourceUrl: base + '/book',
   delayMs: 200, retries: 0, metadata: {title: 'h1', author: '#author'}, catalog: {links: '#catalog a'}, chapter: {title: 'h1', content: '#content'}});
@@ -33,7 +33,7 @@ test('real crawler resumes one-chapter batches without refetching accepted chapt
   t.after(() => new Promise(resolve => server.close(resolve)));
   const queued = queueJob(root, spec(`http://127.0.0.1:${server.address().port}`), {mode: 'download', batchSize: 1});
   const first = await runNext(root); assert.equal(first.state, 'queued'); assert.equal(first.report.downloaded, 1);
-  await assert.rejects(runNext(root, {enforceBackup: true}), /offsite backup/);
+  assert.equal((await runNext(root, {enforceBackup: true})).reason, 'checkpoint_needs_backup');
   const second = await runNext(root); assert.equal(second.state, 'complete'); assert.equal(second.report.downloaded, 2);
   assert.equal(calls.get('/1'), 1); assert.equal(calls.get('/2'), 1);
   assert.equal(listJobs(root)[0].id, queued.id);
@@ -48,7 +48,15 @@ test('single writer lock protects a job and crashes are bounded', async t => {
   let release;
   const pending = runNext(root, {collect: () => new Promise(resolve => { release = resolve; })});
   await assert.rejects(runNext(root), /already running/);
+  await assert.rejects(backupWorker({root, force: true}), /already running/);
+  assert.throws(() => queueJob(root, spec('https://example.org')), /already running/);
+  assert.throws(() => resumeJob(root, job.id), /already running/);
   release({structuralPass: true, issues: []}); await pending;
+  const unlock = workerLock(root);
+  await assert.rejects(runNext(root), /already running/);
+  unlock();
+  await assert.rejects(backupWorker({root, force: true, env: {}}), /Private R2/);
+  assert.equal(fs.existsSync(path.join(root, 'worker.lock')), false);
   const file = path.join(root, 'queue', job.id + '.json'), saved = JSON.parse(fs.readFileSync(file));
   fs.writeFileSync(file, JSON.stringify({...saved, state: 'running', crashes: 2}));
   assert.equal((await runNext(root)).state, 'needs_attention');

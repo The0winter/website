@@ -28,8 +28,13 @@ function jobFile(root, id) {
   return file;
 }
 function writeJob(root, job) { atomicWrite(jobFile(root, job.id), {...job, updatedAt: date()}, {mode: 0o600}); }
+function requireBackup(root, id) {
+  atomicWrite(path.join(root, 'backup-required.json'), {id, generation: randomUUID(), at: date()}, {mode: 0o600});
+}
 export function queueJob(root, input, {mode = 'probe', batchSize = 50} = {}) {
   directory(root);
+  const unlock = workerLock(root);
+  try {
   if (!['probe', 'download'].includes(mode) || !Number.isInteger(batchSize) || batchSize < 1 || batchSize > 100) throw Error('Invalid job options');
   const spec = validateSpec(input);
   // Initial worker is HTTP/file-only. Interactive sources require a separate setup.
@@ -38,7 +43,9 @@ export function queueJob(root, input, {mode = 'probe', batchSize = 50} = {}) {
   if (fs.existsSync(file)) throw Error('Job already exists; resume it explicitly');
   const job = {version: 1, id, spec, mode, batchSize, state: 'queued', createdAt: date(), crashes: 0};
   writeJob(root, job);
+  requireBackup(root, id);
   return {id, title: spec.title, mode, state: job.state};
+  } finally { unlock(); }
 }
 export function listJobs(root) {
   directory(root);
@@ -48,7 +55,7 @@ export function listJobs(root) {
     return job;
   }).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
-function lock(root) {
+export function workerLock(root) {
   const file = path.join(root, 'worker.lock'), token = randomUUID();
   try { fs.writeFileSync(file, JSON.stringify({pid: process.pid, token}), {flag: 'wx', mode: 0o600}); }
   catch (error) {
@@ -56,7 +63,10 @@ function lock(root) {
     const previous = readJson(file);
     if (!Number.isInteger(previous?.pid) || previous.pid < 1) throw Error('Invalid worker lock; preserve it for review');
     try { process.kill(previous.pid, 0); throw Error('Worker is already running'); }
-    catch (ownerError) { if (ownerError.code !== 'ESRCH') throw ownerError; }
+    catch (ownerError) {
+      if (ownerError.code === 'EPERM') throw Error('Worker is already running');
+      if (ownerError.code !== 'ESRCH') throw ownerError;
+    }
     if (readJson(file)?.token !== previous.token) throw Error('Worker lock changed');
     fs.unlinkSync(file);
     fs.writeFileSync(file, JSON.stringify({pid: process.pid, token}), {flag: 'wx', mode: 0o600});
@@ -70,20 +80,19 @@ export function classify(report, mode) {
 }
 export async function runNext(root, {collect = acquire, signal, enforceBackup = false} = {}) {
   directory(root);
-  const unlock = lock(root);
+  const unlock = workerLock(root);
   try {
-    if (enforceBackup && fs.existsSync(path.join(root, 'backup-required.json'))) throw Error('Previous checkpoint still needs an offsite backup');
+    if (enforceBackup && fs.existsSync(path.join(root, 'backup-required.json'))) return {paused: true, reason: 'checkpoint_needs_backup'};
     const disk = fs.statfsSync(root);
     if (disk.bavail * disk.bsize < 8 * 1024 ** 3) throw Error('Less than 8 GiB free; preserve checkpoints and free reviewed build/cache output first');
     const job = listJobs(root).find(j => ['queued', 'running'].includes(j.state));
     if (!job) return {idle: true};
     if (job.state === 'running' && ++job.crashes > 2) {
       job.state = 'needs_attention'; job.message = 'Repeated process interruption; checkpoints preserved';
-      writeJob(root, job); return {id: job.id, state: job.state};
+      writeJob(root, job); requireBackup(root, job.id); return {id: job.id, state: job.state};
     }
     job.state = 'running'; job.startedAt = date(); writeJob(root, job);
-    const backupGeneration = randomUUID();
-    atomicWrite(path.join(root, 'backup-required.json'), {id: job.id, generation: backupGeneration, at: date()}, {mode: 0o600});
+    requireBackup(root, job.id);
     try {
       let lastProgress = 0;
       const report = await collect(job.spec, {mode: job.mode, stateDir: path.join(root, '.novel-crawler'), outputDir: path.join(root, 'downloads'),
@@ -105,13 +114,13 @@ export async function runNext(root, {collect = acquire, signal, enforceBackup = 
   } finally { unlock(); }
 }
 export function resumeJob(root, id, {mode} = {}) {
-  directory(root); const unlock = lock(root);
+  directory(root); const unlock = workerLock(root);
   try {
     const job = readJson(jobFile(root, id));
     if (!job) throw Error('Job not found');
     if (mode && !['probe', 'download'].includes(mode)) throw Error('Invalid mode');
     job.state = 'queued'; job.crashes = 0; if (mode) job.mode = mode; delete job.message;
-    writeJob(root, job); return {id, state: job.state, mode: job.mode};
+    writeJob(root, job); requireBackup(root, id); return {id, state: job.state, mode: job.mode};
   } finally { unlock(); }
 }
 async function main() {

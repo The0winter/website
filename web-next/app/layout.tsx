@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next"; 
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ReadingSettingsProvider } from "@/contexts/ReadingSettingsContext"; 
@@ -20,7 +20,12 @@ import {siteDescription, siteOrigin, siteTitle} from '@/lib/seo';
 import {siteThemeScript} from '@/lib/site-theme';
 import siteIcon from './icon.png';
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = localFont({
+  src: "../public/fonts/inter-variable.woff2",
+  weight: "100 900",
+  style: "normal",
+  display: "swap",
+});
 
 export const viewport: Viewport = {
   themeColor: [

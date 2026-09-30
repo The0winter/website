@@ -5,6 +5,7 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {atomicWrite, readJson} from '../../tools/novel-crawler/storage.mjs';
+import {workerLock} from './remote-worker.mjs';
 
 export function resticEnvironment(env, {passwordFile = '/etc/test1-remote-worker/backup-password', cache = '/var/cache/test1-remote-worker-backup'} = {}) {
   if (!env.R2_BUCKET || env.R2_BUCKET === env.COVER_R2_BUCKET || !env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY) throw Error('Private R2 configuration required');
@@ -29,7 +30,8 @@ function run(args, env, log) {
 export async function backupWorker({root = '/var/lib/test1-remote-worker', source = '/srv/test1-remote-worker/current', force = false, initialize = false, env = process.env} = {}) {
   const marker = path.join(root, 'backup-required.json'), receipt = path.join(root, 'backup-latest.json');
   if (!force && !fs.existsSync(marker)) return {idle: true};
-  if (fs.existsSync(path.join(root, 'worker.lock'))) throw Error('Worker active; backup deferred to its stop hook');
+  const unlock = workerLock(root);
+  try {
   const generation = readJson(marker)?.generation;
   const environment = resticEnvironment(env);
   fs.mkdirSync(environment.RESTIC_CACHE_DIR, {recursive: true, mode: 0o700});
@@ -54,6 +56,7 @@ export async function backupWorker({root = '/var/lib/test1-remote-worker', sourc
   atomicWrite(receipt, result, {mode: 0o644});
   if (generation && readJson(marker)?.generation === generation) fs.unlinkSync(marker);
   return result;
+  } finally { unlock(); }
 }
 async function main() {
   const args = process.argv.slice(2);
