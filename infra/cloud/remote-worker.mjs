@@ -128,4 +128,4 @@ async function main() {
   } else throw Error('Expected enqueue, resume, status or run-next');
   console.log(JSON.stringify(result));
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(JSON.stringify({error: error.message})); process.exitCode = 1; });
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(JSON.stringify({error: error.message})); process.exitCode = 1; });

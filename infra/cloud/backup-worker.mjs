@@ -60,4 +60,4 @@ async function main() {
   if (args.some(arg => !['--force', '--initialize'].includes(arg))) throw Error('Unknown backup option');
   console.log(JSON.stringify(await backupWorker({force: args.includes('--force'), initialize: args.includes('--initialize')})));
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(JSON.stringify({backupFailed: true, error: error.message})); process.exitCode = 1; });
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(JSON.stringify({backupFailed: true, error: error.message})); process.exitCode = 1; });

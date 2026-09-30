@@ -28,11 +28,16 @@ if [[ "$(node --version 2>/dev/null || true)" != "v$VERSION" ]]; then
 fi
 command -v python3 >/dev/null
 command -v git >/dev/null
-npm ci --no-audit --no-fund
-npm --prefix tools/novel-crawler ci --no-audit --no-fund
-npm --prefix server ci --no-audit --no-fund
-if [[ "$PROFILE" == development ]]; then
-  npm --prefix web-next ci --no-audit --no-fund
+STAMP="$( { printf '%s\n' "$PROFILE" "$VERSION"; sha256sum package-lock.json server/package-lock.json tools/novel-crawler/package-lock.json web-next/package-lock.json; } | sha256sum | cut -d' ' -f1)"
+STATE=".runtime/cloud-dependencies-$PROFILE.sha256"
+if [[ "$(cat "$STATE" 2>/dev/null || true)" != "$STAMP" || ! -d node_modules || ! -d server/node_modules || ! -d tools/novel-crawler/node_modules || ( "$PROFILE" == development && ! -d web-next/node_modules ) ]]; then
+  npm ci --no-audit --no-fund
+  npm --prefix tools/novel-crawler ci --no-audit --no-fund
+  npm --prefix server ci --no-audit --no-fund
+  if [[ "$PROFILE" == development ]]; then
+    npm --prefix web-next ci --no-audit --no-fund
+  fi
+  printf '%s\n' "$STAMP" > "$STATE"
 fi
 node infra/cloud/capacity.mjs > .runtime/task-artifacts/cloud-environment/installed.json
 node --version
