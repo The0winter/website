@@ -29,6 +29,7 @@ for(const width of [320,390,1440])test(`${width}px answer heading and count open
 test('opening a question slides a bounded skeleton without cloning the reader; early back and forward recover',async({page},info)=>{
   await page.setViewportSize({width:390,height:844});const row=await entry(page),held=gate();
   await page.goto(`${base}/forum/${row.entryId}?fromQuestion=${row.id}`);await expect(page.locator('.qa-answer')).toHaveCount(5);
+  const wrongPostRequests:string[]=[];page.on('request',request=>{if(new URL(request.url()).pathname===`/api/forum/posts/${row.entryId}`)wrongPostRequests.push(request.url());});
   await page.evaluate(()=>{const stats={clones:0,durations:[] as number[]};Object.assign(window,{questionMotion:stats});const clone=Node.prototype.cloneNode,animate=Element.prototype.animate;Node.prototype.cloneNode=function(deep){if(this instanceof Element&&this.closest('.qa-reader'))stats.clones++;return clone.call(this,deep);};Element.prototype.animate=function(frames,options){if(this.classList.contains('forum-navigation-panel'))stats.durations.push(Number(typeof options==='object'?options.duration:options));return animate.call(this,frames,options);};});
   await page.route(`**/api/forum/posts/${row.id}`,async r=>{await held.wait;await r.continue();});
   try{
@@ -37,6 +38,7 @@ test('opening a question slides a bounded skeleton without cloning the reader; e
     await expect(page.locator('.fq-heading')).toHaveCount(0);await page.screenshot({path:info.outputPath('verified-question-skeleton.png')});
     held.release();await expect(page.locator('.fq-heading')).toBeVisible();await expect(page.locator('.forum-navigation-panel')).toHaveCount(0);
     const metrics=await page.evaluate(()=>(window as unknown as {questionMotion:{clones:number;durations:number[]}}).questionMotion);expect(metrics).toEqual({clones:0,durations:[400]});
+    expect(wrongPostRequests).toEqual([]);
     await page.getByRole('button',{name:'返回上一页'}).click();await expect(page.locator('.qa-answer')).toHaveCount(5);
     await page.locator('.qa-answer-count').click();await page.goBack();await expect(page.locator('.forum-navigation-panel')).toHaveCount(0);await expect(page.locator('.qa-answer')).toHaveCount(5);
     await page.goForward();await expect(page.locator('.fq-heading')).toBeVisible();await expect(page.locator('.qa-answer-stream')).toHaveCount(0);

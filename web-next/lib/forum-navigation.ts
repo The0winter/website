@@ -32,7 +32,7 @@ export function installForumNavigation(next:Router) {
     const visit=event.state?.forumReadingVisit;
     // An interrupted entry still contains the source's temporary Next tree.
     // Forward must request the actual destination rather than show that tree.
-    if(visit&&!visit.ready&&(visit.href===currentHref()||visit.sourceHref===currentHref())){event.stopImmediatePropagation();history.replaceState(history.state,'',visit.href);next.replace(visit.href);}
+    if(visit&&!visit.ready&&(visit.href===currentHref()||visit.sourceHref===currentHref())){event.stopImmediatePropagation();next.replace(visit.href);}
   };
   const leave=()=>active?.cancel();
   window.addEventListener('popstate',pop,true);window.addEventListener('pagehide',leave);
@@ -90,7 +90,7 @@ export function navigateForumLink(href:string) {
     status.after(actions);
   },20000);
   const motion=animateElement(panel,[{transform:matchMedia('(max-width:767px)').matches?'translateX(100%)':'translateX(36px)'},{transform:'translateX(0)'}],{duration:SECTION_TURN_DURATION,easing:SECTION_TURN_EASING,fill:'both'});
-  void motion.finished.then(()=>{if(closed)return;moving=false;if(fromReader){history.replaceState(history.state,'',destination);next.replace(destination);check();}reveal();});
+  void motion.finished.then(()=>{if(closed)return;moving=false;if(fromReader)next.replace(destination);reveal();});
   // Reserve exactly one history slot before the RSC request, matching the
   // book-detail flow. Back can cancel immediately, even on a cold connection.
   const state={...history.state,forumReadingVisit:{href:destination,ready:false,sourceHref}};
