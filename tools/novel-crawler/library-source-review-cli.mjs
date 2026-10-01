@@ -1,0 +1,10 @@
+import {parseArgs} from 'node:util';
+import path from 'node:path';
+import {readJson} from './storage.mjs';
+import {defaultStateDir,projectRoot} from './core.mjs';
+import {specForBook} from './desktop/sources.mjs';
+import {reviewLibrarySource} from './library-source-review.mjs';
+const {values}=parseArgs({options:{file:{type:'string'},spec:{type:'string'},reason:{type:'string'},'state-dir':{type:'string'},'output-dir':{type:'string'}}});
+if(!values.file||!values.spec||!values.reason)throw Error('用法：--file 下载文件 --spec 已绑定来源配置 --reason 具体核对理由');
+const spec=readJson(values.spec);
+console.log(JSON.stringify(reviewLibrarySource({stateDir:values['state-dir']||defaultStateDir,outputDir:values['output-dir']||path.join(projectRoot,'downloads'),file:values.file,spec,siteSpec:specForBook({...spec,url:spec.sourceUrl}),reason:values.reason})));

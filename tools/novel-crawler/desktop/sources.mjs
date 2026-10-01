@@ -4,6 +4,7 @@ import {load} from 'cheerio';
 import {projectRoot, defaultStateDir, validateSpec} from '../core.mjs';
 import {readJson, atomicWrite} from '../storage.mjs';
 import {makeClient, httpUrl, decode} from '../http.mjs';
+import {canonicalSourceUrl} from '../source-origins.mjs';
 import {browserProfile} from '../browser-session.mjs';
 import {selectValue, extractDescription, extractBookStatus, extractBookCategory} from '../adapters.mjs';
 import {applyVerifiedBookCategory, categoryFields, mergeBookCategory} from '../categories.mjs';
@@ -16,7 +17,7 @@ export function normalizeWebsite(value) {
   if (typeof value !== 'string' || !value.trim() || value.length > 2000) throw Error('请输入有效的网站地址');
   const url = new URL(httpUrl(/^[a-z][\w+.-]*:/i.test(value.trim()) ? value.trim() : `https://${value.trim()}`));
   if (url.port || url.hostname === 'localhost' || /^[\d.]+$/.test(url.hostname) || url.hostname.includes(':')) throw Error('网站栏需要填写公开网站的域名或书籍详情页');
-  return url.href;
+  return canonicalSourceUrl(url.href);
 }
 
 export function loadSites(directory = sitesDir) {
@@ -103,7 +104,7 @@ export function parseSearch(html, baseUrl, site) {
       if (!encoded || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) throw Error('搜索结果的编码链接无效');
       link = Buffer.from(encoded, 'base64').toString('utf8');
     }
-    const url = httpUrl(link, baseUrl);
+    const url = canonicalSourceUrl(httpUrl(link, baseUrl));
     bookUrl(url, site);
     results.push({title, author, url, site: site.name});
   }
@@ -113,6 +114,7 @@ export function parseSearch(html, baseUrl, site) {
 }
 
 export function specForBook({url, title, author, description, status, statusDetection, statusEvidence, ...extra}, sites = loadSites().sites) {
+  url = canonicalSourceUrl(url);
   const site = siteFor(url, sites), match = bookUrl(url, site);
   return validateSpec({...fillTemplate(site.spec, {...match.groups, title, author, sourceUrl: url}), ...categoryFields(extra), ...(description ? {description} : {}), ...(status ? {status} : {}), ...(statusDetection ? {statusDetection, statusEvidence} : {})});
 }

@@ -12,6 +12,7 @@ import {planLibrary, updateLibrary} from '../desktop/library.mjs';
 import {specForBook} from '../desktop/sources.mjs';
 import {createDesktop} from '../desktop/server.mjs';
 import {createLibraryControl} from '../desktop/library-control.mjs';
+import {reviewLibrarySource} from '../library-source-review.mjs';
 
 const title = n => `第${n}章 山间故事${n}`;
 const body = n => Array.from({length: 180}, (_, i) => String.fromCodePoint(0x4e00 + n * 200 + i)).join('').repeat(4);
@@ -179,6 +180,33 @@ test('HTML raw and reading editions retain reviewed identity aliases without hid
     assert.equal(planLibrary(f.options)[0].state, 'blocked');
     assert.deepEqual(fs.readFileSync(file), verified);
   }
+});
+
+test('explicit per-book source review preserves bound cleanup and expires on further site changes', async t => {
+  const f=await fixture(t),spec={...f.spec('alpha'),variant:'reviewed-cleanup',chapter:{...f.spec('alpha').chapter,removeText:['独立广告行']}};
+  const source=await acquire(spec,{...f.options,mode:'download'}),book=readJson(source.exportFile);
+  const file=path.join(f.options.outputDir,'reviewed.json');
+  atomicWrite(file,{...book,chapters:book.chapters.map(c=>({...c,sourceChapterNumber:c.chapter_number,sourceChapterUrl:c.link}))});
+  await bindReadingEdition(spec,file,f.options);
+  assert.equal(planLibrary(f.options)[0].state,'blocked');
+  const args={...f.options,file,spec,siteSpec:f.spec('alpha'),reason:'核实专用规则仅清除已记录的独立广告，沿用原绑定'};
+  assert.throws(()=>reviewLibrarySource({...args,spec:{...spec,chapter:{...spec.chapter,content:'section'}}}),/绑定|不匹配|变化/);
+  const review=reviewLibrarySource(args);
+  assert.equal(planLibrary(f.options)[0].state,'pending');
+  f.state.counts.alpha=4;
+  const result=await updateLibrary(f.options);
+  assert.equal(result.added,1,JSON.stringify(result.items));
+  assert.deepEqual(readJson(file).chapters.slice(0,3),book.chapters.map(c=>({...c,sourceChapterNumber:c.chapter_number,sourceChapterUrl:c.link})));
+  assert.equal(planLibrary(f.options)[0].state,'pending','review remains valid after append');
+  const verified=fs.readFileSync(file);
+  f.site.spec.chapter.content='section';
+  assert.equal(planLibrary(f.options)[0].state,'blocked');
+  assert.deepEqual(fs.readFileSync(file),verified);
+  f.site.spec.chapter.content='article';
+  const record=readJson(review.reviewFile);record.value.spec.chapter.content='div';atomicWrite(review.reviewFile,record);
+  assert.equal(planLibrary(f.options)[0].state,'blocked','corrupt review must block');
+  atomicWrite(file,{...readJson(file),description:'手动改动'});
+  assert.throws(()=>reviewLibrarySource(args),/哈希/);
 });
 
 test('batch appends only new raw chapters, continues after manual skip, and reuses unchanged exports', async t => {

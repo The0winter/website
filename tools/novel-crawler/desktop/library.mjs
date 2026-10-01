@@ -11,6 +11,7 @@ import {createLibraryControl} from './library-control.mjs';
 import {localUploadIndex} from './upload-cache.mjs';
 import {normalizeBookStatus} from '../adapters.mjs';
 import recoverySnapshots from '../../storage-snapshots.cjs';
+import {reviewedLibrarySpec} from '../library-source-review.mjs';
 
 const entries = dir => fs.existsSync(dir) ? fs.readdirSync(dir, {withFileTypes: true}) : [];
 function sealed(file) {
@@ -121,7 +122,8 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
       // A verified TXT job owns its file boundaries and cleanup rules. Replacing
       // it with the site's HTML template abandons checkpoints/reading bindings.
       const savedSpec = reading?.spec || rawJob?.spec;
-      const currentSpec = savedSpec?.kind === 'txt' && savedSpec.sourceUrl === siteSpec.sourceUrl ? savedSpec : siteSpec;
+      const reviewedSpec = binding || reading ? reviewedLibrarySpec(stateDir, outputDir, book, siteSpec) : null;
+      const currentSpec = reviewedSpec || (savedSpec?.kind === 'txt' && savedSpec.sourceUrl === siteSpec.sourceUrl ? savedSpec : siteSpec);
       if (currentSpec === savedSpec && siteSpec.maxChapterPages !== undefined) {
         currentSpec.maxChapterPages = Math.max(currentSpec.maxChapterPages || currentSpec.chapter?.maxPages || 20, siteSpec.maxChapterPages);
       }

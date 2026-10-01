@@ -260,7 +260,7 @@ export async function getChapter(spec, chapter, catalogLinks, client) {
     if (parts.includes(text) && !/^[.…]{2,32}$/u.test(text)) throw Error('同章分页正文重复');
     if (parts.length && parts.at(-1).slice(-100) === text.slice(0, 100) && text.length >= 100) warnings.push('分页之间存在重复段落，未自动删文');
     parts.push(text);
-    pageHashes.push({url, hash: response.hash, fetchedAt: response.fetchedAt});
+    pageHashes.push({url, ...(response.responseUrl ? {responseUrl: response.responseUrl} : {}), hash: response.hash, fetchedAt: response.fetchedAt});
     url = nextPage($, config.next, response.url, client);
     if (walkId) {
       const next = nextChapter($, spec, response.url, client);

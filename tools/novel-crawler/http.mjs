@@ -8,6 +8,7 @@ import {hash, atomicWrite, readJson} from './storage.mjs';
 import {rejectedPage} from './diagnostics.mjs';
 import {lockBrowserProfile, sessionCookies} from './browser-session.mjs';
 import {requestPacing} from './request-pacing.mjs';
+import {sourceOrigins} from './source-origins.mjs';
 import retention from '../storage-maintenance.cjs';
 
 export function httpUrl(value, base) {
@@ -30,8 +31,9 @@ export function decode(bytes, contentType = '', encoding) {
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, retries = 2, retryNetworkErrors = false, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal, launchBrowser, pacing, adaptivePacing = false}) {
+export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, retries = 2, retryNetworkErrors = false, timeoutMs = 20000, refresh = false, ttlMs = 86400000, maxBytes = 64 * 1024 * 1024, browser: browserOptions = {}, onStatus, shouldStop, signal, launchBrowser, pacing, adaptivePacing = false, originMigrations}) {
   const hosts = new Set(allowedHosts.map(h => h.toLowerCase()));
+  const origins = sourceOrigins([...hosts], originMigrations);
   const resourceHosts = new Set(browserOptions.resourceHosts || []);
   const actions = [
     {...browserOptions.manualCaptcha, kind: 'verification', label: '验证码', configured: !!browserOptions.manualCaptcha},
@@ -159,7 +161,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
     stopped();
   }
   function assertUrl(value) {
-    const url = httpUrl(value);
+    const url = origins.canonical(httpUrl(value));
     if (!hosts.has(new URL(url).hostname.toLowerCase())) throw Error(`地址不在该来源配置的域名范围内：${url}`);
     return url;
   }
@@ -200,7 +202,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
           // Fresh metadata and interactive pages must revalidate in the collector,
           // not replay a Chromium disk-cache 304 or stale form/pagination scripts.
           await page.setCacheEnabled(!(fresh || refresh || searchForm || selectPages || browserOptions.responseMode === 'source'));
-          await page.goto(original, {waitUntil: 'domcontentloaded', timeout: timeoutMs});
+          await page.goto(origins.transport(original), {waitUntil: 'domcontentloaded', timeout: timeoutMs});
           if (documentResponse?.headers()['cf-mitigated'] === 'challenge') {
             const limit = browserOptions.manualVerificationMs;
             if (!limit) throw Object.assign(Error('网站要求人机验证，采集已停止；请使用支持手动验证的浏览器来源配置。'), {stopSource: true});
@@ -365,7 +367,8 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
           await savedCookies?.save(browser.defaultBrowserContext());
           if (body.length > maxBytes) throw Error('渲染页面超过大小限制');
           stats.bytes += body.length;
-          const meta = {url, original, fetchedAt: new Date().toISOString(), hash: hash(body), contentType: sourceMode ? documentResponse.headers()['content-type'] || 'text/html; charset=utf-8' : 'text/html; charset=utf-8', bytes: body.length, rendered: !sourceMode, browserFetched: true, ...(browserPages ? {browserPages} : {})};
+          const responseUrl = httpUrl(page.url());
+          const meta = {url, original, ...(responseUrl !== url ? {responseUrl} : {}), fetchedAt: new Date().toISOString(), hash: hash(body), contentType: sourceMode ? documentResponse.headers()['content-type'] || 'text/html; charset=utf-8' : 'text/html; charset=utf-8', bytes: body.length, rendered: !sourceMode, browserFetched: true, ...(browserPages ? {browserPages} : {})};
           atomicWrite(bodyPath, body);
           atomicWrite(metaPath, meta);
           return {...meta, body};
@@ -409,7 +412,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
       }
     }
     if (request && (request.method !== 'POST' || !request.form || typeof request.form !== 'object')) throw Error('目录接口只支持显式 POST form 请求');
-    let url = original, activeRequest = request;
+    let url = origins.transport(original), activeRequest = request;
     for (let redirects = 0; redirects <= 5; redirects++) {
       let response, elapsedMs;
       for (let attempt = 0; attempt <= retries; attempt++) {
@@ -455,7 +458,7 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
       }
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         if (!response.headers.location) throw Error('重定向缺少 Location');
-        url = assertUrl(httpUrl(response.headers.location, url));
+        url = origins.transport(assertUrl(httpUrl(response.headers.location, url)));
         if ([301, 302, 303].includes(response.status)) activeRequest = undefined;
         continue;
       }
@@ -464,7 +467,8 @@ export function makeClient({cacheDir, profileDir, allowedHosts, delayMs = 1200, 
       const rejected = rejectedSelector(body, response.headers['content-type']);
       if (rejected) throw rejectedPage(rejected, url);
       stats.bytes += body.length;
-      const meta = {url, original, fetchedAt: new Date().toISOString(), hash: hash(body), contentType: response.headers['content-type'] || '', bytes: body.length};
+      const canonical = assertUrl(url);
+      const meta = {url: canonical, original, ...(canonical !== url ? {responseUrl: url} : {}), fetchedAt: new Date().toISOString(), hash: hash(body), contentType: response.headers['content-type'] || '', bytes: body.length};
       atomicWrite(bodyPath, body);
       atomicWrite(metaPath, meta);
       pacer.succeeded(elapsedMs);
