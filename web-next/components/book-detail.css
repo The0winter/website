@@ -101,10 +101,10 @@
 .book-review-view-all svg { position:absolute; left:calc(100% + 3.25px); top:50%; transform:translateY(-50%); }
 .book-review-view-all:focus-visible { outline:2px solid #936139; outline-offset:2px; }
 .book-review-sheet.book-community { position:fixed; inset:auto 0 0; margin:0 auto; width:100%; max-width:100%; height:95vh; height:95dvh; max-height:95dvh; padding:0; border:0; border-radius:28px 28px 0 0; background:#fffdf9; color:#262626; overflow:hidden; box-shadow:0 -8px 40px #30271922; }
-.book-review-sheet[open] { display:flex; flex-direction:column; animation:book-review-slide-up .24s ease-out; }
-.book-review-sheet::backdrop { background:#221b1459; animation:book-review-backdrop .24s ease-out; }
-.book-review-sheet[open][data-closing] { animation:book-review-slide-down .24s ease-in both; }
-.book-review-sheet[data-closing]::backdrop { animation:book-review-backdrop-out .24s ease-in both; }
+.book-review-sheet[open] { display:flex; flex-direction:column; animation:book-review-slide-up var(--comment-sheet-duration,.24s) ease-out; }
+.book-review-sheet::backdrop { background:#221b1459; animation:book-review-backdrop var(--comment-sheet-duration,.24s) ease-out; }
+.book-review-sheet[open][data-closing] { animation:book-review-slide-down var(--comment-sheet-duration,.24s) ease-in both; }
+.book-review-sheet[data-closing]::backdrop { animation:book-review-backdrop-out var(--comment-sheet-duration,.24s) ease-in both; }
 .book-review-sheet-handle { width:36px; height:3px; border-radius:4px; margin:8px auto 0; flex-shrink:0; background:#dbd1c6; }
 .book-review-sheet-header { display:flex; align-items:center; gap:12px; padding:0 16px 3px; border-bottom:1px solid #eee8df; flex-shrink:0; }
 .book-review-sheet-header h2 { flex:1; min-width:0; font-size:16px; font-weight:600; }
@@ -314,3 +314,5 @@
   .book-detail-search,.book-home-link,.book-share-panel { transition:none; }
   .book-detail-search .book-search { animation:none; }
 }
+
+.comment-sheet-content { display:flex; flex-direction:column; flex:1; min-height:0; }

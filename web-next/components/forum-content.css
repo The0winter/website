@@ -47,17 +47,20 @@
 .forum-reading a:focus-visible,.forum-entry a:focus-visible { outline:2px solid var(--forum-accent); outline-offset:4px; border-radius:3px; }
 .book-community[data-discussions=true] { background:#fff; }.dark .book-community[data-discussions=true] { background:#1c2026; }
 .book-articles .forum-entry { padding-inline:0; }.book-articles .forum-entry-list { border-radius:0; }
-/* Fade content in without moving long answer bodies or changing scroll anchors. */
-.forum-entry,.qa-layout,.forum-reading-shell,.forum-compose { animation:forum-content-in .4s ease both; }
+/* Route entry uses one bounded ForumSlide surface, never one layer per row. */
 :is(.forum-page,.forum-reading,.forum-compose) :is(button,a) { transition:color .4s ease,background-color .4s ease,border-color .4s ease,box-shadow .4s ease; }
 :is(.forum-page,.forum-reading,.forum-compose) [class*="transition-"] { transition-duration:.4s; }
 .forum-article-settings { animation:forum-popover-in .4s ease both; transform-origin:top right; }
 .forum-article-comments { animation:forum-content-in .4s ease both; }.forum-article-comments > [role=dialog] { animation:forum-popover-in .4s ease both; }
+.forum-compose-confirm { animation:forum-content-in .4s ease both; }
+.forum-compose-confirm-panel,.forum-compose-result-icon { animation:forum-popover-in .4s ease both; }
+.forum-feedback-notice { animation-name:forum-notice-in; }
 @keyframes forum-content-in { from { opacity:0; } to { opacity:1; } }
-@keyframes forum-popover-in { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
-@media(min-width:768px) { .forum-feed-panel[aria-hidden=false] { animation:forum-content-in .4s ease both; } }
+@keyframes forum-popover-in { from { transform:translateY(24px); } to { transform:translateY(0); } }
+@keyframes forum-notice-in { from { transform:translate(-50%,24px); } to { transform:translate(-50%,0); } }
+
 @media(prefers-reduced-motion:reduce) {
-  .forum-entry,.qa-layout,.forum-reading-shell,.forum-compose,.forum-feed-panel,.forum-feedback-notice,.forum-article-settings,.forum-article-comments,.forum-article-comments > [role=dialog] { animation:none!important; }
+  .forum-entry,.qa-layout,.forum-reading-shell,.forum-compose,.forum-feed-panel,.forum-feedback-notice,.forum-article-settings,.forum-article-comments,.forum-article-comments > [role=dialog],.forum-compose-confirm,.forum-compose-confirm-panel,.forum-compose-result-icon { animation:none!important; }
   :is(.forum-page,.forum-reading,.forum-compose) :is(button,a,[class*="transition-"]) { transition:none!important; }
 }
 @media(max-width:767px) {

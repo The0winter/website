@@ -1,7 +1,8 @@
 'use client';
+import ShareArrow from '@/components/ShareArrow';
 
 import {useEffect, useId, useRef, useState, useSyncExternalStore} from 'react';
-import {Check, ChevronRight, Copy, Forward, X} from 'lucide-react';
+import {Check, ChevronRight, Copy, X} from 'lucide-react';
 import {bookShareOpen, closeBookShare, openBookShare, serverCatalogClosed, subscribeBookNavigation} from '@/lib/book-navigation';
 import {browserShareHint, hasQQShare, hasUCShare, isAndroidQQBrowser, prepareQQShare, shareWithQQ, shareWithUC, webShareData} from '@/lib/book-sharing';
 import {consumeShareReminder} from '@/lib/share-reading';
@@ -158,7 +159,7 @@ export default function BookShare({bookId, title}: {bookId: string; title: strin
   return <div className="book-share">
     <button ref={toggle} type="button" className="book-share-toggle" aria-label="分享书籍" aria-expanded={open} aria-controls={id}
       onClick={() => {setReminder(false);if(open)closeBookShare();else openBookShare(bookId);}}>
-      <Forward size={25} strokeWidth={1.5} aria-hidden="true"/>
+      <ShareArrow size={25} strokeWidth={1.5} aria-hidden="true"/>
     </button>
     {reminder&&!open&&<div className="book-share-reminder" role="status">
       <button type="button" className="book-share-reminder-message" onClick={()=>{setReminder(false);openBookShare(bookId);}}>喜欢的话，请多多分享 <span aria-hidden="true">😊</span></button>
@@ -171,7 +172,7 @@ export default function BookShare({bookId, title}: {bookId: string; title: strin
         <button type="button" onClick={() => void copy()}>{copied ? <Check size={16} aria-hidden="true"/> : <Copy size={16} aria-hidden="true"/>}{copied ? '已复制' : '复制'}</button>
       </div>
       <button type="button" className="book-share-apps" disabled={busy} onClick={() => void share()}>
-        <span className="book-share-app-icon"><Forward size={21} aria-hidden="true"/></span>
+        <span className="book-share-app-icon"><ShareArrow size={21} aria-hidden="true"/></span>
         <span><strong>{shareMode === 'copy' ? '复制后分享' : '分享到其他应用'}</strong><small>{shareMode === 'native' ? '打开手机分享面板，选择应用' : shareMode === 'qq' ? '打开 QQ 浏览器分享面板，选择应用' : shareMode === 'uc' ? '打开 UC 浏览器分享面板，选择应用' : shareMode === 'loading' ? '正在准备分享，也可复制链接' : `复制后粘贴到应用；${shareHint}`}</small></span>
         <ChevronRight size={18} aria-hidden="true"/>
       </button>

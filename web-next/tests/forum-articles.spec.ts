@@ -40,7 +40,7 @@ for (const width of [390,1440]) {
     await expect(page).toHaveTitle(new RegExp(first.topReply.title.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
     await page.screenshot({path:info.outputPath(`final-answer-${width}.png`)});
-    await page.getByRole('button',{name:'查看全部回答',exact:true}).click();
+    await page.locator('.qa-actionbar .qa-current-author').click();
     await expect(page.getByRole('dialog',{name:'全部 5 个回答'})).toBeVisible();
     await expect(page.locator('.qa-directory-item')).toHaveCount(5);
     await page.screenshot({path:info.outputPath(`final-question-${width}.png`)});

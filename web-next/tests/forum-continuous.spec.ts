@@ -77,7 +77,7 @@ for (const width of [320,390,1440]) {
     await page.locator(`.forum-feed-panel[aria-hidden=false] [data-entry-id="${row.entryId}"] .forum-entry-title`).click();
     await expect(bar).toHaveAttribute('data-active-answer', ids[2]!);
     await expect.poll(async () => Math.abs(await page.evaluate(() => scrollY) - resumed)).toBeLessThan(4);
-    await page.getByRole('button',{name:'查看全部回答',exact:true}).click();
+    await page.locator('.qa-actionbar .qa-current-author').click();
     await expect(page.getByRole('dialog').locator('.qa-directory-item')).toHaveCount(5);
     await page.getByRole('dialog').locator('.qa-directory-item').last().click();
     await expect(bar).toHaveAttribute('data-active-answer', ids[4]!);

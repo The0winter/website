@@ -1,5 +1,6 @@
 'use client';
 import '@/components/forum-content.css';
+import ForumSlide from '@/components/ForumSlide';
 import {LoadingLogo, LoadingText} from '@/components/BrandLoading';
 
 import { Suspense, useMemo, useState } from 'react';
@@ -122,7 +123,7 @@ function CreatePostContent() {
         </div>
       </div>
 
-      <div className="max-w-[860px] mx-auto mt-4 md:mt-8 px-4">
+      <ForumSlide className="max-w-[860px] mx-auto mt-4 md:mt-8 px-4">
         <div className="flex bg-[#edf0f3] p-1 rounded-xl mb-4 md:mb-6 w-full md:w-fit">
           <button
             onClick={() => setType('question')}
@@ -177,11 +178,11 @@ function CreatePostContent() {
             <span className="text-xs text-[#98a2b3]">{parsedTags.length}/{TAG_MAX}</span>
           </div>
         </div>
-      </div>
+      </ForumSlide>
 
       {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-200 px-4">
-          <div className="bg-white w-full max-w-[360px] rounded-2xl p-6 shadow-xl border border-[#eef1f4]">
+        <div className="forum-compose-confirm fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
+          <div className="forum-compose-confirm-panel bg-white w-full max-w-[360px] rounded-2xl p-6 shadow-xl border border-[#eef1f4]">
             <div className="flex flex-col items-center text-center">
               <h3 className="text-lg font-bold text-[#1f2329] mb-2">确认发布？</h3>
               <p className="text-sm text-[#646a73] mb-6">发布后将会对其他用户可见。</p>
@@ -210,7 +211,7 @@ function CreatePostContent() {
           <div className="flex flex-col items-center">
             {showSuccess ? (
               <>
-                <div className="w-16 h-16 bg-[#111827] rounded-full flex items-center justify-center mb-4 animate-bounce">
+                <div className="forum-compose-result-icon w-16 h-16 bg-[#111827] rounded-full flex items-center justify-center mb-4">
                   <CheckCircle2 className="w-8 h-8 text-white" />
                 </div>
                 <h3 className="text-xl font-bold text-[#1f2329]">发布成功</h3>

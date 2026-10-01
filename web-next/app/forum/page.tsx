@@ -18,6 +18,7 @@ import {sectionSwipeThreshold} from '@/lib/section-swipe';
 import './forum.css';
 
 import ForumPostList from '@/components/ForumPostList';
+import ForumSlide from '@/components/ForumSlide';
 import {forumEntryHref, plainForumText} from '@/lib/forum-presentation';
 import ForumTabs, {FORUM_TABS as TABS, type FeedTab} from '@/components/ForumTabs';
 import ForumFeedbackSheet from '@/components/ForumFeedbackSheet';
@@ -277,7 +278,7 @@ return (
       <div className="max-w-[1040px] mx-auto px-0 md:px-4 mt-0 md:mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px] gap-5 md:gap-6">
         
         {/* A single feed tree: mobile slides between panels; desktop shows the selected panel. */}
-        <div className="forum-mobile-feed w-full relative overflow-hidden" style={{ touchAction: 'pan-y pinch-zoom' }}>
+        <ForumSlide className="forum-mobile-feed w-full relative overflow-hidden" enabled={!loadingState.recommend && feedback.ready}>
           <div 
             ref={track} className="forum-feed-track"
             style={{ transform: `translateX(calc(-${activeIndex * 100}% + var(--forum-drag, 0px)))` }}
@@ -289,7 +290,7 @@ return (
               </div>
             ))}
           </div>
-        </div>
+        </ForumSlide>
 
         <aside className="hidden md:flex flex-col gap-6">
           <div className={`${currentTheme.card} rounded-2xl border ${currentTheme.border} p-5 shadow-sm`}>

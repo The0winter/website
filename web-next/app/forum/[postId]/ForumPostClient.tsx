@@ -1,4 +1,5 @@
 'use client';
+import ShareArrow from '@/components/ShareArrow';
 import { useAuth } from '@/contexts/AuthContext';
 import {useReadingSettings} from '@/contexts/ReadingSettingsContext';
 import {useForumView} from '@/lib/useForumView';
@@ -17,7 +18,6 @@ import {
   MessageCircle,
   Moon,
   Settings,
-  Forward,
   Sun,
   ThumbsUp,
   Type,
@@ -26,7 +26,8 @@ import {
 } from 'lucide-react';
 import { forumApi, ForumComment, ForumPost, ForumReply } from '@/lib/api';
 
-const READER_SETTINGS_KEY = 'forum_reader_settings_v1';
+import {FORUM_DEFAULT_FONT_SIZE,readForumFontSize,saveForumFontSize} from '@/lib/forum-reader-settings';
+import ForumSlide from '@/components/ForumSlide';
 
 const THEMES = {
   light: {
@@ -77,7 +78,7 @@ function PostContent() {
   const fromQuestionId = searchParams.get('fromQuestion');
 
   const {theme: themeMode, setTheme: setThemeMode} = useReadingSettings();
-  const [fontSize, setFontSize] = useState(17);
+  const [fontSize, setFontSize] = useState(FORUM_DEFAULT_FONT_SIZE);
   const [showSettings, setShowSettings] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const currentTheme = THEMES[themeMode];
@@ -119,26 +120,8 @@ function PostContent() {
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, []);
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(READER_SETTINGS_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (typeof parsed?.fontSize === 'number' && parsed.fontSize >= 14 && parsed.fontSize <= 24) {
-        setFontSize(parsed.fontSize);
-      }
-    } catch {
-      // ignore broken settings
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify({ fontSize }));
-    } catch {
-      // ignore write failure
-    }
-  }, [fontSize]);
+  useEffect(() => {setFontSize(readForumFontSize());}, []);
+  const changeFont = (size:number) => {setFontSize(size);saveForumFontSize(size);};
 
   useEffect(() => {
     let active = true;
@@ -420,7 +403,7 @@ function PostContent() {
 
           <div className="flex gap-1.5 relative" ref={settingsRef}>
             <button className={`p-2 ${currentTheme.icon}`} title="分享" aria-label="复制文章链接" onClick={async () => {try {await navigator.clipboard.writeText(window.location.href); setShareMessage('链接已复制');} catch {setShareMessage('请复制地址栏中的链接');}}}>
-              <Forward className="w-5 h-5" />
+              <ShareArrow className="w-5 h-5" />
             </button>
             {shareMessage && <span role="status" className="absolute right-0 top-12 whitespace-nowrap rounded-lg bg-[var(--forum-card)] px-3 py-2 text-xs shadow">{shareMessage}</span>}
 
@@ -464,14 +447,14 @@ function PostContent() {
                     <span className="text-xs opacity-70">{fontSize}px</span>
                   </div>
                   <div className={`flex items-center justify-between p-2 rounded-lg ${themeMode === 'light' ? 'bg-gray-100' : 'bg-white/10'}`}>
-                    <button onClick={() => setFontSize((prev) => Math.max(14, prev - 1))} className="p-1 hover:bg-black/10 rounded">
+                    <button onClick={() => changeFont(Math.max(14,fontSize - 1))} className="p-1 hover:bg-black/10 rounded">
                       <Type className="w-3 h-3" />
                     </button>
                     <div className="flex gap-1">
                       {[14, 16, 18, 20, 22].map((size) => (
                         <button
                           key={size}
-                          onClick={() => setFontSize(size)}
+                          onClick={() => changeFont(size)}
                           className={`h-2 w-2 rounded-full ${
                             fontSize >= size ? (themeMode === 'light' ? 'bg-black' : 'bg-white') : 'bg-gray-300 opacity-40'
                           }`}
@@ -479,7 +462,7 @@ function PostContent() {
                         />
                       ))}
                     </div>
-                    <button onClick={() => setFontSize((prev) => Math.min(24, prev + 1))} className="p-1 hover:bg-black/10 rounded">
+                    <button onClick={() => changeFont(Math.min(24,fontSize + 1))} className="p-1 hover:bg-black/10 rounded">
                       <Type className="w-5 h-5" />
                     </button>
                   </div>
@@ -490,7 +473,7 @@ function PostContent() {
         </div>
       </div>
 
-      <div className="forum-reading-shell max-w-[860px] mx-auto mt-3 md:mt-6 px-4">
+      <ForumSlide className="forum-reading-shell max-w-[860px] mx-auto mt-3 md:mt-6 px-4">
         <div className="forum-question-heading mb-4">
           {question.bookId && <Link className="inline-block text-xs text-[var(--forum-muted)] mb-3" href={`/book/${question.bookId}`}>《{question.bookTitle || '相关书籍'}》 · 书籍讨论</Link>}
           <Link href={isArticle ? `/forum/${question.id}` : `/forum/question/${question.id}`}>
@@ -536,7 +519,7 @@ function PostContent() {
 
           <div
             style={{ fontSize: `${fontSize}px` }}
-            className={`rich-text-content forum-prose ${currentTheme.textMain} font-normal transition-all duration-200`}
+            className={`rich-text-content forum-prose ${currentTheme.textMain} font-normal transition-colors`}
             dangerouslySetInnerHTML={{ __html: answer.content }}
           />
           <ForumSourceCredit source={answer.source}/>
@@ -698,7 +681,7 @@ function PostContent() {
         )}
 
         <div className="h-8"></div>
-      </div>
+      </ForumSlide>
     </div>
   );
 }

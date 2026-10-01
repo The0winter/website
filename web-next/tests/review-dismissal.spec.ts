@@ -4,6 +4,8 @@ const base=process.env.REVIEW_TEST_BASE||'http://127.0.0.1:3157',book=process.en
 for(const width of [390,1440])test(`comment dismissal animates every exit and restores focus at ${width}px`,async({page},info)=>{
   await page.setViewportSize({width,height:900});
   await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.route(`**/api/books/${book}/reviews?*`,route=>route.fulfill({json:[{_id:'000000000000000000000301',rating:4,content:'用于检查评论面板开合的固定样本。',createdAt:'2026-10-01T00:00:00Z',user:{_id:'000000000000000000000012',username:'测试书友'}}],headers:{'X-Total-Count':'1','X-Next-Cursor':'','X-Review-Distribution':'{"4":1}'}}));
+  await page.route(`**/api/books/${book}/review-reactions?*`,route=>route.fulfill({json:[]}));
   await page.goto(`${base}/book/${book}`);
   const opener=page.getByRole('button',{name:'查看全部评论',exact:true});
   await expect(opener).toHaveCSS('border-top-width','0px');

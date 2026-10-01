@@ -1,8 +1,9 @@
 'use client';
+import ShareArrow from '@/components/ShareArrow';
 import {useCallback, useEffect, useRef, useState, type CSSProperties} from 'react';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
-import {ArrowLeft, ChevronDown, ChevronsDown, List, MessageCircle, PenLine, Settings, Forward, ThumbsUp} from 'lucide-react';
+import {ArrowLeft, ChevronsDown, List, MessageCircle, PenLine, MoreHorizontal, ThumbsUp} from 'lucide-react';
 import {useAuth} from '@/contexts/AuthContext';
 import {useReadingSettings} from '@/contexts/ReadingSettingsContext';
 import {forumApi, type ForumPost, type ForumReply} from '@/lib/api';
@@ -15,7 +16,8 @@ import ForumSourceCredit from './ForumSourceCredit';
 import './forum-content.css';
 import './forum-answer-reader.css';
 
-const SETTINGS_KEY = 'forum_reader_settings_v1';
+import {FORUM_DEFAULT_FONT_SIZE,readForumFontSize,saveForumFontSize} from '@/lib/forum-reader-settings';
+import ForumSlide from './ForumSlide';
 type Checkpoint = {page:number; answerId:string; offset:number};
 const authorName = (answer:ForumReply) => answer.source?.author || answer.author.name || '书友';
 const unique = (rows:ForumReply[]) => rows.filter((row, index) => rows.findIndex(item => item.id === row.id) === index);
@@ -37,10 +39,9 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
   const [moreError, setMoreError] = useState('');
   const [retry, setRetry] = useState(0);
   const [activeId, setActiveId] = useState('');
-  const [compactHeader, setCompactHeader] = useState(false);
   const [dialog, setDialog] = useState<'answers'|'settings'|'write'|null>(null);
   const [commentId, setCommentId] = useState<string|null>(null);
-  const [fontSize, setFontSize] = useState(18);
+  const [fontSize, setFontSize] = useState(FORUM_DEFAULT_FONT_SIZE);
   const [draft, setDraft] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [writeError, setWriteError] = useState('');
@@ -49,7 +50,6 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
   const [pendingLikes, setPendingLikes] = useState<Set<string>>(new Set());
   const cards = useRef(new Map<string, HTMLElement>());
   const sentinel = useRef<HTMLDivElement>(null);
-  const heading = useRef<HTMLElement>(null);
   const generation = useRef(0), moreLock = useRef(false), submitLock = useRef(false);
   const likeLocks = useRef(new Set<string>());
   const checkpoint = useRef<Checkpoint|null>(null), restored = useRef(false);
@@ -57,12 +57,7 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
   const draftKey = `forum-draft:${user?.id || 'guest'}:${questionId}`;
   useForumView(question?.id);
 
-  useEffect(() => {
-    try {
-      const settings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
-      if (Number.isFinite(settings.fontSize) && settings.fontSize >= 14 && settings.fontSize <= 24) setFontSize(settings.fontSize);
-    } catch { /* Reading remains available when storage is disabled. */ }
-  }, []);
+  useEffect(() => {setFontSize(readForumFontSize());}, []);
   useEffect(() => {try {setDraft(sessionStorage.getItem(draftKey) || '');} catch { /* Optional draft recovery. */ }}, [draftKey]);
   useEffect(() => {
     if (!notice) return;
@@ -144,7 +139,6 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
         if (node && node.getBoundingClientRect().top <= line) current = answer;
       }
       setActiveId(current.id);
-      setCompactHeader((heading.current?.getBoundingClientRect().bottom || 0) < 62);
       const node = cards.current.get(current.id);
       if (node) {
         try {sessionStorage.setItem(positionKey, JSON.stringify({page, answerId:current.id, offset:-node.getBoundingClientRect().top}));} catch { /* Optional reading checkpoint. */ }
@@ -197,7 +191,7 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
   }
   function changeFont(size:number) {
     setFontSize(size);
-    try {localStorage.setItem(SETTINGS_KEY, JSON.stringify({fontSize:size}));} catch { /* Current-page changes still work. */ }
+    saveForumFontSize(size);
   }
   function changeDraft(value:string) {
     setDraft(value);
@@ -221,22 +215,21 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
   return <div className="forum-reading qa-reader" style={{'--qa-font-size':`${fontSize}px`} as CSSProperties}>
     <nav className="qa-topbar" aria-label="问答阅读导航"><div>
       <Link href="/forum" aria-label="返回问答首页" className="qa-icon-button"><ArrowLeft size={24}/></Link>
-      <button className="qa-nav-title" onClick={() => setDialog('answers')} disabled={!question} aria-label="查看全部回答">{compactHeader ? question?.title : '全部回答'}{!compactHeader && <ChevronDown size={15}/>}</button>
       <button className="qa-write-button" onClick={writeAnswer} disabled={!question}><PenLine size={18}/><span>写回答</span></button>
     </div></nav>
-    {loading ? <div className="qa-loading" role="status">正在加载回答…</div> : error || !question ? <div className="qa-loading" role="alert">{error || '问题不存在'}<button onClick={() => setRetry(value => value + 1)}>重新加载</button></div> : <div className="qa-layout">
+    {loading ? <div className="qa-loading" role="status">正在加载回答…</div> : error || !question ? <div className="qa-loading" role="alert">{error || '问题不存在'}<button onClick={() => setRetry(value => value + 1)}>重新加载</button></div> : <ForumSlide className="qa-layout" checkpointKey={positionKey}>
       <section className="qa-main" aria-label="问题与回答">
-        <header className="qa-question" ref={heading}><h1>{question.title}</h1><p className="qa-answer-count">{question.comments} 个回答</p></header>
+        <header className="qa-question"><h1>{question.title}</h1><p className="qa-answer-count">{question.comments} 个回答</p></header>
         <div className="qa-answer-stream" aria-label="连续回答">
           {answers.map(answer => <article className="qa-answer" key={answer.id} data-answer-id={answer.id} ref={node => {if (node) cards.current.set(answer.id, node); else cards.current.delete(answer.id);}} aria-label={`${authorName(answer)}的回答`}>
-            <header className="qa-author"><Avatar answer={answer}/><strong>{authorName(answer)}</strong><button aria-label={`分享${authorName(answer)}的回答`} onClick={() => void share(answer)}><Forward size={20}/></button></header>
+            <header className="qa-author"><Avatar answer={answer}/><strong>{authorName(answer)}</strong></header>
             <div className="forum-prose qa-body" dangerouslySetInnerHTML={{__html:answer.content}}/>
             <div className="qa-answer-date">{answer.source ? '收录于' : '发布于'} {new Date(answer.time).toLocaleDateString('zh-CN')}</div>
             <ForumSourceCredit source={answer.source}/>
             <div className="qa-inline-actions">
               <button aria-pressed={!!answer.hasLiked} disabled={pendingLikes.has(answer.id)} onClick={() => void like(answer)}><ThumbsUp size={17}/>{answer.votes} 赞同</button>
               <button onClick={() => setCommentId(answer.id)}><MessageCircle size={17}/>{answer.comments} 条评论</button>
-              <button onClick={() => void share(answer)}><Forward size={17}/>分享</button>
+              <button onClick={() => void share(answer)}><ShareArrow size={17}/>分享</button>
             </div>
           </article>)}
         </div>
@@ -248,17 +241,17 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
         <h2>{question.comments} 个回答</h2><p>按赞同排序 · 向下连续阅读</p>
         <button className="qa-primary" onClick={writeAnswer}><PenLine size={17}/>写回答</button>
         <button className="qa-side-link" onClick={() => setDialog('answers')}><List size={18}/>浏览全部回答</button>
-        <button className="qa-side-link" onClick={() => setDialog('settings')}><Settings size={18}/>阅读设置</button>
+        <button className="qa-side-link" onClick={() => setDialog('settings')}><MoreHorizontal size={18}/>阅读设置</button>
         {question.bookId && <Link className="qa-side-link" href={`/book/${question.bookId}`}>查看相关书籍</Link>}
       </aside>
-    </div>}
+    </ForumSlide>}
     {active && !loading && !error && <>
       <footer className="qa-actionbar" role="group" aria-label="当前回答操作" data-active-answer={active.id}><div>
         <button className="qa-current-author" onClick={() => setDialog('answers')} aria-label={`当前回答：${authorName(active)}，查看全部回答`}><Avatar answer={active}/><span>{authorName(active)}</span></button>
         <button className="qa-vote" aria-label={active.hasLiked ? '取消赞同当前回答' : '赞同当前回答'} aria-pressed={!!active.hasLiked} disabled={pendingLikes.has(active.id)} onClick={() => void like(active)}><ThumbsUp size={20}/><span>{active.votes}</span></button>
         <button aria-label="打开当前回答评论" onClick={() => setCommentId(active.id)}><MessageCircle size={21}/><span>{active.comments}</span></button>
-        <button aria-label="分享当前回答" onClick={() => void share(active)}><Forward size={20}/></button>
-        <button aria-label="阅读设置" onClick={() => setDialog('settings')}><Settings size={20}/></button>
+        <button aria-label="分享当前回答" onClick={() => void share(active)}><ShareArrow size={20}/></button>
+        <button className="qa-more-button" aria-label="阅读设置" onClick={() => setDialog('settings')}><MoreHorizontal size={20}/></button>
       </div></footer>
       {canNext && <button className="qa-next-answer" aria-label="跳到下一篇回答" disabled={loadingMore} onClick={() => void nextAnswer()}><ChevronsDown size={25}/></button>}
     </>}

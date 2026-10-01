@@ -87,13 +87,13 @@ test('answer count, divider, curved share icons and reduced motion',async ({page
   await page.goto(base+'/forum/question/'+qid);
   await expect(page.locator('.qa-answer-count')).toHaveText('4 个回答');
   await expect(page.locator('.qa-question')).toHaveCSS('border-bottom-width','1px');
-  await expect(page.getByRole('button',{name:'分享当前回答'}).locator('svg')).toHaveClass(/lucide-forward/);
+  await expect(page.getByRole('button',{name:'分享当前回答'}).locator('svg')).toHaveAttribute('data-share-arrow','curved');
   await page.screenshot({path:info.outputPath('verified-answer-count.png')});
-  await page.getByRole('button',{name:'查看全部回答',exact:true}).click();
+  await page.locator('.qa-actionbar .qa-current-author').click();
   await expect(page.getByRole('dialog')).toHaveCSS('animation-duration','0.4s');
   await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.emulateMedia({reducedMotion:'reduce'});
-  await page.getByRole('button',{name:'查看全部回答',exact:true}).click();
+  await page.locator('.qa-actionbar .qa-current-author').click();
   await expect(page.getByRole('dialog')).toHaveCSS('animation-name','none');
   await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0);
 });
