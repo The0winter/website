@@ -28,7 +28,7 @@
 .qa-share-fallback { padding:24px; font-size:14px; }.qa-share-fallback input { margin-top:16px; padding:12px; width:100%; background:var(--forum-soft); border-radius:6px; font-size:16px; }
 @media(max-width:767px) {
   .qa-reader { background:var(--forum-card); }.qa-topbar > div { height:54px; gap:8px; padding:0 12px; }.qa-write-button { font-size:14px; gap:5px; }
-  .qa-layout { display:block; margin:0; padding:0; }.qa-main { border:0; border-radius:0; }.qa-sidebar { display:none; }.qa-question { padding:24px 16px 12px; }.qa-question h1 { font-size:22px; line-height:1.45; }.qa-answer { padding:16px 16px 26px; }.qa-answer + .qa-answer { padding-top:24px; }.qa-author { margin-bottom:22px; gap:10px; }.qa-inline-actions { display:none; }
+  .qa-layout { display:block; margin:0; padding:0; }.qa-main { border:0; border-radius:0; }.qa-sidebar { display:none; }.qa-question { padding:8px 16px 12px; }.qa-question h1 { font-size:22px; line-height:1.45; }.qa-answer { padding:16px 16px 26px; }.qa-answer + .qa-answer { padding-top:24px; }.qa-author { margin-bottom:22px; gap:10px; }.qa-inline-actions { display:none; }
   .qa-actionbar > div { height:60px; padding:0 12px; gap:6px; }.qa-actionbar button { min-width:38px; font-size:12px; }.qa-actionbar .qa-current-author { max-width:140px; gap:7px; }.qa-next-answer { right:18px; }
   .qa-dialog-scroll { padding-inline:16px; }.qa-dialog-subtitle { padding-inline:16px; }.qa-write-form { padding:16px 16px max(20px,env(safe-area-inset-bottom)); }
 }

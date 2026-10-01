@@ -1,7 +1,7 @@
 .forum-loading { --forum-loading-block:#f0f1f3; min-height:100dvh; background:#fff; color:#777e89; font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif; }
 .forum-loading-nav { height:54px; max-width:1040px; margin:auto; padding:0 12px; display:flex; align-items:center; }
 .forum-loading-nav a { width:36px; height:44px; display:grid; place-items:center; color:#20242b; }
-.forum-loading-body { max-width:720px; margin:auto; padding:24px 16px 90px; }
+.forum-loading-body { max-width:720px; margin:auto; padding:8px 16px 90px; }
 .forum-loading-line { height:12px; background:var(--forum-loading-block); border-radius:4px; }
 .forum-loading-line.short { width:62%; }.forum-loading-title { height:23px; margin-bottom:12px; }.forum-loading-count { width:70px; height:13px; margin:20px 0 14px; }
 .forum-loading-question { border-bottom:1px solid #edf0f3; margin-bottom:16px; }.forum-loading-author { display:flex; align-items:center; gap:10px; margin-bottom:24px; }
