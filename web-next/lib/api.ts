@@ -8,8 +8,8 @@ export interface ForumSource {
   title: string;
   author: string;
   url: string;
-  license: string;
-  licenseUrl: string;
+  license?: string;
+  licenseUrl?: string;
   publishedAt?: string;
 }
 

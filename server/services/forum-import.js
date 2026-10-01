@@ -19,8 +19,10 @@ const licenses = new Map([
 const label = (value, max) => typeof value === 'string' && value.trim().length > 0 && value.length <= max;
 
 export function validateForumImport(manifest) {
-  if (manifest?.version !== 1 || manifest.usage !== 'public-licensed-reviews' || !/^[a-z0-9-]{1,80}$/.test(manifest.batch || '')) fail('请提供明确用于公开收录的书评清单');
+  const collected = manifest?.usage === 'public-collected-reviews';
+  if (manifest?.version !== 1 || !['public-licensed-reviews', 'public-collected-reviews'].includes(manifest.usage) || !/^[a-z0-9-]{1,80}$/.test(manifest.batch || '')) fail('请提供明确用于公开收录的书评清单');
   if (!label(manifest.book?.title, 200) || !label(manifest.book?.author, 200) || !label(manifest.book?.description, 5000)) fail('书籍资料不完整');
+  if (collected && (!/^[a-f0-9]{24}$/.test(manifest.book.id || '') || manifest.book.allowCreate)) fail('采集书评须指定已核对的现有书籍编号');
   if (!label(manifest.question?.title, 200) || !label(manifest.question?.content, 20000) || safeHtml(manifest.question.content) !== manifest.question.content) fail('问题内容无效');
   if (!Array.isArray(manifest.articles) || !manifest.articles.length || manifest.articles.length > 20) fail('每批需包含 1 至 20 篇书评');
   const ids = new Set(), urls = new Set();
@@ -28,7 +30,10 @@ export function validateForumImport(manifest) {
     if (!/^[a-z0-9-]{1,100}$/.test(article.id || '') || ids.has(article.id) || !label(article.title, 200) || !label(article.content, 200000) || digest(article.content) !== article.sha256 || safeHtml(article.content) !== article.content) fail('文章正文、编号或校验值无效');
     const source = article.source;
     let url; try {url = new URL(source?.url);} catch {fail('原文链接无效');}
-    if (!label(source?.author, 200) || !label(source.title, 200) || url.protocol !== 'https:' || url.username || url.password || urls.has(url.href) || !licenses.has(source.license) || licenses.get(source.license) !== source.licenseUrl || !Number.isFinite(Date.parse(source.publishedAt))) fail('文章来源或许可信息不完整');
+    if (!label(source?.author, 200) || !label(source.title, 200) || url.protocol !== 'https:' || url.username || url.password || urls.has(url.href)) fail('文章来源信息不完整');
+    const hasLicense = source.license !== undefined || source.licenseUrl !== undefined;
+    if ((!collected || hasLicense) && (!licenses.has(source.license) || licenses.get(source.license) !== source.licenseUrl)) fail('文章来源或许可信息不完整');
+    if ((!collected || source.publishedAt !== undefined) && !Number.isFinite(Date.parse(source.publishedAt))) fail('原文发布时间无效');
     ids.add(article.id); urls.add(url.href);
   }
 }
@@ -46,6 +51,7 @@ export async function importForumArticles(manifest, {apply = false, admin} = {})
     const books = await Book.find({title:manifest.book.title, author:manifest.book.author, deletedAt:null}).limit(2).session(session).lean();
     if (books.length > 1) fail('存在重复书籍，需先核对书籍身份');
     const book = books[0];
+    if (manifest.usage === 'public-collected-reviews' && (!book || String(book._id) !== manifest.book.id)) fail('书籍编号与书名作者不符，停止关联书评');
     if (book?.visibility === 'private') fail('不能将现有私密书自动公开');
     const bookId = String(book?._id || id('book')), questionId = id('question');
     if (!book && await Book.exists({_id:bookId}).session(session)) fail('书籍编号已被占用');
@@ -55,7 +61,8 @@ export async function importForumArticles(manifest, {apply = false, admin} = {})
     const existing = await Reply.find({_id:{$in:answerIds}}).session(session).lean();
     for (const [index, article] of manifest.articles.entries()) {
       const answer = existing.find(row => String(row._id) === answerIds[index]);
-      if (answer && (String(answer.postId) !== questionId || String(answer.author) !== String(actor._id) || answer.title !== article.title || answer.content !== article.content || ['title','author','url','license','licenseUrl'].some(key => answer.source?.[key] !== article.source[key]) || +new Date(answer.source?.publishedAt) !== +new Date(article.source.publishedAt))) fail('回答已被修改，停止重复导入');
+      const date = value => value ? new Date(value).toISOString() : null;
+      if (answer && (String(answer.postId) !== questionId || String(answer.author) !== String(actor._id) || answer.title !== article.title || answer.content !== article.content || ['title','author','url','license','licenseUrl'].some(key => answer.source?.[key] !== article.source[key]) || date(answer.source?.publishedAt) !== date(article.source.publishedAt))) fail('回答已被修改，停止重复导入');
     }
     return {actor, bookId, questionId, answerIds, createBook:!book, createQuestion:!question, createAnswers:answerIds.filter(value => !existing.some(row => String(row._id) === value))};
   }
@@ -74,7 +81,7 @@ export async function importForumArticles(manifest, {apply = false, admin} = {})
     }
     const total = await Reply.countDocuments({postId:plan.questionId}).session(session);
     await Post.updateOne({_id:plan.questionId}, {$set:{replyCount:total}}, {session});
-    await AdminLog.create([{admin_id:plan.actor._id, action:'import_licensed_forum_articles', details:JSON.stringify({batch:manifest.batch, bookId:plan.bookId, questionId:plan.questionId, answerIds:plan.createAnswers})}], {session});
+    await AdminLog.create([{admin_id:plan.actor._id, action:manifest.usage === 'public-collected-reviews' ? 'import_collected_forum_articles' : 'import_licensed_forum_articles', details:JSON.stringify({batch:manifest.batch, bookId:plan.bookId, questionId:plan.questionId, answerIds:plan.createAnswers})}], {session});
   });
   return {applied:apply, batch:manifest.batch, bookId:plan.bookId, questionId:plan.questionId, answerIds:plan.answerIds, curator:plan.actor.username, created:{books:Number(plan.createBook), questions:Number(plan.createQuestion), answers:plan.createAnswers.length}};
 }
