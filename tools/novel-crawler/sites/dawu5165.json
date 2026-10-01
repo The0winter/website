@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "dawu5165",
+  "name": "大悟读书网",
+  "home": "https://5165.org/",
+  "hosts": ["5165.org"],
+  "book": {
+    "urlPattern": "^/(?<category>[a-z]+[0-9]?)/(?<slug>[a-z0-9_-]+)/$",
+    "metadata": {
+      "title": "h1.page-title",
+      "author": {"selector": "#category-description-author", "pattern": "^作者[：:]\\s*(.+)$"}
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-dawu5165-v1",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": ["5165.org"],
+    "identityNormalization": "chinese-simplified",
+    "delayMs": 1500,
+    "timeoutMs": 25000,
+    "retries": 1,
+    "browser": {"headless": true},
+    "metadata": {
+      "title": "h1.page-title",
+      "author": {"selector": "#category-description-author", "pattern": "^作者[：:]\\s*(.+)$"}
+    },
+    "catalog": {
+      "links": "article .entry-content li[data-id] > a[rel='contents']",
+      "orderAncestor": "li",
+      "orderAttribute": "data-id"
+    },
+    "chapter": {
+      "title": "h1.entry-title",
+      "content": "article .entry-content",
+      "transport": "browser",
+      "readySelector": ".entry-content > div[data-id='0']:first-child",
+      "remove": ["script", "style", "iframe", "ins", "[id^='a-']"]
+    }
+  }
+}

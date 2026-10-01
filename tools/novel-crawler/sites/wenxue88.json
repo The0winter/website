@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "id": "wenxue88",
+  "name": "文学吧",
+  "home": "https://wenxue88.com/",
+  "hosts": ["wenxue88.com"],
+  "book": {
+    "urlPattern": "^/(?<slug>[a-z0-9_-]+)/index\\.html$",
+    "metadata": {
+      "title": "h1",
+      "author": "span.jj > a[href^='../zz/']"
+    }
+  },
+  "spec": {
+    "version": 1,
+    "kind": "html",
+    "variant": "desktop-wenxue88-v1",
+    "title": "${title}",
+    "author": "${author}",
+    "sourceUrl": "${sourceUrl}",
+    "allowedHosts": ["wenxue88.com"],
+    "identityNormalization": "chinese-simplified",
+    "delayMs": 1500,
+    "timeoutMs": 25000,
+    "retries": 1,
+    "browser": {"headless": true},
+    "metadata": {
+      "title": "h1",
+      "author": "span.jj > a[href^='../zz/']"
+    },
+    "catalog": {
+      "links": "td.zw_txt > a[href$='.html']:not([href*='/']):not([href='js.html']):not([href='index.html']):not(:has(strong))",
+      "volumeSelector": "td.zw_txt:has(> a > strong)"
+    },
+    "chapter": {
+      "title": "h2",
+      "content": "td.hycolor:not(.nz)",
+      "remove": ["script", "style", "iframe"]
+    }
+  }
+}
