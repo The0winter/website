@@ -373,9 +373,12 @@ export function recordContinuationSourceDefect(spec, options, {links, hashes, ev
     const raw = fs.readFileSync(targetPath(options.outputDir, boundary.file)), book = JSON.parse(raw), previous = book.chapters?.at(-1);
     if (hash(raw) !== boundary.exportHash || !sameBook(spec, book) || !previous || hash(previous) !== boundary.chapterHash) throw Error('边界编号核对的原书或末章已变化');
     const previousId = chapterIdentity(previous.title), sourceId = chapterIdentity(chapters[0].title);
+    const correspondence = boundary.anchorReviewKey && loadReviews(spec, options).anchorDecisions?.find(d =>
+      d.key === boundary.anchorReviewKey && d.key === anchorReviewKey(book, boundary.file, previous, chapters[0]));
     if (!previousId || !sourceId || previousId.number !== sourceId.number || !compatibleNames(previousId.name, sourceId.name) ||
-      bodyKey(previous.content, previous.title, previous.link).length < 100 || bodyKey(previous.content, previous.title, previous.link) !== bodyKey(chapters[0].content, chapters[0].title, chapters[0].link)) throw Error('边界编号核对必须与原书末章完整正文一致');
-    reviewedBoundary = {file: boundary.file, exportHash: boundary.exportHash, bookHash: hash(book), chapterHash: boundary.chapterHash};
+      bodyKey(previous.content, previous.title, previous.link).length < 100 ||
+      (boundary.anchorReviewKey ? !correspondence : bodyKey(previous.content, previous.title, previous.link) !== bodyKey(chapters[0].content, chapters[0].title, chapters[0].link))) throw Error('边界编号核对必须与原书末章完整正文一致，或提供匹配双方完整正文的显式衔接核对');
+    reviewedBoundary = {file: boundary.file, exportHash: boundary.exportHash, bookHash: hash(book), chapterHash: boundary.chapterHash, ...(correspondence ? {anchorReviewKey: correspondence.key} : {})};
   }
   const scope = {previousNumber, window, ...(reviewedBoundary ? {boundary: reviewedBoundary} : {})};
   const key = sourceDefectKey(scope), decision = {key, kind: 'numbering', ...scope, evidenceHash, reason: reason.trim(), reviewedAt: new Date().toISOString()};

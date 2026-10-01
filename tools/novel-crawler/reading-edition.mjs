@@ -129,6 +129,18 @@ function readingChapterNumber(title) {
   return chapterIdentity(normalized)?.number ?? (fractional ? Number(fractional[1]) : match ? Number(match[1]) : null);
 }
 
+// The reader already supports numeric headings and a single N.5 interlude.
+// Use the same identities for explicit evidence review, without making an
+// unreviewed jump or an arbitrary decimal heading acceptable.
+function readingReviewIdentity(title) {
+  const normal = chapterIdentity(title);
+  if (normal) return normal;
+  const text = String(title).normalize('NFKC').trim();
+  if (/^[0-9]+月总结/u.test(text)) return null;
+  const match = /^(?:第([0-9]+\.5)[章节回]|([0-9]+)(?:[、.]|\s+|(?=\p{Script=Han})))\s*(.+)$/u.exec(text);
+  return match ? {number: Number(match[1] || match[2]), name: chapterIdentity('第1章 ' + match[3]).name} : null;
+}
+
 // Explicitly reviewed unnumbered notices are pinned to the complete source
 // text, not just a permissive title pattern. Recording does not change the book.
 export function recordReadingNoticeReview(dir, spec, extraction, outputDir, {link, contentHash, reason}) {
@@ -192,14 +204,15 @@ export function recordReadingNumberingReview(dir, spec, extraction, outputDir, {
   const chapters=positions.map((p,i)=>{const c=rawChapter(dir,catalog[p]);if(sourceContentHash(c)!==hashes[i]||normalizedTitle(c.title)!==normalizedTitle(catalog[p].title)||c.content.trim().length<100)throw Error('完整正文哈希或目录标题不匹配');return c;});
   checkNewIssues(qualityReport(positions.map(p=>catalog[p]),chapters,[],'probe'));
   const numbers=chapters.map(c=>readingChapterNumber(c.title));
-  const anomalies=[1,2].filter(i=>numbers[i]!==numbers[i-1]+1);
-  if (!numbers.every(Number.isSafeInteger)||anomalies.length!==1) throw Error('仅核对相邻三项中的一个来源编号错误');
+  const halfBoundary=boundaryWindow&&numbers[0]%1===0.5&&Number.isSafeInteger(Math.floor(numbers[0]));
+  const anomalies=[1,2].filter(i=>numbers[i]!==Math.floor(numbers[i-1])+1);
+  if (!numbers.every((n,i)=>Number.isSafeInteger(n)||i===0&&halfBoundary)||anomalies.length!==1) throw Error('仅核对相邻三项中的一个来源编号错误');
   if (boundaryWindow && (anomalies[0] !== 1 || sourceContentHash(last) !== hashes[0] || normalizedTitle(last.title) !== normalizedTitle(chapters[0].title))) throw Error('边界核对只能验收旧末章之后的编号错误，旧题与完整正文必须一致');
   const url=httpUrl(reference.url),raw=fs.readFileSync(reference.bodyFile),text=normalizedTitle(load(raw.toString('utf8')).text());
-  const titles=reference.chapters,identities=Array.isArray(titles)&&titles.map(title=>chapterIdentity(String(title).replace(/^([0-9]+)[、.]\s*/u,'第$1章 ')));
+  const titles=reference.chapters,identities=Array.isArray(titles)&&titles.map(readingReviewIdentity);
   if (new URL(url).hostname===new URL(spec.sourceUrl).hostname||!raw.length||raw.length>2_000_000||hash(raw)!==reference.hash||
       !text.includes(normalizedTitle(spec.title))||!text.includes(normalizedTitle(spec.author))||!identities||identities.length!==3||
-      !identities.every((id,i)=>id&&Number.isSafeInteger(id.number)&&(!i||id.number===identities[i-1].number+1)&&id.name===chapterIdentity(chapters[i].title)?.name&&text.includes(normalizedTitle(titles[i])))) throw Error('独立目录未证明同书同作者的三个标题连续');
+      !identities.every((id,i)=>id&&(i===0&&halfBoundary ? id.number%1===0.5&&Number.isSafeInteger(Math.floor(id.number)) : Number.isSafeInteger(id.number))&&(!i||id.number===Math.floor(identities[i-1].number)+1)&&id.name===readingReviewIdentity(chapters[i].title)?.name&&text.includes(normalizedTitle(titles[i])))) throw Error('独立目录未证明同书同作者的三个标题连续');
   const window=chapters.map(numberingFingerprint),evidenceFile=path.join(dir,'reading-numbering-evidence',reference.hash+'.bin');
   atomicWrite(evidenceFile,raw);
   const decision={key:hash(window),window,anomalyIndex:anomalies[0],...(boundaryWindow ? {boundary:{exportHash,chapterHash:hash(last),sourcePosition:state.sources.length}} : {}),reason:reason.trim(),reference:{url,hash:reference.hash,chapters:titles},reviewedAt:new Date().toISOString()};

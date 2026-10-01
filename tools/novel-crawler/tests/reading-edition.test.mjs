@@ -291,6 +291,23 @@ test('reviewed new numbering defects require independent consecutive titles and 
   assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).reusedExport,true);
 });
 
+for (const [label, ending, referenceEnding] of [['numeric heading','4 后续','第4章 后续'],['half-chapter boundary','第3.5章 后续','第3.5章 后续']]) {
+test(`explicit numbering review supports ${label} and still rejects stale or nonconsecutive evidence`,async t=>{
+  const f=await fixture(t,{sourceOrder:true,fullCatalog:true,titles:{1:'第1章 开始',2:'第2章 经过',3:'第1章 开始',4:'第3章 转折',5:ending}});
+  const book={...f.book,chapters:[1,2,4,5].map((n,i)=>({...formatChapterForExport(f.raw(n)),chapter_number:i+1,sourceChapterNumber:n,sourceChapterUrl:f.raw(n).link}))};
+  atomicWrite(f.file,book);
+  await bindReadingEdition(f.spec,f.file,{...f.options,sourceOrderReview:{catalogHash:hash(readJson(path.join(f.dir,'catalog.json'))),reason:'仅移出已核实重复项',pairs:[{omit:3,keep:1,omitHash:hash(f.raw(3).content),keepHash:hash(f.raw(1).content),reason:'全文相同'}]}});
+  const original=fs.readFileSync(f.file);Object.assign(f.state.titles,{6:'第20章 新章',7:'第21章 收束'});f.state.count=7;
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).exportFile,null);
+  const next=label==='numeric heading'?5:4,titles=[referenceEnding,`第${next}章 新章`,`第${next+1}章 收束`],bodyFile=path.join(f.options.stateDir,'publisher.html'),evidence='测试书 甲作者 '+titles.join(' ');fs.writeFileSync(bodyFile,evidence);
+  const review={exportHash:hash(original),boundary:{chapterHash:hash(book.chapters.at(-1))},links:[5,6,7].map(n=>f.raw(n).link),hashes:[5,6,7].map(n=>hash(f.raw(n).content)),reason:'独立目录明确同名连续三项，保留旧半章和全部原文',reference:{url:'https://publisher.example/book',bodyFile,hash:hash(evidence),chapters:titles}};
+  for(const bad of [{...review,boundary:undefined},{...review,boundary:{chapterHash:'stale'}},{...review,hashes:['stale',...review.hashes.slice(1)]},{...review,reference:{...review.reference,chapters:[referenceEnding,`第${next+1}章 新章`,`第${next+2}章 收束`]}}])await assert.rejects(reviewReadingNumbering(f.spec,bad,f.options));
+  await reviewReadingNumbering(f.spec,review,f.options);
+  const result=await acquire(f.spec,{...f.options,mode:'download'});assert.equal(result.readingAdded,2,JSON.stringify(result.failures));
+  assert.deepEqual(readJson(f.file).chapters.slice(0,book.chapters.length),book.chapters);assert.deepEqual(readJson(f.file).chapters.slice(-2).map(c=>c.title),['第20章 新章','第21章 收束']);
+});
+}
+
 test('a proven boundary numbering error pins the old final chapter and preserves its complete edition',async t=>{
   const f=await fixture(t,{sourceOrder:true,fullCatalog:true,titles:{1:'第1章 开始',2:'第2章 经过',3:'第1章 开始',4:'第3章 转折',5:'第4章 后续'}});
   const book={...f.book,chapters:[1,2,4,5].map((n,i)=>({...formatChapterForExport(f.raw(n)),chapter_number:i+1,sourceChapterNumber:n,sourceChapterUrl:f.raw(n).link}))};

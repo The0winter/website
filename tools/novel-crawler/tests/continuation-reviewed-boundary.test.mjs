@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import {acquire, localBookState, validateSpec, extractionHash} from '../core.mjs';
-import {continuationKey, createContinuationReviewer, recordContinuationAnchorReview} from '../continuation.mjs';
+import {continuationKey, createContinuationReviewer, recordContinuationAnchorReview, recordContinuationSourceDefect} from '../continuation.mjs';
 import {atomicWrite, hash, readJson} from '../storage.mjs';
 
 const body = n => Array.from({length:180}, (_,i) => String.fromCodePoint(0x4e00+n*200+i)).join('').repeat(4);
@@ -60,4 +60,23 @@ test('title-annotation review cannot authorize a renamed story, different ordina
     const incoming={chapter_number:4,title,content:body(4),link:f.base+'/c/4'};f.save(incoming);
     assert.throws(()=>recordContinuationAnchorReview(f.spec,f.options,{file:path.basename(f.file),oldNumber:4,newLink:incoming.link,oldHash:hash(body(4)),newHash:hash(body(4)),allowTitleAnnotationChange:true,reason:'不能凭附注选项接受其他章节'}),/同章号且标题对应/);
   }
+});
+
+test('boundary numbering with a prose variant requires a pinned explicit anchor review and preserves the old body',async t=>{
+  const f=await fixture(t);f.book.chapters[3].content=body(4).slice(2);atomicWrite(f.file,f.book);f.titles[5]='第6章 山间故事5';f.titles[6]='第7章 山间故事6';
+  assert.equal((await f.run()).structuralPass,false);
+  const sourceDir=path.join(f.options.stateDir,'continuations',continuationKey(f.spec),'sources',hash([f.spec.sourceUrl,f.options.extraction]).slice(0,24));
+  atomicWrite(path.join(sourceDir,'catalog.json'),Array.from({length:6},(_,i)=>({chapter_number:i+1,title:f.titles[i+1]||heading(i+1),link:f.base+'/c/'+(i+1)})));
+  const chapters=[4,5,6].map(n=>({chapter_number:n,title:f.titles[n]||heading(n),content:body(n),link:f.base+'/c/'+n}));chapters.forEach(f.save);
+  const evidenceFile=path.join(f.options.stateDir,'independent.json');atomicWrite(evidenceFile,{chapters,detail:'Independent complete prose and title sequence reviewed'});
+  const choice={links:chapters.map(c=>c.link),hashes:chapters.map(c=>hash(c.content)),evidenceFile,evidenceHash:hash(fs.readFileSync(evidenceFile)),reason:'完整三章顺序已核对，旧末章少字版本保留',boundary:{file:path.basename(f.file),exportHash:hash(fs.readFileSync(f.file)),chapterHash:hash(f.book.chapters.at(-1))}};
+  assert.throws(()=>recordContinuationSourceDefect(f.spec,f.options,choice),/显式衔接核对/);
+  const anchor=recordContinuationAnchorReview(f.spec,f.options,{file:path.basename(f.file),oldNumber:4,newLink:chapters[0].link,oldHash:hash(f.book.chapters[3].content),newHash:hash(chapters[0].content),reason:'完整正文确认少字旧版与现版对应，保留旧版'});
+  assert.throws(()=>recordContinuationSourceDefect(f.spec,f.options,choice),/显式衔接核对/);
+  assert.throws(()=>recordContinuationSourceDefect(f.spec,f.options,{...choice,boundary:{...choice.boundary,anchorReviewKey:'stale'}}),/显式衔接核对/);
+  const pinned={...choice,boundary:{...choice.boundary,anchorReviewKey:anchor.key}},changed={...chapters[0],content:chapters[0].content+'\n'};f.save(changed);
+  assert.throws(()=>recordContinuationSourceDefect(f.spec,f.options,{...pinned,hashes:[hash(changed.content),...choice.hashes.slice(1)]}),/显式衔接核对/);f.save(chapters[0]);
+  const decision=recordContinuationSourceDefect(f.spec,f.options,pinned);assert.equal(decision.boundary.anchorReviewKey,anchor.key);
+  const result=await acquire(f.spec,{...f.options,continuation:localBookState(f.spec,f.options).continuation,mode:'download'});
+  assert.equal(result.completeAgainstSource,true,JSON.stringify(result.failures));assert.deepEqual(readJson(f.file).chapters.slice(0,4),f.book.chapters);
 });
