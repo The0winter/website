@@ -17,7 +17,8 @@ import './forum-content.css';
 import './forum-answer-reader.css';
 
 import {FORUM_DEFAULT_FONT_SIZE,readForumFontSize,saveForumFontSize} from '@/lib/forum-reader-settings';
-import ForumSlide from './ForumSlide';
+import ForumLoadingShell from './ForumLoadingShell';
+import {afterForumNavigation} from '@/lib/forum-navigation';
 type Checkpoint = {page:number; answerId:string; offset:number};
 const authorName = (answer:ForumReply) => answer.source?.author || answer.author.name || '书友';
 const unique = (rows:ForumReply[]) => rows.filter((row, index) => rows.findIndex(item => item.id === row.id) === index);
@@ -92,7 +93,7 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
         }
         setQuestion(post); setAnswers(rows); setPage(lastPage); setHasMore(more);
         setActiveId(rows[0]?.id || '');
-        if (openComments && rows[0]) setCommentId(rows[0].id);
+        if (openComments && rows[0]) void afterForumNavigation().then(ready=>{if(ready&&token===generation.current)setCommentId(rows[0].id);});
       } catch (error) {if (token === generation.current) setError(error instanceof Error ? error.message : '回答加载失败，请重试');}
       finally {if (token === generation.current) setLoading(false);}
     }
@@ -212,12 +213,13 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
   function writeAnswer() {if (requireLogin()) {setWriteError(''); setDialog('write');}}
   const canNext = active && (answers.findIndex(answer => answer.id === active.id) < answers.length - 1 || hasMore);
 
-  return <div className="forum-reading qa-reader" style={{'--qa-font-size':`${fontSize}px`} as CSSProperties}>
+  if(loading)return <ForumLoadingShell/>;
+  return <div className="forum-reading qa-reader" data-forum-document={initialAnswerId||questionId} tabIndex={-1} style={{'--qa-font-size':`${fontSize}px`} as CSSProperties}>
     <nav className="qa-topbar" aria-label="问答阅读导航"><div>
       <Link href="/forum" aria-label="返回问答首页" className="qa-icon-button"><ArrowLeft size={24}/></Link>
       <button className="qa-write-button" onClick={writeAnswer} disabled={!question}><PenLine size={18}/><span>写回答</span></button>
     </div></nav>
-    {loading ? <div className="qa-loading" role="status">正在加载回答…</div> : error || !question ? <div className="qa-loading" role="alert">{error || '问题不存在'}<button onClick={() => setRetry(value => value + 1)}>重新加载</button></div> : <ForumSlide className="qa-layout" checkpointKey={positionKey}>
+    {error || !question ? <div className="qa-loading" role="alert">{error || '问题不存在'}<button onClick={() => setRetry(value => value + 1)}>重新加载</button></div> : <div className="qa-layout">
       <section className="qa-main" aria-label="问题与回答">
         <header className="qa-question"><h1>{question.title}</h1><p className="qa-answer-count">{question.comments} 个回答</p></header>
         <div className="qa-answer-stream" aria-label="连续回答">
@@ -244,7 +246,7 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
         <button className="qa-side-link" onClick={() => setDialog('settings')}><MoreHorizontal size={18}/>阅读设置</button>
         {question.bookId && <Link className="qa-side-link" href={`/book/${question.bookId}`}>查看相关书籍</Link>}
       </aside>
-    </ForumSlide>}
+    </div>}
     {active && !loading && !error && <>
       <footer className="qa-actionbar" role="group" aria-label="当前回答操作" data-active-answer={active.id}><div>
         <button className="qa-current-author" onClick={() => setDialog('answers')} aria-label={`当前回答：${authorName(active)}，查看全部回答`}><Avatar answer={active}/><span>{authorName(active)}</span></button>

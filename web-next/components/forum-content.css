@@ -47,7 +47,7 @@
 .forum-reading a:focus-visible,.forum-entry a:focus-visible { outline:2px solid var(--forum-accent); outline-offset:4px; border-radius:3px; }
 .book-community[data-discussions=true] { background:#fff; }.dark .book-community[data-discussions=true] { background:#1c2026; }
 .book-articles .forum-entry { padding-inline:0; }.book-articles .forum-entry-list { border-radius:0; }
-/* Route entry uses one bounded ForumSlide surface, never one layer per row. */
+/* Only the incoming loading shell moves; loaded feed rows and prose stay still. */
 :is(.forum-page,.forum-reading,.forum-compose) :is(button,a) { transition:color .4s ease,background-color .4s ease,border-color .4s ease,box-shadow .4s ease; }
 :is(.forum-page,.forum-reading,.forum-compose) [class*="transition-"] { transition-duration:.4s; }
 .forum-article-settings { animation:forum-popover-in .4s ease both; transform-origin:top right; }

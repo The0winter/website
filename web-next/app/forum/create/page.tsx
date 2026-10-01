@@ -1,6 +1,5 @@
 'use client';
 import '@/components/forum-content.css';
-import ForumSlide from '@/components/ForumSlide';
 import {LoadingLogo, LoadingText} from '@/components/BrandLoading';
 
 import { Suspense, useMemo, useState } from 'react';
@@ -123,7 +122,7 @@ function CreatePostContent() {
         </div>
       </div>
 
-      <ForumSlide className="max-w-[860px] mx-auto mt-4 md:mt-8 px-4">
+      <div className="max-w-[860px] mx-auto mt-4 md:mt-8 px-4">
         <div className="flex bg-[#edf0f3] p-1 rounded-xl mb-4 md:mb-6 w-full md:w-fit">
           <button
             onClick={() => setType('question')}
@@ -178,7 +177,7 @@ function CreatePostContent() {
             <span className="text-xs text-[#98a2b3]">{parsedTags.length}/{TAG_MAX}</span>
           </div>
         </div>
-      </ForumSlide>
+      </div>
 
       {showConfirm && (
         <div className="forum-compose-confirm fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">

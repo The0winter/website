@@ -1,5 +1,5 @@
 'use client';
-import Link from 'next/link';
+import Link from './ForumLink';
 import {memo} from 'react';
 import {ArrowUpRight, MessageCircle, ThumbsUp, X} from 'lucide-react';
 import type {ForumPost} from '@/lib/api';

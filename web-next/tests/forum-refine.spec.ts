@@ -52,7 +52,7 @@ for(const width of [320,390,1440])test(`${width}px reader controls and comments 
   expect(await bookSheet.evaluate(node=>{const s=getComputedStyle(node),r=node.getBoundingClientRect();return {width:r.width,height:r.height,radius:s.borderRadius,background:s.backgroundColor};})).toEqual(shape);
   await bookSheet.getByRole('button',{name:'关闭全部评论'}).click();await expect(bookSheet).toHaveCount(0);
 });
-test('long-answer entry animates one bounded surface and releases it after 400ms',async({page},info)=>{
+test('direct long-answer loading never animates or clones the finished prose',async({page},info)=>{
   await page.setViewportSize({width:390,height:844});const row=await entry(page);
   await page.addInitScript(()=>{
     const animate=Element.prototype.animate,clone=Node.prototype.cloneNode;
@@ -72,10 +72,7 @@ test('long-answer entry animates one bounded surface and releases it after 400ms
   await expect(page.locator('.qa-answer')).toHaveCount(20);
   await expect(page.locator('[data-forum-entering]')).toHaveCount(0);
   const metrics=await page.evaluate(()=>({motion:(window as unknown as {forumMotion:{height:number;viewport:number;duration:number;frames:Record<string,string>[]}[]}).forumMotion,clones:(window as unknown as {forumClones:number}).forumClones}));
-  expect(metrics.motion).toHaveLength(1);expect(metrics.clones).toBe(0);
-  expect(metrics.motion[0].height).toBeLessThanOrEqual(metrics.motion[0].viewport);
-  expect(metrics.motion[0].duration).toBe(400);
-  expect(metrics.motion[0].frames.every(frame=>Object.keys(frame).every(key=>key==='transform'))).toBe(true);
+  expect(metrics.motion).toHaveLength(0);expect(metrics.clones).toBe(0);
   expect(await page.locator('.qa-layout').evaluate(node=>getComputedStyle(node).maxHeight)).toBe('none');
   expect(await page.locator('.qa-layout').evaluate(node=>getComputedStyle(node).transform)).toBe('none');
   await info.attach('verified-motion-cost',{body:JSON.stringify(metrics),contentType:'application/json'});

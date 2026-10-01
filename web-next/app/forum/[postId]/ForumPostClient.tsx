@@ -27,7 +27,7 @@ import {
 import { forumApi, ForumComment, ForumPost, ForumReply } from '@/lib/api';
 
 import {FORUM_DEFAULT_FONT_SIZE,readForumFontSize,saveForumFontSize} from '@/lib/forum-reader-settings';
-import ForumSlide from '@/components/ForumSlide';
+import ForumLoadingShell from '@/components/ForumLoadingShell';
 
 const THEMES = {
   light: {
@@ -375,19 +375,19 @@ function PostContent() {
   }, {});
 
   if (loading) {
-    return <div className={`min-h-screen ${currentTheme.bg} pt-20 text-center ${currentTheme.textSub}`}>加载中...</div>;
+    return <ForumLoadingShell/>;
   }
 
   if (errorMsg) {
-    return <div role="alert" className={`min-h-screen ${currentTheme.bg} flex flex-col gap-4 items-center justify-center ${currentTheme.textSub}`}><p>{errorMsg}</p><button className="underline" onClick={() => setRetry(value => value + 1)}>重试</button><Link href="/forum">返回论坛</Link></div>;
+    return <div role="alert" data-forum-document={postId} tabIndex={-1} className={`min-h-screen ${currentTheme.bg} flex flex-col gap-4 items-center justify-center ${currentTheme.textSub}`}><p>{errorMsg}</p><button className="underline" onClick={() => setRetry(value => value + 1)}>重试</button><Link href="/forum">返回论坛</Link></div>;
   }
 
   if (!answer || !question) {
-    return <div className={`min-h-screen ${currentTheme.bg} flex items-center justify-center ${currentTheme.textSub}`}>内容不存在</div>;
+    return <div data-forum-document={postId} tabIndex={-1} className={`min-h-screen ${currentTheme.bg} flex items-center justify-center ${currentTheme.textSub}`}>内容不存在</div>;
   }
 
   return (
-    <div className={`forum-reading min-h-screen ${currentTheme.bg} pb-24 font-sans transition-colors duration-300`}>
+    <div data-forum-document={postId} tabIndex={-1} className={`forum-reading min-h-screen ${currentTheme.bg} pb-24 font-sans transition-colors duration-300`}>
       <div
         className={`sticky top-0 z-40 border-b backdrop-blur-md ${currentTheme.border} ${themeMode === 'light' ? 'bg-white/92' : 'bg-[#121417]/92'}`}
       >
@@ -473,7 +473,7 @@ function PostContent() {
         </div>
       </div>
 
-      <ForumSlide className="forum-reading-shell max-w-[860px] mx-auto mt-3 md:mt-6 px-4">
+      <div className="forum-reading-shell max-w-[860px] mx-auto mt-3 md:mt-6 px-4">
         <div className="forum-question-heading mb-4">
           {question.bookId && <Link className="inline-block text-xs text-[var(--forum-muted)] mb-3" href={`/book/${question.bookId}`}>《{question.bookTitle || '相关书籍'}》 · 书籍讨论</Link>}
           <Link href={isArticle ? `/forum/${question.id}` : `/forum/question/${question.id}`}>
@@ -681,7 +681,7 @@ function PostContent() {
         )}
 
         <div className="h-8"></div>
-      </ForumSlide>
+      </div>
     </div>
   );
 }
@@ -689,7 +689,7 @@ function PostContent() {
 export default function PostDetailPage() {
 
   return (
-    <Suspense fallback={<div>加载中...</div>}>
+    <Suspense fallback={<ForumLoadingShell/>}>
       <PostRoute />
     </Suspense>
   );

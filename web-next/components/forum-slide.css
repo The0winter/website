@@ -1,2 +1,0 @@
-:is(.forum-reading,.forum-page,.forum-compose) { overflow-x:clip; }
-[data-forum-entering] { max-height:var(--forum-slide-height); overflow:clip; contain:paint; }

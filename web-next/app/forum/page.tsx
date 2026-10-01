@@ -18,7 +18,7 @@ import {sectionSwipeThreshold} from '@/lib/section-swipe';
 import './forum.css';
 
 import ForumPostList from '@/components/ForumPostList';
-import ForumSlide from '@/components/ForumSlide';
+import ForumLink from '@/components/ForumLink';
 import {forumEntryHref, plainForumText} from '@/lib/forum-presentation';
 import ForumTabs, {FORUM_TABS as TABS, type FeedTab} from '@/components/ForumTabs';
 import ForumFeedbackSheet from '@/components/ForumFeedbackSheet';
@@ -221,23 +221,23 @@ export default function ForumPage() {
 
               {/* 右侧：纯文本内容区域（占满剩余宽度） */}
               <div className="flex-1 min-w-0 flex flex-col justify-between">
-                <Link href={answerLink} className="block">
+                <ForumLink href={answerLink} className="block">
                   <h2
                     className={`font-bold leading-snug tracking-tight ${currentTheme.textMain} hover:text-[var(--home-accent)] transition-colors line-clamp-2`}
                     style={{ fontSize: `${fontSize + 2}px` }}
                   >
                     {topReply?.title || post.title}
                   </h2>
-                </Link>
+                </ForumLink>
 
-                <Link href={answerLink} className="block mt-1.5 md:mt-2">
+                <ForumLink href={answerLink} className="block mt-1.5 md:mt-2">
                   <p
                     className={`leading-relaxed line-clamp-1 md:line-clamp-2 ${currentTheme.textSub} hover:text-[var(--home-text)] transition-colors`}
                     style={{ fontSize: `${fontSize - 1}px` }}
                   >
                     {excerpt}
                   </p>
-                </Link>
+                </ForumLink>
 
                 {/* 底部数据：热度、分享等 */}
                 <div className={`mt-2.5 flex items-center gap-4 text-[13px] ${currentTheme.textSub}`}>
@@ -246,7 +246,7 @@ export default function ForumPage() {
                     <svg className="w-3.5 h-3.5 text-[var(--home-accent)] fill-current" viewBox="0 0 24 24"><path d="M17.5 12.5c0 2.8-2.2 5.5-5.5 5.5s-5.5-2.7-5.5-5.5c0-2.8 5.5-8.5 5.5-8.5s5.5 5.7 5.5 8.5z" /></svg>
                     {formatCount(heat)} 热度
                   </span>
-                  <Link href={post.type === 'question' ? `/forum/question/${realId}` : answerLink} className="hover:text-[var(--home-accent)] transition-colors">{post.type === 'question' ? '查看问题' : '阅读文章'}</Link>
+                  <ForumLink href={post.type === 'question' ? `/forum/question/${realId}` : answerLink} className="hover:text-[var(--home-accent)] transition-colors">{post.type === 'question' ? '查看问题' : '阅读文章'}</ForumLink>
                 </div>
               </div>
             </article>
@@ -278,7 +278,7 @@ return (
       <div className="max-w-[1040px] mx-auto px-0 md:px-4 mt-0 md:mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px] gap-5 md:gap-6">
         
         {/* A single feed tree: mobile slides between panels; desktop shows the selected panel. */}
-        <ForumSlide className="forum-mobile-feed w-full relative overflow-hidden" enabled={!loadingState.recommend && feedback.ready}>
+        <div className="forum-mobile-feed w-full relative overflow-hidden" style={{touchAction:'pan-y pinch-zoom'}}>
           <div 
             ref={track} className="forum-feed-track"
             style={{ transform: `translateX(calc(-${activeIndex * 100}% + var(--forum-drag, 0px)))` }}
@@ -290,7 +290,7 @@ return (
               </div>
             ))}
           </div>
-        </ForumSlide>
+        </div>
 
         <aside className="hidden md:flex flex-col gap-6">
           <div className={`${currentTheme.card} rounded-2xl border ${currentTheme.border} p-5 shadow-sm`}>
@@ -332,7 +332,7 @@ return (
                   <span className={`text-[15px] font-bold w-4 text-center leading-5 ${index < 3 ? 'text-[var(--home-accent)]' : 'text-[var(--home-muted)]'}`}>
                     {index + 1}
                   </span>
-                  <Link href={`/forum/question/${topic.id}`} className="text-[14px] text-[var(--home-muted)] leading-snug group-hover:text-[var(--home-accent)] group-hover:underline line-clamp-2">{topic.title}</Link>
+                  <ForumLink href={`/forum/question/${topic.id}`} className="text-[14px] text-[var(--home-muted)] leading-snug group-hover:text-[var(--home-accent)] group-hover:underline line-clamp-2">{topic.title}</ForumLink>
                 </li>
               ))}
             </ul>
