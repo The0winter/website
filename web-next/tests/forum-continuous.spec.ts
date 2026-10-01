@@ -123,7 +123,7 @@ test('pagination recovers from failure, keeps a deep-linked answer unique, and r
 test('answer composer keeps its draft and has no title field', async ({page}) => {
   test.skip(publicRun, 'No production writes.');
   const row = await entry(page); await login(page);
-  await page.goto(`${base}/forum/question/${row.id}`);
+  await page.goto(`${base}/forum/${row.entryId}?fromQuestion=${row.id}`);
   await page.locator('.qa-topbar').getByRole('button',{name:'写回答'}).click();
   const dialog = page.getByRole('dialog',{name:'写回答'});
   await expect(dialog.locator('input')).toHaveCount(0);

@@ -3,16 +3,18 @@ import ShareArrow from '@/components/ShareArrow';
 import {useCallback, useEffect, useRef, useState, type CSSProperties} from 'react';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
-import {ArrowLeft, ChevronsDown, List, MessageCircle, PenLine, MoreHorizontal, ThumbsUp} from 'lucide-react';
+import {ArrowLeft, ChevronRight, ChevronsDown, List, MessageCircle, SquarePen, MoreHorizontal, ThumbsUp} from 'lucide-react';
 import {useAuth} from '@/contexts/AuthContext';
 import {useReadingSettings} from '@/contexts/ReadingSettingsContext';
 import {forumApi, type ForumPost, type ForumReply} from '@/lib/api';
-import {plainForumText, textToForumHtml} from '@/lib/forum-presentation';
+import {plainForumText} from '@/lib/forum-presentation';
 import {refreshForum} from '@/lib/forum-cache';
 import {useForumView} from '@/lib/useForumView';
 import ForumReaderDialog from './ForumReaderDialog';
 import ForumReplyComments from './ForumReplyComments';
 import ForumSourceCredit from './ForumSourceCredit';
+import ForumAnswerComposer from './ForumAnswerComposer';
+import ForumLink from './ForumLink';
 import './forum-content.css';
 import './forum-answer-reader.css';
 
@@ -43,23 +45,18 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
   const [dialog, setDialog] = useState<'answers'|'settings'|'write'|null>(null);
   const [commentId, setCommentId] = useState<string|null>(null);
   const [fontSize, setFontSize] = useState(FORUM_DEFAULT_FONT_SIZE);
-  const [draft, setDraft] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [writeError, setWriteError] = useState('');
   const [notice, setNotice] = useState('');
   const [shareUrl, setShareUrl] = useState('');
   const [pendingLikes, setPendingLikes] = useState<Set<string>>(new Set());
   const cards = useRef(new Map<string, HTMLElement>());
   const sentinel = useRef<HTMLDivElement>(null);
-  const generation = useRef(0), moreLock = useRef(false), submitLock = useRef(false);
+  const generation = useRef(0), moreLock = useRef(false);
   const likeLocks = useRef(new Set<string>());
   const checkpoint = useRef<Checkpoint|null>(null), restored = useRef(false);
   const positionKey = `forum-position:${questionId}:${initialAnswerId || 'all'}`;
-  const draftKey = `forum-draft:${user?.id || 'guest'}:${questionId}`;
   useForumView(question?.id);
 
   useEffect(() => {setFontSize(readForumFontSize());}, []);
-  useEffect(() => {try {setDraft(sessionStorage.getItem(draftKey) || '');} catch { /* Optional draft recovery. */ }}, [draftKey]);
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(''), 3500);
@@ -194,34 +191,18 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
     setFontSize(size);
     saveForumFontSize(size);
   }
-  function changeDraft(value:string) {
-    setDraft(value);
-    try {sessionStorage.setItem(draftKey, value);} catch { /* The draft remains in memory. */ }
-  }
-  async function submit() {
-    if (!draft.trim() || submitLock.current || !requireLogin()) return;
-    submitLock.current = true; setSubmitting(true); setWriteError('');
-    try {
-      const created = await forumApi.addReply(questionId, {content:textToForumHtml(draft.trim())});
-      const answer:ForumReply = {id:created.id, content:created.content, votes:created.likes || 0, comments:created.comments || 0, time:created.createdAt, hasLiked:false, author:{id:user!.id, name:user!.username, avatar:user!.avatar || '', bio:''}};
-      setAnswers(previous => unique([...previous, answer]));
-      setQuestion(previous => previous ? {...previous, comments:previous.comments + 1} : previous);
-      changeDraft(''); setDialog(null); refreshForum(); jumpTo(created.id); setNotice('回答已发布');
-    } catch (error) {setWriteError(error instanceof Error ? error.message : '回答发布失败，请重试');}
-    finally {submitLock.current = false; setSubmitting(false);}
-  }
-  function writeAnswer() {if (requireLogin()) {setWriteError(''); setDialog('write');}}
+  function writeAnswer() {if (requireLogin()) setDialog('write');}
   const canNext = active && (answers.findIndex(answer => answer.id === active.id) < answers.length - 1 || hasMore);
 
   if(loading)return <ForumLoadingShell/>;
   return <div className="forum-reading qa-reader" data-forum-document={initialAnswerId||questionId} tabIndex={-1} style={{'--qa-font-size':`${fontSize}px`} as CSSProperties}>
     <nav className="qa-topbar" aria-label="问答阅读导航"><div>
       <Link href="/forum" aria-label="返回问答首页" className="qa-icon-button"><ArrowLeft size={24}/></Link>
-      <button className="qa-write-button" onClick={writeAnswer} disabled={!question}><PenLine size={18}/><span>写回答</span></button>
+      <button className="qa-write-button" onClick={writeAnswer} disabled={!question}><SquarePen size={17} aria-hidden="true"/><span>写回答</span></button>
     </div></nav>
     {error || !question ? <div className="qa-loading" role="alert">{error || '问题不存在'}<button onClick={() => setRetry(value => value + 1)}>重新加载</button></div> : <div className="qa-layout">
       <section className="qa-main" aria-label="问题与回答">
-        <header className="qa-question"><h1>{question.title}</h1><p className="qa-answer-count">{question.comments} 个回答</p></header>
+        <header className="qa-question"><h1><ForumLink href={`/forum/question/${questionId}`}>{question.title}</ForumLink></h1><ForumLink className="qa-answer-count" href={`/forum/question/${questionId}`}>{question.comments} 个回答<ChevronRight size={16} aria-hidden="true"/></ForumLink></header>
         <div className="qa-answer-stream" aria-label="连续回答">
           {answers.map(answer => <article className="qa-answer" key={answer.id} data-answer-id={answer.id} ref={node => {if (node) cards.current.set(answer.id, node); else cards.current.delete(answer.id);}} aria-label={`${authorName(answer)}的回答`}>
             <header className="qa-author"><Avatar answer={answer}/><strong>{authorName(answer)}</strong></header>
@@ -241,7 +222,7 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
       </section>
       <aside className="qa-sidebar" aria-label="问题与回答导航">
         <h2>{question.comments} 个回答</h2><p>按赞同排序 · 向下连续阅读</p>
-        <button className="qa-primary" onClick={writeAnswer}><PenLine size={17}/>写回答</button>
+        <button className="qa-primary" onClick={writeAnswer}><SquarePen size={17}/>写回答</button>
         <button className="qa-side-link" onClick={() => setDialog('answers')}><List size={18}/>浏览全部回答</button>
         <button className="qa-side-link" onClick={() => setDialog('settings')}><MoreHorizontal size={18}/>阅读设置</button>
         {question.bookId && <Link className="qa-side-link" href={`/book/${question.bookId}`}>查看相关书籍</Link>}
@@ -276,9 +257,9 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
       <p>正文大小 <strong>{fontSize}px</strong></p><div>{[16,18,20,22,24].map(size => <button key={size} aria-pressed={fontSize === size} onClick={() => changeFont(size)}>{size}</button>)}</div>
       <p>阅读主题</p><div><button aria-pressed={theme === 'light'} onClick={() => setTheme('light')}>浅色</button><button aria-pressed={theme === 'dark'} onClick={() => setTheme('dark')}>深色</button></div>
     </div></ForumReaderDialog>}
-    {dialog === 'write' && <ForumReaderDialog title="写回答" onClose={() => setDialog(null)}><form className="qa-write-form" onSubmit={event => {event.preventDefault(); void submit();}}>
-      <p>{question?.title}</p><textarea aria-label="回答内容" placeholder="直接写下你的回答…" value={draft} onChange={event => changeDraft(event.target.value)} maxLength={12000} onKeyDown={event => {if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {event.preventDefault(); void submit();}}}/>
-      {writeError && <p className="qa-error" role="alert">{writeError}</p>}<div><span>{draft.length} / 12000</span><button className="qa-primary" disabled={submitting || !draft.trim()}>{submitting ? '发布中…' : '发布回答'}</button></div>
-    </form></ForumReaderDialog>}
+    {dialog === 'write' && question && <ForumAnswerComposer question={question} onClose={()=>setDialog(null)} onPublished={answer=>{
+      setAnswers(previous=>unique([...previous,answer]));setQuestion(previous=>previous?{...previous,comments:previous.comments+1}:previous);
+      setDialog(null);jumpTo(answer.id);setNotice('回答已发布');
+    }}/>}
   </div>;
 }

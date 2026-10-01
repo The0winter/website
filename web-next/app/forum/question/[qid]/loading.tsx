@@ -1,1 +1,1 @@
-export {default} from '@/components/ForumLoadingShell';
+export {default} from '@/components/ForumQuestionLoading';

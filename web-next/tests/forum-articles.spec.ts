@@ -134,8 +134,8 @@ test('publish a book question, answer it, and keep standalone article comments w
   await page.getByRole('button',{name:'发布',exact:true}).click();
   await page.getByRole('button',{name:'确认发布',exact:true}).click();
   await expect(page).toHaveURL(/\/forum\/question\/[a-f0-9]{24}$/);
-  await expect(page.locator('.qa-question h1')).toHaveText(`哪些情节值得重读 ${stamp}？`);
-  await page.locator('.qa-topbar').getByRole('button',{name:'写回答',exact:true}).click();
+  await expect(page.locator('.fq-heading h1')).toHaveText(`哪些情节值得重读 ${stamp}？`);
+  await page.locator('.fq-actions').getByRole('button',{name:'写回答',exact:true}).click();
   await page.getByRole('textbox',{name:'回答内容'}).fill('我的回答包含 <普通文字>，换行后继续。\n这是第二段。');
   await page.getByRole('button',{name:'发布回答',exact:true}).click();
   await expect(page.locator('.qa-answer')).toHaveCount(1);

@@ -401,6 +401,10 @@ export const forumApi = {
   getReply: async(postId:string,replyId:string):Promise<ForumReply|null>=>{
     const rows=await apiCall<ForumReply[]>(`/forum/posts/${postId}/replies?target=${encodeURIComponent(replyId)}`);return rows[0]||null;
   },
+  // Question lists receive plain excerpts instead of every answer's full HTML.
+  getAnswerPreviews: async(postId:string,page=1,sort:'default'|'latest'='default'):Promise<Array<ForumReply & {excerpt:string;thumbnail?:string}>>=>{
+    return apiCall(`/forum/posts/${postId}/replies?page=${page}&limit=20&sort=${sort}&view=preview`);
+  },
 
   createReply: async (postId: string, content: string): Promise<ForumReply> => {
     return apiCall<ForumReply>(`/forum/posts/${postId}/replies`, {

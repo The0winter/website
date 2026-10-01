@@ -80,11 +80,12 @@ test('entering forum keeps the navigation white even while the route is delayed'
 test('answer count, divider, curved share icons and reduced motion',async ({page},info) => {
   await page.setViewportSize({width:390,height:844});
   const feed = await (await page.request.get(base+'/api/forum/posts?view=answers')).json();
-  const qid = feed.find((row:{type:string}) => row.type === 'question').id;
+  const entry = feed.find((row:{type:string}) => row.type === 'question');
+  const qid = entry.id;
   await page.route('**/api/forum/posts/'+qid,route=>route.fulfill({json:{...rows[0],id:qid}}));
-  await page.route(`**/api/forum/posts/${qid}/replies?*`,route=>route.fulfill({json:rows.map((row,i)=>({...row.topReply,time:'2026-09-30T00:00:00Z',content:`<p>${'完整回答的文字。'.repeat(80)}</p>`,author:{...row.topReply.author,bio:'',avatar:''},id:'answer-'+i}))}));
+  await page.route(`**/api/forum/posts/${qid}/replies?*`,route=>route.fulfill({json:rows.map((row,i)=>({...row.topReply,time:'2026-09-30T00:00:00Z',content:`<p>${'完整回答的文字。'.repeat(80)}</p>`,author:{...row.topReply.author,bio:'',avatar:''},id:i?'answer-'+i:entry.entryId}))}));
   await page.route('**/api/forum/posts/*/views',route=>route.fulfill({json:{counted:false}}));
-  await page.goto(base+'/forum/question/'+qid);
+  await page.goto(`${base}/forum/${entry.entryId}?fromQuestion=${qid}`);
   await expect(page.locator('.qa-answer-count')).toHaveText('4 个回答');
   await expect(page.locator('.qa-question')).toHaveCSS('border-bottom-width','1px');
   await expect(page.getByRole('button',{name:'分享当前回答'}).locator('svg')).toHaveAttribute('data-share-arrow','curved');

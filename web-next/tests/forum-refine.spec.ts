@@ -68,7 +68,7 @@ test('direct long-answer loading never animates or clones the finished prose',as
   });
   const answers=Array.from({length:20},(_,i)=>({...row.topReply,id:String(i).padStart(24,'0'),content:`<p>${'长回答滚动性能验证。'.repeat(600)}</p>`,time:'2026-10-01T00:00:00Z'}));
   await page.route(`**/api/forum/posts/${row.id}/replies?*`,route=>route.fulfill({json:answers}));
-  await page.goto(`${base}/forum/question/${row.id}`);
+  await page.goto(`${base}/forum/${row.entryId}?fromQuestion=${row.id}`);
   await expect(page.locator('.qa-answer')).toHaveCount(20);
   await expect(page.locator('[data-forum-entering]')).toHaveCount(0);
   const metrics=await page.evaluate(()=>({motion:(window as unknown as {forumMotion:{height:number;viewport:number;duration:number;frames:Record<string,string>[]}[]}).forumMotion,clones:(window as unknown as {forumClones:number}).forumClones}));

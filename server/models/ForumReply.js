@@ -33,6 +33,7 @@ const forumReplySchema = new mongoose.Schema({
 }, { timestamps: true });
 
 forumReplySchema.index({postId:1,likes:-1,createdAt:-1,_id:1});
+forumReplySchema.index({postId:1,createdAt:-1,_id:-1});
 forumReplySchema.index({createdAt:-1,_id:-1});
 forumReplySchema.index({likes:-1,createdAt:-1,_id:-1});
 export default mongoose.model('ForumReply', forumReplySchema);

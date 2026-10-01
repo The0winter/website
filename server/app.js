@@ -1,5 +1,5 @@
 import { forumWrites } from './routes/forum-writes.js';
-import {forumFeed} from './services/forum-feed.js';
+import {forumFeed,forumExcerpt} from './services/forum-feed.js';
 import {chapterResponse} from './services/chapter-storage.js';
 import {pagination} from './services/pagination.js';
 import {createRequestMetrics,allowMetrics} from './services/observability.js';
@@ -438,15 +438,16 @@ app.get('/api/forum/posts/:id/replies', async (req, res) => {
     if(parent?.bookId && !await Book.exists({_id:parent.bookId,deletedAt:null,visibility:{$ne:'private'}})) return res.status(404).json({error:'帖子不存在'});
     if(req.query.target){if(typeof req.query.target!=='string'||!/^[a-f0-9]{24}$/i.test(req.query.target))return res.status(400).json({error:'回答ID无效'});filter._id=req.query.target;}
     const replies = await ForumReply.find(filter)
-      .populate('author', 'username _id')
-      .sort({ likes: -1, createdAt: -1, _id:1 }).skip(skip).limit(limit).maxTimeMS(3000)
+      .populate('author', 'username _id avatar')
+      .sort(req.query.sort==='latest' ? {createdAt:-1,_id:-1} : {likes:-1,createdAt:-1,_id:1}).skip(skip).limit(limit).maxTimeMS(3000)
       .lean();
 
     const formattedReplies = replies.map(r => ({
       id: r._id,
       title: r.title,
       source: r.source,
-      content: r.content,
+      content: req.query.view==='preview' ? '' : r.content,
+      ...(req.query.view==='preview' ? {excerpt:forumExcerpt(r.content),thumbnail:/<img\b[^>]*\bsrc=["']((?:https?:\/\/|\/)[^"']+)["']/i.exec(r.content||'')?.[1]} : {}),
       votes: r.likes,
       hasLiked: currentUserId
         ? (r.likedBy || []).some(uid => String(uid) === currentUserId)
@@ -456,7 +457,7 @@ app.get('/api/forum/posts/:id/replies', async (req, res) => {
       author: {
         name: r.source?.author || r.author?.username,
         bio: '暂无介绍', // 以后可以在 User 表加 bio 字段
-        avatar: '', 
+        avatar: r.source ? '' : r.author?.avatar || '',
         id: r.author?._id
       }
     }));

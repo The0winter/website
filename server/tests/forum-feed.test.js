@@ -86,6 +86,21 @@ test('book questions share distinct answer entries, preserve source text, and ke
     assert.equal((await request(`/api/forum/posts/${fixture.questionId}/replies?target=${reply}`)).data[0].comments, 1);
     assert.equal((await request(`/api/books/${fixture.bookId}/discussions`)).data.items.find(row => row.entryId === reply).topReply.comments, 1);
 
+    // Latest is ordered before pagination; previews remain small and preserve source metadata.
+    const newest=fixture.answerIds[1];
+    await Reply.collection.updateOne({_id:new mongoose.Types.ObjectId(reply)},{$set:{createdAt:new Date('2020-01-01')}});
+    await Reply.collection.updateOne({_id:new mongoose.Types.ObjectId(newest)},{$set:{createdAt:new Date('2030-01-01'),content:'<p>预览&amp;文字。'+('正文。'.repeat(500))+'</p><img src="https://example.test/answer.png"/>'}});
+    assert.equal((await request(`/api/forum/posts/${fixture.questionId}/replies?limit=2`)).data[0].id,reply);
+    const latest=(await request(`/api/forum/posts/${fixture.questionId}/replies?sort=latest`)).data;
+    assert.equal(latest[0].id,newest);
+    const previews=(await Promise.all([1,2,3].map(page=>request(`/api/forum/posts/${fixture.questionId}/replies?sort=latest&view=preview&limit=2&page=${page}`)))).flatMap(result=>result.data);
+    assert.deepEqual(previews.map(row=>row.id),latest.map(row=>row.id));
+    assert.ok(previews[0].excerpt.startsWith('预览&文字。'));
+    assert.ok(previews.every(row=>row.content===''&&row.excerpt.length<=200));
+    assert.equal(previews[0].thumbnail,'https://example.test/answer.png');
+    assert.deepEqual(previews[0].source,latest[0].source);
+    assert.ok(latest[0].content.length>1000,'The full answer remains intact');
+
     await Book.updateOne({_id:fixture.bookId}, {$set:{visibility:'private'}});
     assert.equal((await request(`/api/books/${fixture.bookId}/discussions`)).status, 404);
     assert.equal((await request(`/api/forum/posts/${fixture.questionId}`)).status, 404);
