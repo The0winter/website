@@ -8,6 +8,7 @@ import {registerMobileSectionShells} from '@/lib/mobile-section-snapshot';
 import {invalidateMobileSectionPreview} from '@/lib/mobile-section-navigation';
 import {getLibrarySnapshot, serverLibrarySnapshot, subscribeLibrary, type LibrarySort} from '@/lib/library-cache';
 import {getForumSnapshot, serverForumSnapshot, subscribeForum} from '@/lib/forum-cache';
+import {isForumRecommended, subscribeForumFeedback, useForumFeedback} from '@/lib/forum-feedback';
 import {useAuth} from '@/contexts/AuthContext';
 import {useStoredState} from '@/lib/useStoredState';
 import ShelfBookContent from './ShelfBookContent';
@@ -26,8 +27,10 @@ export default function MobileSectionShells() {
   const {user} = useAuth();
   const [sort] = useStoredState<LibrarySort>('library-sort', 'combined', value => value === 'combined' || value === 'read' || value === 'updated');
   const forum = useSyncExternalStore(subscribeForum, getForumSnapshot, serverForumSnapshot);
+  const feedback = useForumFeedback(user?.id || 'guest');
   const shelf = useSyncExternalStore(subscribeLibrary, () => getLibrarySnapshot({userId: user?.id || '', tab: 'shelf', sort, page: 1}), serverLibrarySnapshot);
   useEffect(() => subscribeForum(() => invalidateMobileSectionPreview('/forum')), []);
+  useEffect(() => subscribeForumFeedback(() => invalidateMobileSectionPreview('/forum')), []);
   useEffect(() => {invalidateMobileSectionPreview('/library');}, [shelf]);
   const [shadow, setShadow] = useState<ShadowRoot | null>(null);
   const mounted = useRef<{host: HTMLDivElement; root: ShadowRoot} | null>(null);
@@ -60,7 +63,8 @@ export default function MobileSectionShells() {
     <div data-mobile-section-shell="/forum" className="forum-page min-h-screen font-sans">
       <div className="forum-masthead"><div data-section-shell-header/></div>
       <ForumTabs/>
-      <ForumPostList posts={forum.posts.recommend} loading={forum.loading.recommend}/>
+      {feedback.rows.length > 0 && <div className="forum-feedback-manage"><button>推荐偏好 · {feedback.rows.length}</button></div>}
+      <ForumPostList posts={forum.posts.recommend?.filter(post => isForumRecommended(post,feedback.rows))} loading={forum.loading.recommend || !feedback.ready} onFeedback={() => {}}/>
     </div>
     <div data-mobile-section-shell="/" className="mobile-home">
       <div data-section-shell-header/>

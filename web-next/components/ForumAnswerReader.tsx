@@ -2,7 +2,7 @@
 import {useCallback, useEffect, useRef, useState, type CSSProperties} from 'react';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
-import {ArrowLeft, ChevronDown, ChevronsDown, List, MessageCircle, PenLine, Settings, Share2, ThumbsUp} from 'lucide-react';
+import {ArrowLeft, ChevronDown, ChevronsDown, List, MessageCircle, PenLine, Settings, Forward, ThumbsUp} from 'lucide-react';
 import {useAuth} from '@/contexts/AuthContext';
 import {useReadingSettings} from '@/contexts/ReadingSettingsContext';
 import {forumApi, type ForumPost, type ForumReply} from '@/lib/api';
@@ -226,17 +226,17 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
     </div></nav>
     {loading ? <div className="qa-loading" role="status">正在加载回答…</div> : error || !question ? <div className="qa-loading" role="alert">{error || '问题不存在'}<button onClick={() => setRetry(value => value + 1)}>重新加载</button></div> : <div className="qa-layout">
       <section className="qa-main" aria-label="问题与回答">
-        <header className="qa-question" ref={heading}><h1>{question.title}</h1></header>
+        <header className="qa-question" ref={heading}><h1>{question.title}</h1><p className="qa-answer-count">{question.comments} 个回答</p></header>
         <div className="qa-answer-stream" aria-label="连续回答">
           {answers.map(answer => <article className="qa-answer" key={answer.id} data-answer-id={answer.id} ref={node => {if (node) cards.current.set(answer.id, node); else cards.current.delete(answer.id);}} aria-label={`${authorName(answer)}的回答`}>
-            <header className="qa-author"><Avatar answer={answer}/><strong>{authorName(answer)}</strong><button aria-label={`分享${authorName(answer)}的回答`} onClick={() => void share(answer)}><Share2 size={20}/></button></header>
+            <header className="qa-author"><Avatar answer={answer}/><strong>{authorName(answer)}</strong><button aria-label={`分享${authorName(answer)}的回答`} onClick={() => void share(answer)}><Forward size={20}/></button></header>
             <div className="forum-prose qa-body" dangerouslySetInnerHTML={{__html:answer.content}}/>
             <div className="qa-answer-date">{answer.source ? '收录于' : '发布于'} {new Date(answer.time).toLocaleDateString('zh-CN')}</div>
             <ForumSourceCredit source={answer.source}/>
             <div className="qa-inline-actions">
               <button aria-pressed={!!answer.hasLiked} disabled={pendingLikes.has(answer.id)} onClick={() => void like(answer)}><ThumbsUp size={17}/>{answer.votes} 赞同</button>
               <button onClick={() => setCommentId(answer.id)}><MessageCircle size={17}/>{answer.comments} 条评论</button>
-              <button onClick={() => void share(answer)}><Share2 size={17}/>分享</button>
+              <button onClick={() => void share(answer)}><Forward size={17}/>分享</button>
             </div>
           </article>)}
         </div>
@@ -257,7 +257,7 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
         <button className="qa-current-author" onClick={() => setDialog('answers')} aria-label={`当前回答：${authorName(active)}，查看全部回答`}><Avatar answer={active}/><span>{authorName(active)}</span></button>
         <button className="qa-vote" aria-label={active.hasLiked ? '取消赞同当前回答' : '赞同当前回答'} aria-pressed={!!active.hasLiked} disabled={pendingLikes.has(active.id)} onClick={() => void like(active)}><ThumbsUp size={20}/><span>{active.votes}</span></button>
         <button aria-label="打开当前回答评论" onClick={() => setCommentId(active.id)}><MessageCircle size={21}/><span>{active.comments}</span></button>
-        <button aria-label="分享当前回答" onClick={() => void share(active)}><Share2 size={20}/></button>
+        <button aria-label="分享当前回答" onClick={() => void share(active)}><Forward size={20}/></button>
         <button aria-label="阅读设置" onClick={() => setDialog('settings')}><Settings size={20}/></button>
       </div></footer>
       {canNext && <button className="qa-next-answer" aria-label="跳到下一篇回答" disabled={loadingMore} onClick={() => void nextAnswer()}><ChevronsDown size={25}/></button>}
@@ -266,16 +266,16 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
     {shareUrl && <ForumReaderDialog title="分享回答" onClose={() => setShareUrl('')}><div className="qa-share-fallback"><p>长按或选中下面的链接复制：</p><input aria-label="当前回答链接" readOnly value={shareUrl} onFocus={event => event.target.select()}/></div></ForumReaderDialog>}
     {commentAnswer && <ForumReplyComments key={commentAnswer.id} answer={commentAnswer} onClose={() => setCommentId(null)} requireLogin={requireLogin} onComment={() => setAnswers(previous => previous.map(answer => answer.id === commentAnswer.id ? {...answer, comments:answer.comments + 1} : answer))}/>}
     {dialog === 'answers' && question && <ForumReaderDialog title={`全部 ${question.comments} 个回答`} onClose={() => setDialog(null)}>
-      <div className="qa-dialog-scroll">
+      {dismiss => <div className="qa-dialog-scroll">
         <p className="qa-directory-question">{question.title}</p>
         {question.content && <details className="qa-question-details"><summary>问题补充</summary><div className="forum-prose" dangerouslySetInnerHTML={{__html:question.content}}/></details>}
         {question.bookId && <Link className="qa-related-book" href={`/book/${question.bookId}`}>查看相关书籍</Link>}
         <p className="qa-directory-order">赞同优先{initialAnswerId ? ' · 当前打开的回答置顶' : ''}</p>
-        {answers.map(answer => <button className="qa-directory-item" key={answer.id} aria-current={answer.id === active?.id ? 'true' : undefined} onClick={() => jumpTo(answer.id)}><strong>{authorName(answer)}</strong><span>{plainForumText(answer.content).slice(0, 95)}</span><small>{answer.votes} 赞同 · {answer.comments} 评论</small></button>)}
+        {answers.map(answer => <button className="qa-directory-item" key={answer.id} aria-current={answer.id === active?.id ? 'true' : undefined} onClick={() => dismiss(() => jumpTo(answer.id))}><strong>{authorName(answer)}</strong><span>{plainForumText(answer.content).slice(0, 95)}</span><small>{answer.votes} 赞同 · {answer.comments} 评论</small></button>)}
         {moreError && <p className="qa-error" role="alert">{moreError}</p>}
         {hasMore && <button className="qa-load-more" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? '加载中…' : '加载更多回答'}</button>}
         {!answers.length && <p className="qa-empty">还没有回答</p>}
-      </div>
+      </div>}
     </ForumReaderDialog>}
     {dialog === 'settings' && <ForumReaderDialog title="阅读设置" onClose={() => setDialog(null)}><div className="qa-settings">
       <p>正文大小 <strong>{fontSize}px</strong></p><div>{[16,18,20,22,24].map(size => <button key={size} aria-pressed={fontSize === size} onClick={() => changeFont(size)}>{size}</button>)}</div>

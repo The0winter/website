@@ -4,7 +4,7 @@
   --home-accent:var(--forum-accent); --home-accent-soft:#eaf0fa;
   background:var(--home-background); color:var(--home-text);
 }
-.forum-feed-track { display:flex; align-items:flex-start; width:100%; transition:transform 300ms ease-out; }
+.forum-feed-track { display:flex; align-items:flex-start; width:100%; transition:transform .4s cubic-bezier(.22,.68,0,1); }
 .forum-page .forum-search { --suggest-bg:var(--forum-soft); --suggest-text:var(--forum-text); --suggest-muted:var(--forum-muted); --suggest-line:var(--forum-line); --suggest-accent:var(--forum-accent); }
 .forum-page .mh-bottom { background:color-mix(in srgb,var(--forum-card) 97%,transparent); border-color:var(--forum-line); }
 .forum-page .mh-bottom a { color:var(--forum-muted); }

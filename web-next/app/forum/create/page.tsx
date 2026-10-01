@@ -1,4 +1,5 @@
 'use client';
+import '@/components/forum-content.css';
 import {LoadingLogo, LoadingText} from '@/components/BrandLoading';
 
 import { Suspense, useMemo, useState } from 'react';
@@ -96,7 +97,7 @@ function CreatePostContent() {
   };
 
   return (
-    <div className={`min-h-screen ${theme.bg} pb-24 relative font-sans`}>
+    <div className={`forum-compose min-h-screen ${theme.bg} pb-24 relative font-sans`}>
       {bookId && <p className="bg-white px-4 py-3 text-sm text-gray-600">关于《{bookTitle || "这本书"}》的{type === 'question' ? '提问' : '文章'}</p>}
       <div className="bg-white/92 backdrop-blur-md border-b border-[#e6e8eb] sticky top-0 z-30">
         <div className="max-w-[860px] mx-auto px-4 h-14 md:h-16 flex items-center justify-between">

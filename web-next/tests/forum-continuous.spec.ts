@@ -38,7 +38,7 @@ for (const width of [320,390,1440]) {
     await expect(page.locator('.qa-answer')).toHaveCount(5);
     const ids = await page.locator('.qa-answer').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-answer-id')));
     expect(ids[0]).toBe(row.entryId);
-    await expect(page.locator('.qa-question')).toHaveText(row.title);
+    await expect(page.locator('.qa-question h1')).toHaveText(row.title);
     await expect(page.locator('.qa-answer > h2')).toHaveCount(0);
     await expect(page.locator('.qa-body').first()).toHaveCSS('font-size','18px');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);

@@ -1,14 +1,14 @@
 'use client';
 import Link from 'next/link';
 import {memo} from 'react';
-import {ArrowUpRight, MessageCircle, ThumbsUp} from 'lucide-react';
+import {ArrowUpRight, MessageCircle, ThumbsUp, X} from 'lucide-react';
 import type {ForumPost} from '@/lib/api';
 import {forumEntryHref, plainForumText} from '@/lib/forum-presentation';
 import './forum-content.css';
 
-function ForumPostList({posts = [], loading, hideQuestion = false}: {posts?: ForumPost[]; loading: boolean; hideQuestion?: boolean}) {
+function ForumPostList({posts = [], loading, hideQuestion = false, onFeedback, emptyText}: {posts?: ForumPost[]; loading: boolean; hideQuestion?: boolean; onFeedback?:(post:ForumPost)=>void; emptyText?:string}) {
   return <div className="forum-entry-list" aria-busy={loading}>
-    {loading ? <p className="forum-list-state" role="status">正在加载讨论…</p> : !posts.length ? <p className="forum-list-state">还没有讨论，来分享你的阅读感受吧。</p> : posts.map(post => {
+    {loading ? <p className="forum-list-state" role="status">正在加载讨论…</p> : !posts.length ? <p className="forum-list-state">{emptyText || '还没有讨论，来分享你的阅读感受吧。'}</p> : posts.map(post => {
       const reply = post.topReply;
       const href = forumEntryHref(post);
       const author = reply?.source?.author || reply?.author?.name || (typeof post.author === 'string' ? post.author : post.author.name) || '书友';
@@ -23,7 +23,7 @@ function ForumPostList({posts = [], loading, hideQuestion = false}: {posts?: For
         <div className="forum-entry-meta">
           <span><ThumbsUp size={14}/>{reply?.votes ?? post.votes ?? 0} 赞同</span>
           <Link href={href + (href.includes('?') ? '&' : '?') + 'comments=1'}><MessageCircle size={14}/>{reply?.comments ?? post.comments ?? 0} 评论</Link>
-          <Link href={href} className="forum-read-link">{reply ? '阅读全文' : post.type === 'article' ? '阅读文章' : '查看问题'}<ArrowUpRight size={14}/></Link>
+          {onFeedback ? <button type="button" className="forum-feedback-toggle" aria-label={`不感兴趣：${post.title}`} onClick={() => onFeedback(post)}><X size={18}/></button> : <Link href={href} className="forum-read-link">{reply ? '阅读全文' : post.type === 'article' ? '阅读文章' : '查看问题'}<ArrowUpRight size={14}/></Link>}
         </div>
       </article>;
     })}

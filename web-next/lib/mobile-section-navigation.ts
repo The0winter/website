@@ -68,6 +68,13 @@ function createTransition(href: string, dragging = false, sourceHref = location.
   if (previous) previews.delete(from);
   outgoing.dataset.sectionPane = 'outgoing';
   const header = captureMobileSection(bar, 0, top, true);
+  // Header snapshots live outside the route and otherwise inherit the warm
+  // home palette. Apply the destination palette before their first paint.
+  // Keep the host distinct from a real route: readiness checks query .forum-page.
+  header.element.classList.toggle('forum-section-header', to === 2);
+  header.content.classList.toggle('forum-page', to === 2);
+  header.element.style.background = to === 2 ? 'var(--forum-bg)' : 'var(--home-background)';
+  header.content.querySelector('form')?.classList.toggle('forum-search', to === 2);
   const preview = (index: number) => {
     const saved = index === 0 ? undefined : previews.get(index);
     return saved?.key === key && (index !== 1 || saved.scroll === mobileHomeScroll()) ? saved : undefined;

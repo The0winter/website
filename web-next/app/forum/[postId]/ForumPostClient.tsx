@@ -17,7 +17,7 @@ import {
   MessageCircle,
   Moon,
   Settings,
-  Share2,
+  Forward,
   Sun,
   ThumbsUp,
   Type,
@@ -420,7 +420,7 @@ function PostContent() {
 
           <div className="flex gap-1.5 relative" ref={settingsRef}>
             <button className={`p-2 ${currentTheme.icon}`} title="分享" aria-label="复制文章链接" onClick={async () => {try {await navigator.clipboard.writeText(window.location.href); setShareMessage('链接已复制');} catch {setShareMessage('请复制地址栏中的链接');}}}>
-              <Share2 className="w-5 h-5" />
+              <Forward className="w-5 h-5" />
             </button>
             {shareMessage && <span role="status" className="absolute right-0 top-12 whitespace-nowrap rounded-lg bg-[var(--forum-card)] px-3 py-2 text-xs shadow">{shareMessage}</span>}
 
@@ -435,7 +435,7 @@ function PostContent() {
             </button>
 
             {showSettings && (
-              <div className={`absolute right-0 top-12 w-64 p-4 rounded-xl border shadow-xl z-50 ${currentTheme.panel}`}>
+              <div className={`forum-article-settings absolute right-0 top-12 w-64 p-4 rounded-xl border shadow-xl z-50 ${currentTheme.panel}`}>
                 <div className="mb-4">
                   <div className="text-xs font-bold opacity-70 mb-2 px-1">主题</div>
                   <div className={`flex p-1 rounded-lg ${themeMode === 'light' ? 'bg-gray-100' : 'bg-white/10'}`}>
@@ -577,7 +577,7 @@ function PostContent() {
 
         {showCommentsModal && activeCommentTarget && (
           <div
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-4"
+            className="forum-article-comments fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-4"
             onClick={closeCommentsModal}
           >
             <div
