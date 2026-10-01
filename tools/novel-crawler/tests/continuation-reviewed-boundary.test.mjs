@@ -1,0 +1,63 @@
+import '../../test-env.cjs';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import http from 'node:http';
+import {acquire, localBookState, validateSpec, extractionHash} from '../core.mjs';
+import {continuationKey, createContinuationReviewer, recordContinuationAnchorReview} from '../continuation.mjs';
+import {atomicWrite, hash, readJson} from '../storage.mjs';
+
+const body = n => Array.from({length:180}, (_,i) => String.fromCodePoint(0x4e00+n*200+i)).join('').repeat(4);
+const heading = n => `第${n}章 山间故事${n}`;
+async function fixture(t) {
+  const stateDir=fs.mkdtempSync(path.join(os.tmpdir(),'reviewed-boundary-')),outputDir=path.join(stateDir,'out'),titles={};
+  const server=http.createServer((req,res)=>{
+    res.setHeader('Content-Type','text/html; charset=utf-8');
+    if(req.url==='/book')return res.end(`<h1>附注核对</h1><b>甲作者</b><nav>${Array.from({length:6},(_,i)=>`<a href="/c/${i+1}">${titles[i+1]||heading(i+1)}</a>`).join('')}</nav>`);
+    const n=Number(req.url.split('/').at(-1));res.end(`<h1>${titles[n]||heading(n)}</h1><article>${body(n)}</article>`);
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  t.after(async()=>{await new Promise(resolve=>server.close(resolve));assert.equal(path.dirname(path.resolve(stateDir)),path.resolve(os.tmpdir()));assert.ok(path.basename(stateDir).startsWith('reviewed-boundary-'));fs.rmSync(stateDir,{recursive:true,force:true});});
+  const base=`http://127.0.0.1:${server.address().port}`;
+  const spec=validateSpec({version:1,kind:'html',variant:'reviewed-heading-v1',title:'附注核对',author:'甲作者',sourceUrl:base+'/book',metadata:{title:'h1',author:'b'},catalog:{links:'nav a'},chapter:{title:'h1',content:'article'},delayMs:200,retries:0});
+  const book={title:spec.title,author:spec.author,sourceUrl:'https://old.example/book',chapters:Array.from({length:4},(_,i)=>({chapter_number:i+1,title:heading(i+1),content:body(i+1),link:`https://old.example/${i+1}`}))};
+  const file=path.join(outputDir,'附注核对.json');atomicWrite(file,book);
+  const options={stateDir,outputDir,extraction:extractionHash(spec)},sourceDir=path.join(stateDir,'continuations',continuationKey(spec),'sources',hash([spec.sourceUrl,options.extraction]).slice(0,24));
+  const run=()=>acquire(spec,{...options,continuation:localBookState(spec,options).continuation,mode:'probe'});
+  const save=chapter=>atomicWrite(path.join(sourceDir,'chapters',hash(chapter.link)+'.json'),{chapter,hash:hash(chapter),catalogTitle:chapter.title});
+  return {spec,book,file,options,titles,run,save,base};
+}
+
+test('continuation comparison uses host-specific noise rules without removing prose on other hosts',()=>{
+  const content=body(1).slice(0,300)+'\n'+body(1).slice(300),promotion='前往必应搜索德旗小说网可查看最新章节！';
+  const old={chapter_number:1,title:heading(1),content,link:'https://www.deqixs.org/1/old.html'},book={chapters:[old]};
+  const incoming={...old,content:content.replace('\n','\n'+promotion+'\n'),link:'https://www.deqixs.org/1/new.html'};
+  const reviewer=createContinuationReviewer(book);
+  assert.equal(reviewer.accept(incoming,incoming),false);assert.equal(reviewer.resolutions[0].kind,'duplicate-chapter');assert.equal(book.chapters[0].content,content);
+  assert.throws(()=>createContinuationReviewer(book).accept(incoming,{...incoming,link:'https://unverified.example/chapter'}));
+  assert.throws(()=>createContinuationReviewer(book).accept(incoming,{...incoming,content:content.replace('\n','\n他念道：'+promotion+'\n')}));
+});
+
+test('request suffix changes require an explicit review that expires even when normalized bodies remain equal',async t=>{
+  const f=await fixture(t);f.book.chapters[3].title=heading(4)+'（求追读or2）';atomicWrite(f.file,f.book);f.titles[4]=heading(4)+'（求追读2）';
+  const original=fs.readFileSync(f.file),blocked=await f.run();assert.equal(blocked.structuralPass,false);assert.match(blocked.failures[0].error,/无法对齐/);
+  const incoming={chapter_number:4,title:f.titles[4],content:body(4),link:f.base+'/c/4'};f.save(incoming);
+  const choice={file:path.basename(f.file),oldNumber:4,newLink:incoming.link,oldHash:hash(body(4)),newHash:hash(body(4)),reason:'同一章求追读附注变化，已核对完整正文并保留原题原文'};
+  assert.throws(()=>recordContinuationAnchorReview(f.spec,f.options,choice),/同章号且标题对应/);
+  const review=recordContinuationAnchorReview(f.spec,f.options,{...choice,allowTitleAnnotationChange:true});assert.equal(review.titleAnnotation,true);
+  f.save({...incoming,content:body(4)+'\n'});assert.equal((await f.run()).failures[0].code,'continuation-body-conflict');
+  f.save(incoming);const checked=await f.run();assert.equal(checked.structuralPass,true,JSON.stringify(checked.failures));assert.equal(checked.anchors[2].reviewKey,review.key);
+  assert.deepEqual(fs.readFileSync(f.file),original);
+  const downloaded=await acquire(f.spec,{...f.options,continuation:localBookState(f.spec,f.options).continuation,mode:'download'});
+  assert.equal(downloaded.completeAgainstSource,true);assert.deepEqual(readJson(f.file).chapters.slice(0,4),f.book.chapters);
+});
+
+test('title-annotation review cannot authorize a renamed story, different ordinal or a split chapter',async t=>{
+  const f=await fixture(t);f.book.chapters[3].title=heading(4)+'（求追读or2）';atomicWrite(f.file,f.book);
+  for(const title of ['第4章 另一件事情（求追读2）','第5章 山间故事4（求追读2）',heading(4)+'（下）']){
+    const incoming={chapter_number:4,title,content:body(4),link:f.base+'/c/4'};f.save(incoming);
+    assert.throws(()=>recordContinuationAnchorReview(f.spec,f.options,{file:path.basename(f.file),oldNumber:4,newLink:incoming.link,oldHash:hash(body(4)),newHash:hash(body(4)),allowTitleAnnotationChange:true,reason:'不能凭附注选项接受其他章节'}),/同章号且标题对应/);
+  }
+});
