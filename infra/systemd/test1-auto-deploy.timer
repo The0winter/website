@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Test1 public main for a new release each minute
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1min
+AccuracySec=10s
+Unit=test1-auto-deploy.service
+
+[Install]
+WantedBy=timers.target

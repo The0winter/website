@@ -1,0 +1,23 @@
+[Unit]
+Description=Deploy accepted Test1 main updates from the public repository
+After=network-online.target test1-web.service test1-api.service
+Wants=network-online.target
+ConditionPathIsSymbolicLink=/srv/test1/current
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /usr/local/lib/test1/auto-deploy.py --apply
+StateDirectory=test1-auto-deploy
+StateDirectoryMode=0700
+CacheDirectory=test1-auto-deploy
+CacheDirectoryMode=0700
+UMask=0077
+Nice=10
+TimeoutStartSec=30min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/test1 /etc/nginx/sites-available /var/log/nginx /run/lock -/run/nginx.pid
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
