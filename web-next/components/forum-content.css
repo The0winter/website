@@ -1,12 +1,14 @@
 .forum-surface, .forum-page, .forum-reading, .forum-section-header {
   --forum-bg:#f6f7f9; --forum-card:#fff; --forum-text:#20242b; --forum-muted:#777e89;
   --forum-line:#edf0f3; --forum-soft:#f3f5f8; --forum-accent:#3d65b4;
+  --forum-preview:color-mix(in srgb,var(--forum-muted) 75%,#000);
   color:var(--forum-text);
   font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
 }
 .dark :is(.forum-surface,.forum-page,.forum-reading,.forum-section-header) {
   --forum-bg:#121417; --forum-card:#1c2026; --forum-text:#edf0f5; --forum-muted:#a0a8b5;
   --forum-line:#30353c; --forum-soft:#282e37; --forum-accent:#91b4fa;
+  --forum-preview:color-mix(in srgb,var(--forum-muted) 75%,#fff);
 }
 .forum-entry-list { background:var(--forum-card); border-radius:16px; overflow:hidden; }
 .forum-entry { padding:25px 28px; border-bottom:1px solid var(--forum-line); overflow-wrap:anywhere; }
@@ -20,7 +22,7 @@
 .forum-entry-author small { font-size:11px; font-weight:400; color:var(--forum-muted); }
 .forum-letter-avatar { display:grid; place-items:center; width:22px; height:22px; border-radius:50%; background:var(--forum-soft); color:var(--forum-muted); font-size:11px; }
 .forum-entry-avatar.user-avatar { width:22px; height:22px; font-size:11px; border:0; }
-.forum-entry-excerpt { display:block; color:var(--forum-muted); font-size:15px; line-height:1.85; }
+.forum-entry-excerpt { display:block; color:var(--forum-preview); font-size:15px; line-height:1.85; }
 .forum-entry-excerpt p { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
 .forum-entry-meta { display:flex; align-items:center; gap:18px; margin-top:15px; font-size:12px; color:var(--forum-muted); }
 .forum-entry-meta > * { display:inline-flex; align-items:center; gap:5px; min-height:28px; }
@@ -51,16 +53,16 @@
   --forum-card:transparent; --forum-text:var(--home-text); --forum-muted:var(--home-muted);
   --forum-line:var(--home-border); --forum-soft:var(--home-soft); --forum-accent:var(--home-accent);
 }
-.book-articles .forum-entry { padding:16px 0; }.book-articles .forum-entry-list { border-radius:0; }
-.book-articles .forum-entry-title h2 { font-size:18px; font-weight:500; line-height:27px; letter-spacing:0; }
-.book-articles .forum-entry-author { gap:7px; margin:8px 0 4px; font-size:15px; line-height:22px; font-weight:400; color:var(--forum-muted); }
+.book-articles .forum-entry { width:100%; margin:0; padding:16px 0; }.book-articles .forum-entry-list { border-radius:0; }
+.book-articles .forum-entry-title h2 { font-size:19px; font-weight:500; line-height:28px; letter-spacing:0; }
+.book-articles .forum-entry-author { gap:7px; margin:8px 0 4px; font-size:16px; line-height:23px; font-weight:400; color:var(--forum-preview); }
 .book-articles .forum-entry-author>span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.book-articles .forum-entry-avatar.user-avatar { width:21px; height:21px; flex-shrink:0; }
-.book-articles .forum-entry-excerpt { font-size:16px; font-weight:400; line-height:26px; }
+.book-articles .forum-entry-avatar.user-avatar { width:22px; height:22px; font-size:12px; flex-shrink:0; }
+.book-articles .forum-entry-excerpt { font-size:17px; font-weight:400; line-height:27px; }
 .book-articles .forum-entry-excerpt p { -webkit-line-clamp:2; }
-.book-articles .forum-entry-meta { gap:26px; margin-top:7px; font-size:13px; line-height:20px; }
+.book-articles .forum-entry-meta { gap:26px; margin-top:7px; font-size:14px; line-height:21px; }
 .book-articles .forum-entry-meta>* { gap:6px; min-height:32px; }
-.book-articles .forum-entry-meta svg { width:18px; height:18px; stroke-width:1.6; flex-shrink:0; }
+.book-articles .forum-entry-meta svg { width:19px; height:19px; stroke-width:1.6; flex-shrink:0; }
 .book-articles .forum-entry-meta .forum-vote-desktop,.book-articles .forum-meta-label { display:none; }
 .book-articles .forum-entry-meta .forum-vote-mobile { display:block; }
 /* Only the incoming loading shell moves; loaded feed rows and prose stay still. */
@@ -83,6 +85,8 @@
   .book-articles .forum-entry { padding:0; }
   .book-articles .forum-entry-meta .forum-read-link { display:none; }
   .forum-page,.forum-section-header { --forum-bg:#fff; }
+  .forum-page { --forum-preview:color-mix(in srgb,#666 75%,#000); }
+  .dark .forum-page { --forum-preview:color-mix(in srgb,var(--forum-muted) 75%,#fff); }
   .forum-entry-list { border-radius:0; }.forum-entry { padding:22px 16px; }
   .forum-entry-title h2 { font-size:20px; }.forum-entry-excerpt { font-size:16px; line-height:1.75; }.forum-entry-excerpt p { -webkit-line-clamp:3; }
   .forum-entry-meta { gap:14px; font-size:11px; }
@@ -91,11 +95,13 @@
   .forum-page .forum-entry { position:relative; padding:16px 16px 8px; border:0; }
   .forum-page .forum-entry:not(:last-child)::after { content:""; position:absolute; inset:auto 16px 0; height:1px; background:#f3f3f3; }
   .forum-page .forum-entry-title { color:#121212; }
+  .dark .forum-page .forum-entry-title { color:var(--forum-text); }
+  .dark .forum-page .forum-entry:not(:last-child)::after { background:var(--forum-line); }
   .forum-page .forum-entry-title h2 { font-size:19px; font-weight:500; line-height:29px; letter-spacing:0; }
-  .forum-page .forum-entry-author { gap:7px; margin:9px 0 3px; min-height:22px; font-size:17px; line-height:22px; font-weight:400; color:#666; }
+  .forum-page .forum-entry-author { gap:7px; margin:9px 0 3px; min-height:22px; font-size:17px; line-height:22px; font-weight:400; color:var(--forum-preview); }
   .forum-page .forum-entry-author > span:last-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .forum-page .forum-entry-avatar { width:21px; height:21px; font-size:11px; }
-  .forum-page .forum-entry-excerpt { color:#666; font-size:17px; font-weight:400; line-height:27px; letter-spacing:0; }
+  .forum-page .forum-entry-excerpt { font-size:17px; font-weight:400; line-height:27px; letter-spacing:0; }
   .forum-page .forum-entry-excerpt p { -webkit-line-clamp:2; }
   .forum-page .forum-entry-meta { gap:26px; margin-top:9px; font-size:13px; line-height:20px; color:#999; }
   .forum-page .forum-entry-meta > * { min-height:28px; gap:6px; }
