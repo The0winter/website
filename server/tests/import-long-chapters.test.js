@@ -21,7 +21,7 @@ test('long imported chapters survive R2 and API readback without relaxing author
     const content=objects.get(Key);return {ContentLength:Buffer.byteLength(content),Body:{transformToString:async()=>content}};
   }}});
   const chapter={chapter_number:1,title:'完整长篇',content:'甲'.repeat(importedChapterLimit)};
-  const book={title:'长章测试',author:'合成作者',sourceUrl:'https://example.test/long-chapter',chapters:[chapter]};
+  const book={title:'长章测试',author:'合成作者',sourceUrl:'https://example.test/long-chapter',missingOnly:true,chapters:[chapter]};
   let server;
   try{
     process.env.IMPORT_SECRET=crypto.randomBytes(32).toString('hex');process.env.CHAPTER_STORAGE='r2';configureChapterStorage(storage);
@@ -34,11 +34,12 @@ test('long imported chapters survive R2 and API readback without relaxing author
     assert.equal(prepareImport(book)[0].chapters[0].content,chapter.content);
     assert.throws(()=>validateChapter(chapter));
     assert.equal(validateChapter({...chapter,content:'甲'.repeat(60000)}).word_count,60000);
+    assert.equal((await send({...book,missingOnly:false,dryRun:true})).status,200);
     assert.equal((await send({...book,dryRun:true})).status,200);assert.equal(await Book.countDocuments(),0);assert.equal(objects.size,0);
     assert.equal((await send(book)).status,200);
     const saved=await Chapter.findOne();assert.equal(saved.content,undefined);assert.equal(await readChapterBody(saved),chapter.content);
     const response=await fetch(base+'/api/chapters/'+saved._id);assert.equal(response.status,200);assert.equal((await response.json()).content,chapter.content);
-    assert.equal(await Chapter.countDocuments(),1);
+    assert.equal((await send(book)).status,200);assert.equal(await Chapter.countDocuments(),1);
     const tooLong={...chapter,content:chapter.content+'乙'};
     assert.throws(()=>prepareImport({...book,chapters:[tooLong]}));
     assert.equal((await send({...book,chapters:[tooLong]})).status,400);

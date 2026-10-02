@@ -27,7 +27,7 @@ export function libraryImportRoutes(app) {
     const {author, metadata} = importMetadata(data);
     const chapters = data.chapters.map(chapter => {
       if (!chapter || typeof chapter !== 'object') fail(400, '章节无效');
-      const validated = validateChapter(chapter), sourceUrl = chapter.link ?? chapter.sourceUrl;
+      const validated = validateChapter(chapter,{imported:true}), sourceUrl = chapter.link ?? chapter.sourceUrl;
       if (sourceUrl !== undefined) {
         if (typeof sourceUrl !== 'string' || sourceUrl.length > 2000 || !/^https?:\/\//.test(sourceUrl)) fail(400, '章节来源链接无效');
         validated.sourceUrl = sourceUrl;
