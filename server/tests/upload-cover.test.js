@@ -12,13 +12,29 @@ import {lockBook} from '../services/content.js';
 import {claimMedia,retireUnreferencedCover} from '../services/media-reference.js';
 import {finishCoverRetirement} from '../services/cover-retention.js';
 import {prepareCover,createCoverStorage} from '../services/cover-storage.js';
-import {parseArgs,uploadCover} from '../../infra/upload-cover.mjs';
+import {parseArgs,uploadCover,containCover} from '../../infra/upload-cover.mjs';
 
 test('cover CLI requires one exact selector and rejects ambiguous or unsafe arguments',()=>{
   const options=parseArgs(['--book=同名书','--author=甲','--image=F:/封面/a b.png','--apply']);
   assert.equal(options.book,'同名书');assert.equal(options.apply,true);assert.equal(options.image,'F:/封面/a b.png');
   assert.equal(parseArgs(['--book-id='+'a'.repeat(24),'--image=a.png']).apply,false);
+  const missing=parseArgs(['--book=x','--image=a.png','--missing-only','--fit=contain']);
+  assert.equal(missing.missingOnly,true);assert.equal(missing.fit,'contain');
+  assert.throws(()=>parseArgs(['--book=x','--image=a.png','--fit=cover']));
+  assert.throws(()=>parseArgs(['--book=x','--image=a.png','--missing-only','--missing-only']));
   for(const args of [[],['--book=x','--book-id='+'a'.repeat(24),'--image=a.png'],['--book=x','--book=y','--image=a.png'],['--book=x','--image=a.png','--host=-oProxyCommand=bad'],['--book=x','--image=a.png','--site=https://user:secret@example.test'],['--book=x','--image=a.png','--unknown=y']]) assert.throws(()=>parseArgs(args));
+});
+
+test('publication cover fitting preserves all pixels without cropping or enlarging small artwork',async()=>{
+  for(const [width,height] of [[20,40],[40,20]]){
+    const input=await sharp({create:{width,height,channels:3,background:'#f00000'}}).png().toBuffer();
+    const output=await containCover(input,sharp),{data,info}=await sharp(output).removeAlpha().raw().toBuffer({resolveWithObject:true});
+    assert.equal(info.width*4,info.height*3);
+    let red=0,white=0;
+    for(let i=0;i<data.length;i+=info.channels){if(data[i]===240&&data[i+1]===0&&data[i+2]===0)red++;else if(data[i]===255&&data[i+1]===255&&data[i+2]===255)white++;else assert.fail('Unexpected changed artwork pixel');}
+    assert.equal(red,width*height);assert.ok(white>0);
+    const variants=await prepareCover(output);assert.deepEqual(variants.map(v=>[v.width,v.height]),[[240,320],[480,640]]);
+  }
 });
 
 test('shared cover upload uses real MongoDB transactions and existing image storage services',async t=>{
@@ -66,9 +82,17 @@ test('shared cover upload uses real MongoDB transactions and existing image stor
       assert.equal(await Media.countDocuments(),1);assert.deepEqual(await Book.findById(first._id).lean(),before);
     });
     const second=await Book.create({title:'同名书',author:'乙'});
+    await t.test('missing-only skips any existing cover before image processing or writes',async()=>{
+      const before=await Book.findById(first._id).lean(),count=puts,auditCount=audits.length;
+      for(const apply of [false,true]){
+        const result=await uploadCover(job({missingOnly:true,apply}),{...services,prepareCover:async()=>{throw Error('Must not process existing cover');}});
+        assert.equal(result.status,'skipped-existing');assert.equal(result.previousCover,before.cover_image);
+      }
+      assert.equal(puts,count);assert.equal(audits.length,auditCount);assert.deepEqual(await Book.findById(first._id).lean(),before);
+    });
     await t.test('duplicate titles require disambiguation; the same command handles another book by ID',async()=>{
       await assert.rejects(uploadCover(job({author:undefined}),services),/同名/);
-      const result=await uploadCover(job({book:undefined,bookId:String(second._id),author:undefined}),services);
+      const result=await uploadCover(job({book:undefined,bookId:String(second._id),author:undefined,missingOnly:true}),services);
       assert.equal(result.bookId,String(second._id));assert.equal(result.status,'bound');assert.equal(await Media.countDocuments(),2);
       assert.notEqual((await Book.findById(first._id)).cover_image,result.cover);
     });
@@ -91,7 +115,7 @@ test('shared cover upload uses real MongoDB transactions and existing image stor
     });
     await t.test('a concurrent cover change is preserved, never overwritten',async()=>{
       const anotherCover='/api/media/'+'a'.repeat(24);
-      await assert.rejects(uploadCover(freshJob(),{...services,storage:{async write(...args){
+      await assert.rejects(uploadCover({...freshJob(),missingOnly:true},{...services,storage:{async write(...args){
         const stored=await storage.write(...args);
         await Book.updateOne({_id:fresh._id},{$set:{cover_image:anotherCover}});
         return stored;

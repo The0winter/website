@@ -5,25 +5,40 @@ import crypto from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
-export const usage = 'node infra/upload-cover.mjs --book=书名 --image=图片路径 [--author=作者] [--apply]\n也可用 --book-id=书籍ID；可选 --admin=管理员 --host=SSH主机 --identity=SSH密钥 --site=网站地址。默认只预览。';
+export const usage = 'node infra/upload-cover.mjs --book=书名 --image=图片路径 [--author=作者] [--missing-only] [--fit=contain] [--apply]\n也可用 --book-id=书籍ID；可选 --admin=管理员 --host=SSH主机 --identity=SSH密钥 --site=网站地址。默认只预览。';
 export function parseArgs(args) {
   const options = {apply:false, host:'ubuntu@51.79.242.0', identity:path.join(os.homedir(),'.ssh','ovh_website_ed25519'), site:'https://jiutianxiaoshuo.com'};
-  const names = {'book':'book','book-id':'bookId','author':'author','image':'image','admin':'admin','host':'host','identity':'identity','site':'site'};
+  const names = {'book':'book','book-id':'bookId','author':'author','image':'image','admin':'admin','host':'host','identity':'identity','site':'site','fit':'fit'};
   const seen = new Set();
   for (const arg of args) {
     if (arg === '--help') return {help:true};
     if (arg === '--apply' && !seen.has('apply')) {options.apply=true;seen.add('apply');continue;}
+    if (arg === '--missing-only' && !seen.has('missing-only')) {options.missingOnly=true;seen.add('missing-only');continue;}
     const match = /^--([^=]+)=(.+)$/s.exec(arg);
     if (!match || !names[match[1]] || seen.has(match[1])) throw Error(usage);
     seen.add(match[1]); options[names[match[1]]] = match[2];
   }
   if (!options.image || Boolean(options.book) === Boolean(options.bookId)) throw Error(usage);
+  if (options.fit && options.fit!=='contain') throw Error('封面适配仅支持 --fit=contain（完整保留画面并留白）');
   if (options.bookId && !/^[a-f0-9]{24}$/.test(options.bookId)) throw Error('书籍 ID 无效');
   if (!/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(options.host)) throw Error('SSH 主机无效');
   const site = new URL(options.site);
   if (site.protocol!=='https:' || site.username || site.password || site.pathname!=='/' || site.search || site.hash) throw Error('网站地址须为 HTTPS 站点根地址');
   options.site=site.origin;
   return options;
+}
+
+// Add a 3:4 canvas without cropping or enlarging the original artwork.
+export async function containCover(bytes, sharp) {
+  const source=sharp(bytes,{limitInputPixels:16000000,failOn:'error'}).timeout({seconds:5});
+  const metadata=await source.metadata();
+  if (!['jpeg','png','webp'].includes(metadata.format) || (metadata.pages||1)>1 || !metadata.width || !metadata.height || Math.max(metadata.width/metadata.height,metadata.height/metadata.width)>4) throw Error('封面图片格式或尺寸无效');
+  const rotated=metadata.orientation>=5 && metadata.orientation<=8;
+  const width=rotated?metadata.height:metadata.width,height=rotated?metadata.width:metadata.height;
+  const units=Math.min(320,Math.ceil(Math.max(width/3,height/4)));
+  const resized=await source.rotate().resize({width:units*3,height:units*4,fit:'inside',withoutEnlargement:true}).png().toBuffer({resolveWithObject:true});
+  const dx=units*3-resized.info.width,dy=units*4-resized.info.height;
+  return sharp(resized.data).extend({left:Math.floor(dx/2),right:Math.ceil(dx/2),top:Math.floor(dy/2),bottom:Math.ceil(dy/2),background:'#ffffff'}).png().toBuffer();
 }
 
 // This function is also sent over SSH; keep all server dependencies explicit.
@@ -38,6 +53,7 @@ export async function uploadCover(job, services) {
   const books=await Book.find(filter).limit(2).lean();
   if (books.length!==1) fail(books.length?'存在同名作品，请指定作者或书籍 ID':'未找到对应的在架作品');
   const before=books[0];
+  if (job.missingOnly && before.cover_image) return {runId:job.runId,bookId:String(before._id),title:before.title,author:before.author,previousCover:before.cover_image,status:'skipped-existing'};
   const admins=await User.find({role:'admin',isBanned:{$ne:true},...(job.admin?{username:job.admin}:{})}).select('_id username').limit(2).lean();
   if (admins.length!==1) fail('请用 --admin 指定唯一的现有管理员');
   const actor={id:String(admins[0]._id),role:'admin'};
@@ -125,8 +141,10 @@ export async function main(args) {
   if (options.help) {console.log(usage);return;}
   const image=path.resolve(options.image),stat=await fs.stat(image);
   if (!stat.isFile() || !stat.size || stat.size>8*1024*1024) throw Error('请选择 8 MB 以内的图片文件');
-  const bytes=await fs.readFile(image),runId='cover-'+crypto.randomUUID();
-  const job={runId,book:options.book,bookId:options.bookId,author:options.author,admin:options.admin,apply:options.apply,imageBase64:bytes.toString('base64'),sourceSha256:crypto.createHash('sha256').update(bytes).digest('hex')};
+  const originalBytes=await fs.readFile(image),runId='cover-'+crypto.randomUUID();
+  const bytes=options.fit==='contain'?await containCover(originalBytes,(await import('../server/node_modules/sharp/lib/index.js')).default):originalBytes;
+  if (bytes.length>8*1024*1024) throw Error('适配后的封面超过 8 MB');
+  const job={runId,book:options.book,bookId:options.bookId,author:options.author,admin:options.admin,apply:options.apply,missingOnly:options.missingOnly,imageBase64:bytes.toString('base64'),sourceSha256:crypto.createHash('sha256').update(bytes).digest('hex')};
   const command='sudo -n /opt/node-v22.23.2-linux-x64/bin/node --env-file=/etc/test1/api.env --input-type=module';
   const result=await new Promise((resolve,reject)=>{
     const child=spawn('ssh',['-i',options.identity,'-o','BatchMode=yes','-o','ConnectTimeout=15',options.host,command],{stdio:['pipe','pipe','pipe'],windowsHide:true});
@@ -145,7 +163,7 @@ export async function main(args) {
   });
   const directory=fileURLToPath(new URL('../.runtime/cover-uploads/',import.meta.url));
   await fs.mkdir(directory,{recursive:true});
-  const reportPath=path.join(directory,runId+'.json'),report={...result,image,site:options.site};
+  const reportPath=path.join(directory,runId+'.json'),report={...result,image,site:options.site,missingOnly:!!options.missingOnly,fit:options.fit,originalSha256:crypto.createHash('sha256').update(originalBytes).digest('hex')};
   await fs.writeFile(reportPath,JSON.stringify(report,null,2));
   if(options.apply && result.cover) {
     try {
