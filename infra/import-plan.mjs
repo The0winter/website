@@ -1,5 +1,6 @@
 // Pure validation: no connection or credentials needed.
 import {chapterDuplicateIssues} from '../shared/chapter-duplicates.mjs';
+import {importedChapterLimit} from '../shared/chapter-limits.mjs';
 import {chapterVolumeFields, cleanBookForReading} from '../shared/reading-cleanup.mjs';
 
 export function prepareImport(book) {
@@ -17,7 +18,7 @@ export function prepareImport(book) {
     const n=c?.chapter_number??c?.chapterNumber;
     if(!Number.isSafeInteger(n)||n<1||seen.has(n))throw Error(`第 ${i+1} 项章号无效或重复`);
     seen.add(n);
-    if(typeof c.title!=='string'||!c.title.trim()||c.title.length>100||typeof c.content!=='string'||!c.content.trim()||c.content.length>60000)throw Error(`第 ${n} 章标题或正文无效（正文最多60000字符）`);
+    if(typeof c.title!=='string'||!c.title.trim()||c.title.length>100||typeof c.content!=='string'||!c.content.trim()||c.content.length>importedChapterLimit)throw Error(`第 ${n} 章标题或正文无效（正文最多${importedChapterLimit}字符）`);
     const link=c.link??c.sourceUrl;
     if(link!==undefined&&!validUrl(link))throw Error(`第 ${n} 章链接无效`);
     return {title:c.title.trim(),content:c.content,chapter_number:n,...chapterVolumeFields(c),...(link===undefined?{}:{link})};

@@ -4,6 +4,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {createRequire} from 'node:module';
 
 export const usage = 'node infra/upload-cover.mjs --book=书名 --image=图片路径 [--author=作者] [--missing-only] [--fit=contain] [--apply]\n也可用 --book-id=书籍ID；可选 --admin=管理员 --host=SSH主机 --identity=SSH密钥 --site=网站地址。默认只预览。';
 export function parseArgs(args) {
@@ -142,7 +143,7 @@ export async function main(args) {
   const image=path.resolve(options.image),stat=await fs.stat(image);
   if (!stat.isFile() || !stat.size || stat.size>8*1024*1024) throw Error('请选择 8 MB 以内的图片文件');
   const originalBytes=await fs.readFile(image),runId='cover-'+crypto.randomUUID();
-  const bytes=options.fit==='contain'?await containCover(originalBytes,(await import('../server/node_modules/sharp/lib/index.js')).default):originalBytes;
+  const bytes=options.fit==='contain'?await containCover(originalBytes,createRequire(new URL('../server/package.json',import.meta.url))('sharp')):originalBytes;
   if (bytes.length>8*1024*1024) throw Error('适配后的封面超过 8 MB');
   const job={runId,book:options.book,bookId:options.bookId,author:options.author,admin:options.admin,apply:options.apply,missingOnly:options.missingOnly,imageBase64:bytes.toString('base64'),sourceSha256:crypto.createHash('sha256').update(bytes).digest('hex')};
   const command='sudo -n /opt/node-v22.23.2-linux-x64/bin/node --env-file=/etc/test1/api.env --input-type=module';

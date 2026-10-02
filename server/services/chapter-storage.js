@@ -1,4 +1,5 @@
 import {PutObjectCommand, GetObjectCommand} from '@aws-sdk/client-s3';
+import {importedChapterLimit} from '../../shared/chapter-limits.mjs';
 import {bodyHash, r2Client} from './r2.js';
 import {createLimiter, mapConcurrent} from '../../shared/async-pool.mjs';
 
@@ -26,15 +27,15 @@ export function createChapterStorage({client, bucket, maxCacheBytes = 16 * 1024 
     let content = fresh ? undefined : cache.get(contentKey);
     if (content === undefined) {
       const result = await client.send(new GetObjectCommand({Bucket:bucket,Key:contentKey}));
-      if (result.ContentLength > 240000) throw new Error('Chapter object exceeds size limit');
+      if (result.ContentLength > importedChapterLimit*4) throw new Error('Chapter object exceeds size limit');
       content = await result.Body.transformToString('utf-8');
-      if (content.length > 60000 || bodyHash(content) !== contentSha256) throw new Error('Chapter body checksum mismatch');
+      if (content.length > importedChapterLimit || bodyHash(content) !== contentSha256) throw new Error('Chapter body checksum mismatch');
       remember(contentKey, content);
     }
     return content;
   }
   async function write(content) {
-    if (typeof content !== 'string' || !content.trim() || content.length > 60000) throw new Error('Invalid chapter body');
+    if (typeof content !== 'string' || !content.trim() || content.length > importedChapterLimit) throw new Error('Invalid chapter body');
     const contentSha256 = bodyHash(content), contentKey = `chapters/sha256/${contentSha256}.txt`;
     const ref = {contentKey,contentSha256};
     // Content-addressed keys cannot change an existing chapter's bytes on a failed DB transaction.

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import {importedChapterLimit} from '../../shared/chapter-limits.mjs';
 import {storeChapterBody} from '../services/chapter-storage.js';
 
 const chapterSchema = new mongoose.Schema({
@@ -13,7 +14,7 @@ const chapterSchema = new mongoose.Schema({
   },
   
   title: { type: String, required: true, maxLength: 100 },
-  content: { type: String, required: function(){return !this.contentKey;}, maxLength: 60000 },
+  content: { type: String, required: function(){return !this.contentKey;}, maxLength: importedChapterLimit },
   contentKey: { type:String, match:/^chapters\/sha256\/[a-f0-9]{64}\.txt$/ },
   contentSha256: { type:String, match:/^[a-f0-9]{64}$/ },
   chapter_number: { type: Number, required: true },

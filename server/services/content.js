@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import {authoredChapterLimit,importedChapterLimit} from '../../shared/chapter-limits.mjs';
 import {chapterVolumeFields} from '../../shared/reading-cleanup.mjs';
 import {recordBookUpdate} from './book-update-time.js';
 import mongoose from 'mongoose';
@@ -11,9 +12,9 @@ export function fail(status,message) { throw Object.assign(new Error(message),{s
 export const jsonDoc = doc => ({...doc.toObject(),id:String(doc._id)});
 export const dayKey = (date=new Date()) => new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
 export const contentHash = data => crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
-export function validateChapter(body) {
+export function validateChapter(body,{imported=false}={}) {
   const number=body.chapter_number ?? body.chapterNumber;
-  if ((body.title!==undefined && (typeof body.title!=='string' || body.title.length>100)) || typeof body.content!=='string' || !body.content.trim() || body.content.length>60000 || !Number.isSafeInteger(number) || number<1) fail(400,'章节标题、正文或编号无效');
+  if ((body.title!==undefined && (typeof body.title!=='string' || body.title.length>100)) || typeof body.content!=='string' || !body.content.trim() || body.content.length>(imported?importedChapterLimit:authoredChapterLimit) || !Number.isSafeInteger(number) || number<1) fail(400,'章节标题、正文或编号无效');
   let volume;try{volume=chapterVolumeFields(body);}catch(error){fail(400,error.message);}
   return {title:body.title?.trim() || `第${number}章`,content:body.content,chapter_number:number,word_count:body.content.length,...volume};
 }
