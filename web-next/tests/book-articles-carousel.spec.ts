@@ -5,6 +5,7 @@ import type {ForumPost} from '../lib/api';
 const base = process.env.DETAIL_BASE || 'http://127.0.0.1:3000';
 const book = process.env.DETAIL_BOOK || '000000000000000000000101';
 const detail = `${base}/book/${book}`;
+const entry = '.book-article-slide:not([data-clone]) .forum-entry';
 const posts = (count:number, offset = 0):ForumPost[] => Array.from({length:count}, (_, i) => ({
   id:(4096 + offset + i).toString(16).padStart(24, '0'), title:`第 ${offset + i + 1} 篇：山海之间的阅读记忆`,
   excerpt:'那些看似平常的片段，藏着人物一路走来的变化。'.repeat(i + 1), author:{id:'reader',name:'山间书友'},
@@ -33,9 +34,11 @@ async function mockArticles(page:Page, count:number) {
 async function activeSlide(page:Page) {
   return page.locator('.book-article-track').evaluate(track => {
     const rect = track.getBoundingClientRect();
+    const slides = [...track.querySelectorAll('.book-article-slide:not([data-clone])')];
     return [...track.children].flatMap((slide,index) => {
       const box = slide.getBoundingClientRect();
-      return Math.min(box.right, rect.right) - Math.max(box.left, rect.left) > 1 ? [index] : [];
+      const logicalIndex = slide.hasAttribute('data-clone') ? (index === 0 ? slides.length - 1 : 0) : slides.indexOf(slide);
+      return Math.min(box.right, rect.right) - Math.max(box.left, rect.left) > 1 ? [logicalIndex] : [];
     });
   });
 }
@@ -44,7 +47,7 @@ async function activeSlide(page:Page) {
 // rather than dispatching synthetic DOM handlers or assigning scrollLeft.
 async function swipe(page:Page, direction:'left'|'right'|'down') {
   const track = page.locator('.book-article-track');
-  await track.scrollIntoViewIfNeeded();
+  await track.evaluate(element => element.scrollIntoView({block:'center'}));
   const box = (await track.boundingBox())!;
   const session = await page.context().newCDPSession(page);
   const startX = box.x + box.width * (direction === 'right' ? .2 : .8);
@@ -70,23 +73,40 @@ for (const width of [320,390,430,767]) test(`mobile ${width}: independent review
   const reviews=page.locator('#reviews-section');
   const counter=articles.locator('[aria-live=polite]');
   await expect(reviews.locator('.book-review')).toHaveCount(1);
-  await expect(articles.locator('.forum-entry')).toHaveCount(3);
+  await expect(articles.locator(entry)).toHaveCount(3);
   await expect(page.getByRole('tablist',{name:'书友交流'})).toHaveCount(0);
   expect(await reviews.locator('#articles-section').count()).toBe(0);
   expect((await articles.boundingBox())!.y).toBeGreaterThan((await reviews.boundingBox())!.y+(await reviews.boundingBox())!.height);
   await expect.poll(()=>activeSlide(page)).toEqual([0]);
-  await expect(articles.getByRole('button',{name:'上一篇文章'})).toBeDisabled();
+  const controls=articles.getByRole('navigation',{name:'文章切换'});
+  await expect(controls.getByRole('button')).toHaveCount(3);
+  await expect(controls.getByRole('button',{name:'第 1 篇文章'})).toHaveAttribute('aria-current','true');
+  await expect(articles).not.toContainText('左右滑动切换');
   await swipe(page,'left');
   await expect(counter).toHaveText('2 / 3');
   await expect.poll(()=>activeSlide(page)).toEqual([1]);
   await swipe(page,'left');
   await expect(counter).toHaveText('3 / 3');
   await expect.poll(()=>activeSlide(page)).toEqual([2]);
-  await expect(articles.getByRole('button',{name:'下一篇文章'})).toBeDisabled();
   await swipe(page,'left');
+  await expect.poll(()=>activeSlide(page)).toEqual([0]);
+  await expect(counter).toHaveText('1 / 3');
+  await swipe(page,'right');
   await expect.poll(()=>activeSlide(page)).toEqual([2]);
   await swipe(page,'right');
   await expect(counter).toHaveText('2 / 3');
+  await expect(controls.getByRole('button',{name:'第 2 篇文章'})).toHaveAttribute('aria-current','true');
+  const layout=await articles.evaluate(section=>{
+    const row=section.querySelector('.book-article-slide:not([data-clone]) .forum-entry')!;
+    const excerpt=row.querySelector('.forum-entry-excerpt p')!;
+    return {background:getComputedStyle(section).backgroundColor,neighbor:getComputedStyle(document.querySelector('#reviews-section')!).backgroundColor,
+      list:getComputedStyle(row.parentElement!).backgroundColor,lines:getComputedStyle(excerpt).webkitLineClamp,
+      labels:[...row.querySelectorAll('.forum-meta-label,.forum-read-link')].map(el=>getComputedStyle(el).display)};
+  });
+  expect(layout.background).toBe(layout.neighbor);
+  expect(layout.list).toBe('rgba(0, 0, 0, 0)');
+  expect(layout.lines).toBe('2');
+  expect(layout.labels.every(display=>display==='none')).toBe(true);
   await expect.poll(()=>activeSlide(page)).toEqual([1]);
   await expect(reviews.locator('.book-review-content')).toHaveText('评论独立保留，切换文章仍然可以阅读。');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
@@ -107,7 +127,7 @@ for (const count of [0,1]) test(`mobile boundary: ${count} article has no switch
   await page.goto(detail);
   const section=page.locator('#articles-section');
   await expect(section.locator('.forum-entry-list')).toHaveAttribute('aria-busy','false');
-  await expect(section.locator('.forum-entry')).toHaveCount(count);
+  await expect(section.locator(entry)).toHaveCount(count);
   await expect(section.getByRole('navigation')).toHaveCount(0);
   if (!count) await expect(section).toContainText('还没有相关文章');
   else {
@@ -122,7 +142,7 @@ test('mobile controls, keyboard, vertical scrolling and resize keep the current 
   await page.setViewportSize({width:390,height:844});
   await mockArticles(page,3);
   await page.goto(detail);
-  await page.getByRole('button',{name:'下一篇文章'}).click();
+  await page.getByRole('button',{name:'第 2 篇文章'}).click();
   await expect.poll(()=>activeSlide(page)).toEqual([1]);
   const track=page.locator('.book-article-track');
   await track.focus();
@@ -130,8 +150,12 @@ test('mobile controls, keyboard, vertical scrolling and resize keep the current 
   await expect.poll(()=>activeSlide(page)).toEqual([2]);
   await page.setViewportSize({width:430,height:844});
   await expect.poll(()=>activeSlide(page)).toEqual([2]);
+  await page.setViewportSize({width:1440,height:900});
+  await expect(page.getByRole('navigation',{name:'文章切换'})).toBeHidden();
+  await page.setViewportSize({width:430,height:844});
+  await expect.poll(()=>activeSlide(page)).toEqual([2]);
   await page.emulateMedia({reducedMotion:'reduce'});
-  await page.getByRole('button',{name:'上一篇文章'}).click();
+  await page.getByRole('button',{name:'第 2 篇文章'}).click();
   await expect.poll(()=>activeSlide(page)).toEqual([1]);
   await track.scrollIntoViewIfNeeded();
   const before=await page.evaluate(()=>scrollY);
@@ -159,17 +183,33 @@ test('article loading, failure and retry do not hide reviews; a new page starts 
   await expect(section.getByRole('alert')).toContainText('讨论加载失败');
   fail=false;
   await section.getByRole('button',{name:'重试',exact:true}).click();
-  await expect(section.locator('.forum-entry')).toHaveCount(20);
-  await section.getByRole('button',{name:'下一篇文章'}).click();
+  await expect(section.locator(entry)).toHaveCount(20);
+  const controls=section.getByRole('navigation',{name:'文章切换'});
+  await expect(controls.getByRole('button')).toHaveCount(3);
+  await section.getByRole('button',{name:'第 2 篇文章'}).click();
   await expect.poll(()=>activeSlide(page)).toEqual([1]);
+  await section.getByRole('button',{name:'第 3 篇文章'}).click();
+  await expect.poll(()=>activeSlide(page)).toEqual([2]);
+  await expect(controls.getByRole('button',{name:'第 4 篇文章'})).toBeVisible();
+  await expect(controls.getByRole('button')).toHaveCount(3);
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await section.locator('.book-article-track').focus();
+  for (let index=3; index<20; index++) {
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(()=>activeSlide(page)).toEqual([index]);
+  }
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(()=>activeSlide(page)).toEqual([0]);
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(()=>activeSlide(page)).toEqual([19]);
   const pagination=section.getByRole('navigation',{name:'文章分页'});
   await pagination.getByRole('button',{name:'下一页'}).click();
-  await expect(section.locator('.forum-entry')).toHaveCount(1);
+  await expect(section.locator(entry)).toHaveCount(1);
   await expect(section.locator('.forum-entry-title')).toContainText('第 21 篇');
   await expect.poll(()=>activeSlide(page)).toEqual([0]);
   await expect(pagination.getByRole('button',{name:'下一页'})).toBeDisabled();
   await pagination.getByRole('button',{name:'上一页'}).click();
-  await expect(section.locator('.forum-entry')).toHaveCount(20);
+  await expect(section.locator(entry)).toHaveCount(20);
   await expect.poll(()=>activeSlide(page)).toEqual([0]);
 });
 
@@ -178,9 +218,9 @@ for (const width of [768,1440]) test(`desktop ${width}: articles stay in a verti
   await mockArticles(page,3);
   await page.goto(detail);
   const section=page.locator('#articles-section');
-  await expect(section.locator('.forum-entry')).toHaveCount(3);
+  await expect(section.locator(entry)).toHaveCount(3);
   await expect(section.getByRole('navigation',{name:'文章切换'})).toBeHidden();
-  const boxes=await section.locator('.forum-entry').evaluateAll(rows=>rows.map(row=>{
+  const boxes=await section.locator(entry).evaluateAll(rows=>rows.map(row=>{
     const {x,y,width,height}=row.getBoundingClientRect();return {x,y,width,height};
   }));
   expect(boxes[1].x).toBe(boxes[0].x);
@@ -192,14 +232,18 @@ for (const width of [768,1440]) test(`desktop ${width}: articles stay in a verti
   await section.screenshot({path:info.outputPath(`verified-desktop-${width}.png`)});
 });
 
-test('dark mode keeps both section headings readable',async ({page},info)=>{
+test('dark mode keeps both sections on the same surface with readable headings',async ({page},info)=>{
   await page.setViewportSize({width:390,height:844});
   await page.emulateMedia({colorScheme:'dark'});
   await mockArticles(page,2);
   await page.goto(detail);
-  await expect(page.locator('#articles-section .forum-entry')).toHaveCount(2);
+  await expect(page.locator('#articles-section').locator(entry)).toHaveCount(2);
   await expect(page.locator('html')).toHaveClass(/dark/);
   const colors=await page.locator('#articles-heading').evaluate(el=>({heading:getComputedStyle(el).color,expected:getComputedStyle(document.querySelector('.book-review-content')!).color}));
   expect(colors.heading).toBe(colors.expected);
+  const surfaces=await page.locator('#articles-section').evaluate(el=>({article:getComputedStyle(el).backgroundColor,review:getComputedStyle(document.querySelector('#reviews-section')!).backgroundColor,list:getComputedStyle(el.querySelector('.forum-entry-list')!).backgroundColor}));
+  expect(surfaces.article).toBe(surfaces.review);
+  expect(surfaces.list).toBe('rgba(0, 0, 0, 0)');
+  await expect(page.getByRole('navigation',{name:'文章切换'}).getByRole('button')).toHaveCount(2);
   await page.locator('#articles-section').screenshot({path:info.outputPath('verified-articles-dark.png')});
 });

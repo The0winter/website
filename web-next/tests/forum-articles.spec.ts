@@ -18,7 +18,7 @@ async function entries(page:Page) {
 }
 
 for (const width of [390,1440]) {
-  test(`${width}px: five full reviews share a question and book, with a white discussion surface`, async ({page}, info) => {
+  test(`${width}px: five full reviews share a question and book, with a themed book surface`, async ({page}, info) => {
     await page.setViewportSize({width,height:900});
     const errors:string[] = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -46,12 +46,13 @@ for (const width of [390,1440]) {
     await page.screenshot({path:info.outputPath(`final-question-${width}.png`)});
     await page.getByRole('dialog').getByRole('link',{name:'查看相关书籍'}).click();
     await expect(page.getByRole('region',{name:'文章',exact:true})).toBeVisible();
-    await expect(page.locator('#articles-section .forum-entry')).toHaveCount(5);
-    await expect(page.locator('#articles-section')).toHaveCSS('background-color','rgb(255, 255, 255)');
+    await expect(page.locator('#articles-section .book-article-slide:not([data-clone]) .forum-entry')).toHaveCount(5);
+    const reviewSurface=await page.locator('#reviews-section').evaluate(el=>getComputedStyle(el).backgroundColor);
+    await expect(page.locator('#articles-section')).toHaveCSS('background-color',reviewSurface);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
     await page.locator('#articles-section').scrollIntoViewIfNeeded();
     await page.screenshot({path:info.outputPath(`final-book-discussions-${width}.png`)});
-    await page.locator('#articles-section .forum-entry-title').first().click();
+    await page.locator('#articles-section .book-article-slide:not([data-clone]) .forum-entry-title').first().click();
     await expect(page.locator('.qa-question h1')).toHaveText(manifest.question.title);
     expect(errors).toEqual([]);
   });

@@ -1,6 +1,5 @@
 'use client';
 import {useEffect, useId, useRef, useState} from 'react';
-import {ChevronLeft, ChevronRight} from 'lucide-react';
 import {safeFetch} from '@/lib/request';
 import type {ForumPost} from '@/lib/api';
 import ForumPostList from './ForumPostList';
@@ -9,18 +8,58 @@ function ArticleCarousel({posts}: {posts:ForumPost[]}) {
   const track = useRef<HTMLDivElement>(null);
   const id = useId();
   const [current, setCurrent] = useState(0);
+  const position = useRef(0);
+  const looping = posts.length > 1;
+  // The two inert edge copies let a native swipe cross either end of the list.
+  useEffect(() => {
+    const element = track.current;
+    if (!element) return;
+    const mobile = window.matchMedia('(max-width: 767px)');
+    let timer:ReturnType<typeof setTimeout>;
+    const align = () => {
+      clearTimeout(timer);
+      element.scrollTo({left:mobile.matches ? (position.current + (looping ? 1 : 0)) * element.clientWidth : 0, behavior:'instant'});
+    };
+    const settle = () => {
+      if (!mobile.matches || !looping || !element.clientWidth) return;
+      const index = Math.round(element.scrollLeft / element.clientWidth);
+      if (Math.abs(element.scrollLeft - index * element.clientWidth) > 1) return;
+      if (index === 0 || index === posts.length + 1) {
+        element.scrollTo({left:(index === 0 ? posts.length : 1) * element.clientWidth, behavior:'instant'});
+      }
+    };
+    const scroll = () => {
+      if (!mobile.matches || !element.clientWidth) return;
+      const index = Math.round(element.scrollLeft / element.clientWidth) - (looping ? 1 : 0);
+      position.current = (index + posts.length) % posts.length;
+      setCurrent(position.current);
+      clearTimeout(timer);
+      timer = setTimeout(settle, 160);
+    };
+    align();
+    element.addEventListener('scroll', scroll, {passive:true});
+    element.addEventListener('scrollend', settle);
+    mobile.addEventListener('change', align);
+    const resize = new ResizeObserver(align);
+    resize.observe(element);
+    return () => {
+      clearTimeout(timer);
+      resize.disconnect();
+      element.removeEventListener('scroll', scroll);
+      element.removeEventListener('scrollend', settle);
+      mobile.removeEventListener('change', align);
+    };
+  }, [looping, posts.length]);
   const move = (index:number) => {
     const element = track.current;
     if (!element) return;
-    element.scrollTo({left:Math.max(0, Math.min(posts.length - 1, index)) * element.clientWidth,
+    element.scrollTo({left:(index + (looping ? 1 : 0)) * element.clientWidth,
       behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
   };
+  const dotStart = Math.max(0, Math.min(current - 1, posts.length - 3));
+  const dots = Array.from({length:Math.min(3, posts.length)}, (_, index) => dotStart + index);
   return <>
     <div id={id} ref={track} className="book-article-track" role="group" aria-label="文章列表" tabIndex={posts.length > 1 ? 0 : undefined}
-      onScroll={event => {
-        const element = event.currentTarget;
-        if (element.clientWidth) setCurrent(Math.min(posts.length - 1, Math.round(element.scrollLeft / element.clientWidth)));
-      }}
       onKeyDown={event => {
         if (event.target !== event.currentTarget || !window.matchMedia('(max-width: 767px)').matches) return;
         if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
@@ -28,15 +67,19 @@ function ArticleCarousel({posts}: {posts:ForumPost[]}) {
           move(current + (event.key === 'ArrowLeft' ? -1 : 1));
         }
       }}>
+      {looping && <div className="book-article-slide" data-clone="true" aria-hidden="true" inert>
+        <ForumPostList posts={[posts[posts.length - 1]]} loading={false}/>
+      </div>}
       {posts.map(post => <div className="book-article-slide" key={post.entryId || post.topReply?.id || post.id}>
         <ForumPostList posts={[post]} loading={false}/>
       </div>)}
+      {looping && <div className="book-article-slide" data-clone="true" aria-hidden="true" inert>
+        <ForumPostList posts={[posts[0]]} loading={false}/>
+      </div>}
     </div>
     {posts.length > 1 && <nav className="book-article-controls" aria-label="文章切换">
-      <button type="button" aria-label="上一篇文章" aria-controls={id} disabled={current === 0} onClick={() => move(current - 1)}><ChevronLeft size={18}/></button>
-      <span aria-live="polite" aria-atomic="true">{current + 1} / {posts.length}</span>
-      <span className="book-article-hint">左右滑动切换</span>
-      <button type="button" aria-label="下一篇文章" aria-controls={id} disabled={current === posts.length - 1} onClick={() => move(current + 1)}><ChevronRight size={18}/></button>
+      {dots.map((index, slot) => <button key={slot} type="button" aria-label={`第 ${index + 1} 篇文章`} aria-current={current === index ? 'true' : undefined} aria-controls={id} onClick={() => move(index)}><span/></button>)}
+      <span className="sr-only" aria-live="polite" aria-atomic="true">{current + 1} / {posts.length}</span>
     </nav>}
   </>;
 }
