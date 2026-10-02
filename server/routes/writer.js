@@ -48,7 +48,16 @@ export function writerRoutes(app, auth) {
     const end = req.query.end || today;
     if (typeof end !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(end) || !Number.isFinite(Date.parse(end)) || new Date(end).toISOString().slice(0, 10) !== end || end > today || end < '2000-01-01') fail(400, '统计日期无效');
     const owner = new mongoose.Types.ObjectId(req.user.id);
-    const books = await Book.find({author_id: owner, deletedAt: null}).select('_id views').lean();
+    const filter={author_id:owner,deletedAt:null};
+    let workTitle;
+    const work=req.query.work;
+    if(work!==undefined){
+      if(typeof work!=='string'||!/^([bm])_[a-zA-Z0-9_-]{1,128}$/.test(work))fail(400,'作品标识无效');
+      if(work.startsWith('b_')){if(!/^[a-f0-9]{24}$/.test(work.slice(2)))fail(400,'作品标识无效');filter._id=work.slice(2);}
+      else {const draft=await Manuscript.findOne({_id:`${req.user.id}:${work.slice(2)}`,owner,publishedBookId:null}).select('title').lean();if(!draft)fail(404,'作品不存在');workTitle=draft.title;filter._id=null;}
+    }
+    const books = await Book.find(filter).select('_id views title').lean();
+    if(work?.startsWith('b_')){if(!books.length)fail(404,'作品不存在');workTitle=books[0].title;}
     const bookIds = books.map(book => book._id);
     const daily = mongoose.connection.collection('readdailies');
     const latest = periodStart(end, period);
@@ -70,7 +79,7 @@ export function writerRoutes(app, auth) {
       const date = movePeriod(start, period, index);
       return {date, views: movePeriod(date, period, 1) <= historyStart ? null : totals.get(date) || 0};
     });
-    res.set('Cache-Control', 'private, no-store').json({period, points, historyStart, totalViews: books.reduce((sum, book) => sum + (book.views || 0), 0),
+    res.set('Cache-Control', 'private, no-store').json({workTitle,period, points, historyStart, totalViews: books.reduce((sum, book) => sum + (book.views || 0), 0),
       bestChapter: best[0] || null, hasPrevious: start > periodStart(historyStart, period), hasNext: latest < periodStart(today, period),
       previousEnd: movePeriod(start, 'day', -1), nextEnd: movePeriod(latest, period, count) > today ? today : movePeriod(latest, period, count),
     });

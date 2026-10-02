@@ -10,6 +10,7 @@ import './mobile-writer-view.css';
 
 // Keep the immediately available dialog shell independent of the editors.
 const WriterStatistics = dynamic(() => import('./WriterStatistics'), {ssr: false});
+const WorkTransfer = dynamic(() => import('./WorkTransfer'), {ssr:false});
 const WritingWorkspace = dynamic(() => import('./WritingWorkspace'), {ssr: false});
 const WorkCreator = dynamic(() => import('./WorkCreator'), {
   ssr: false,
@@ -28,9 +29,10 @@ export default function MobileWriterView({ view, covered, onBack, onExited, onCh
 }) {
   const destination = writerEntry(view.entry);
   const statistics = destination.kind === 'statistics';
+  const transfer = destination.kind === 'transfer';
   const chapters = destination.kind === 'chapters';
   const create = destination.kind === 'new';
-  const title = statistics ? '作品数据' : '创作';
+  const title = statistics ? '作品数据' : transfer ? '作品搬运' : '创作';
   const [draftKey] = useState(() => crypto.randomUUID());
   const [elapsed, setElapsed] = useState(false);
   const [ready, setReady] = useState(false);
@@ -79,7 +81,8 @@ export default function MobileWriterView({ view, covered, onBack, onExited, onCh
           <LoadingLogo/><p><LoadingText branded>{create ? '正在准备新作品' : `正在加载${title}`}</LoadingText></p><div className="mw-view-skeleton" aria-hidden="true"><i/><i/><i/></div>
         </div>}
         <div className="mw-view-body" inert={!loaded} aria-hidden={!loaded || undefined}>
-          {statistics && elapsed && <WriterStatistics onReady={markReady}/>}
+          {statistics && elapsed && <WriterStatistics work={destination.statisticsWork} onReady={markReady}/>}
+          {transfer && elapsed && <WorkTransfer onReady={markReady}/>}
           {chapters && elapsed && <WritingWorkspace reference={destination.reference} embedded compactHeader onExit={onBack} onReady={markReady} onChanged={onChanged}/>}
           {create && elapsed && <WorkCreator draftKey={draftKey} embedded onClose={onBack} onComplete={() => {onChanged(); onBack();}}/>}
           {destination.kind === 'works' && <p className="writing-note">请返回创作中心选择作品。</p>}

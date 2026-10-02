@@ -5,6 +5,7 @@ import WorkActions from './WorkActions';
 import WorkCoverButton from './WorkCoverButton';
 import WritingWorkspace from './WritingWorkspace';
 import WriterStatistics from './WriterStatistics';
+import WorkTransfer from './WorkTransfer';
 import './writer-desktop.css';
 import {LoadingLogo, LoadingText} from './BrandLoading';
 import { safeFetch as fetch } from '@/lib/request';
@@ -14,7 +15,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowLeft, PenTool, BookOpen, BarChart3,
+  ArrowLeft, PenTool, BookOpen, BarChart3, Upload,
   Plus, Settings, AlertCircle, CheckCircle2,
   Shield, Ban, Unlock, Search, LayoutDashboard
 } from 'lucide-react';
@@ -65,7 +66,8 @@ export default function WriterDashboard({entry}: {entry: string}) {
   // ================= State 定义区域 =================
 
 // 核心：视图控制 'works' | 'admin' | 'adminBooks'
-  const [currentView, setCurrentView] = useState<'works' | 'statistics' | 'admin' | 'adminBooks'>(entryAction === 'statistics' ? 'statistics' : 'works');
+  const [currentView, setCurrentView] = useState<'works' | 'statistics' | 'transfer' | 'admin' | 'adminBooks'>(entryAction === 'statistics' ? 'statistics' : entryAction==='transfer'?'transfer':'works');
+  const [statisticsWork,setStatisticsWork]=useState(destination.statisticsWork);
 
   // 作品相关
   const [myBooks, setMyBooks] = useState<Book[]>([]);
@@ -256,7 +258,7 @@ export default function WriterDashboard({entry}: {entry: string}) {
 
   return (
     <div className="writer-page min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
-      <header className="writer-mobile-header"><button type="button" aria-label={fromCreationCenter ? '返回创作中心' : '返回阅读'} onClick={() => fromCreationCenter ? router.back() : router.push('/')}><ArrowLeft size={20}/></button><h1>{currentView === 'statistics' ? '作品数据' : '作品管理'}</h1></header>
+      <header className="writer-mobile-header"><button type="button" aria-label={fromCreationCenter ? '返回创作中心' : '返回阅读'} onClick={() => fromCreationCenter ? router.back() : router.push('/')}><ArrowLeft size={20}/></button><h1>{currentView === 'statistics' ? '作品数据' : currentView==='transfer'?'作品搬运':'作品管理'}</h1></header>
       {/* Toast */}
       {toast && (
         <div className="writer-toast fixed top-4 left-1/2 transform -translate-x-1/2 z-[110] animate-in fade-in slide-in-from-top-4">
@@ -284,7 +286,7 @@ export default function WriterDashboard({entry}: {entry: string}) {
             <BookOpen className="h-5 w-5" /> 作品管理
           </button>
 
-          <button onClick={() => setCurrentView('statistics')} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-600"><BarChart3 className="h-5 w-5"/>作品数据</button>
+          <button onClick={() => setCurrentView('transfer')} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-600"><Upload className="h-5 w-5"/>作品搬运</button>
           {/* 切换到控制台 (仅管理员) */}
           {user.role === 'admin' && (
             <button
@@ -319,12 +321,13 @@ export default function WriterDashboard({entry}: {entry: string}) {
       {/* ================= 主内容区域 ================= */}
       <main className="writer-main flex-1 md:ml-64 p-4 md:p-8 pb-20 md:pb-8">
 
-        {currentView === 'statistics' && <WriterStatistics/>}
+        {currentView === 'statistics' && <><button type="button" className="mb-4 flex gap-2 items-center" onClick={()=>setCurrentView('works')}><ArrowLeft size={18}/>我的作品</button><WriterStatistics key={statisticsWork} work={statisticsWork}/></>}
+        {currentView === 'transfer' && <WorkTransfer/>}
         {/* 1. 作品管理视图 */}
         {currentView === 'works' && (
             <div className="writer-works-shell bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[80vh] md:min-h-0 animate-in fade-in">
                 <div className="writer-works-heading p-4 md:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 md:bg-white">
-                    <h3 className="font-bold text-lg text-gray-900">我的作品</h3>
+                    <h3 className="font-bold text-lg text-gray-900">我的作品</h3><button type="button" onClick={()=>{setStatisticsWork('');setCurrentView('statistics');}}>数据汇总</button>
                     <button onClick={() => {setBookCreationKey(crypto.randomUUID());setShowCreateBookModal(true);}} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg hover:bg-blue-700 transition shadow-md shadow-blue-500/20 active:scale-95 cursor-pointer">
                         <Plus className="h-4 w-4" /> <span className="hidden md:inline">创建新书</span><span className="md:hidden">新建</span>
                     </button>
@@ -339,9 +342,9 @@ export default function WriterDashboard({entry}: {entry: string}) {
                     ) : (
                         myBooks.map((book) => (
                             <div key={book.id} className="writer-work p-4 md:p-6 flex gap-4 md:gap-6 hover:bg-gray-50 transition group items-start">
-                                <div className="writer-work-cover w-20 aspect-[3/4] h-auto md:w-24 md:aspect-[3/4] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
+                                <button type="button" aria-label={`查看《${book.title}》数据`} onClick={()=>{setStatisticsWork(book.manuscriptKey?`m_${book.manuscriptKey}`:`b_${book.id}`);setCurrentView('statistics');}} className="writer-work-cover w-20 aspect-[3/4] h-auto md:w-24 md:aspect-[3/4] bg-gray-200 rounded-md md:rounded-lg shadow-sm flex-shrink-0 flex items-center justify-center text-gray-400 overflow-hidden relative">
                                     {book.cover_image ? <BookCover src={book.cover_image} className="w-full h-full object-cover" /> : <BookOpen className="h-8 w-8 opacity-50" />}
-                                </div>
+                                </button>
                                 <div className="writer-work-info flex-1 flex flex-col justify-between min-h-[7rem] md:min-h-[8rem]">
                                     <div>
                                         <div className="flex justify-between items-start">

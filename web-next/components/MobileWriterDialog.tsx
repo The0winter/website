@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, ArrowRight, BookOpen, ChevronLeft, ChevronRight, FilePenLine, PenTool, Plus, BarChart3, LockKeyhole } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, ChevronLeft, ChevronRight, FilePenLine, PenTool, Plus, Upload, LockKeyhole } from 'lucide-react';
 import {LoadingLogo, LoadingText} from './BrandLoading';
 import { useAuth } from '@/contexts/AuthContext';
 import { booksApi, type Book } from '@/lib/api';
@@ -73,7 +73,7 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
       const viewId = form?.closest<HTMLElement>('.mw-view')?.dataset.viewId;
       const removing = history.state?.mobileWriter !== marker || !historyWriterViews().some(view => view.id === viewId);
       if (form && removing) {
-        const warning = form.classList.contains('work-create-form') ? '作品还未创建，确定关闭？已填写的内容不会保存。' : '还有未保存的内容，确定关闭？可以先保存草稿，之后继续整理。';
+        const warning = form.classList.contains('wt-form') ? '作品还未提交，确定离开？已填写的信息和文件选择不会保存。' : form.classList.contains('work-create-form') ? '作品还未创建，确定关闭？已填写的内容不会保存。' : '还有未保存的内容，确定关闭？可以先保存草稿，之后继续整理。';
         if (form.dataset.busy === 'true' || (form.dataset.dirty === 'true' && !confirm(warning))) {
           history.forward(); return;
         }
@@ -209,11 +209,11 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
       <header className="mw-header"><button type="button" className="mw-back" aria-label="返回上一页" onClick={() => dismiss.current()}><ArrowLeft size={21}/></button><h2 id="mw-title">创作中心</h2></header>
       <section className="mw-welcome"><h3>每个故事，都有意义</h3><span className="mw-pen" aria-hidden="true"><PenTool size={24}/></span></section>
       {authLoading ? <p className="mw-status" role="status"><LoadingLogo/><LoadingText branded>正在确认登录状态</LoadingText></p> : !user ? <section className="mw-guest"><FilePenLine size={32}/><h3>你的故事，值得被读到</h3><p>登录后创建作品、保存草稿，<br/>也可以接着写上次未完成的章节。</p><Link prefetchMode="intent" href="/login" className="mw-primary" onNavigate={() => navigate.current()}>登录并开始创作<ArrowRight size={17}/></Link></section> : <>
-        <div className="mw-actions"><Link prefetchMode="intent" href="/writer?action=new&from=creation" className="mw-action mw-action-primary" onNavigate={event => { event.preventDefault(); openView("/writer?action=new&from=creation"); }}><Plus size={23}/><strong>新建作品</strong><span>开启一个新故事</span></Link><Link prefetchMode="intent" href="/writer?action=statistics&from=creation" className="mw-action" onNavigate={event => { event.preventDefault(); openView("/writer?action=statistics&from=creation"); }}><BarChart3 size={23}/><strong>作品数据</strong><span>浏览趋势 · 阅读统计</span></Link></div>
-        <section className="mw-works" aria-label="我的作品"><div className="mw-section-heading"><h3>我的作品</h3></div>
+        <div className="mw-actions"><Link prefetchMode="intent" href="/writer?action=new&from=creation" className="mw-action mw-action-primary" onNavigate={event => { event.preventDefault(); openView("/writer?action=new&from=creation"); }}><Plus size={23}/><strong>新建作品</strong><span>开启一个新故事</span></Link><Link prefetchMode="intent" href="/writer?action=transfer&from=creation" className="mw-action" onNavigate={event => { event.preventDefault(); openView("/writer?action=transfer&from=creation"); }}><Upload size={23}/><strong>作品搬运</strong><span>上传文稿 · 分享好书</span></Link></div>
+        <section className="mw-works" aria-label="我的作品"><div className="mw-section-heading"><h3>我的作品</h3><button type="button" onClick={()=>openView('/writer?action=statistics&from=creation')}>数据汇总</button></div>
           {loading ? <p className="mw-status" role="status"><LoadingLogo/><LoadingText branded>正在翻开你的作品</LoadingText></p> : error ? <div className="mw-status" role="alert"><p>{error}</p><button type="button" onClick={() => setRetry(value => value + 1)}>重新加载</button></div> : books.length ? <div className="mw-book-list">{books.map(book => <article className="mw-book" key={book.id}>
             <div className="mw-cover">
-              <div className="mw-cover-art">{book.cover_image ? <BookCover src={book.cover_image} alt={`${book.title}封面`} sizes="(max-width: 350px) 120px, 180px"/> : <BookOpen size={40}/>}</div>
+              <button type="button" className="mw-cover-art" aria-label={`查看《${book.title}》数据`} onClick={()=>openView(`/writer?action=statistics&work=${encodeURIComponent(book.manuscriptKey ? `m_${book.manuscriptKey}` : `b_${book.id}`)}&from=creation`)}>{book.cover_image ? <BookCover src={book.cover_image} alt={`${book.title}封面`} sizes="(max-width: 350px) 120px, 180px"/> : <BookOpen size={40}/>}</button>
               {book.visibility === 'private' && <span className="work-private"><LockKeyhole size={12}/>私密</span>}
               <WorkActions book={book} menuIcon="more" onChanged={() => {if (books.length === 1 && page > 1) setPage(page - 1); worksChanged();}}/>
             </div>

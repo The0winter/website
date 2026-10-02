@@ -51,7 +51,7 @@ for(const width of [320,390]) test(`mobile center, statistics and private draft 
   await page.goto(base);
   await page.getByRole('button',{name:'创作',exact:true}).click();
   const center=page.getByRole('dialog',{name:'创作中心',exact:true});
-  await expect(center.getByRole('link',{name:'作品数据'})).toBeVisible();
+  await expect(center.getByRole('link',{name:/作品搬运/})).toBeVisible();
   await expect(center.getByRole('link',{name:'写一章'})).toHaveCount(0);
   await center.getByRole('link',{name:'新建作品'}).click();
   const title=`手机草稿${width}${Date.now().toString().slice(-4)}`;
@@ -78,7 +78,7 @@ for(const width of [320,390]) test(`mobile center, statistics and private draft 
   await expect(page.getByLabel('书名',{exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'返回创作中心',exact:true}).click();
   await expect(page.locator('.mw-view')).toHaveCount(0);
-  await center.getByRole('link',{name:'作品数据'}).click();
+  await center.getByRole('button',{name:'数据汇总',exact:true}).click();
   await expect(page.locator('.ws-cards')).toBeVisible();
   for(const label of ['每周','每月','每日']) {
     await page.getByRole('button',{name:label,exact:true}).click();

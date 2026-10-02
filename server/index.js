@@ -10,7 +10,7 @@ try {
   const stopCleanup = config.writeMode === 'readwrite' ? startExpiryCleanup() : () => {};
   const app = createApp(config);
   const server = app.listen(config.port, config.host, () => console.log('API ready on configured loopback/private endpoint'));
-  server.requestTimeout = 15000;
+  server.requestTimeout = 120000; // Bounded TXT uploads may arrive over a mobile connection.
   server.headersTimeout = 10000;
   let stopping = false;
   const stop = () => {

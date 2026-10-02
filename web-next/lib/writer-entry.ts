@@ -5,5 +5,5 @@ export function writerEntry(entry: string) {
   const reference = action === 'chapters' ? params.get('work') || ''
     : action === 'new' && params.has('draft') ? `m_${params.get('draft')}`
     : ['manage', 'write'].includes(action || '') && params.has('book') ? `b_${params.get('book')}` : '';
-  return {reference, kind: reference ? 'chapters' : action === 'new' ? 'new' : action === 'statistics' ? 'statistics' : 'works'};
+  return {reference, statisticsWork: action === 'statistics' ? params.get('work') || '' : '', kind: reference ? 'chapters' : action === 'new' ? 'new' : action === 'transfer' ? 'transfer' : action === 'statistics' ? 'statistics' : 'works'};
 }

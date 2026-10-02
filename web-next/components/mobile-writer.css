@@ -20,6 +20,9 @@
 .mw-action-primary { color:#fff8ed; background:linear-gradient(135deg,#c7535b,#a93844); border-color:#b4444c; box-shadow:0 5px 13px #b4484d20; }
 .mw-section-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:14px; }
 .mw-section-heading h3 { font-size:22px; font-weight:700; }
+.mw-section-heading>button {font-size:13px;padding:10px 0 10px 12px;color:#977359;cursor:pointer;}
+button.mw-cover-art {border:0;padding:0;cursor:pointer;}
+button.mw-cover-art:focus-visible {outline:2px solid #a63e49;outline-offset:3px;}
 .mw-book-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px 12px; }
 .mw-book { display:flex; flex-direction:column; min-width:0; gap:10px; padding:10px; border:1px solid #e9ddd3; border-radius:14px; background:#fffaf6; }
 .mw-cover { position:relative; width:100%; aspect-ratio:3 / 4; }
