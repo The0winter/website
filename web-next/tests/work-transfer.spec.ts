@@ -25,7 +25,7 @@ for(const width of [320,390,1440])test(`transfer submission and cover statistics
   await page.screenshot({path:info.outputPath('final-form.png'),fullPage:true});
   expect(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
   await panel.getByRole('button',{name:'提交审核',exact:true}).click();
-  await expect(panel.getByRole('status')).toContainText('提交成功');
+  await expect(panel.locator('.wt-notice')).toContainText('提交成功');
   await expect(panel.locator('.wt-records').getByRole('heading',{name:`山海之间${width}`,exact:true})).toBeVisible();
   await expect(panel.locator('.wt-records')).toContainText('待审核');
   await page.screenshot({path:info.outputPath('final-submitted.png'),fullPage:true});
@@ -35,5 +35,5 @@ test('admin previews literal text and reviews a submission',async({page},info)=>
   await page.getByRole('tab',{name:'搬运审核',exact:true}).click();await page.getByRole('button',{name:'查看投稿',exact:true}).first().click();
   await expect(page.locator('.wt-preview pre')).toContainText('<script>');expect(await page.evaluate(()=>Object.hasOwn(window,'pwned'))).toBe(false);
   await page.screenshot({path:info.outputPath('final-review.png'),fullPage:true});
-  page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'审核通过并收录',exact:true}).click();await expect(page.getByRole('status')).toContainText('作品已完整收录');
+  page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'审核通过并收录',exact:true}).click();await expect(page.locator('.wt-notice')).toContainText('作品已完整收录');
 });
