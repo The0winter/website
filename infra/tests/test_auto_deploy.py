@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location('auto_deploy', Path(__file__).parents[1] / 'auto-deploy.py')
 deploy = importlib.util.module_from_spec(spec)
@@ -77,6 +77,37 @@ class DeploymentGuards(unittest.TestCase):
 
 
 class TransactionTests(unittest.TestCase):
+    def test_health_waits_for_the_api_listener_and_database(self):
+        with patch.object(deploy, 'run'), patch.object(deploy, 'time') as clock, \
+                patch.object(deploy, 'read', side_effect=[ConnectionRefusedError(), b'{"ready":false}', b'{"ready":true}']) as read:
+            clock.monotonic.return_value = 0
+            deploy.health()
+            self.assertEqual(read.call_count, 3)
+            self.assertEqual(clock.sleep.call_count, 2)
+
+    def test_health_stops_if_the_service_never_starts(self):
+        with patch.object(deploy, 'run'), patch.object(deploy, 'time') as clock, \
+                patch.object(deploy, 'read', side_effect=ConnectionRefusedError()):
+            clock.monotonic.side_effect = [0, 41]
+            with self.assertRaisesRegex(deploy.DeploymentError, 'did not become ready'):
+                deploy.health()
+
+    def test_rollback_restores_nginx_even_when_restart_or_health_fails(self):
+        for failure in ['restart', 'health']:
+            activation = Mock()
+            calls = []
+            def run(*args, **kwargs):
+                calls.append(args)
+                if failure == 'restart' and args[:2] == ('systemctl', 'restart'):
+                    raise deploy.DeploymentError('restart failed')
+            with self.subTest(failure=failure), patch.object(deploy, 'run', side_effect=run), \
+                    patch.object(deploy, 'health', side_effect=deploy.DeploymentError('not ready')):
+                with self.assertRaises(deploy.DeploymentError):
+                    deploy.restore_release(activation, Path('/old'), 'original upstream', True)
+            activation.write.assert_called_once_with(activation.NGINX, 'original upstream')
+            self.assertIn(('nginx', '-t'), calls)
+            self.assertIn(('systemctl', 'reload', 'nginx'), calls)
+
     def test_success_records_acceptance_after_public_validation(self):
         calls = []
         result = deploy.activate_transaction(lambda: calls.append('activate'),

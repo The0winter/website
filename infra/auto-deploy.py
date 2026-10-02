@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import urllib.request
 
 ROOT = Path('/srv/test1')
@@ -185,9 +186,34 @@ def read(url):
 
 
 def health():
-    if not json.loads(read('http://127.0.0.1:5000/health/ready')).get('ready'):
-        raise DeploymentError('API is not ready')
-    run('systemctl', 'is-active', '--quiet', 'test1-api', 'test1-web')
+    # systemctl restart returns before Node has connected to the database and
+    # opened its listener. The web process can become ready much sooner.
+    deadline = time.monotonic() + 40
+    while True:
+        try:
+            run('systemctl', 'is-active', '--quiet', 'test1-api', 'test1-web', timeout=10)
+            if json.loads(read('http://127.0.0.1:5000/health/ready')).get('ready'):
+                return
+        except (OSError, ValueError, DeploymentError):
+            pass
+        if time.monotonic() >= deadline:
+            raise DeploymentError('API and web services did not become ready')
+        time.sleep(0.5)
+
+
+def restore_release(activation, old, nginx, switched):
+    try:
+        if switched:
+            activation.switch(old)
+            run('systemctl', 'restart', 'test1-api', 'test1-web')
+            activation.ready(3000)
+    finally:
+        # Even a failed restart must not leave nginx pointing at the temporary
+        # preview that the transaction will stop in its final cleanup.
+        activation.write(activation.NGINX, nginx)
+        run('nginx', '-t')
+        run('systemctl', 'reload', 'nginx')
+    health()
 
 
 def verify_site(base, head):
@@ -318,17 +344,12 @@ def deploy(old, head, changes, report):
             write_json(new / 'deployment-manifest.json', manifest)
 
         def rollback():
-            if switched:
-                activation.switch(old)
-                run('systemctl', 'restart', 'test1-api', 'test1-web')
-                activation.ready(3000)
-                health()
-            activation.write(activation.NGINX, nginx)
-            run('nginx', '-t')
-            run('systemctl', 'reload', 'nginx')
-            manifest.pop('activatedAt', None)
-            manifest['failedAt'] = now()
-            write_json(new / 'deployment-manifest.json', manifest)
+            try:
+                restore_release(activation, old, nginx, switched)
+            finally:
+                manifest.pop('activatedAt', None)
+                manifest['failedAt'] = now()
+                write_json(new / 'deployment-manifest.json', manifest)
 
         activate_transaction(activate, lambda: verify_site(SITE, head), accept, rollback)
     finally:
