@@ -1,5 +1,6 @@
 import {animateElement} from './browser-animation';
 import {SECTION_TURN_DURATION,SECTION_TURN_EASING} from './section-swipe';
+import {warmForumDestination} from './forum-reading-cache';
 
 type Router={replace:(href:string,options?:{scroll?:boolean})=>void};
 let router:Router|undefined;
@@ -40,6 +41,7 @@ export function installForumNavigation(next:Router) {
 }
 
 export function navigateForumLink(href:string) {
+  warmForumDestination(href);
   const url=new URL(href,location.origin),match=/^\/forum\/(?:question\/)?([^/]+)$/.exec(url.pathname);
   const source=document.querySelector<HTMLElement>('main .forum-page, main .forum-question-page, main .qa-reader');
   if(!router||!source||url.origin!==location.origin||!match||match[1]==='create'||href===currentHref())return false;

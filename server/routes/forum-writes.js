@@ -8,6 +8,7 @@ import Post from '../models/ForumPost.js';
 import Reply from '../models/ForumReply.js';
 import Comment from '../models/ForumReplyComment.js';
 import {forumFeed} from '../services/forum-feed.js';
+import {forumJson} from '../services/forum-json.js';
 import {pagination} from '../services/pagination.js';
 
 const plain=value=>safeHtml(value).replace(/<[^>]*>/g,'').trim();
@@ -20,7 +21,7 @@ export function forumWrites(app,auth){
     if(!await Book.exists({_id:req.params.id,deletedAt:null,visibility:{$ne:'private'}}))fail(404,'书籍不存在');
     const {page}=pagination(req.query,20,20);
     if(page>100)fail(400,'分页范围超限');
-    res.json(await forumFeed({bookId:req.params.id,page}));
+    await forumJson(req, res, await forumFeed({bookId:req.params.id,page}));
   }));
   app.get('/api/books/:id/articles',asyncRoute(async(req,res)=>{
     if(!/^[a-f0-9]{24}$/i.test(req.params.id))fail(400,'书籍ID无效');

@@ -5,6 +5,7 @@ import {captureMobileSection, captureMobileSectionShell} from './mobile-section-
 import {mobileHomeScroll, rememberMobileHomeScroll} from './mobile-home-position';
 import {animateElement, type BrowserAnimation} from './browser-animation';
 
+import {loadForum} from './forum-cache';
 type Section = 'library' | 'home' | 'forum';
 export type MobileSectionDrag = {update: (dx: number) => void; release: (commit: boolean) => void; cancel: () => void};
 const sections = ['/library', '/', '/forum'];
@@ -293,6 +294,7 @@ function createTransition(href: string, dragging = false, sourceHref = location.
 }
 
 export function beginMobileSectionTransition(href: string) {
+  if (new URL(href, location.origin).pathname === '/forum') loadForum();
   if (active?.href === new URL(href, location.origin).href) {active.commit(); return true;}
   return Boolean(createTransition(href));
 }
@@ -305,6 +307,7 @@ export function beginMobileSectionReturn(sourceHref: string) {
 export function startMobileSectionDrag(source: Element | null, section: Section) {
   const link = sectionLink(source, section);
   if (!link) return;
+  if (section === 'forum') loadForum();
   const drag = createTransition(link.href, true);
   if (!drag) return;
   return {...drag, release(commit: boolean) {

@@ -1,54 +1,88 @@
 import {forumApi, type ForumPost} from './api';
+import {clearForumReadingCache, setForumReadingUser} from './forum-reading-cache';
+import {requestSignal} from './request-signal';
 
-type Feed = 'recommend' | 'hot' | 'follow';
-type Snapshot = {posts: Partial<Record<Feed, ForumPost[]>>; loading: Record<Feed, boolean>; errors: Partial<Record<Feed, string>>};
-const empty: Snapshot = {posts: {}, loading: {recommend: true, hot: true, follow: true}, errors: {}};
+export type Feed = 'recommend' | 'hot' | 'follow';
+type ByFeed<T> = Partial<Record<Feed, T>>;
+type Snapshot = {posts:ByFeed<ForumPost[]>; loading:ByFeed<boolean>; errors:ByFeed<string>;
+  loadingMore:ByFeed<boolean>; moreErrors:ByFeed<string>; cursors:ByFeed<string|null>; batches:ByFeed<number>};
+const empty:Snapshot = {posts:{}, loading:{recommend:true, hot:true, follow:true}, errors:{}, loadingMore:{}, moreErrors:{}, cursors:{}, batches:{}};
 let snapshot = empty;
-let user: string | null | undefined;
+let user:string|null|undefined;
 let generation = 0;
 const updated = new Map<Feed, number>();
-const pending = new Map<Feed, Promise<void>>();
+const pending = new Map<Feed, AbortController>();
+const sizes = new Map<Feed, number>();
 const requested = new Set<Feed>();
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach(listener => listener());
+const key = (post:ForumPost) => post.entryId || post.topReply?.id || post.id;
+function unique(posts:ForumPost[]) {const seen = new Set<string>(); return posts.filter(post => !seen.has(key(post)) && !!seen.add(key(post)));}
+let position = {tab:'recommend' as Feed, search:'', y:0};
+export const getForumPosition = () => position;
+export function rememberForumPosition(next:typeof position) {position = next;}
+export const forumPageSize = () => typeof window !== 'undefined' && window.matchMedia('(max-width:767px)').matches ? 5 : 20;
 
-export function setForumUser(id: string | null) {
+function cancel() {generation++; for (const controller of pending.values()) controller.abort(); pending.clear();}
+export function setForumUser(id:string|null) {
+  setForumReadingUser(id);
   if (user === id) return;
-  user = id;
-  generation++;
-  snapshot = empty;
-  updated.clear(); pending.clear(); requested.clear(); notify();
+  const queued = user === undefined ? [...requested] : [];
+  user = id; cancel(); snapshot = empty;
+  position = {tab:'recommend', search:'', y:0};
+  updated.clear(); sizes.clear(); requested.clear(); notify();
+  for (const tab of queued) loadForum(tab);
 }
 export const getForumSnapshot = () => snapshot;
 export const serverForumSnapshot = () => empty;
-export function subscribeForum(listener: () => void) {
-  listeners.add(listener);
-  return () => {listeners.delete(listener);};
-}
-export function loadForum(tab: Feed = 'recommend') {
-  if (user === undefined) return;
+export function subscribeForum(listener:() => void) {listeners.add(listener); return () => {listeners.delete(listener);};}
+
+export function loadForum(tab:Feed = 'recommend') {
   requested.add(tab);
-  if (pending.has(tab) || Date.now() - (updated.get(tab) ?? 0) < 60000) return;
-  const version = generation;
-  snapshot = {...snapshot, loading: {...snapshot.loading, [tab]: !snapshot.posts[tab]}, errors: {...snapshot.errors, [tab]: undefined}};
-  const request = forumApi.getPosts(tab).then(posts => {
+  if (user === undefined || pending.has(tab) || Date.now() - (updated.get(tab) ?? 0) < 60000) return;
+  sizes.set(tab, sizes.get(tab) || forumPageSize());
+  const previous = snapshot.posts[tab];
+  // Revalidate the retained window on return without shrinking a scrolled list.
+  const limit = Math.max(sizes.get(tab)!, Math.min(100, previous?.length || 0));
+  const version = generation, controller = new AbortController();
+  pending.set(tab, controller);
+  snapshot = {...snapshot, loading:{...snapshot.loading, [tab]:!previous}, errors:{...snapshot.errors, [tab]:undefined}};
+  notify();
+  void forumApi.getFeedPage(tab, limit, null, requestSignal(controller.signal)).then(result => {
     if (version !== generation) return;
-    snapshot = {...snapshot, posts: {...snapshot.posts, [tab]: posts || []}};
+    const retained = previous && previous.length > limit;
+    snapshot = {...snapshot, posts:{...snapshot.posts, [tab]:unique(retained ? [...result.items, ...previous] : result.items)},
+      cursors:{...snapshot.cursors, [tab]:retained ? snapshot.cursors[tab] : result.nextCursor},
+      batches:{...snapshot.batches, [tab]:snapshot.batches[tab] || 1}, moreErrors:{...snapshot.moreErrors, [tab]:undefined}};
     updated.set(tab, Date.now());
   }).catch(() => {
-    // Retain the last successful list when a background refresh fails.
-    if (version === generation) snapshot = {...snapshot, errors: {...snapshot.errors, [tab]: '暂时无法加载，请重试'}};
+    if (version === generation) snapshot = {...snapshot, errors:{...snapshot.errors, [tab]:'暂时无法加载，请重试'}};
   }).finally(() => {
     if (version !== generation) return;
-    pending.delete(tab);
-    snapshot = {...snapshot, loading: {...snapshot.loading, [tab]: false}};
-    notify();
+    pending.delete(tab); snapshot = {...snapshot, loading:{...snapshot.loading, [tab]:false}}; notify();
   });
-  pending.set(tab, request);
-  notify();
+}
+
+export async function loadMoreForum(tab:Feed) {
+  const cursor = snapshot.cursors[tab];
+  if (user === undefined || !cursor || pending.has(tab)) return;
+  const version = generation, controller = new AbortController();
+  pending.set(tab, controller);
+  snapshot = {...snapshot, loadingMore:{...snapshot.loadingMore, [tab]:true}, moreErrors:{...snapshot.moreErrors, [tab]:undefined}}; notify();
+  try {
+    const result = await forumApi.getFeedPage(tab, sizes.get(tab) || forumPageSize(), cursor, requestSignal(controller.signal));
+    if (version !== generation) return;
+    snapshot = {...snapshot, posts:{...snapshot.posts, [tab]:unique([...(snapshot.posts[tab] || []), ...result.items])},
+      cursors:{...snapshot.cursors, [tab]:result.nextCursor}, batches:{...snapshot.batches, [tab]:(snapshot.batches[tab] || 1) + 1}};
+    updated.set(tab, Date.now());
+  } catch {
+    if (version === generation) snapshot = {...snapshot, moreErrors:{...snapshot.moreErrors, [tab]:'更多内容加载失败，请重试'}};
+  } finally {
+    if (version === generation) {pending.delete(tab); snapshot = {...snapshot, loadingMore:{...snapshot.loadingMore, [tab]:false}}; notify();}
+  }
 }
 export function refreshForum() {
-  generation++; pending.clear(); updated.clear();
-  // Mutations refresh visited feeds without fetching unopened tabs.
+  cancel(); clearForumReadingCache(); updated.clear();
+  snapshot = {...snapshot, loadingMore:{}};
   for (const tab of requested) loadForum(tab);
 }

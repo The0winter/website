@@ -8,6 +8,7 @@ import ForumPostList from '@/components/ForumPostList';
 import ForumAnswerReader from '@/components/ForumAnswerReader';
 import {answerFeedItem, textToForumHtml} from '@/lib/forum-presentation';
 import {refreshForum} from '@/lib/forum-cache';
+import {loadForumReading} from '@/lib/forum-reading-cache';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -143,17 +144,12 @@ function PostContent() {
           allReplies = replies;
           finalAnswer = selected;
         } else {
-          const postData = await forumApi.getById(postId);
+          const {post:postData} = await loadForumReading(postId);
           if (postData.type === 'question') {if (active) router.replace(`/forum/question/${postData.id}`); return;}
           finalQuestion = postData;
 
-          if (postData.id) {
-            try {
-              allReplies = await forumApi.getReplies(postData.id);
-            } catch {
-              allReplies = [];
-            }
-          }
+          // Article comments belong to the comments dialog, not the initial
+          // reading dependency chain. Their counts already come with the post.
 
           finalAnswer = {
             id: postData.id,

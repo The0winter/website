@@ -32,7 +32,7 @@ for (const width of [390,1440]) {
     await panel.locator('.forum-entry-title').first().click();
     await expect(page).toHaveURL(new RegExp(`/forum/${first.entryId}\\?fromQuestion=${first.id}`));
     await expect(page.locator('.qa-question h1')).toHaveText(manifest.question.title);
-    await expect(page.locator('.qa-answer')).toHaveCount(5);
+    await expect(page.locator('.qa-answer').first()).toBeVisible();
     await expect(page.locator('.qa-answer > h2')).toHaveCount(0);
     const source = page.getByRole('complementary',{name:'文章来源与许可'}).first();
     await expect(source.getByRole('link',{name:'查看原文 ↗'})).toHaveAttribute('href',first.topReply.source.url);
@@ -42,6 +42,8 @@ for (const width of [390,1440]) {
     await page.screenshot({path:info.outputPath(`final-answer-${width}.png`)});
     await page.locator('.qa-actionbar .qa-current-author').click();
     await expect(page.getByRole('dialog',{name:'全部 5 个回答'})).toBeVisible();
+    await expect(page.locator('.qa-load-more:disabled')).toHaveCount(0);
+    if(await page.locator('.qa-load-more').isVisible())await page.locator('.qa-load-more').click();
     await expect(page.locator('.qa-directory-item')).toHaveCount(5);
     await page.screenshot({path:info.outputPath(`final-question-${width}.png`)});
     await page.getByRole('dialog').getByRole('link',{name:'查看相关书籍'}).click();

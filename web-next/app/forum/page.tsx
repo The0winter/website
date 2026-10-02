@@ -11,7 +11,9 @@ import {
   Search,
 } from 'lucide-react';
 import {useAuth} from '@/contexts/AuthContext';
-import {getForumSnapshot, serverForumSnapshot, subscribeForum, loadForum} from '@/lib/forum-cache';
+import {getForumSnapshot, serverForumSnapshot, subscribeForum, loadForum, loadMoreForum, getForumPosition, rememberForumPosition, forumPageSize} from '@/lib/forum-cache';
+import {useForumPagination} from '@/lib/useForumPagination';
+import {warmForumReaderCode} from '@/lib/forum-reading-cache';
 import HomeSearchHeader from '@/components/HomeSearchHeader';
 import {interruptMobileSectionTransition, navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from '@/lib/mobile-section-navigation';
 import {sectionSwipeThreshold} from '@/lib/section-swipe';
@@ -67,7 +69,33 @@ export default function ForumPage() {
     const text = reason === 'author' ? `不再推荐${row.authorName}的内容` : reason === 'similar' ? '已隐藏这个问题及重复、相似内容' : reason === 'dislike' ? '已隐藏该内容' : `已标记“${feedbackReasons[reason]}”并隐藏该内容`;
     setFeedbackNotice({id:row.id,text:text + (persisted ? '' : '（当前浏览器无法保存，仅本次浏览有效）')});
   };
-  const {posts: postsCache, loading: loadingState, errors} = useSyncExternalStore(subscribeForum, getForumSnapshot, serverForumSnapshot);
+  const {posts: postsCache, loading: loadingState, errors, loadingMore, moreErrors, cursors, batches} = useSyncExternalStore(subscribeForum, getForumSnapshot, serverForumSnapshot);
+  const savedPosition = useRef<{tab:FeedTab; search:string; y:number}|null>(null);
+  const restoredPosition = useRef(false);
+  useEffect(() => {
+    if (authLoading) return;
+    savedPosition.current = {...getForumPosition()}; restoredPosition.current = false;
+    setActiveTab(savedPosition.current.tab); setSearchQuery(savedPosition.current.search);
+    const timer = setTimeout(warmForumReaderCode, 450);
+    return () => clearTimeout(timer);
+  }, [authLoading, user?.id]);
+  useEffect(() => {
+    const saved = savedPosition.current;
+    if (restoredPosition.current || !saved || activeTab !== saved.tab || searchQuery !== saved.search || !postsCache[activeTab] || !feedback.ready) return;
+    const frame = requestAnimationFrame(() => {
+      window.scrollTo({top:saved.y, behavior:'instant'}); restoredPosition.current = true;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeTab, searchQuery, postsCache, feedback.ready]);
+  useEffect(() => {
+    const save = () => {if (restoredPosition.current && location.pathname === '/forum') rememberForumPosition({tab:activeTab, search:searchQuery, y:scrollY});};
+    window.addEventListener('scroll', save, {passive:true});
+    document.addEventListener('pointerdown', save, true);
+    return () => {window.removeEventListener('scroll', save); document.removeEventListener('pointerdown', save, true);};
+  }, [activeTab, searchQuery]);
+  const sentinel = useForumPagination({identity:`${user?.id || 'guest'}:${activeTab}`, enabled:!authLoading && !!postsCache[activeTab],
+    loading:!!loadingState[activeTab] || !!loadingMore[activeTab], hasMore:!!cursors[activeTab], error:errors[activeTab] || moreErrors[activeTab],
+    preload:forumPageSize() === 5 && batches[activeTab] === 1, loadMore:() => void loadMoreForum(activeTab)});
   const matchesSearch = (post: import('@/lib/api').ForumPost) => !searchQuery.trim() || [post.title, post.excerpt, post.topReply?.title, post.topReply?.content, post.topReply?.author.name].some(value => value?.toLocaleLowerCase().includes(searchQuery.trim().toLocaleLowerCase()));
   const topics = [...new Map((postsCache[activeTab] || []).filter(post => post.type === 'question').map(post => [post.id, post])).values()].slice(0,5);
 
@@ -286,7 +314,12 @@ return (
             {TABS.map(tab => (
               <div key={tab.id} className="forum-feed-panel w-full shrink-0" inert={tab.id!==activeTab} aria-hidden={tab.id!==activeTab}>
                 {errors[tab.id] && <div className="forum-feed-error" role="status">{errors[tab.id]}<button onClick={()=>loadForum(tab.id)}>重新加载</button></div>}
-                {(tab.id === activeTab || postsCache[tab.id]) && (!errors[tab.id] || postsCache[tab.id]) && (tab.id === 'hot' && !searchQuery.trim() ? renderHotList(tab.id) : <ForumPostList posts={postsCache[tab.id]?.filter(matchesSearch).filter(post => tab.id !== 'recommend' || isForumRecommended(post,feedback.rows))} loading={loadingState[tab.id] || tab.id === 'recommend' && (!feedback.ready || authLoading)} onFeedback={tab.id === 'recommend' ? setFeedbackPost : undefined} emptyText={tab.id === 'recommend' && feedback.rows.length ? '暂时没有更多推荐，可在“推荐偏好”中恢复已隐藏内容。' : undefined}/>)}
+                {(tab.id === activeTab || postsCache[tab.id]) && (!errors[tab.id] || postsCache[tab.id]) && (tab.id === 'hot' && !searchQuery.trim() ? renderHotList(tab.id) : <ForumPostList posts={postsCache[tab.id]?.filter(matchesSearch).filter(post => tab.id !== 'recommend' || isForumRecommended(post,feedback.rows))} loading={!!loadingState[tab.id] || tab.id === 'recommend' && (!feedback.ready || authLoading)} onFeedback={tab.id === 'recommend' ? setFeedbackPost : undefined} emptyText={searchQuery.trim() ? '已加载的内容中暂无匹配，可继续加载更多。' : tab.id === 'recommend' && feedback.rows.length ? '暂时没有更多推荐，可在“推荐偏好”中恢复已隐藏内容。' : undefined}/>)}
+                {tab.id === activeTab && <div ref={sentinel} className="forum-feed-more" aria-live="polite">
+                  {moreErrors[tab.id] && <p role="alert">{moreErrors[tab.id]}</p>}
+                  {cursors[tab.id] && <button type="button" disabled={!!loadingMore[tab.id]} onClick={() => void loadMoreForum(tab.id)}>{loadingMore[tab.id] ? '正在加载更多…' : moreErrors[tab.id] ? '重试' : '加载更多内容'}</button>}
+                  {postsCache[tab.id]?.length && !cursors[tab.id] && !loadingState[tab.id] ? <span>已展示全部内容</span> : null}
+                </div>}
               </div>
             ))}
           </div>

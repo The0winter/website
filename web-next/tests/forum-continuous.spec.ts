@@ -35,7 +35,12 @@ for (const width of [320,390,1440]) {
     const row = await entry(page);
     const answerUrl = `${base}/forum/${row.entryId}?fromQuestion=${row.id}`;
     await page.goto(answerUrl);
+    await expect(page.locator('.qa-answer').first()).toBeVisible();
+    await page.locator('.qa-actionbar .qa-current-author').click();
+    await expect(page.locator('.qa-load-more:disabled')).toHaveCount(0);
+    if(await page.locator('.qa-load-more').isVisible())await page.locator('.qa-load-more').click();
     await expect(page.locator('.qa-answer')).toHaveCount(5);
+    await page.getByRole('dialog').getByRole('button',{name:'关闭弹窗'}).click();
     const ids = await page.locator('.qa-answer').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-answer-id')));
     expect(ids[0]).toBe(row.entryId);
     await expect(page.locator('.qa-question h1')).toHaveText(row.title);
@@ -95,16 +100,27 @@ test('pagination recovers from failure, keeps a deep-linked answer unique, and r
   const question = await created.json();
   const ids:string[] = [];
   for (let index = 0; index < 24; index++) {
-    const response = await page.request.post(`${base}/api/forum/posts/${question.id}/replies`, {headers, data:{content:Array.from({length:5}, (_, paragraph) => `<p>第 ${index + 1} 位书友的回答，第 ${paragraph + 1} 段。阅读完毕后应当直接接下一篇完整回答，不重复标题。</p>`).join('')}});
+    const response = await page.request.post(`${base}/api/forum/posts/${question.id}/replies`, {headers, data:{content:Array.from({length:20}, (_, paragraph) => `<p>第 ${index + 1} 位书友的回答，第 ${paragraph + 1} 段。阅读完毕后应当直接接下一篇完整回答，不重复标题。</p>`).join('')}});
     expect(response.ok()).toBeTruthy(); ids.push((await response.json()).id);
   }
   await page.goto(`${base}/forum/${ids[0]}?fromQuestion=${question.id}`);
-  await expect(page.locator('.qa-answer')).toHaveCount(21);
-  await page.route(`**/api/forum/posts/${question.id}/replies?page=2&limit=20`, route => route.fulfill({status:503,json:{error:'临时不可用'}}), {times:1});
+  await expect(page.locator('.qa-answer')).toHaveCount(1);
+  await page.locator('.qa-actionbar .qa-current-author').click();
+  await page.locator('.qa-load-more').click();
+  await expect(page.locator('.qa-answer')).toHaveCount(6);
+  await page.getByRole('dialog').getByRole('button',{name:'关闭弹窗'}).click();
+  await page.route(`**/api/forum/posts/${question.id}/replies?page=2&limit=5`, route => route.fulfill({status:503,json:{error:'临时不可用'}}), {times:1});
   await page.locator('.qa-stream-end').scrollIntoViewIfNeeded();
   await expect(page.locator('.qa-stream-end [role=alert]')).toBeVisible();
-  await expect(page.locator('.qa-answer')).toHaveCount(21);
+  await expect(page.locator('.qa-answer')).toHaveCount(6);
   await page.locator('.qa-stream-end').getByRole('button',{name:'重试'}).click();
+  await expect(page.locator('.qa-answer')).toHaveCount(11);
+  await page.locator('.qa-actionbar .qa-current-author').click();
+  for(const count of [16,21,24]) {
+    await page.locator('.qa-load-more').click();
+    await expect(page.locator('.qa-answer')).toHaveCount(count);
+  }
+  await page.getByRole('dialog').getByRole('button',{name:'关闭弹窗'}).click();
   await expect(page.locator('.qa-answer')).toHaveCount(24);
   const rendered = await page.locator('.qa-answer').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-answer-id')));
   expect(new Set(rendered).size).toBe(24);

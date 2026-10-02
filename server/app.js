@@ -1,5 +1,7 @@
 import { forumWrites } from './routes/forum-writes.js';
 import {forumFeed,forumExcerpt} from './services/forum-feed.js';
+import {readForumPost} from './services/forum-read.js';
+import {forumJson} from './services/forum-json.js';
 import {chapterResponse} from './services/chapter-storage.js';
 import {pagination} from './services/pagination.js';
 import {createRequestMetrics,allowMetrics} from './services/observability.js';
@@ -313,7 +315,11 @@ app.get('/api/forum/posts', async (req, res) => {
       const {limit,skip} = pagination(req.query);
       const page = Math.floor(skip / limit) + 1;
       if(page>100) return res.status(400).json({error:'分页范围超限'});
-      return res.json((await forumFeed({tab,page,limit})).items);
+      const paged = req.query.format === 'page';
+      if (typeof tab !== 'string' || !['recommend', 'hot', 'follow'].includes(tab)) return res.status(400).json({error:'论坛分类无效'});
+      if (req.query.cursor && !paged || paged && page !== 1) return res.status(400).json({error:'分页参数无效'});
+      const feed = await forumFeed({tab, page, limit, paged, cursor: req.query.cursor});
+      return await forumJson(req, res, paged ? feed : feed.items);
     }
     const currentUserId = await getOptionalUserId(req);
     const {limit,skip}=pagination(req.query);
@@ -397,30 +403,25 @@ app.get('/api/forum/posts/:id', async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
         return res.status(400).json({ error: '无效的帖子ID' });
     }
-    const post = await ForumPost.findById(req.params.id).populate('author', 'username _id').lean();
-
-    if (!post) return res.status(404).json({ error: '帖子不存在' });
-
-    const book = post.bookId ? await Book.findOne({_id:post.bookId,deletedAt:null,visibility:{$ne:'private'}}).select('title').lean() : null;
-    if(post.bookId && !book) return res.status(404).json({error:'帖子不存在'});
-
-    const {likedBy,...publicPost}=post;
-    res.json({
-      ...publicPost,
-      bookTitle: book?.title,
-      id: post._id,
-      votes:post.likes||0,comments:post.replyCount||0,created_at:post.createdAt,
-      hasLiked: currentUserId
-        ? (post.likedBy || []).some(uid => String(uid) === currentUserId)
-        : false,
-      author: {
-        name: post.author?.username,
-        id: post.author?._id
-      }
-    });
+    const result = await readForumPost(req.params.id, currentUserId);
+    if (!result) return res.status(404).json({error:'帖子不存在'});
+    await forumJson(req, res, result.post);
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }
+});
+
+// One bounded read supplies the visible document; other answers/comments are
+// intentionally fetched independently after the reader has become usable.
+app.get('/api/forum/posts/:id/reading', async (req, res) => {
+  try {
+    if (!/^[a-f0-9]{24}$/i.test(req.params.id)) return res.status(400).json({error:'帖子ID无效'});
+    const answerId = req.query.answer;
+    if (answerId !== undefined && (typeof answerId !== 'string' || !/^[a-f0-9]{24}$/i.test(answerId))) return res.status(400).json({error:'回答ID无效'});
+    const result = await readForumPost(req.params.id, await getOptionalUserId(req), {reading:true, answerId});
+    if (!result) return res.status(404).json({error:'内容不存在或不可见'});
+    await forumJson(req, res, result);
+  } catch (error) {res.status(error.status || 500).json({error:error.message});}
 });
 
 // 4. 获取某个帖子的所有回答/评论
@@ -462,7 +463,7 @@ app.get('/api/forum/posts/:id/replies', async (req, res) => {
       }
     }));
 
-    res.json(formattedReplies);
+    await forumJson(req, res, formattedReplies);
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }

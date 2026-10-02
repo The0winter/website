@@ -36,7 +36,7 @@ for(const width of [320,390,1440])for(const kind of ['answer','article'])test(`$
   await page.route('**/api/forum/posts?*',r=>r.fulfill({json:[kind==='answer'?row:{...row,type:'article',topReply:null,entryId:undefined,content}]}));
   await page.route(url=>url.pathname===href.split('?')[0]&&url.searchParams.has('_rsc'),async route=>{await rsc.wait;await route.continue();});
   let requests=0;
-  await page.route(`**/api/forum/posts/${row.id}`,async route=>{requests++;await data.wait;await route.fulfill({json:{...row,type:kind==='answer'?'question':'article',content}});});
+  await page.route(`**/api/forum/posts/${row.id}/reading*`,async route=>{requests++;await data.wait;await route.fulfill({json:{post:{...row,type:kind==='answer'?'question':'article',content},answer:kind==='answer'?{...row.topReply,content,time:'2026-10-01T00:00:00Z'}:null}});});
   await page.route(`**/api/forum/posts/${row.id}/replies?*`,async route=>{await data.wait;await route.fulfill({json:kind==='answer'?[{...row.topReply,content,time:'2026-10-01T00:00:00Z'}]:[]});});
   try {
     await page.goto(base+'/forum');await expect(page.locator('main .forum-entry')).toHaveCount(1);
@@ -47,7 +47,7 @@ for(const width of [320,390,1440])for(const kind of ['answer','article'])test(`$
     await expect(panel.locator('.forum-loading-line')).toHaveCount(20);
     expect((await stats(page)).motions).toHaveLength(1);
     await expect.poll(()=>panel.evaluate(el=>getComputedStyle(el).transform)).toBe('matrix(1, 0, 0, 1, 0, 0)');
-    expect(requests).toBe(0);
+    await expect.poll(()=>requests).toBeGreaterThan(0);
     await page.screenshot({path:info.outputPath(`verified-${kind}-skeleton-${width}.png`)});
     rsc.release();await expect.poll(()=>requests).toBeGreaterThan(0);
     await expect(panel).toBeVisible();await expect(page.locator(`main [data-forum-document="${documentId}"]`)).toHaveCount(0);
@@ -87,7 +87,7 @@ for(const action of ['back','escape'])test(`cancel a cold entry with ${action}, 
     if(action==='back')await page.goBack();else await page.keyboard.press('Escape');
     await expect(page).toHaveURL(base+'/forum');await expect(page.locator('.forum-navigation-panel')).toHaveCount(0);
     held.release();await expect(page.locator('main .forum-entry')).toHaveCount(1);
-    await page.goForward();await expect(page).toHaveURL(base+href);await expect(page.locator('.qa-answer')).toHaveCount(5);
+    await page.goForward();await expect(page).toHaveURL(base+href);await expect(page.locator('.qa-answer').first()).toBeVisible();
     await expect(page.locator('main .forum-page')).toHaveCount(0);
   }finally{held.release();}
 });
@@ -97,7 +97,7 @@ test('fast cached entry still slides only the skeleton, including comment links 
   await page.route('**/api/forum/posts?*',r=>r.fulfill({json:[row]}));
   await page.goto(base+'/forum');
   for(let visit=0;visit<2;visit++){
-    await page.locator('main .forum-entry-title').click();await expect(page.locator('.qa-answer')).toHaveCount(5);await expect(page.locator('.forum-navigation-panel')).toHaveCount(0);
+    await page.locator('main .forum-entry-title').click();await expect(page.locator('.qa-answer').first()).toBeVisible();await expect(page.locator('.forum-navigation-panel')).toHaveCount(0);
     expect((await stats(page)).motions).toHaveLength(visit+1);
     await page.getByRole('link',{name:'返回问答首页'}).click();await expect(page.locator('main .forum-entry')).toHaveCount(1);
   }
@@ -107,15 +107,15 @@ test('fast cached entry still slides only the skeleton, including comment links 
   await page.getByRole('dialog').getByRole('button',{name:'关闭弹窗'}).click();
   await page.getByRole('link',{name:'返回问答首页'}).click();await expect(page.locator('main .forum-entry')).toHaveCount(1);
   await page.emulateMedia({reducedMotion:'reduce'});await page.locator('main .forum-entry-title').click();
-  await expect(page.locator('.qa-answer')).toHaveCount(5);await expect(page.locator('.forum-navigation-panel')).toHaveCount(0);expect((await stats(page)).motions).toHaveLength(3);
+  await expect(page.locator('.qa-answer').first()).toBeVisible();await expect(page.locator('.forum-navigation-panel')).toHaveCount(0);expect((await stats(page)).motions).toHaveLength(3);
 });
 
 test('data errors reveal retry controls instead of leaving the loading cover stuck',async({page})=>{
   await page.setViewportSize({width:390,height:844});const row=await entry(page);
   await page.route('**/api/forum/posts?*',r=>r.fulfill({json:[row]}));
   let fail=true;
-  await page.route(`**/api/forum/posts/${row.id}`,async(route:Route)=>{if(fail)await route.fulfill({status:503,json:{error:'临时无法读取'}});else await route.continue();});
+  await page.route(`**/api/forum/posts/${row.id}/reading*`,async(route:Route)=>{if(fail)await route.fulfill({status:503,json:{error:'临时无法读取'}});else await route.continue();});
   await page.goto(base+'/forum');await page.locator('main .forum-entry-title').click();
   await expect(page.locator('.qa-loading[role=alert]')).toBeVisible();await expect(page.locator('.forum-navigation-panel')).toHaveCount(0);
-  fail=false;await page.getByRole('button',{name:'重新加载'}).click();await expect(page.locator('.qa-answer')).toHaveCount(5);
+  fail=false;await page.getByRole('button',{name:'重新加载'}).click();await expect(page.locator('.qa-answer').first()).toBeVisible();
 });

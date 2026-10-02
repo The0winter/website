@@ -34,3 +34,7 @@
   .forum-feed-toolbar [aria-current=page] { color:color-mix(in srgb,var(--home-accent) 82%,var(--home-text)); border-bottom-color:currentColor; }
   .dark .forum-feed-toolbar [aria-current=page] { color:var(--home-accent); }
 }
+.forum-feed-more {padding:20px 16px 28px;text-align:center;color:var(--home-muted);font-size:14px;}
+.forum-feed-more button {padding:10px 24px;border:1px solid var(--home-border);border-radius:999px;color:var(--home-accent);background:var(--home-surface);cursor:pointer;}
+.forum-feed-more button:disabled {opacity:.6;cursor:default;}
+.forum-feed-more p {margin:0 0 12px;}

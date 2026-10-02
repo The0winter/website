@@ -5,7 +5,7 @@ const base = process.env.MOBILE_SECTIONS_BASE || 'http://127.0.0.1:3000';
 test.use({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true});
 const user = {id: '000000000000000000000001', username: '缓存验证', role: 'reader'};
 const entry = {bookId: '1', book: {id: '1', title: '提前准备的书架', author: '测试作者', cover_image: '/test-cover.svg'}};
-const post = {id: '1', title: '已经读过的论坛列表', votes: 1, comments: 0};
+const post = {id: '1', title: '已经读过的论坛列表', author: '书友', type: 'question', votes: 1, comments: 0};
 async function setup(page: Page) {
   await page.route('**/api/traffic/observe',route=>route.fulfill({status:204}));
   await page.addInitScript(() => {

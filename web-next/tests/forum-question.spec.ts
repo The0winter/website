@@ -8,7 +8,7 @@ test.beforeEach(async({page})=>{await page.route('**/api/forum/posts/*/views',r=
 
 for(const width of [320,390,1440])test(`${width}px answer heading and count open question previews and return to the selected answer`,async({page},info)=>{
   await page.setViewportSize({width,height:844});const row=await entry(page),href=`${base}/forum/${row.entryId}?fromQuestion=${row.id}`;
-  await page.goto(href);await expect(page.locator('.qa-answer')).toHaveCount(5);
+  await page.goto(href);await expect(page.locator('.qa-answer').first()).toBeVisible();
   const write=page.locator('.qa-topbar .qa-write-button');await expect(write).toHaveCSS('background-color','rgb(22, 119, 255)');
   await expect(write.locator('.lucide-square-pen')).toHaveCount(1);await expect(page.locator('.qa-answer-count svg')).toHaveCount(1);
   await page.screenshot({path:info.outputPath(`verified-answer-button-${width}.png`)});
@@ -19,16 +19,16 @@ for(const width of [320,390,1440])test(`${width}px answer heading and count open
     await expect(page.locator('.fq-tabs')).toContainText('全部内容 5');await expect(page.getByRole('button',{name:'关注问题',exact:true})).toHaveCount(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width);
     await page.screenshot({path:info.outputPath(`verified-question-${width}.png`)});
-    await page.getByRole('button',{name:'返回上一页'}).click();await expect(page).toHaveURL(href);await expect(page.locator('.qa-answer')).toHaveCount(5);
+    await page.getByRole('button',{name:'返回上一页'}).click();await expect(page).toHaveURL(href);await expect(page.locator('.qa-answer').first()).toBeVisible();
   }
   await page.locator('.qa-answer-count').click();await expect(page.locator('.fq-answer')).toHaveCount(5);await expect(page.locator('.forum-navigation-panel')).toHaveCount(0);
   const link=page.locator('.fq-answer-link').first(),target=await link.getAttribute('href');await link.click();
-  await expect(page).toHaveURL(base+target);await expect(page.locator('.qa-answer')).toHaveCount(5);await expect(page.locator('.forum-navigation-panel')).toHaveCount(0);
+  await expect(page).toHaveURL(base+target);await expect(page.locator('.qa-answer').first()).toBeVisible();await expect(page.locator('.forum-navigation-panel')).toHaveCount(0);
 });
 
 test('opening a question slides a bounded skeleton without cloning the reader; early back and forward recover',async({page},info)=>{
   await page.setViewportSize({width:390,height:844});const row=await entry(page),held=gate();
-  await page.goto(`${base}/forum/${row.entryId}?fromQuestion=${row.id}`);await expect(page.locator('.qa-answer')).toHaveCount(5);
+  await page.goto(`${base}/forum/${row.entryId}?fromQuestion=${row.id}`);await expect(page.locator('.qa-answer').first()).toBeVisible();
   const wrongPostRequests:string[]=[];page.on('request',request=>{if(new URL(request.url()).pathname===`/api/forum/posts/${row.entryId}`)wrongPostRequests.push(request.url());});
   await page.evaluate(()=>{const stats={clones:0,durations:[] as number[]};Object.assign(window,{questionMotion:stats});const clone=Node.prototype.cloneNode,animate=Element.prototype.animate;Node.prototype.cloneNode=function(deep){if(this instanceof Element&&this.closest('.qa-reader'))stats.clones++;return clone.call(this,deep);};Element.prototype.animate=function(frames,options){if(this.classList.contains('forum-navigation-panel'))stats.durations.push(Number(typeof options==='object'?options.duration:options));return animate.call(this,frames,options);};});
   await page.route(`**/api/forum/posts/${row.id}`,async r=>{await held.wait;await r.continue();});
@@ -39,8 +39,8 @@ test('opening a question slides a bounded skeleton without cloning the reader; e
     held.release();await expect(page.locator('.fq-heading')).toBeVisible();await expect(page.locator('.forum-navigation-panel')).toHaveCount(0);
     const metrics=await page.evaluate(()=>(window as unknown as {questionMotion:{clones:number;durations:number[]}}).questionMotion);expect(metrics).toEqual({clones:0,durations:[400]});
     expect(wrongPostRequests).toEqual([]);
-    await page.getByRole('button',{name:'返回上一页'}).click();await expect(page.locator('.qa-answer')).toHaveCount(5);
-    await page.locator('.qa-answer-count').click();await page.goBack();await expect(page.locator('.forum-navigation-panel')).toHaveCount(0);await expect(page.locator('.qa-answer')).toHaveCount(5);
+    await page.getByRole('button',{name:'返回上一页'}).click();await expect(page.locator('.qa-answer').first()).toBeVisible();
+    await page.locator('.qa-answer-count').click();await page.goBack();await expect(page.locator('.forum-navigation-panel')).toHaveCount(0);await expect(page.locator('.qa-answer').first()).toBeVisible();
     await page.goForward();await expect(page.locator('.fq-heading')).toBeVisible();await expect(page.locator('.qa-answer-stream')).toHaveCount(0);
   }finally{held.release();}
 });

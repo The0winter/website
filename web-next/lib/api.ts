@@ -369,6 +369,15 @@ export const authApi = {
 };
 
 export const forumApi = {
+  getFeedPage: async (tab: string, limit: number, cursor?: string | null, signal?: AbortSignal): Promise<{items:ForumPost[]; nextCursor:string|null}> => {
+    const query = new URLSearchParams({tab, limit:String(limit), view:'answers', format:'page'});
+    if (cursor) query.set('cursor', cursor);
+    const result = await apiCall<{items:ForumPost[]; nextCursor:string|null} | ForumPost[]>(`/forum/posts?${query}`, {signal});
+    // A retained tab may briefly meet the previous API during a rolling deploy.
+    return Array.isArray(result) ? {items:result, nextCursor:null} : result;
+  },
+  getReading: (id:string, answerId?:string, signal?:AbortSignal):Promise<{post:ForumPost; answer:ForumReply|null}> =>
+    apiCall(`/forum/posts/${id}/reading${answerId ? '?answer='+encodeURIComponent(answerId) : ''}`, {signal}),
   getPosts: async (tab: string = 'recommend', page: number = 1): Promise<ForumPost[]> => {
     return apiCall<ForumPost[]>(`/forum/posts?tab=${tab}&page=${page}&view=answers`);
   },
@@ -394,16 +403,16 @@ export const forumApi = {
     });
   },
 
-  getReplies: async (postId: string, page=1): Promise<ForumReply[]> => {
+  getReplies: async (postId: string, page=1, limit=20, signal?:AbortSignal): Promise<ForumReply[]> => {
     if (!postId || postId === 'undefined' || postId === 'null') return [];
-    return apiCall<ForumReply[]>(`/forum/posts/${postId}/replies?page=${page}&limit=20`);
+    return apiCall<ForumReply[]>(`/forum/posts/${postId}/replies?page=${page}&limit=${limit}`, {signal});
   },
   getReply: async(postId:string,replyId:string):Promise<ForumReply|null>=>{
     const rows=await apiCall<ForumReply[]>(`/forum/posts/${postId}/replies?target=${encodeURIComponent(replyId)}`);return rows[0]||null;
   },
   // Question lists receive plain excerpts instead of every answer's full HTML.
-  getAnswerPreviews: async(postId:string,page=1,sort:'default'|'latest'='default'):Promise<Array<ForumReply & {excerpt:string;thumbnail?:string}>>=>{
-    return apiCall(`/forum/posts/${postId}/replies?page=${page}&limit=20&sort=${sort}&view=preview`);
+  getAnswerPreviews: async(postId:string,page=1,sort:'default'|'latest'='default',limit=20):Promise<Array<ForumReply & {excerpt:string;thumbnail?:string}>>=>{
+    return apiCall(`/forum/posts/${postId}/replies?page=${page}&limit=${limit}&sort=${sort}&view=preview`);
   },
 
   createReply: async (postId: string, content: string): Promise<ForumReply> => {

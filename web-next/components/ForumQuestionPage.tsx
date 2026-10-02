@@ -12,6 +12,8 @@ import ForumAnswerComposer from './ForumAnswerComposer';
 import ForumReaderDialog from './ForumReaderDialog';
 import ForumQuestionLoading from './ForumQuestionLoading';
 import UserAvatar from './UserAvatar';
+import {forumPageSize} from '@/lib/forum-cache';
+import {useForumPagination} from '@/lib/useForumPagination';
 import './forum-content.css';
 import './forum-question.css';
 
@@ -35,14 +37,15 @@ export default function ForumQuestionPage({questionId}:{questionId:string}) {
   const [error,setError]=useState(''),[moreError,setMoreError]=useState(''),[retry,setRetry]=useState(0),[page,setPage]=useState(1);
   const [writing,setWriting]=useState(false),[inviteUrl,setInviteUrl]=useState(''),[notice,setNotice]=useState('');
   const generation=useRef(0),moreLock=useRef(false),heading=useRef<HTMLElement>(null);
+  const pageSize=useRef(20);
   useForumView(question?.id);
   useEffect(()=>{
-    const token=++generation.current;moreLock.current=false;
+    const token=++generation.current;moreLock.current=false;pageSize.current=forumPageSize();
     setLoading(true);setError('');setMoreError('');setLoadingMore(false);setPage(1);
-    void Promise.all([forumApi.getById(questionId),forumApi.getAnswerPreviews(questionId,1,order)]).then(([post,rows])=>{
+    void Promise.all([forumApi.getById(questionId),forumApi.getAnswerPreviews(questionId,1,order,pageSize.current)]).then(([post,rows])=>{
       if(token!==generation.current)return;
       if(post.type!=='question'){router.replace(`/forum/${post.id}`);return;}
-      setQuestion(post);setAnswers(rows);setHasMore(rows.length===20);
+      setQuestion(post);setAnswers(rows);setHasMore(rows.length===pageSize.current && rows.length<post.comments);
     }).catch(error=>{if(token===generation.current)setError(error instanceof Error?error.message:'问题加载失败，请重试');})
       .finally(()=>{if(token===generation.current)setLoading(false);});
     return()=>{generation.current=token+1;};
@@ -52,12 +55,14 @@ export default function ForumQuestionPage({questionId}:{questionId:string}) {
     if(moreLock.current||!hasMore)return;
     const token=generation.current;moreLock.current=true;setLoadingMore(true);setMoreError('');
     try{
-      const rows=await forumApi.getAnswerPreviews(questionId,page+1,order);
+      const rows=await forumApi.getAnswerPreviews(questionId,page+1,order,pageSize.current);
       if(token!==generation.current)return;
-      setAnswers(previous=>[...previous,...rows.filter(row=>!previous.some(item=>item.id===row.id))]);setPage(value=>value+1);setHasMore(rows.length===20);
+      setAnswers(previous=>[...previous,...rows.filter(row=>!previous.some(item=>item.id===row.id))]);setPage(value=>value+1);setHasMore(rows.length===pageSize.current && (page+1)*pageSize.current<(question?.comments ?? Infinity));
     }catch(error){if(token===generation.current)setMoreError(error instanceof Error?error.message:'更多回答加载失败');}
     finally{if(token===generation.current){moreLock.current=false;setLoadingMore(false);}}
   }
+  const sentinel=useForumPagination({identity:`${questionId}:${order}:${user?.id || 'guest'}`,enabled:!!question,loading:loading||loadingMore,hasMore,error:error||moreError,
+    preload:pageSize.current===5&&page===1,loadMore:()=>void loadMore()});
   function write(){if(user)setWriting(true);else router.push('/login');}
   async function invite(){
     const url=`${location.origin}/forum/question/${questionId}`;
@@ -83,7 +88,7 @@ export default function ForumQuestionPage({questionId}:{questionId:string}) {
       <div role="tabpanel" id="question-answers" aria-labelledby={`question-sort-${order}`} aria-busy={loading||loadingMore}>
         {loading?<div className="fq-state" role="status">正在加载回答…</div>:error?<div className="fq-state" role="alert">{error}<button onClick={()=>setRetry(value=>value+1)}>重试</button></div>:<>
           {answers.map(answer=><AnswerPreview key={answer.id} answer={answer} questionId={questionId}/>)}
-          {!answers.length?<div className="fq-state"><p>还没有回答，来分享你的看法吧。</p><button onClick={write}>写第一个回答</button></div>:<div className="fq-more">{moreError&&<p role="alert">{moreError}</p>}{hasMore?<button disabled={loadingMore} onClick={()=>void loadMore()}>{loadingMore?'正在加载…':moreError?'重试':'加载更多回答'}</button>:<span>已展示全部回答</span>}</div>}
+          {!answers.length?<div className="fq-state"><p>还没有回答，来分享你的看法吧。</p><button onClick={write}>写第一个回答</button></div>:<div ref={sentinel} className="fq-more">{moreError&&<p role="alert">{moreError}</p>}{hasMore?<button disabled={loadingMore} onClick={()=>void loadMore()}>{loadingMore?'正在加载…':moreError?'重试':'加载更多回答'}</button>:<span>已展示全部回答</span>}</div>}
         </>}
       </div>
     </section><aside className="fq-sidebar"><h2>参与讨论</h2>{actions}{question.bookId&&<ForumLink href={`/book/${question.bookId}`}>查看相关书籍</ForumLink>}</aside></div>}

@@ -21,7 +21,9 @@ import './forum-answer-reader.css';
 import {FORUM_DEFAULT_FONT_SIZE,readForumFontSize,saveForumFontSize} from '@/lib/forum-reader-settings';
 import ForumLoadingShell from './ForumLoadingShell';
 import {afterForumNavigation} from '@/lib/forum-navigation';
-type Checkpoint = {page:number; answerId:string; offset:number};
+import {loadForumReading, loadForumAnswers} from '@/lib/forum-reading-cache';
+type Checkpoint = {page:number; pageSize:number; answerId:string; offset:number};
+const PAGE_SIZE = 5;
 const authorName = (answer:ForumReply) => answer.source?.author || answer.author.name || '书友';
 const unique = (rows:ForumReply[]) => rows.filter((row, index) => rows.findIndex(item => item.id === row.id) === index);
 function Avatar({answer}: {answer:ForumReply}) {
@@ -34,7 +36,7 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
   const {theme, setTheme} = useReadingSettings();
   const [question, setQuestion] = useState<ForumPost|null>(null);
   const [answers, setAnswers] = useState<ForumReply[]>([]);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -69,24 +71,21 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
     checkpoint.current = null;
     try {
       const saved = JSON.parse(sessionStorage.getItem(positionKey) || 'null');
-      if (saved && Number.isInteger(saved.page) && saved.page > 0 && Number.isFinite(saved.offset)) checkpoint.current = saved;
+      if (saved && saved.pageSize === PAGE_SIZE && Number.isInteger(saved.page) && saved.page >= 0 && saved.page <= 100 && Number.isFinite(saved.offset)) checkpoint.current = saved;
     } catch { /* Start at the selected answer if a checkpoint is unavailable. */ }
     async function load() {
       setLoading(true); setLoadingMore(false); setError(''); setMoreError(''); setCommentId(null); setDialog(null);
       try {
-        const [post, first, selected] = await Promise.all([
-          forumApi.getById(questionId), forumApi.getReplies(questionId),
-          initialAnswerId ? forumApi.getReply(questionId, initialAnswerId) : Promise.resolve(null)
-        ]);
+        const {post, answer:selected} = await loadForumReading(questionId, initialAnswerId);
         if (token !== generation.current) return;
         if (post.type !== 'question') {router.replace(`/forum/${post.id}`); return;}
         if (initialAnswerId && !selected) throw new Error('回答不存在或不属于这个问题');
-        let rows = selected ? unique([selected, ...first]) : first;
-        let lastPage = 1, more = first.length === 20;
-        while (more && lastPage < (checkpoint.current?.page || 1)) {
-          const next = await forumApi.getReplies(questionId, lastPage + 1);
+        let rows = selected ? [selected] : [];
+        let lastPage = 0, more = post.comments > rows.length;
+        while (more && lastPage < (checkpoint.current?.page ?? 0)) {
+          const next = await loadForumAnswers(questionId, lastPage + 1, PAGE_SIZE);
           if (token !== generation.current) return;
-          rows = unique([...rows, ...next]); lastPage++; more = next.length === 20;
+          rows = unique([...rows, ...next]); lastPage++; more = next.length === PAGE_SIZE && rows.length < post.comments;
         }
         setQuestion(post); setAnswers(rows); setPage(lastPage); setHasMore(more);
         setActiveId(rows[0]?.id || '');
@@ -103,13 +102,14 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
     const token = generation.current;
     moreLock.current = true; setLoadingMore(true); setMoreError('');
     try {
-      const next = await forumApi.getReplies(questionId, page + 1);
+      const next = await loadForumAnswers(questionId, page + 1, PAGE_SIZE);
       if (token !== generation.current) return [];
-      setAnswers(previous => unique([...previous, ...next])); setPage(value => value + 1); setHasMore(next.length === 20);
+      const merged = unique([...answers, ...next]);
+      setAnswers(previous => unique([...previous, ...next])); setPage(value => value + 1); setHasMore(next.length === PAGE_SIZE && merged.length < (question?.comments ?? Infinity));
       return next;
     } catch (error) {if (token === generation.current) setMoreError(error instanceof Error ? error.message : '其他回答加载失败'); return [];}
     finally {if (token === generation.current) {moreLock.current = false; setLoadingMore(false);}}
-  }, [questionId, page, hasMore]);
+  }, [questionId, page, hasMore, answers, question?.comments]);
   useEffect(() => {
     if (loading || loadingMore || moreError || !hasMore || !sentinel.current) return;
     const observer = new IntersectionObserver(entries => {if (entries.some(entry => entry.isIntersecting)) void loadMore();}, {rootMargin:'700px 0px'});
@@ -139,7 +139,7 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
       setActiveId(current.id);
       const node = cards.current.get(current.id);
       if (node) {
-        try {sessionStorage.setItem(positionKey, JSON.stringify({page, answerId:current.id, offset:-node.getBoundingClientRect().top}));} catch { /* Optional reading checkpoint. */ }
+        try {sessionStorage.setItem(positionKey, JSON.stringify({page, pageSize:PAGE_SIZE, answerId:current.id, offset:-node.getBoundingClientRect().top}));} catch { /* Optional reading checkpoint. */ }
       }
     };
     const schedule = () => {if (!frame) frame = window.requestAnimationFrame(update);};
