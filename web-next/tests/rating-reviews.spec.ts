@@ -119,7 +119,7 @@ for (const width of [320, 390, 1440]) test(`rating without text counts one reade
   await page.getByRole('button', {name: '提交评分', exact: true}).click();
   await expect(score).toHaveText('6.7');
   await expect(page.locator('.book-rating-counts, .book-rate-button')).toHaveCount(0);
-  await expect(page.locator('#reviews-tab small')).toHaveText('0');
+  await expect(page.locator('#reviews-heading small')).toHaveText('0');
   await expect(page.locator('.book-review-list article')).toHaveCount(0);
   await page.reload();
   await page.getByRole('button', {name: '写书评', exact: true}).click();

@@ -174,8 +174,6 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
     if (!firstChapterId && chapterTotal) catalog.ensureRange(0, 0);
   }, [firstChapterId, chapterTotal, catalog.ensureRange]);
 
-  const [communityTab, setCommunityTab] = useState<'reviews' | 'articles'>('reviews');
-
   // --- 评论相关状态 ---
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewCursor,setReviewCursor]=useState<string|null>(null);
@@ -313,7 +311,6 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
   // --- 操作：评论相关 ---
   const openReviewForm = () => {
     if (!authLoading && !user) return openLogin(router);
-    setCommunityTab('reviews');
     setShowReviewForm(true);
     requestAnimationFrame(() => document.getElementById('reviews-section')?.scrollIntoView({block:'start',behavior:'smooth'}));
   };
@@ -522,17 +519,12 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
         </div>
 
         {/* === 第三部分：书友评价区 (⚠️ 利用 order-3 md:order-4 在手机端提到目录前面，电脑端仍为第4) === */}
-        <div id="reviews-section" data-discussions={communityTab === 'articles'} className="book-community bg-white rounded-lg shadow-sm p-4 md:p-8 order-4">
+        <section id="reviews-section" aria-labelledby="reviews-heading" className="book-community bg-white rounded-lg shadow-sm p-4 md:p-8 order-4">
             <div className="book-community-header">
-            <div className="community-tabs" role="tablist" aria-label="书友交流">
-              <button id="reviews-tab" role="tab" aria-selected={communityTab === 'reviews'} aria-controls="reviews-panel" onClick={() => setCommunityTab('reviews')}>评论 <small>{reviewTotal}</small></button>
-              <button id="articles-tab" role="tab" aria-selected={communityTab === 'articles'} aria-controls="articles-panel" onClick={() => setCommunityTab('articles')}>文章</button>
+              <h2 id="reviews-heading" className="book-community-title">评论 <small>{reviewTotal}</small></h2>
+              {!showReviewForm && <button className="book-review-compose" onClick={openReviewForm}>写书评</button>}
             </div>
-            {communityTab === 'reviews' && !showReviewForm && <button className="book-review-compose" onClick={openReviewForm}>写书评</button>}
-            {communityTab === 'articles' && <Link className="book-article-compose" href={`/forum/create?type=question&bookId=${book.id}&bookTitle=${encodeURIComponent(book.title)}`}><PenLine size={14} aria-hidden="true"/>发起讨论</Link>}
-            </div>
-            {communityTab === 'articles' && <div id="articles-panel" role="tabpanel" aria-labelledby="articles-tab"><BookArticles bookId={book.id} /></div>}
-            <div id="reviews-panel" role="tabpanel" aria-labelledby="reviews-tab" aria-busy={reviewsLoading} hidden={communityTab !== 'reviews'}>
+            <div id="reviews-panel" aria-busy={reviewsLoading}>
             
             {/* 评论表单 */}
             {showReviewForm && (
@@ -557,7 +549,15 @@ export default function BookDetailClient({ initialBookData, initialCatalog, init
               personalReview={myReview} personalLoading={authLoading||personalLoading} personalError={personalError} onRetryPersonal={()=>setReviewRefresh(value=>value+1)}
               onSaved={()=>{setReviewRefresh(value=>value+1);setReactionRefresh(value=>value+1);setShowReviewForm(false);}}/>}
             </div>
-        </div>
+        </section>
+
+        <section id="articles-section" data-discussions="true" aria-labelledby="articles-heading" className="book-community book-articles-section bg-white rounded-lg shadow-sm p-4 md:p-8 order-4">
+          <div className="book-community-header">
+            <h2 id="articles-heading" className="book-community-title">文章</h2>
+            <Link className="book-article-compose" href={`/forum/create?type=question&bookId=${book.id}&bookTitle=${encodeURIComponent(book.title)}`}><PenLine size={14} aria-hidden="true"/>发起讨论</Link>
+          </div>
+          <BookArticles key={book.id} bookId={book.id}/>
+        </section>
 
         <BookRecommendations key={book.id} book={book}/>
 

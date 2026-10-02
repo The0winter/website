@@ -45,13 +45,13 @@ for (const width of [390,1440]) {
     await expect(page.locator('.qa-directory-item')).toHaveCount(5);
     await page.screenshot({path:info.outputPath(`final-question-${width}.png`)});
     await page.getByRole('dialog').getByRole('link',{name:'查看相关书籍'}).click();
-    await page.getByRole('tab',{name:'文章',exact:true}).click();
-    await expect(page.locator('#articles-panel .forum-entry')).toHaveCount(5);
-    await expect(page.locator('#reviews-section')).toHaveCSS('background-color','rgb(255, 255, 255)');
+    await expect(page.getByRole('region',{name:'文章',exact:true})).toBeVisible();
+    await expect(page.locator('#articles-section .forum-entry')).toHaveCount(5);
+    await expect(page.locator('#articles-section')).toHaveCSS('background-color','rgb(255, 255, 255)');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
-    await page.locator('#reviews-section').scrollIntoViewIfNeeded();
+    await page.locator('#articles-section').scrollIntoViewIfNeeded();
     await page.screenshot({path:info.outputPath(`final-book-discussions-${width}.png`)});
-    await page.locator('#articles-panel .forum-entry-title').first().click();
+    await page.locator('#articles-section .forum-entry-title').first().click();
     await expect(page.locator('.qa-question h1')).toHaveText(manifest.question.title);
     expect(errors).toEqual([]);
   });

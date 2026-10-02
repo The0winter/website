@@ -84,11 +84,13 @@
 .book-meta a { font-size:15px; }
 .book-community { font-family:"PingFang SC","Microsoft YaHei","Noto Sans CJK SC","Noto Sans SC",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
 .book-community-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
-.community-tabs { display:flex; align-items:center; gap:14px; min-width:0; }
-.community-tabs button { position:relative; padding:0; font-size:17px; line-height:28px; color:#96999f; white-space:nowrap; cursor:pointer; }
-.community-tabs button+button { border-left:1px solid #eee; padding-left:14px; }
-.community-tabs button[aria-selected=true] { color:#1a1a1a; font-weight:600; }
-.community-tabs small { font-size:inherit; font-weight:inherit; color:inherit; }
+.book-community-title { min-width:0; font-size:17px; line-height:28px; color:#1a1a1a; font-weight:600; }
+.book-community-title small { font-size:inherit; font-weight:inherit; color:inherit; }
+.book-article-track { overflow:hidden; border-radius:16px; }
+.book-article-slide { min-width:0; }
+.book-article-slide .forum-entry-list { border-radius:0; }
+.book-article-slide + .book-article-slide { border-top:1px solid var(--forum-line); }
+.book-article-controls { display:none; }
 .book-review-compose { flex-shrink:0; min-height:32px; padding:2px 12px; border-radius:18px; background:#f6f6f8; color:#55585e; font-size:14px; line-height:24px; cursor:pointer; }
 .book-article-compose { display:inline-flex; align-items:center; justify-content:center; gap:5px; flex-shrink:0; min-height:32px; padding:2px 11px; border:1px solid #bd695338; border-radius:18px; background:#bd695308; color:#a4503c; font-size:14px; line-height:24px; }
 .book-article-compose:hover { background:#bd695314; border-color:#bd69536b; }
@@ -264,6 +266,17 @@
   .mobile-catalog>span { min-width:0; margin-left:auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right; font-size:14px; color:#8f8b83; line-height:20px; }
   .mobile-catalog svg { flex-shrink:0; color:#b5aea3; }
   .book-community { border-radius:0; box-shadow:none; padding:16px var(--book-gutter) 20px; background:#fffdf9; }
+  .book-articles-section { margin-top:10px; }
+  .book-article-track { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; overscroll-behavior-x:contain; scrollbar-width:none; }
+  .book-article-track::-webkit-scrollbar { display:none; }
+  .book-article-track:focus-visible { outline:2px solid var(--forum-accent); outline-offset:2px; }
+  .book-article-slide { flex:0 0 100%; scroll-snap-align:start; scroll-snap-stop:always; }
+  .book-article-slide + .book-article-slide { border-top:0; }
+  .book-article-controls { display:flex; align-items:center; justify-content:center; gap:10px; color:var(--forum-muted); font-size:12px; }
+  .book-article-controls button { display:grid; place-items:center; width:44px; height:44px; flex-shrink:0; border-radius:50%; color:var(--forum-accent); cursor:pointer; }
+  .book-article-controls button:disabled { opacity:.35; cursor:default; }
+  .book-article-controls button:focus-visible { outline:2px solid currentColor; }
+  .book-article-hint { margin-left:2px; }
   .book-recommendations { --shelf-gutter:var(--book-gutter); margin-top:10px; padding:16px var(--shelf-gutter) 20px; border-radius:0; box-shadow:none; background:#fffdf9; }
   .book-review-name { font-size:16px; }
   .book-review-content { font-size:16px; }
