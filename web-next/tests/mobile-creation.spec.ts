@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './fixtures/without-analytics';
+import type { Page } from '@playwright/test';
 
 const base = process.env.CREATION_BASE_URL || 'http://127.0.0.1:3000';
 const account = { id: '000000000000000000000099', username: '清风读者', email: 'preview@example.test', role: 'reader' };

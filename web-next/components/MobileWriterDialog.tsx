@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import dynamic from 'next/dynamic';
 import { ArrowLeft, ArrowRight, BookOpen, ChevronLeft, ChevronRight, FilePenLine, PenTool, Plus, BarChart3, LockKeyhole } from 'lucide-react';
 import {LoadingLogo, LoadingText} from './BrandLoading';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,11 +10,11 @@ import { booksApi, type Book } from '@/lib/api';
 import BookCover from './BookCover';
 import Link from './PrefetchLink';
 import './mobile-writer.css';
-import WorkActions from './WorkActions';
 import MobileWriterView, { historyWriterViews, type WriterView } from './MobileWriterView';
 import {lockBodyScroll} from '@/lib/body-scroll-lock';
 
 type WorksResult = { key: string; books: Book[]; error?: string };
+const WorkActions = dynamic(() => import('./WorkActions'), {ssr: false});
 
 export default function MobileWriterDialog({ onClose }: { onClose: () => void }) {
   const { user, loading: authLoading } = useAuth();
@@ -26,8 +27,7 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
   const [page, setPage] = useState(1);
   const [retry, setRetry] = useState(0);
   const [result, setResult] = useState<WorksResult>();
-  const entered = useRef(false);
-  const pendingResult = useRef<WorksResult | null>(null);
+  const [entered, setEntered] = useState(false);
   const key = `${user?.id}:${page}:${retry}:${refreshVersion}`;
   const books = result?.key === key ? result.books : [];
   const error = result?.key === key ? result.error : undefined;
@@ -38,9 +38,8 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
   const backPending = useRef(false);
   const finishOpening = useCallback(() => {
     if (dialog.current?.dataset.closing === 'true') return;
-    entered.current = true;
+    setEntered(true);
     if (dialog.current) dialog.current.dataset.ready = 'true';
-    if (pendingResult.current) { setResult(pendingResult.current); pendingResult.current = null; }
   }, []);
 
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
@@ -116,7 +115,13 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
     else history.pushState({ ...history.state, mobileWriter: marker }, '', location.href);
     historyMarker.current = marker;
     const sizeReveal = () => {
-      const radius = Math.hypot(innerWidth, innerHeight) + 2;
+      // Some mobile kernels lack dvh or keep it at the layout viewport height.
+      // Size the native dialog explicitly, including browser bars and keyboard.
+      const viewport = window.visualViewport;
+      const height = viewport?.height || innerHeight;
+      element.style.setProperty('--mw-viewport-height', `${height}px`);
+      element.style.top = `${viewport?.offsetTop || 0}px`;
+      const radius = Math.hypot(innerWidth, height) + 2;
       element.style.setProperty('--mw-reveal-radius', `${radius}px`);
       element.style.setProperty('--mw-reveal-start', String(76 / radius));
     };
@@ -132,6 +137,8 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
     const resize = () => { if (desktop.matches) history.go(-(historyWriterViews().length + 1)); };
     desktop.addEventListener('change', resize);
     window.addEventListener('resize', sizeReveal);
+    window.visualViewport?.addEventListener('resize', sizeReveal);
+    window.visualViewport?.addEventListener('scroll', sizeReveal);
     // Animation events can be interrupted when the tab or motion setting changes.
     const openingTimer = setTimeout(finishOpening, 380);
     return () => {
@@ -141,6 +148,8 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
       window.removeEventListener('popstate', pop);
       desktop.removeEventListener('change', resize);
       window.removeEventListener('resize', sizeReveal);
+      window.visualViewport?.removeEventListener('resize', sizeReveal);
+      window.visualViewport?.removeEventListener('scroll', sizeReveal);
       element.removeEventListener('close', nativeClose);
       unlockScroll();
       if (element.open) element.close();
@@ -152,19 +161,17 @@ export default function MobileWriterDialog({ onClose }: { onClose: () => void })
   }, [finishOpening]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !entered) return;
     let active = true;
     const accept = (next: WorksResult) => {
       if (!active) return;
-      // Keep list mounting, cover decoding and link prefetch out of the reveal.
-      if (entered.current) setResult(next);
-      else pendingResult.current = next;
+      setResult(next);
     };
     booksApi.getMyBooks(userId, page).then(books => {
       accept({ key, books });
     }).catch(() => { accept({ key, books: [], error: '作品暂时加载失败，请重试。' }); });
     return () => { active = false; };
-  }, [userId, page, key, refreshVersion]);
+  }, [userId, page, key, refreshVersion, entered]);
 
   const openView = (href: string) => {
     finishOpening();

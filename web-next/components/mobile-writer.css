@@ -1,7 +1,7 @@
-.mw-dialog { position:fixed; inset:0; margin:0; padding:0; width:100vw; max-width:none; height:100dvh; max-height:none; border:0; background:transparent; color:#42362f; overflow:hidden; font-family:Arial,"Microsoft YaHei",sans-serif; }
+.mw-dialog { position:fixed; inset:0; bottom:auto; margin:0; padding:0; width:100vw; max-width:none; height:100vh; height:100dvh; height:var(--mw-viewport-height,100vh); max-height:none; border:0; background:transparent; color:#42362f; overflow:hidden; box-sizing:border-box; font-family:Arial,"Microsoft YaHei",sans-serif; }
 .mw-dialog::backdrop { background:transparent; }
 .mw-reveal { position:absolute; right:0; bottom:0; width:var(--mw-reveal-radius,150vmax); height:var(--mw-reveal-radius,150vmax); border-top-left-radius:100%; background:#f7efe9; transform-origin:100% 100%; will-change:transform; pointer-events:none; animation:mw-reveal-in 240ms cubic-bezier(.2,.75,.25,1) both; }
-.mw-scroll { position:relative; height:100%; overflow-y:auto; overscroll-behavior:contain; padding:calc(8px + env(safe-area-inset-top)) 20px calc(28px + env(safe-area-inset-bottom)); will-change:transform,opacity; animation:mw-content-in 140ms ease-out 160ms both; }
+.mw-scroll { position:relative; height:100%; min-height:0; box-sizing:border-box; overflow-y:auto; overscroll-behavior:contain; padding:calc(8px + env(safe-area-inset-top)) 20px calc(28px + env(safe-area-inset-bottom)); will-change:transform,opacity; animation:mw-content-in 140ms ease-out 160ms both; }
 .mw-dialog[data-ready=true]:not([data-closing=true]) :is(.mw-reveal,.mw-scroll) { animation:none; will-change:auto; }
 .mw-dialog[data-closing=true] { pointer-events:none; }
 .mw-dialog[data-closing=true] .mw-reveal { animation:mw-reveal-out 240ms cubic-bezier(.4,0,.65,.25) both; }

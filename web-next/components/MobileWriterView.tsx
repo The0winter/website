@@ -2,13 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, X } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import {LoadingLogo, LoadingText} from './BrandLoading';
-import WriterStatistics from './WriterStatistics';
-import WritingWorkspace from './WritingWorkspace';
-import WorkCreator from './WorkCreator';
 import {writerEntry} from '@/lib/writer-entry';
 import '@/app/writer/writer-mobile.css';
 import './mobile-writer-view.css';
+
+// Keep the immediately available dialog shell independent of the editors.
+const WriterStatistics = dynamic(() => import('./WriterStatistics'), {ssr: false});
+const WritingWorkspace = dynamic(() => import('./WritingWorkspace'), {ssr: false});
+const WorkCreator = dynamic(() => import('./WorkCreator'), {
+  ssr: false,
+  loading: () => <div className="mw-view-loading" role="status"><LoadingLogo/><LoadingText branded>正在准备新作品</LoadingText></div>,
+});
 
 export type WriterView = { id: string; entry: string; closing?: boolean };
 
