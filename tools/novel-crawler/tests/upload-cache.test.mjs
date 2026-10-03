@@ -244,3 +244,69 @@ test('persistent SSH protocol reuses one hidden connection, isolates request err
   const pending = canceled({mode: 'inspect'}, {signal: controller.signal}); controller.abort();
   await assert.rejects(pending, error => /已停止/.test(error.message) && !error.message.includes('PRIVATE'));
 });
+
+function restartingWorker(reply) {
+  const jobs = [];
+  let connections = 0;
+  return {jobs, get connections() { return connections; }, spawnProcess(command, args, options) {
+    assert.equal(options.windowsHide, true);
+    const connection = ++connections, child = new EventEmitter();
+    child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+    child.stdin.on('data', data => {
+      const message = JSON.parse(data); jobs.push(message.job);
+      queueMicrotask(() => child.stdout.write(JSON.stringify({protocol: 1, id: message.id, ...reply(connection, message.job)}) + '\n'));
+    });
+    child.stdin.on('finish', () => queueMicrotask(() => child.emit('close', 0)));
+    child.kill = () => queueMicrotask(() => child.emit('close', 1));
+    return child;
+  }};
+}
+const restartFailure = {type: 'error', fatal: true, error: '网站暂时无法写入，已成功的批次保留，再次上传可续传'};
+
+test('deployment interruption reconnects and replays the same missing-only upload without overlapping connections', async () => {
+  const worker = restartingWorker(connection => connection < 3 ? restartFailure : {type: 'result', result: {added: 0, bookId: 'kept'}});
+  const delays = [], progress = [];
+  const send = createVpsLibrarySession({...worker, wait: async ms => delays.push(ms)});
+  const job = {mode: 'apply', expectedToken: 'before', batches: [{title: '书', chapters: [{chapter_number: 1}]}]};
+  const result = await send(job, {onProgress: value => progress.push(value)});
+  assert.equal(result.bookId, 'kept'); assert.equal(worker.connections, 3);
+  assert.deepEqual(delays, [5000, 15000]);
+  assert.deepEqual(worker.jobs, [job, job, job]);
+  assert.deepEqual(progress.map(value => value.stage), ['retry', 'retry']);
+  await send.close();
+});
+
+test('recovery is bounded and never replays rejected content, credentials, maintenance or cleaning writes', async () => {
+  for (const error of ['网站拒绝上传（HTTP 409）：内容冲突', '网站拒绝上传（HTTP 403）：无权操作', '网站处于只读维护状态，请稍后重试']) {
+    const worker = restartingWorker(() => ({...restartFailure, error}));
+    const send = createVpsLibrarySession({...worker, wait: async () => assert.fail('must not retry')});
+    await assert.rejects(send({mode: 'apply', batches: [{}]}), {message: error});
+    assert.equal(worker.connections, 1); await send.close();
+  }
+  const worker = restartingWorker(() => restartFailure), delays = [];
+  const send = createVpsLibrarySession({...worker, wait: async ms => delays.push(ms)});
+  await assert.rejects(send({mode: 'apply', batches: [{}]}), {message: restartFailure.error});
+  assert.equal(worker.connections, 5); assert.deepEqual(delays, [5000, 15000, 30000, 60000]); await send.close();
+  const cleaning = restartingWorker(() => restartFailure);
+  const clean = createVpsLibrarySession({...cleaning, worker: 'library-cleaning-worker.mjs', wait: async () => assert.fail('must not replay cleaning')});
+  await assert.rejects(clean({mode: 'apply', batches: [{}]}), {message: restartFailure.error});
+  assert.equal(cleaning.connections, 1); await clean.close();
+});
+
+test('stop and close during recovery prevent any replay and concurrent requests stay rejected', async () => {
+  for (const action of ['stop', 'close']) {
+    const worker = restartingWorker(() => restartFailure), controller = new AbortController();
+    let waiting;
+    const ready = new Promise(resolve => { waiting = resolve; });
+    const send = createVpsLibrarySession({...worker, wait: async (ms, signal) => {
+      waiting();
+      await new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(Error('aborted')), {once: true}));
+    }});
+    const pending = send({mode: 'apply', batches: [{}]}, {signal: controller.signal});
+    const stopped = assert.rejects(pending, /已停止/);
+    await ready;
+    await assert.rejects(send({mode: 'inspect'}), /尚未完成/);
+    if (action === 'stop') controller.abort(); else await send.close();
+    await stopped; assert.equal(worker.connections, 1); await send.close();
+  }
+});

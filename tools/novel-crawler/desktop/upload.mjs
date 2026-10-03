@@ -136,7 +136,12 @@ export async function uploadLibrary({stateDir, outputDir, signal, shouldStop = (
       }
       item.message = `正在上传${plan.newBook ? '新书' : '新增内容'}，共 ${plan.expectedAdded} 章…`; publish();
       const result = await transport({mode: 'apply', batches: plan.batches, expectedToken: remote.token}, {signal, onProgress: progress => {
-        item.added = progress.added; item.message = progress.stage === 'preflight' ? `上传前检查 ${progress.batch} / ${progress.batches} 批` : `已上传 ${progress.batch} / ${progress.batches} 批，新增 ${progress.added} 章`; publish();
+        if (progress.stage === 'retry') item.message = `网站暂时中断，${progress.delayMs / 1000} 秒后自动恢复（第 ${progress.attempt} 次），已上传内容保留…`;
+        else {
+          item.added = Math.max(item.added || 0, progress.added || 0);
+          item.message = progress.stage === 'preflight' ? `上传前检查 ${progress.batch} / ${progress.batches} 批` : `已上传 ${progress.batch} / ${progress.batches} 批，新增 ${item.added} 章`;
+        }
+        publish();
       }});
       item.added = result.added; item.bookId = result.bookId;
       if (stopped()) break;
@@ -152,6 +157,10 @@ export async function uploadLibrary({stateDir, outputDir, signal, shouldStop = (
         verified = {...verified, partial: false, chapters: [...merged.values()].sort((a, b) => a.number - b.number)};
       }
       if (planUpload(reviewedUploadIdentity(book, verified, stateDir), verified, prepared).batches.length) throw Error('网站回读尚未确认完整同步，请再次上传核对；已完成批次保留');
+      // A retried batch may already have committed before its response was lost.
+      // Count the verified difference from the initial directory, not just the
+      // inserts reported by the last attempt.
+      item.added = plan.expectedAdded;
       checkpoints.save(item, verified, partial && cached ? checkpoint.verifiedAt : undefined);
       item.state = 'uploaded'; item.message = plan.newBook ? `新书已上传，新增 ${item.added} 章` : item.added ? `已同步新增 ${item.added} 章` : '书籍信息已同步';
     } catch (error) {

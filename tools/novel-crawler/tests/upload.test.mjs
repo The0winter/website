@@ -105,6 +105,22 @@ test('large Unicode bodies split by actual JSON bytes before the HTTP body limit
   assert.ok(plan.batches.every(batch => Buffer.byteLength(JSON.stringify({...batch, missingOnly: true, dryRun: false})) <= uploadBatchLimits.bytes));
 });
 
+test('a committed batch with a lost response is counted from verified chapters after retry', async t => {
+  const f = fixture(t), source = book('恢复上传', 4), remote = memoryTransport([{...source, chapters: source.chapters.slice(0, 2)}]);
+  f.save('book.json', source);
+  const result = await uploadLibrary({...f, transport: async (job, options) => {
+    const result = await remote.send(job, options);
+    if (job.mode === 'apply') {
+      options.onProgress({stage: 'retry', attempt: 1, delayMs: 5000});
+      // The first attempt committed; the repeat therefore inserts zero rows.
+      return {...result, added: 0};
+    }
+    return result;
+  }});
+  assert.equal(result.failed, 0); assert.equal(result.added, 2);
+  assert.equal(result.uploaded, 1); assert.equal(remote.books.get(source.sourceUrl).chapters.length, 4);
+});
+
 test('preflight overlaps up to four batches, drains failures, and keeps writes ordered after all checks', async () => {
   const batches = Array.from({length: 9}, (_, index) => ({index, chapters: []}));
   let active = 0, peak = 0, checked = 0;
