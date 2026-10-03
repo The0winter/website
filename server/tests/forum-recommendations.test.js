@@ -100,6 +100,11 @@ test('personalized feed persists snapshots, protects identities/visibility and l
     const follow=await personalizedForumFeed({identity,key,tab:'follow'});
     assert.ok(follow.items.length>0 && follow.items.every(row=>row.bookId===blocked.bookId));
     assert.equal((await personalizedForumFeed({identity:other,key,tab:'follow'})).items.length,0);
+    const follows=await saveRecommendationPreference(identity.actor,secondUser.items[0].entryId,'followBook');
+    const followedPage=await personalizedForumFeed({identity,key,tab:'follow',limit:1});
+    assert.ok(followedPage.nextCursor);
+    for(const preference of follows.rows)if(preference.reason==='followBook')await removeRecommendationPreference(identity.actor,preference.id);
+    assert.equal((await personalizedForumFeed({identity,key,tab:'follow',cursor:followedPage.nextCursor})).items.length,0,'unfollowing applies to existing cursor pages');
     const now=Date.now();
     const receipt=await recommendationReadReceipt(identity.actor,blocked.entryId,key,now-60000);
     await assert.rejects(acceptRecommendationEvents(identity,[{type:'read',token:receipt.token,activeMs:1000,depth:1}],key,now),/有效条件/);

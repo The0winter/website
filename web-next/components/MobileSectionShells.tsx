@@ -24,10 +24,10 @@ import '../app/forum/forum.css';
 // Prepare the frames with the shared layout, before destination route requests.
 // A hidden shadow root keeps these inert controls out of page selectors and IDs.
 export default function MobileSectionShells() {
-  const {user} = useAuth();
+  const {user,loading:authLoading} = useAuth();
   const [sort] = useStoredState<LibrarySort>('library-sort', 'combined', value => value === 'combined' || value === 'read' || value === 'updated');
   const forum = useSyncExternalStore(subscribeForum, getForumSnapshot, serverForumSnapshot);
-  const feedback = useForumFeedback(user?.id || 'guest');
+  const feedback = useForumFeedback(user?.id || 'guest',!authLoading);
   const shelf = useSyncExternalStore(subscribeLibrary, () => getLibrarySnapshot({userId: user?.id || '', tab: 'shelf', sort, page: 1}), serverLibrarySnapshot);
   useEffect(() => subscribeForum(() => invalidateMobileSectionPreview('/forum')), []);
   useEffect(() => subscribeForumFeedback(() => invalidateMobileSectionPreview('/forum')), []);

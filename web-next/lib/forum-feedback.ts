@@ -16,9 +16,15 @@ const empty:Snapshot = {ready:false, rows:[], enabled:true, exploration:'balance
 const snapshots = new Map<string,Snapshot>();
 const requests = new Map<string,Promise<Snapshot>>();
 const refreshed = new Map<string,number>();
+let activeUser:string|undefined,identityVersion=0,identityRequests=new AbortController();
 const listeners = new Set<() => void>();
 const storageKey = (user:string) => `forum-feedback-v1:${user}`;
 const notify = () => listeners.forEach(listener => listener());
+export function setForumFeedbackUser(user:string|null) {
+  const next=user||'guest';if(activeUser===next)return;
+  activeUser=next;identityVersion++;identityRequests.abort();identityRequests=new AbortController();
+  requests.clear();snapshots.clear();refreshed.clear();notify();
+}
 export function subscribeForumFeedback(listener:()=>void) {listeners.add(listener); return () => {listeners.delete(listener);};}
 export function forumEntryKey(post:ForumPost) {return post.entryId || post.topReply?.id || post.id;}
 export function forumAuthor(post:ForumPost) {
@@ -67,8 +73,8 @@ function publish(user:string, value:Omit<Snapshot,'ready'>) {
   try {localStorage.setItem(storageKey(user),JSON.stringify(value.rows));} catch { /* Server preferences remain authoritative. */ }
   notify();return snapshot;
 }
-async function requestPreferences(method='GET',body?:unknown,key='') {
-  const response=await safeFetch('/api/forum/preferences'+key,{method,cache:'no-store',
+async function requestPreferences(method='GET',body?:unknown,key='',signal=identityRequests.signal) {
+  const response=await safeFetch('/api/forum/preferences'+key,{method,cache:'no-store',signal,
     ...(body?{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})});
   if(!response.ok)throw Error('推荐偏好暂时无法同步，请稍后重试');
   return await response.json() as Snapshot;
@@ -76,44 +82,56 @@ async function requestPreferences(method='GET',body?:unknown,key='') {
 // Shared by prefetch, visible feed and readers: establish the guest cookie once
 // before parallel requests issue any signed recommendation receipts.
 export function ensureForumFeedback(user:string,force=false):Promise<Snapshot> {
+  if(user!==activeUser)return Promise.resolve(empty);
   const pending=requests.get(user);if(pending)return pending;
   if(!force && snapshots.get(user)?.ready && Date.now()-(refreshed.get(user)||0)<60000)return Promise.resolve(snapshots.get(user)!);
   if(!snapshots.has(user))read(user);
+  const version=identityVersion,signal=identityRequests.signal;
   const task=(async()=>{
     try {
-      let value=await requestPreferences();
+      let value=await requestPreferences('GET',undefined,'',signal);
+      if(version!==identityVersion)return empty;
       let legacy:ForumFeedback[]=[];
       try {if(!localStorage.getItem(storageKey(user)+':migrated'))legacy=snapshots.get(user)?.rows||[];} catch { /* Optional legacy migration. */ }
-      for(let start=0;start<legacy.length;start+=100)value=await requestPreferences('POST',{action:'import',rows:legacy.slice(start,start+100).map(row=>({entry:row.entry,reason:row.reason}))});
+      for(let start=0;start<legacy.length;start+=100)value=await requestPreferences('POST',{action:'import',rows:legacy.slice(start,start+100).map(row=>({entry:row.entry,reason:row.reason}))},'',signal);
+      if(version!==identityVersion)return empty;
       try {localStorage.setItem(storageKey(user)+':migrated','1');} catch { /* Never block reading. */ }
       refreshed.set(user,Date.now());return publish(user,value);
     } catch(error) {
+      if(version!==identityVersion)return empty;
       const value={...(snapshots.get(user)||empty),ready:true,error:error instanceof Error?error.message:'偏好同步失败'};
       snapshots.set(user,value);notify();return value;
-    } finally {requests.delete(user);}
+    } finally {if(version===identityVersion)requests.delete(user);}
   })();
   requests.set(user,task);return task;
 }
 
-export function useForumFeedback(user:string) {
+export function useForumFeedback(user:string,enabled=true) {
   const snapshot = useSyncExternalStore(subscribeForumFeedback, useCallback(() => snapshots.get(user) || empty,[user]), () => empty);
   useEffect(() => {
+    if(!enabled)return;
     void ensureForumFeedback(user);
     const onStorage = (event:StorageEvent) => {if (event.key === storageKey(user) || event.key === null) void ensureForumFeedback(user,true);};
     const onVisible=()=>{if(document.visibilityState==='visible')void ensureForumFeedback(user);};
     window.addEventListener('storage', onStorage);
     document.addEventListener('visibilitychange',onVisible);
     return () => {window.removeEventListener('storage', onStorage);document.removeEventListener('visibilitychange',onVisible);};
-  }, [user]);
+  }, [user,enabled]);
+  const mutate=async(method:string,body?:unknown,key='')=>{
+    if(user!==activeUser)throw Error('登录状态已变化，请重试');
+    const version=identityVersion,signal=identityRequests.signal;
+    const value=await requestPreferences(method,body,key,signal);
+    if(version!==identityVersion)throw Error('登录状态已变化，请重试');
+    return publish(user,value);
+  };
   return {...snapshot,
     async add(post:ForumPost, reason:FeedbackReason) {
       await ensureForumFeedback(user);
-      const value=await requestPreferences('POST',{entry:forumEntryKey(post),reason});
-      publish(user,value);
+      const value=await mutate('POST',{entry:forumEntryKey(post),reason});
       return value.rows.find(row=>row.reason===reason && (row.entry===forumEntryKey(post) || row.author===forumAuthor(post).id))!;
     },
-    async remove(id:string) {publish(user,await requestPreferences('DELETE',undefined,'/'+encodeURIComponent(id)));},
-    async settings(value:{enabled?:boolean;exploration?:'balanced'|'more';action?:'reset'}) {publish(user,await requestPreferences('PATCH',value));},
+    async remove(id:string) {await mutate('DELETE',undefined,'/'+encodeURIComponent(id));},
+    async settings(value:{enabled?:boolean;exploration?:'balanced'|'more';action?:'reset'}) {await mutate('PATCH',value);},
     retry:()=>ensureForumFeedback(user,true),
   };
 }

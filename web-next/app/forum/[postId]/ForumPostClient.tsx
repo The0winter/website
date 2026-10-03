@@ -70,7 +70,7 @@ function formatCount(value: number) {
 }
 
 function PostContent() {
-  const { user } = useAuth();
+  const { user,loading:authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams();
@@ -111,7 +111,7 @@ function PostContent() {
   const autoComments = useRef('');
   const commentDialog = useRef<HTMLDivElement>(null);
   const isArticle = !fromQuestionId && question?.type === 'article';
-  useForumReadingActivity(isArticle?question?.id:undefined,user?.id,'.rich-text-content.forum-prose');
+  useForumReadingActivity(isArticle?question?.id:undefined,user?.id,'.rich-text-content.forum-prose',!authLoading);
 
   useEffect(() => {
     const onClickOutside = (event: MouseEvent) => {

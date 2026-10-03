@@ -50,9 +50,9 @@ export function useForumImpressions(root:RefObject<HTMLDivElement|null>,posts:Fo
   },[root,posts,active]);
 }
 
-export function useForumReadingActivity(entry:string|undefined,user:string|undefined,selector:string) {
+export function useForumReadingActivity(entry:string|undefined,user:string|undefined,selector:string,enabled=true) {
   useEffect(()=>{
-    if(!entry)return;
+    if(!entry||!enabled)return;
     const controller=new AbortController();let disposed=false,receipt:{token:string;minReadMs:number}|undefined;
     let activeMs=0,depth=0,last=performance.now(),sent=false,started=false;
     const tick=()=>{
@@ -71,5 +71,5 @@ export function useForumReadingActivity(entry:string|undefined,user:string|undef
     };
     const interval=setInterval(tick,1000);tick();
     return ()=>{disposed=true;controller.abort();clearInterval(interval);};
-  },[entry,user,selector]);
+  },[entry,user,selector,enabled]);
 }

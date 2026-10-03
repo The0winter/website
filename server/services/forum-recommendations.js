@@ -57,8 +57,7 @@ export async function saveRecommendationPreference(actor,entry,reason) {
   return recommendationPreferences(actor);
 }
 
-async function history(identity,profile) {
-  const events=await Event.find({actor:identity.actor,at:{$gte:new Date(Date.now()-90*DAY)}}).sort({at:-1}).limit(1200).lean();
+async function history(identity,profile,events) {
   let books=[];
   if(identity.userId && profile.enabled!==false) {
     const [shelf,reading]=await Promise.all([
@@ -71,30 +70,46 @@ async function history(identity,profile) {
   return {events,books};
 }
 
-async function candidates(interests,preferences,tab,seed) {
+const candidateFeatures='_id post book author topic topics fingerprint nearSignature length quality publishedAt';
+function publicCandidates(seed) {
   const bucket=parseInt(hash(seed).slice(0,4),16)%16;
   // Rank compact features; fetch display metadata only for the delivered page.
-  const features='_id post book author topic topics fingerprint nearSignature length quality publishedAt';
-  const [recent,quality,discovery,trending,personal]=await Promise.all([
-    Item.find({}).sort({createdAt:-1,_id:1}).limit(150).select(features).lean(),
-    Item.find({}).sort({quality:-1,_id:1}).limit(180).select(features).lean(),
-    Item.find({bucket:{$in:Array.from({length:4},(_,i)=>(bucket+i)%16)}}).sort({quality:-1,_id:1}).limit(180).select(features).lean(),
-    Trend.find({at:{$gte:new Date(Date.now()-7*DAY)}}).sort({heat24:-1}).limit(150).lean(),
-    Item.find({$or:[{book:{$in:[...interests.books.keys(),...preferences.filter(p=>p.reason==='followBook').map(p=>p.book)]}},
-      {topic:{$in:[...interests.topics.keys()]}},{author:{$in:[...interests.authors.keys(),...preferences.filter(p=>p.reason==='followAuthor').map(p=>p.author)]}}]})
-      .sort({quality:-1,_id:1}).limit(180).select(features).lean(),
+  return Promise.all([
+    Item.find({}).sort({createdAt:-1,_id:1}).limit(150).batchSize(150).select(candidateFeatures).lean(),
+    Item.find({}).sort({quality:-1,_id:1}).limit(180).batchSize(180).select(candidateFeatures).lean(),
+    Item.find({bucket:{$in:Array.from({length:4},(_,i)=>(bucket+i)%16)}}).sort({quality:-1,_id:1}).limit(180).batchSize(180).select(candidateFeatures).lean(),
+    Trend.find({at:{$gte:new Date(Date.now()-7*DAY)}}).sort({heat24:-1}).limit(150).batchSize(150).lean(),
   ]);
-  const hot=trending.length?await Item.find({_id:{$in:trending.map(row=>row._id)}}).select(features).lean():[];
+}
+async function candidates(interests,preferences,publicRows) {
+  const [recent,quality,discovery,trending]=publicRows;
+  const personalFilters=[
+    ['book',[...interests.books.keys(),...preferences.filter(p=>p.reason==='followBook').map(p=>p.book)]],
+    ['topic',[...interests.topics.keys()]],
+    ['author',[...interests.authors.keys(),...preferences.filter(p=>p.reason==='followAuthor').map(p=>p.author)]],
+  ].filter(([,values])=>values.length).map(([field,values])=>({[field]:{$in:values}}));
+  const [personal,hot]=await Promise.all([
+    personalFilters.length?Item.find({$or:personalFilters})
+      .sort({quality:-1,_id:1}).limit(180).batchSize(180).select(candidateFeatures).lean():[],
+    trending.length?Item.find({_id:{$in:trending.map(row=>row._id)}}).batchSize(150).select(candidateFeatures).lean():[],
+  ]);
   const rows=[...new Map([...recent,...quality,...discovery,...hot,...personal].map(row=>[row._id,row])).values()];
-  const trends=await Trend.find({_id:{$in:rows.map(row=>row._id)}}).lean();
-  return {rows,trends:new Map(trends.map(row=>[row._id,row]))};
+  return rows;
 }
 
 export async function personalizedForumFeed({identity,tab='recommend',limit=20,cursor,key,now=Date.now()}) {
   await initializeRecommendations();
-  if(!await Item.exists({}))await syncForumCatalog({batches:4});
-  const preferences=await recommendationPreferences(identity.actor);
-  let session,offset=0,tail=[];
+  const seed=cursor?null:crypto.randomUUID();
+  // Independent public retrieval, preference and behavior queries overlap even
+  // when the database is far from the API server. Permissions stay uncached.
+  const [preferences,initialEvents,publicRows]=await Promise.all([
+    recommendationPreferences(identity.actor),
+    cursor?null:Event.find({actor:identity.actor,at:{$gte:new Date(now-90*DAY)}}).sort({at:-1}).limit(1200).lean(),
+    cursor || tab==='follow'?null:publicCandidates(seed),
+  ]);
+  if(!cursor && tab==='follow' && !preferences.rows.some(row=>row.reason==='followBook'||row.reason==='followAuthor'))
+    return {items:[],nextCursor:null,algorithm:recommendationVersion};
+  let session,offset=0,tail=[],createSession=false;
   if(cursor) {
     const parsed=verifyRecommendation(cursor,identity.actor,key,now);
     if(parsed.kind!=='cursor'||parsed.tab!==tab||!Number.isSafeInteger(parsed.offset)||parsed.offset<0)fail(400,'分页游标无效');
@@ -104,20 +119,24 @@ export async function personalizedForumFeed({identity,tab='recommend',limit=20,c
     if(!Array.isArray(parsed.tail)||parsed.tail.length>19||parsed.tail.some(value=>!id(value)))fail(400,'分页游标无效');
     tail=parsed.tail;
   } else {
-    const {events,books}=await history(identity,preferences);
+    const {events,books}=await history(identity,preferences,initialEvents);
     const interests=interestProfile(events,books,preferences.rows,preferences,now);
-    const seed=crypto.randomUUID();
-    const pool=await candidates(interests,preferences.rows,tab,seed);
+    let rows=await candidates(interests,preferences.rows,publicRows||await publicCandidates(seed));
+    if(!rows.length){await syncForumCatalog({batches:4});rows=await candidates(interests,preferences.rows,await publicCandidates(seed));}
     // Interest learning is bounded, but the read/exposure exclusion must cover
     // every candidate for the full cooldown even for very active readers.
-    const exposures=tab==='recommend' && pool.rows.length?await Event.find({actor:identity.actor,
-      entry:{$in:pool.rows.map(row=>row._id)},at:{$gte:new Date(now-30*DAY)}})
-      .select('entry read impression day at').limit(pool.rows.length*32).lean():events;
-    const ranked=rankRecommendations(pool.rows,{interests,preferences:preferences.rows,events:exposures,trends:pool.trends,
+    const [trendRows,exposures]=await Promise.all([
+      Trend.find({_id:{$in:rows.map(row=>row._id)}}).lean(),
+      tab==='recommend' && rows.length?Event.find({actor:identity.actor,
+        entry:{$in:rows.map(row=>row._id)},at:{$gte:new Date(now-30*DAY)}})
+        .select('entry read impression day at').limit(rows.length*32).lean():events,
+    ]);
+    const ranked=rankRecommendations(rows,{interests,preferences:preferences.rows,events:exposures,trends:new Map(trendRows.map(row=>[row._id,row])),
       tab,seed,now,exploration:preferences.exploration});
     session={_id:seed,actor:identity.actor,tab,entries:ranked.map(row=>row._id),reasons:ranked.map(row=>row.reason),createdAt:new Date(now),expiresAt:new Date(now+6*3600000)};
-    await Session.create(session);
+    createSession=true;
   }
+  const deliver=async()=>{
   const result=[];
   const previous=tail.length?await Item.find({_id:{$in:tail}}).select('post').lean():[];
   const recentQuestions=tail.map(entry=>previous.find(row=>row._id===entry)?.post||'');
@@ -130,6 +149,7 @@ export async function personalizedForumFeed({identity,tab='recommend',limit=20,c
     for(const entry of batch) {
       const row=byId.get(entry),reason=session.reasons[offset++];
       if(!row || excludedByPreferences(row,preferences.rows) || recentQuestions.includes(row.post))continue;
+      if(tab==='follow' && !preferences.rows.some(pref=>pref.reason==='followBook'&&pref.book===row.book || pref.reason==='followAuthor'&&pref.author===row.author))continue;
       const ticket=signRecommendation({v:1,kind:'feed',actor:identity.actor,entry,issued:now,expires:now+6*3600000},key);
       result.push({...row.item,recommendation:{reason,topic:row.topic,author:row.author,token:ticket,
         ...(tab==='hot'?{heat:Math.round(trendScore(trends.get(entry),now)*100)}:{})}});
@@ -138,6 +158,9 @@ export async function personalizedForumFeed({identity,tab='recommend',limit=20,c
   }
   return {items:result,nextCursor:offset<session.entries.length?signRecommendation({v:1,kind:'cursor',actor:identity.actor,
     session:session._id,tab,offset,tail,expires:+new Date(session.expiresAt)},key):null,algorithm:recommendationVersion};
+  };
+  if(createSession){const [,feed]=await Promise.all([Session.create(session),deliver()]);return feed;}
+  return deliver();
 }
 
 export async function recommendationReadReceipt(actor,entry,key,now=Date.now()) {

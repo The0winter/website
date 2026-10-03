@@ -1,7 +1,7 @@
 import {forumApi, type ForumPost} from './api';
 import {clearForumReadingCache, setForumReadingUser} from './forum-reading-cache';
 import {requestSignal} from './request-signal';
-import {ensureForumFeedback} from './forum-feedback';
+import {ensureForumFeedback,setForumFeedbackUser} from './forum-feedback';
 import {setForumActivityUser} from './forum-activity';
 
 export type Feed = 'recommend' | 'hot' | 'follow';
@@ -29,6 +29,7 @@ function cancel() {generation++; for (const controller of pending.values()) cont
 export function setForumUser(id:string|null) {
   setForumReadingUser(id);
   setForumActivityUser(id);
+  setForumFeedbackUser(id);
   if (user === id) return;
   const queued = user === undefined ? [...requested] : [];
   user = id; cancel(); snapshot = empty;

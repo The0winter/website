@@ -34,7 +34,7 @@ function Avatar({answer}: {answer:ForumReply}) {
 
 export default function ForumAnswerReader({questionId, initialAnswerId, openComments = false}: {questionId:string; initialAnswerId?:string; openComments?:boolean}) {
   const router = useRouter();
-  const {user} = useAuth();
+  const {user,loading:authLoading} = useAuth();
   const {theme, setTheme} = useReadingSettings();
   const [question, setQuestion] = useState<ForumPost|null>(null);
   const [answers, setAnswers] = useState<ForumReply[]>([]);
@@ -150,7 +150,7 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
   }, [answers, loading, page, positionKey]);
 
   const active = answers.find(answer => answer.id === activeId) || answers[0];
-  useForumReadingActivity(active?.archived?undefined:active?.id,user?.id,`[data-answer-id="${active?.id}"] .qa-body`);
+  useForumReadingActivity(active?.archived?undefined:active?.id,user?.id,`[data-answer-id="${active?.id}"] .qa-body`,!authLoading);
   const commentAnswer = answers.find(answer => answer.id === commentId);
   const requireLogin = () => {
     if (user) return true;

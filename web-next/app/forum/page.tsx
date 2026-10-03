@@ -57,7 +57,7 @@ export default function ForumPage() {
   const selectTab=(tab:FeedTab)=>{selectedTab.current=tab;setActiveTab(tab);};
   
   const {user, loading: authLoading} = useAuth();
-  const feedback = useForumFeedback(user?.id || 'guest');
+  const feedback = useForumFeedback(user?.id || 'guest',!authLoading);
   const [feedbackPost, setFeedbackPost] = useState<ForumPost|null>(null);
   const [showFeedbackHistory, setShowFeedbackHistory] = useState(false);
   const [feedbackNotice, setFeedbackNotice] = useState<{id:string; text:string}|null>(null);

@@ -95,3 +95,35 @@ test('only visible cards and the actively read answer emit telemetry',async({pag
   await expect.poll(()=>reads,{timeout:12000}).toContain(firstId);
   expect(new Set(reads)).toEqual(new Set([firstId]));
 });
+
+test('preference loading waits for authentication and logout restores guest settings',async({page,context})=>{
+  await page.setViewportSize({width:1440,height:900});
+  const csrf=await(await context.request.get(base+'/api/auth/csrf')).json();
+  const headers={origin:base,'x-csrf-token':csrf.csrfToken};
+  expect((await context.request.post(base+'/api/auth/signin',{headers,data:{email:'recommendation@example.test',password:'Local-test-12345'}})).ok()).toBeTruthy();
+  headers['x-csrf-token']=(await(await context.request.get(base+'/api/auth/csrf')).json()).csrfToken;
+  expect((await context.request.patch(base+'/api/forum/preferences',{headers,data:{enabled:false}})).ok()).toBeTruthy();
+  let releaseAuth:()=>void=()=>{};
+  const pendingAuth=new Promise<void>(resolve=>{releaseAuth=resolve;});
+  await context.route('**/api/auth/session',async route=>{await pendingAuth;await route.continue();});
+  await context.route('**/api/forum/recommendations/events',route=>route.fulfill({json:{recorded:0}}));
+  let preferenceRequests=0;
+  page.on('request',request=>{if(request.url().endsWith('/api/forum/preferences'))preferenceRequests++;});
+  try {
+    await page.goto(base+'/forum');
+    await expect(page.getByRole('navigation',{name:'论坛内容分类'})).toBeVisible();
+    await page.waitForTimeout(400); // Keep auth unresolved across mounted effects.
+    expect(preferenceRequests).toBe(0);
+  } finally {releaseAuth();}
+  await expect(page.locator(cards).first()).toBeVisible();
+  await page.getByRole('button',{name:/推荐偏好/}).click();
+  await expect(page.getByRole('dialog',{name:'推荐偏好'}).getByRole('button',{name:'已关闭',exact:true})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.getByRole('link',{name:'九天小说首页',exact:true}).click();
+  await page.getByRole('button',{name:'退出登录',exact:true}).click();
+  await expect(page.getByRole('button',{name:'退出登录',exact:true})).toHaveCount(0);
+  await page.getByRole('link',{name:'论坛',exact:true}).first().click();
+  await expect(page.locator(cards).first()).toBeVisible();
+  await page.getByRole('button',{name:/推荐偏好/}).click();
+  await expect(page.getByRole('dialog',{name:'推荐偏好'}).getByRole('button',{name:'已开启',exact:true})).toBeVisible();
+});
