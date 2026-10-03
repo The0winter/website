@@ -49,7 +49,7 @@ export function forumWrites(app,auth){
     fields(req.body,['content']);const html=content(req.body.content,12000);let reply;
     await mongoose.connection.transaction(async session=>{
       await lockActor(req,session);
-      if(!await Post.findByIdAndUpdate(req.params.id,{$inc:{replyCount:1},$set:{lastReplyAt:new Date()}},{session,timestamps:false}))fail(404,'帖子不存在');
+      if(!await Post.findByIdAndUpdate(req.params.id,{$inc:{replyCount:1},$set:{lastReplyAt:new Date()}},{session}))fail(404,'帖子不存在');
       if(await Reply.exists({postId:req.params.id,author:req.user.id,content:html,createdAt:recent()}).session(session))fail(429,'请勿重复回答');
       [reply]=await Reply.create([{postId:req.params.id,author:req.user.id,content:html}],{session});
     });res.status(201).json({...reply.toObject(),id:String(reply._id)});
@@ -60,7 +60,7 @@ export function forumWrites(app,auth){
     if(parentId&&!(typeof parentId==='string'&&/^[a-f0-9]{24}$/i.test(parentId)))fail(400,'父评论ID无效');
     await mongoose.connection.transaction(async session=>{
       await lockActor(req,session);
-      const reply=await Reply.findByIdAndUpdate(req.params.id,{$inc:{comments:1}},{session,timestamps:false});if(!reply)fail(404,'回答不存在');
+      const reply=await Reply.findByIdAndUpdate(req.params.id,{$inc:{comments:1}},{session});if(!reply)fail(404,'回答不存在');
       if(parentId){
         const parent=await Comment.findOne({_id:parentId,replyId:reply._id}).session(session);
         if(!parent)fail(404,'父评论不存在');if(parent.parentCommentId)fail(400,'仅支持二级评论');
@@ -77,7 +77,7 @@ export function forumWrites(app,auth){
       fields(req.body||{},['liked']);if(req.body?.liked!==undefined&&typeof req.body.liked!=='boolean')fail(400,'点赞状态无效');
       const actor=new mongoose.Types.ObjectId(req.user.id),list={$ifNull:['$likedBy',[]]},contains={$in:[actor,list]};
       const remove=req.body?.liked===undefined?contains:!req.body.liked;
-      const doc=await Model.findByIdAndUpdate(req.params.id,[{$set:{likedBy:{$cond:[remove,{$setDifference:[list,[actor]]},{$setUnion:[list,[actor]]}]}}},{$set:{likes:{$size:'$likedBy'}}}],{new:true,timestamps:false});
+      const doc=await Model.findByIdAndUpdate(req.params.id,[{$set:{likedBy:{$cond:[remove,{$setDifference:[list,[actor]]},{$setUnion:[list,[actor]]}]}}},{$set:{likes:{$size:'$likedBy'}}}],{new:true});
       if(!doc)fail(404,'内容不存在');
       const liked=doc.likedBy.some(id=>String(id)===req.user.id);
       if(liked && path!=='comments')await app.locals.forumRecommendations?.action(req,res,String(doc._id),'like');

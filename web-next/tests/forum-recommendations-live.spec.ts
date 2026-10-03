@@ -13,7 +13,7 @@ for(const width of [390,1440])test(`recommendation release read-only acceptance 
   await page.goto(base+'/forum');
   const payload=await(await response).json();expect(payload.algorithm).toBe('balanced-fast-v2');
   await expect(page.locator(cards).first()).toBeVisible({timeout:30000});
-  await expect(page.locator(cards)).toHaveCount(width<768?5:20,{timeout:20000});
+  await expect(page.locator(cards)).toHaveCount(width<768?10:20,{timeout:20000});
   const titles=await page.locator(cards+' h2').allTextContents();
   expect(new Set(titles).size).toBe(titles.length);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();

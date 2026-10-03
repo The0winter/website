@@ -62,7 +62,7 @@ export default function ForumQuestionPage({questionId}:{questionId:string}) {
     finally{if(token===generation.current){moreLock.current=false;setLoadingMore(false);}}
   }
   const sentinel=useForumPagination({identity:`${questionId}:${order}:${user?.id || 'guest'}`,enabled:!!question,loading:loading||loadingMore,hasMore,error:error||moreError,
-    loadMore:()=>void loadMore()});
+    preload:pageSize.current===5&&page===1,loadMore:()=>void loadMore()});
   function write(){if(user)setWriting(true);else router.push('/login');}
   async function invite(){
     const url=`${location.origin}/forum/question/${questionId}`;

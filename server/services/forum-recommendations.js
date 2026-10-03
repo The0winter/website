@@ -7,7 +7,6 @@ import {RecommendationItem as Item, RecommendationProfile as Profile, Recommenda
   RecommendationEvent as Event, RecommendationTrend as Trend, RecommendationSession as Session} from '../models/ForumRecommendation.js';
 import {DAY,hash,interestProfile,rankRecommendations,excludedByPreferences,trendScore} from './forum-recommendation-ranking.js';
 import {initializeRecommendations,syncForumCatalog,publicRecommendationItems} from './forum-recommendation-catalog.js';
-import {cachedForumCandidates} from './forum-recommendation-cache.js';
 
 export const recommendationVersion='balanced-fast-v2';
 export const preferenceReasons=['dislike','author','similar','extreme','quality','book','topic','followAuthor','followBook'];
@@ -80,10 +79,10 @@ function publicCandidates(seed,budget=fastBudget,now=Date.now()) {
   const bucket=parseInt(hash(seed).slice(0,4),16)%16;
   // Rank compact features; fetch display metadata only for the delivered page.
   return Promise.all([
-    cachedForumCandidates(`recent:${budget.recent}`,()=>Item.find({}).sort({createdAt:-1,_id:1}).limit(budget.recent).batchSize(budget.recent).select(candidateFeatures).lean()),
-    cachedForumCandidates(`quality:${budget.quality}`,()=>Item.find({}).sort({quality:-1,_id:1}).limit(budget.quality).batchSize(budget.quality).select(candidateFeatures).lean()),
-    cachedForumCandidates(`discovery:${bucket}:${budget.discovery}`,()=>Item.find({bucket:{$in:Array.from({length:4},(_,i)=>(bucket+i)%16)}}).sort({quality:-1,_id:1}).limit(budget.discovery).batchSize(budget.discovery).select(candidateFeatures).lean()),
-    cachedForumCandidates(`trends:${budget.hot}`,()=>Trend.find({at:{$gte:new Date(now-7*DAY)}}).sort({heat24:-1}).limit(budget.hot).batchSize(budget.hot).lean()),
+    Item.find({}).sort({createdAt:-1,_id:1}).limit(budget.recent).batchSize(budget.recent).select(candidateFeatures).lean(),
+    Item.find({}).sort({quality:-1,_id:1}).limit(budget.quality).batchSize(budget.quality).select(candidateFeatures).lean(),
+    Item.find({bucket:{$in:Array.from({length:4},(_,i)=>(bucket+i)%16)}}).sort({quality:-1,_id:1}).limit(budget.discovery).batchSize(budget.discovery).select(candidateFeatures).lean(),
+    Trend.find({at:{$gte:new Date(now-7*DAY)}}).sort({heat24:-1}).limit(budget.hot).batchSize(budget.hot).lean(),
   ]);
 }
 async function candidates(interests,preferences,publicRows,budget=fastBudget) {
@@ -96,7 +95,7 @@ async function candidates(interests,preferences,publicRows,budget=fastBudget) {
   const [personal,hot]=await Promise.all([
     personalFilters.length?Item.find({$or:personalFilters})
       .sort({quality:-1,_id:1}).limit(budget.personal).batchSize(budget.personal).select(candidateFeatures).lean():[],
-    trending.length?cachedForumCandidates(`hot:${hash(trending.map(row=>row._id).join(','))}`,()=>Item.find({_id:{$in:trending.map(row=>row._id)}}).batchSize(budget.hot).select(candidateFeatures).lean()):[],
+    trending.length?Item.find({_id:{$in:trending.map(row=>row._id)}}).batchSize(budget.hot).select(candidateFeatures).lean():[],
   ]);
   const rows=[...new Map([...recent,...quality,...discovery,...hot,...personal].map(row=>[row._id,row])).values()];
   return rows;

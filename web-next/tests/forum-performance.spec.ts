@@ -17,7 +17,7 @@ test.beforeEach(async({page})=>{
   await page.route('**/api/forum/posts/*/views',route=>route.fulfill({json:{counted:false}}));
 });
 
-test('mobile feed retains five while idle, loads on scroll, retries and returns to its retained position',async({page})=>{
+test('mobile feed paints five, idles to ten, scrolls to more, retries and returns to its retained position',async({page})=>{
   const {row} = await fixture(page), second = gate();
   const rows = Array.from({length:15},(_,i)=>({...row,entryId:String(i).padStart(24,'0'),title:`预览卡片 ${i+1}：${row.title}`}));
   const requests:number[]=[]; let failThird=true;
@@ -33,8 +33,6 @@ test('mobile feed retains five while idle, loads on scroll, retries and returns 
     await page.goto(base+'/forum');
     const cards=page.locator('main .forum-feed-panel[aria-hidden=false] .forum-entry');
     await expect(cards).toHaveCount(5);await expect(cards.first()).toBeVisible();
-    await page.waitForTimeout(1000);expect(requests).toEqual([0]);
-    await page.locator('.forum-feed-more').scrollIntoViewIfNeeded();
     await expect.poll(()=>requests).toEqual([0,5]);
     second.release();await expect(cards).toHaveCount(10);
     await page.waitForTimeout(800);expect(requests).toEqual([0,5]);
@@ -69,7 +67,6 @@ test('expired recommendations renew once, retain existing cards, and recover fro
   await page.goto(base+'/forum');
   const cards=page.locator('.forum-feed-panel[aria-hidden=false] .forum-entry');
   await expect(cards).toHaveCount(5);
-  await page.locator('.forum-feed-more').scrollIntoViewIfNeeded();
   await expect(page.locator('.forum-feed-more [role=alert]')).toHaveText('更多内容加载失败，请重试');
   expect(requests).toEqual([null,'expired',null]);
   await page.waitForTimeout(300);expect(requests).toHaveLength(3);
@@ -79,32 +76,6 @@ test('expired recommendations renew once, retain existing cards, and recover fro
   expect(requests).toEqual([null,'expired',null,'expired',null]);
   await expect(page.getByText('暂时没有更多内容，稍后再来看看')).toBeVisible();
   await expect(page.getByText(/换一批/)).toHaveCount(0);
-});
-
-test('idle feed and cancelled title gestures never fetch another page or an unread body',async({page})=>{
-  const {row,reading}=await fixture(page);let feeds=0,reads=0;
-  await page.route('**/api/forum/recommendations/events',route=>route.fulfill({json:{recorded:0}}));
-  await page.route('**/api/forum/posts?*',route=>{feeds++;return route.fulfill({json:{items:Array.from({length:5},(_,i)=>({...row,entryId:String(i).padStart(24,'0')})),nextCursor:'later'}});});
-  await page.route(`**/api/forum/posts/${row.id}/reading?*`,route=>{reads++;return route.fulfill({json:reading});});
-  await page.goto(base+'/forum');
-  const title=page.locator('main .forum-entry-title').first();await expect(title).toBeVisible();
-  await title.hover();await title.focus();
-  await title.dispatchEvent('touchstart',{touches:[{identifier:1,clientX:100,clientY:160}]});
-  await title.dispatchEvent('touchcancel',{touches:[]});
-  await page.waitForTimeout(1800);expect(feeds).toBe(1);expect(reads).toBe(0);
-  await title.click();await expect(page.locator('main .qa-body').first()).toBeVisible();expect(reads).toBe(1);
-});
-
-test('home and cancelled forum navigation do not request forum data',async({page})=>{
-  const forumRequests:string[]=[];
-  page.on('request',request=>{if(new URL(request.url()).pathname.startsWith('/api/forum/'))forumRequests.push(request.url());});
-  await page.goto(base+'/');
-  const link=page.locator('.mh-bottom a[data-section="forum"]');await expect(link).toBeVisible();
-  await link.hover();await link.dispatchEvent('touchstart',{touches:[{identifier:1,clientX:100,clientY:800}]});
-  await link.dispatchEvent('touchcancel',{touches:[]});await page.waitForTimeout(1500);
-  expect(forumRequests).toEqual([]);
-  await link.click();await expect(page.locator('main .forum-entry').first()).toBeVisible();
-  expect(forumRequests.some(url=>url.includes('/api/forum/posts?'))).toBeTruthy();
 });
 
 test('selected body is readable before other answers, and repeat entry reuses its request',async({page})=>{

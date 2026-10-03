@@ -10,7 +10,7 @@ for(const width of [320,390,1440])test(`automatic recommendations, card feedback
   await page.route('**/api/forum/posts/*/views',route=>route.fulfill({json:{counted:false}}));
   await page.goto(base+'/forum');
   await expect(page.locator(cards).first()).toBeVisible({timeout:30000});
-  if(width<768)await expect(page.locator(cards)).toHaveCount(5,{timeout:20000});
+  if(width<768)await expect(page.locator(cards)).toHaveCount(10,{timeout:20000});
   else await expect(page.locator(cards)).toHaveCount(20);
   const titles=await page.locator(cards+' h2').allTextContents();
   expect(new Set(titles).size).toBe(titles.length);
@@ -84,9 +84,9 @@ test('only visible cards and the actively read answer emit telemetry',async({pag
     const entry=new URL(route.request().url()).searchParams.get('entry');
     await route.fulfill({json:{minReadMs:1200,token:Buffer.from(JSON.stringify({entry})).toString('base64url')+'.test'}});
   });
-  await page.goto(base+'/forum');await expect(page.locator(cards)).toHaveCount(5,{timeout:25000});
+  await page.goto(base+'/forum');await expect(page.locator(cards)).toHaveCount(10,{timeout:25000});
   await expect.poll(()=>impressions.length).toBeGreaterThan(0);
-  expect(impressions.length).toBeLessThan(5);
+  expect(impressions.length).toBeLessThan(10);
   const lastId=await page.locator(cards).last().getAttribute('data-entry-id');expect(impressions).not.toContain(lastId);
   const firstId=await page.locator(cards).first().getAttribute('data-entry-id');
   await page.locator(cards+' .forum-entry-title').first().click();

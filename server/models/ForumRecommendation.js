@@ -12,7 +12,6 @@ export const RecommendationItem = model('ForumRecommendationItem', {
   topic:String, topics:[String], terms:[String], fingerprint:String, nearSignature:String, bucket:Number,
   kind:String, length:Number, quality:Number, publishedAt:Date, createdAt:Date,
   indexedAt:Date, sourceUpdatedAt:Date, item:mongoose.Schema.Types.Mixed,
-  postUpdatedAt:Date, replyUpdatedAt:Date, bookMetadata:[String],
 }, [[{createdAt:-1,_id:1}], [{quality:-1,_id:1}], [{book:1,quality:-1}],
   [{topic:1,quality:-1}], [{bucket:1,quality:-1}], [{author:1}], [{post:1}]]);
 

@@ -79,7 +79,7 @@ export async function applyReviewCleanup(plan,{apply=false,writeAudit,admin,batc
     await mongoose.connection.transaction(async session=>{
       const active=await inspect(batch,session);
       for(const {change,before}of active){
-        const update=await Reply.updateOne({_id:before._id,content:before.content,source:before.source},{$set:editorialFields(change)},{session,runValidators:true});
+        const update=await Reply.updateOne({_id:before._id,content:before.content,source:before.source},{$set:editorialFields(change)},{session,runValidators:true,timestamps:false});
         if(update.matchedCount!==1)throw Error('书评发生并发修改：'+change.id);
       }
       for(const postId of new Set(active.map(r=>r.change.postId))){
