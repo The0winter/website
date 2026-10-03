@@ -9,6 +9,7 @@ import {createRequestMetrics,allowMetrics} from './services/observability.js';
 import {trackDatabaseRequest, mongoUsageSnapshot} from './services/mongo-usage.js';
 import {installReadGuard} from './services/read-guard.js';
 import {bookCacheMetrics} from './services/versioned-book-cache.js';
+import {forumRecommendationCacheMetrics} from './services/forum-recommendation-cache.js';
 import { readingRoutes } from './routes/reading.js';
 import { importRoutes } from './routes/import.js';
 import {libraryImportRoutes} from './routes/library-import.js';
@@ -133,7 +134,7 @@ app.use(mongoSanitize());
 app.get('/health/live', (req, res) => res.json({status:'live'}));
 app.get('/health/metrics', async (req,res)=>{
   if(!allowMetrics(req))return res.status(404).end();
-  res.set('Cache-Control','private, no-store').json({...metrics.snapshot(),databaseReady:await databaseReady(),databaseBackend:mongoose.connection.transport?.remote?'d1':mongoose.connection.transport?'sqlite':'mongodb',databaseUsage:mongoose.connection.transport?.metrics ?? mongoUsageSnapshot(),readGuard:readProtection.guard.snapshot(),searchCrawlers:readProtection.searchVerifier.snapshot(),bookCaches:bookCacheMetrics(),trafficObservation:app.locals.trafficObservationMetrics?.()});
+  res.set('Cache-Control','private, no-store').json({...metrics.snapshot(),databaseReady:await databaseReady(),databaseBackend:mongoose.connection.transport?.remote?'d1':mongoose.connection.transport?'sqlite':'mongodb',databaseUsage:mongoose.connection.transport?.metrics ?? mongoUsageSnapshot(),readGuard:readProtection.guard.snapshot(),searchCrawlers:readProtection.searchVerifier.snapshot(),bookCaches:bookCacheMetrics(),forumRecommendationCache:forumRecommendationCacheMetrics(),trafficObservation:app.locals.trafficObservationMetrics?.()});
 });
 app.get('/health/ready', async (req, res) => {const ready=await databaseReady();res.status(ready?200:503).json({ready});});
 app.use('/api', async (req, res, next) => await databaseReady() ? next() : res.status(503).json({error:'数据库暂不可用'}));

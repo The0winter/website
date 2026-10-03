@@ -11,9 +11,8 @@ import {
   Search,
 } from 'lucide-react';
 import {useAuth} from '@/contexts/AuthContext';
-import {getForumSnapshot, serverForumSnapshot, subscribeForum, loadForum, loadMoreForum, getForumPosition, rememberForumPosition, forumPageSize,reloadForumFollowing} from '@/lib/forum-cache';
+import {getForumSnapshot, serverForumSnapshot, subscribeForum, loadForum, loadMoreForum, getForumPosition, rememberForumPosition, reloadForumFollowing} from '@/lib/forum-cache';
 import {useForumPagination} from '@/lib/useForumPagination';
-import {warmForumReaderCode} from '@/lib/forum-reading-cache';
 import HomeSearchHeader from '@/components/HomeSearchHeader';
 import {interruptMobileSectionTransition, navigateMobileSection, startMobileSectionDrag, type MobileSectionDrag} from '@/lib/mobile-section-navigation';
 import {sectionSwipeThreshold} from '@/lib/section-swipe';
@@ -74,7 +73,7 @@ export default function ForumPage() {
     } catch {setFeedbackNotice({id:'',text:'偏好未能保存，请稍后重试'});}
   };
   const removeFeedback=async(id:string)=>{try{await feedback.remove(id);reloadForumFollowing();setFeedbackNotice(null);}catch{setFeedbackNotice({id:'',text:'偏好未能更新，请稍后重试'});}};
-  const {posts: postsCache, loading: loadingState, errors, loadingMore, moreErrors, cursors, batches} = useSyncExternalStore(subscribeForum, getForumSnapshot, serverForumSnapshot);
+  const {posts: postsCache, loading: loadingState, errors, loadingMore, moreErrors, cursors} = useSyncExternalStore(subscribeForum, getForumSnapshot, serverForumSnapshot);
   const savedPosition = useRef<{tab:FeedTab; search:string; y:number}|null>(null);
   const restoredPosition = useRef(false);
   useEffect(() => {
@@ -82,8 +81,6 @@ export default function ForumPage() {
     savedPosition.current = {...getForumPosition()}; restoredPosition.current = false;
     if(selectedTab.current)savedPosition.current={...savedPosition.current,tab:selectedTab.current,y:0};
     setActiveTab(savedPosition.current.tab); setSearchQuery(savedPosition.current.search);
-    const timer = setTimeout(warmForumReaderCode, 450);
-    return () => clearTimeout(timer);
   }, [authLoading, user?.id]);
   useEffect(() => {
     const saved = savedPosition.current;
@@ -101,7 +98,7 @@ export default function ForumPage() {
   }, [activeTab, searchQuery]);
   const sentinel = useForumPagination({identity:`${user?.id || 'guest'}:${activeTab}`, enabled:!authLoading && !!postsCache[activeTab],
     loading:!!loadingState[activeTab] || !!loadingMore[activeTab], hasMore:!!cursors[activeTab], error:errors[activeTab] || moreErrors[activeTab],
-    preload:forumPageSize() === 5 && batches[activeTab] === 1, loadMore:() => void loadMoreForum(activeTab)});
+    loadMore:() => void loadMoreForum(activeTab)});
   const matchesSearch = (post: import('@/lib/api').ForumPost) => !searchQuery.trim() || [post.title, post.excerpt, post.topReply?.title, post.topReply?.content, post.topReply?.author.name].some(value => value?.toLocaleLowerCase().includes(searchQuery.trim().toLocaleLowerCase()));
   const topics = [...new Map((postsCache[activeTab] || []).filter(post => post.type === 'question').map(post => [post.id, post])).values()].slice(0,5);
 

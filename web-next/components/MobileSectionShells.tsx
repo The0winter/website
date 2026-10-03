@@ -10,6 +10,7 @@ import {getLibrarySnapshot, serverLibrarySnapshot, subscribeLibrary, type Librar
 import {getForumSnapshot, serverForumSnapshot, subscribeForum} from '@/lib/forum-cache';
 import {isForumRecommended, subscribeForumFeedback, useForumFeedback} from '@/lib/forum-feedback';
 import {useAuth} from '@/contexts/AuthContext';
+import {usePathname} from 'next/navigation';
 import {useStoredState} from '@/lib/useStoredState';
 import ShelfBookContent from './ShelfBookContent';
 import LibraryToolbar from './LibraryToolbar';
@@ -25,9 +26,10 @@ import '../app/forum/forum.css';
 // A hidden shadow root keeps these inert controls out of page selectors and IDs.
 export default function MobileSectionShells() {
   const {user,loading:authLoading} = useAuth();
+  const pathname=usePathname();
   const [sort] = useStoredState<LibrarySort>('library-sort', 'combined', value => value === 'combined' || value === 'read' || value === 'updated');
   const forum = useSyncExternalStore(subscribeForum, getForumSnapshot, serverForumSnapshot);
-  const feedback = useForumFeedback(user?.id || 'guest',!authLoading);
+  const feedback = useForumFeedback(user?.id || 'guest',!authLoading && pathname.startsWith('/forum'));
   const shelf = useSyncExternalStore(subscribeLibrary, () => getLibrarySnapshot({userId: user?.id || '', tab: 'shelf', sort, page: 1}), serverLibrarySnapshot);
   useEffect(() => subscribeForum(() => invalidateMobileSectionPreview('/forum')), []);
   useEffect(() => subscribeForumFeedback(() => invalidateMobileSectionPreview('/forum')), []);

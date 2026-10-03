@@ -307,7 +307,6 @@ export function beginMobileSectionReturn(sourceHref: string) {
 export function startMobileSectionDrag(source: Element | null, section: Section) {
   const link = sectionLink(source, section);
   if (!link) return;
-  if (section === 'forum') loadForum();
   const drag = createTransition(link.href, true);
   if (!drag) return;
   return {...drag, release(commit: boolean) {

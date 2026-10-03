@@ -11,6 +11,7 @@ import {navigateMobileAuth} from '@/lib/mobile-auth-navigation';
 import {isBookDetailHref, warmBookDetailCode} from '@/lib/book-detail-code';
 
 type Props = Omit<ComponentProps<typeof Link>, 'prefetch' | 'ref'> & {
+  prefetch?: false;
   prefetchMode?: 'visible' | 'intent';
   pendingLabel?: string;
 };
@@ -21,7 +22,7 @@ function PendingFeedback({ label }: { label: string }) {
   return <span role="status" data-link-pending className="sr-only">{label}</span>;
 }
 
-export default function PrefetchLink({ children, href, prefetchMode = 'visible', pendingLabel = '正在打开页面…', onMouseEnter, onMouseLeave, onFocus, onTouchStart, onBlur, onNavigate, ...props }: Props) {
+export default function PrefetchLink({ children, href, prefetch: allowPrefetch, prefetchMode = 'visible', pendingLabel = '正在打开页面…', onMouseEnter, onMouseLeave, onFocus, onTouchStart, onBlur, onNavigate, ...props }: Props) {
   const anchor = useRef<HTMLAnchorElement>(null);
   const [visible, setVisible] = useState(false);
   const [intent, setIntent] = useState(false);
@@ -36,12 +37,12 @@ export default function PrefetchLink({ children, href, prefetchMode = 'visible',
   }, []);
   // Next shares its bounded scheduler, deduplication and memory cache across
   // every link. Offscreen/hidden links stop contributing speculative work.
-  const prefetch = canPrefetchHref(href, pathname) && shouldPrefetchBook(policy, visible, intent, prefetchMode);
+  const prefetch = allowPrefetch !== false && canPrefetchHref(href, pathname) && shouldPrefetchBook(policy, visible, intent, prefetchMode);
   useEffect(() => {
     if (prefetch && isBookDetailHref(href)) warmBookDetailCode();
   }, [prefetch, href]);
   const warmOnIntent = () => {
-    if (policy !== 'paused' && isBookDetailHref(href)) warmBookDetailCode();
+    if (allowPrefetch !== false && policy !== 'paused' && isBookDetailHref(href)) warmBookDetailCode();
   };
   return <Link
     {...props}

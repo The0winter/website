@@ -16,7 +16,7 @@ export function forumViewRoutes(app,auth){
     await mongoose.connection.transaction(async session=>{
       counted=false;
       if(await Receipt.exists({_id:id}).session(session))return;
-      if(!await ForumPost.findOneAndUpdate({_id:req.params.id},{$inc:{views:1}},{session}))fail(404,'帖子不存在');
+      if(!await ForumPost.findOneAndUpdate({_id:req.params.id},{$inc:{views:1}},{session,timestamps:false}))fail(404,'帖子不存在');
       await Receipt.create([{_id:id,postId:req.params.id,expiresAt:new Date(Date.now()+8*86400000)}],{session});counted=true;
     });res.json({counted});
   }));

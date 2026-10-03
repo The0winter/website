@@ -1,0 +1,73 @@
+import '../../tools/test-env.cjs';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import mongoose from 'mongoose';
+import {TestDatabase} from '../database/testing.js';
+import User from '../models/User.js';
+import Post from '../models/ForumPost.js';
+import Reply from '../models/ForumReply.js';
+import Book from '../models/Book.js';
+import {RecommendationItem as Item,RecommendationCheckpoint as Checkpoint} from '../models/ForumRecommendation.js';
+import {syncForumCatalog,publicRecommendationItems} from '../services/forum-recommendation-catalog.js';
+import {cachedForumCandidates,clearForumRecommendationCache,forumRecommendationCacheMetrics} from '../services/forum-recommendation-cache.js';
+
+test('public candidate cache shares concurrent reads, expires on demand, bounds storage and retries failures',async t=>{
+  t.mock.timers.enable({apis:['Date'],now:100000});clearForumRecommendationCache();
+  let reads=0,release;const gate=new Promise(resolve=>{release=resolve;});
+  const load=async()=>{reads++;await gate;return [{_id:'public-feature'}];};
+  const first=cachedForumCandidates('same',load),second=cachedForumCandidates('same',load);
+  await Promise.resolve();assert.equal(reads,1);release();assert.deepEqual(await first,await second);
+  await cachedForumCandidates('same',load);assert.equal(reads,1);
+  t.mock.timers.tick(60001);await Promise.resolve();assert.equal(reads,1,'expiration must not start a refresh');
+  await cachedForumCandidates('same',load);assert.equal(reads,2);
+  await assert.rejects(cachedForumCandidates('retry',async()=>{throw Error('offline');}),/offline/);
+  assert.equal(await cachedForumCandidates('retry',async()=>42),42);
+  for(let i=0;i<55;i++)await cachedForumCandidates('bounded-'+i,async()=>[{feature:'x'.repeat(100000)}]);
+  const metrics=forumRecommendationCacheMetrics();
+  assert.ok(metrics.estimatedJsonBytes<=metrics.capacityBytes);assert.ok(metrics.entries<=48);assert.equal(metrics.pending,0);
+  clearForumRecommendationCache();
+  let finish;const outdated=cachedForumCandidates('invalidated',()=>new Promise(resolve=>{finish=resolve;}));
+  await Promise.resolve();clearForumRecommendationCache();finish(['old']);await outdated;
+  assert.deepEqual(await cachedForumCandidates('invalidated',async()=>['new']),['new'],'in-flight stale reads cannot repopulate an invalidated cache');
+  clearForumRecommendationCache();
+});
+
+test('catalog revisits transfer metadata only; counters do not rebuild bodies, edits and permissions remain current',async()=>{
+  const database=await TestDatabase.create();await mongoose.connect(database.getUri(),{autoIndex:false,monitorCommands:true});
+  try {
+    const user=await User.create({username:'省流量测试',email:'egress@example.test',password:'synthetic'});
+    const book=await Book.create({title:'测试书名',author:'测试作者',category:'科幻',description:'用于识别主题的书籍简介'});
+    const post=await Post.create({author:user._id,title:'如何评价这本书？',content:'问题补充',type:'question',bookId:book._id,replyCount:1});
+    const reply=await Reply.create({author:user._id,postId:post._id,content:'<p>讨论人物和结构的长正文。</p>'.repeat(400)});
+    const entry=String(reply._id);
+    assert.equal((await syncForumCatalog()).reindexed,1);
+    const original=await Item.findById(entry).lean();
+    await Post.updateOne({_id:post._id},{$inc:{views:10,likes:1}},{timestamps:false});
+    await Reply.updateOne({_id:reply._id},{$inc:{comments:2,likes:3}},{timestamps:false});
+    await Book.updateOne({_id:book._id},{$inc:{views:5}});
+    let watched=false;const replies=[];
+    const client=mongoose.connection.getClient?.();
+    const listener=event=>{if(watched)replies.push(event.reply);};
+    client?.on?.('commandSucceeded',listener);
+    watched=true;const unchanged=await syncForumCatalog({reconcile:true});const [card]=await publicRecommendationItems([entry]);watched=false;
+    assert.equal(unchanged.processed,2);assert.equal(unchanged.reindexed,0);assert.equal(unchanged.removed,0);
+    assert.equal(card.item.views,10);assert.equal(card.item.votes,1);assert.equal(card.item.topReply.votes,3);assert.equal(card.item.topReply.comments,2);
+    assert.equal(+(await Item.findById(entry)).indexedAt,+original.indexedAt);
+    if(!mongoose.connection.transport)assert.ok(!JSON.stringify(replies).includes(reply.content),'no original body may leave the database during an unchanged revisit');
+    await Reply.updateOne({_id:reply._id},{$set:{content:'<p>同一条回答刚刚修改，新的分析结论。</p>'.repeat(30)}});
+    const edited=await publicRecommendationItems([entry]);assert.notEqual(edited[0].fingerprint,original.fingerprint);
+    await Book.updateOne({_id:book._id},{$set:{title:'修改后的书名',category:'历史'}});
+    assert.equal((await publicRecommendationItems([entry]))[0].item.bookTitle,'修改后的书名');
+    await Book.updateOne({_id:book._id},{$set:{visibility:'private'}});
+    assert.deepEqual(await publicRecommendationItems([entry]),[]);
+    await Checkpoint.updateMany({},{$set:{passAt:new Date(0)}});
+    const hidden=await syncForumCatalog();assert.equal(hidden.reindexed,0);assert.equal(hidden.removed,1);
+    await Book.updateOne({_id:book._id},{$set:{visibility:'public'}});
+    await Checkpoint.updateMany({},{$set:{passAt:new Date(0)}});
+    assert.equal((await syncForumCatalog()).reindexed,1);
+    await Reply.updateOne({_id:reply._id},{$set:{'curation.status':'withheld'}},{timestamps:false});
+    assert.deepEqual(await publicRecommendationItems([entry]),[],'live curation cannot wait for timestamp or cache expiry');
+    await Reply.deleteOne({_id:reply._id});assert.deepEqual(await publicRecommendationItems([entry]),[]);
+    client?.off?.('commandSucceeded',listener);
+  } finally {await mongoose.disconnect();await database.stop();}
+});
