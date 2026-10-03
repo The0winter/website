@@ -335,6 +335,29 @@ test('a proven boundary numbering error pins the old final chapter and preserves
   assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).reusedExport,true);
 });
 
+test('a single new chapter numbering review pins both retained preceding chapters',async t=>{
+  const f=await fixture(t,{sourceOrder:true,fullCatalog:true,titles:{1:'第1章 开始',2:'第2章 经过',3:'第1章 开始',4:'第3章 转折',5:'第4章 后续'}});
+  const book={...f.book,chapters:[1,2,4,5].map((n,i)=>({...formatChapterForExport(f.raw(n)),chapter_number:i+1,sourceChapterNumber:n,sourceChapterUrl:f.raw(n).link}))};
+  atomicWrite(f.file,book);
+  await bindReadingEdition(f.spec,f.file,{...f.options,sourceOrderReview:{catalogHash:hash(readJson(path.join(f.dir,'catalog.json'))),reason:'仅移出全文相同的重复项',pairs:[{omit:3,keep:1,omitHash:hash(f.raw(3).content),keepHash:hash(f.raw(1).content),reason:'全文相同'}]}});
+  const original=fs.readFileSync(f.file);f.state.titles[6]='第6章 新章';f.state.count=6;
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).exportFile,null);
+  const titles=['第3章 转折','第4章 后续','第5章 新章'],bodyFile=path.join(f.options.stateDir,'publisher.html'),evidence='测试书 甲作者 '+titles.join(' ');fs.writeFileSync(bodyFile,evidence);
+  const review={exportHash:hash(original),boundary:{chapterHash:hash(book.chapters.at(-1)),chapterHashes:book.chapters.slice(-2).map(c=>hash(c))},links:[4,5,6].map(n=>f.raw(n).link),hashes:[4,5,6].map(n=>hash(f.raw(n).content)),reason:'独立目录证明两个旧末章及唯一新章相邻，保留全部原文',reference:{url:'https://publisher.example/book',bodyFile,hash:hash(evidence),chapters:titles}};
+  for(const bad of [{...review,boundary:undefined},{...review,boundary:{chapterHash:review.boundary.chapterHash}},{...review,boundary:{...review.boundary,chapterHashes:['stale',review.boundary.chapterHash]}},{...review,boundary:{...review.boundary,chapterHashes:review.boundary.chapterHashes.slice(1)}},{...review,exportHash:'stale'},{...review,links:[f.raw(2).link,...review.links.slice(1)]},{...review,reference:{...review.reference,chapters:['第3章 转折','第4章 后续','第6章 新章']}}]){
+    await assert.rejects(reviewReadingNumbering(f.spec,bad,f.options));assert.deepEqual(fs.readFileSync(f.file),original);
+  }
+  const decision=await reviewReadingNumbering(f.spec,review,f.options);assert.equal(decision.anomalyIndex,2);assert.deepEqual(decision.boundary.chapterHashes,review.boundary.chapterHashes);
+  for(const n of [4,5,6]){
+    const file=path.join(f.dir,'chapters',hash(f.raw(n).link)+'.json'),saved=readJson(file),chapter={...saved.chapter,content:saved.chapter.content+'改变'};
+    atomicWrite(file,{...saved,chapter,hash:hash(chapter)});assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).exportFile,null);assert.deepEqual(fs.readFileSync(f.file),original);atomicWrite(file,saved);
+  }
+  const result=await acquire(f.spec,{...f.options,mode:'download'});assert.equal(result.readingAdded,1,JSON.stringify(result.failures));assert.equal(result.structuralPass,true);assert.equal(result.completeAgainstSource,true);
+  assert.deepEqual(readJson(f.file).chapters.slice(0,book.chapters.length),book.chapters);assert.equal(readJson(f.file).chapters.at(-1).title,'第6章 新章');
+  const accepted=fs.readFileSync(f.file);f.state.titles[7]='第8章 再次跳号';f.state.count=7;
+  assert.equal((await acquire(f.spec,{...f.options,mode:'download'})).exportFile,null);assert.deepEqual(fs.readFileSync(f.file),accepted);
+});
+
 test('the latest chapter may retain a proven numbering defect only with its complete preceding window',async t=>{
   const f=await fixture(t);await f.bind();const original=fs.readFileSync(f.file);
   Object.assign(f.state.titles,{6:'第4章 前奏',7:'第5章 经过',8:'第5章 末章'});f.state.count=8;
