@@ -39,6 +39,18 @@ Goal active；处于功能基线和首个真实阅读链路实现阶段，尚未
 
 证据：`server-regression.log`、`native-integration.log`、`native-auth-verified.log`、`native-auth-mongodb.log`、`progress-mongodb.log` 均位于 `.runtime/task-artifacts/android-v1/`。
 
+### 后端已上线及第二批同步合同
+
+- `6e627de7a5162d43bb18405fb8ff746e73750b21` 已提交推送并兼容部署。current为 `/srv/test1/releases/auto-6e627de7a516-20261003155738`，activatedAt `2026-10-03T15:58:58.190192+00:00`，健康/页面/目录/正文及保留策略验证通过。
+- 另一个任务在开发期间提交并部署 `ea2ef5744bc0`（论坛首页优化），本次基于其已上线release增量部署，保留其功能；App范围仍固定开工版本957b99b中的131项，不自动缩减。
+- 服务器未安装auto-deploy.service且release中无auto-deploy.py；未变更系统常驻配置。通过SSH stdin运行本仓库既有 `infra/auto-deploy.py --apply` 完成受锁保护的构建/切换/验收，证据 `deploy-apply.json`。
+- NativeSession/ReadingPosition/ReadingPositionOperation索引已按模型非破坏性创建，`deploy-indexes.json`；公网真实正文hash、访客偏好与401拒绝检查见 `backend-public-verified.json`。
+- 书架单项修订、删除墓碑、幂等与老网页双向兼容已实现，250项后端测试通过/3跳过/0失败，新增书架MongoDB验收通过；新书架接口尚待本批部署。
+- API36无头模拟器已完成安装和Activity启动，保持后台 `emulator-5554`。这仍只是工具链检查，业务端到端继续进行。
+- release签名密钥已创建并验证，独立私密目录与公开证书见 `SIGNING.md`，未加入Git。最终release APK仍未生成/交付。
+
+当前分工：`android_toolchain` 已转原生app/core:ui页面；`native_auth` 已转core:data；`parity_audit` 已转原生reader与字体/连续跨章滚动。主智能体负责API、部署、签名、后续网页精确续读和全量集成。
+
 ## 下一步
 
 完成部署实际源文件比对；确定同规范锚点与修订冲突合同；构建真实 API 数据仓库、阅读器及原生导航；其后按功能表持续实现全部业务。

@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import Chapter from '../models/Chapter.js';
 import Bookmark from '../models/Bookmark.js';
 import ReadingHistory from '../models/ReadingHistory.js';
+import ShelfState from '../models/ShelfState.js';
 import {asyncRoute} from '../security.js';
 import {fail} from '../services/content.js';
 import {pagination} from '../services/pagination.js';
@@ -106,8 +107,11 @@ export function libraryRoutes(app, auth) {
     const latestByBook = new Map(latest.map(row => [String(row._id), row.title]));
     const firstByBook = new Map(latest.filter(row => row.firstChapterId).map(row => [String(row._id), String(row.firstChapterId)]));
     const progressById = new Map(progress.map(row => [String(row._id), row.title]));
+    const shelfStates = history ? [] : await ShelfState.find({userId, bookId: {$in: rows.map(row => row.bookId)}}).select('bookId revision').lean();
+    const shelfByBook = new Map(shelfStates.map(row => [String(row.bookId), row.revision]));
     res.set('Cache-Control', 'no-store').set('X-Total-Count', String(total)).json(rows.map(row => ({
       bookId: String(row.bookId),
+      ...(!history ? {shelfRevision: shelfByBook.get(String(row.bookId)) || 0, shelfAdded: true} : {}),
       book: row.book && !row.book.deletedAt && row.book.visibility !== 'private' ? {id: String(row.book._id), title: row.book.title, author: row.book.author, cover_image: row.book.cover_image, status: row.book.status, category: row.book.category, lastUpdated: row.book.lastUpdated} : null,
       lastReadAt: row.history?.lastReadAt,
       lastVisitedAt: row.history?.lastVisitedAt,

@@ -5,7 +5,8 @@ import Book from '../models/Book.js';
 import {ensureBookStatistics} from '../services/initial-book-statistics.js';
 import Chapter from '../models/Chapter.js';
 import Bookmark from '../models/Bookmark.js';
-import {recordBookMilestones} from '../services/book-milestones.js';
+import {legacyShelfChange} from '../services/shelf-state.js';
+import {shelfStateRoutes} from './shelf-state.js';
 import Review from '../models/Review.js';
 import {combinedRating} from '../services/book-statistics.js';
 import {claimMedia,retireUnreferencedCover} from '../services/media-reference.js';
@@ -30,6 +31,7 @@ function bookFields(body){
   if(body.title!==undefined&&!body.title.trim())fail(400,'标题不能为空');
 }
 export function contentRoutes(app,auth) {
+  shelfStateRoutes(app,auth);
   workAccess(app,auth);
   reviewReactionRoutes(app,auth);
   reviewReplyRoutes(app,auth);
@@ -124,29 +126,12 @@ export function contentRoutes(app,auth) {
   app.get('/api/users/:userId/bookmarks/:bookId/check',auth.authenticate,own,asyncRoute(async(req,res)=>res.json({isBookmarked:!!await Bookmark.exists({user_id:req.user.id,bookId:req.params.bookId})})));
   app.post('/api/users/:userId/bookmarks',auth.authenticate,own,asyncRoute(async(req,res)=>{
     if(typeof req.body.bookId!=='string'||!/^[a-f\d]{24}$/i.test(req.body.bookId))fail(400,'作品ID无效');
-    let bookmark;
-    await mongoose.connection.transaction(async session=>{
-      const book=await Book.findOneAndUpdate({_id:req.body.bookId,deletedAt:null,visibility:{$ne:'private'}},{$inc:{milestoneVersion:1}},{session,timestamps:false});
-      if(!book)fail(404,'作品不可用');
-      const filter={user_id:req.user.id,bookId:book._id};
-      const favorites=await Bookmark.countDocuments({bookId:book._id}).session(session);
-      bookmark=await Bookmark.findOne(filter).session(session);
-      const added=!bookmark;
-      if(added)[bookmark]=await Bookmark.create([filter],{session});
-      await recordBookMilestones(book,{favorites},{favorites:favorites+Number(added)},session);
-    });
-    res.json(bookmark);
+    res.json(await legacyShelfChange(req.user.id,req.body.bookId,true));
   }));
   app.delete('/api/users/:userId/bookmarks/:bookId',auth.authenticate,own,asyncRoute(async(req,res)=>{
-    await mongoose.connection.transaction(async session=>{
-      const book=await Book.findOneAndUpdate({_id:req.params.bookId},{$inc:{milestoneVersion:1}},{session,timestamps:false});
-      if(book){
-        const favorites=await Bookmark.countDocuments({bookId:book._id}).session(session);
-        // Preserve any pre-existing achievements before removing the bookmark.
-        await recordBookMilestones(book,{favorites},{},session);
-      }
-      await Bookmark.deleteOne({user_id:req.user.id,bookId:req.params.bookId},{session});
-    });res.json({success:true});
+    if(!/^[a-f\d]{24}$/i.test(req.params.bookId))fail(400,'作品ID无效');
+    await legacyShelfChange(req.user.id,req.params.bookId,false);
+    res.json({success:true});
   }));
   app.post('/api/books/:id/reviews',auth.authenticate,asyncRoute(async(req,res)=>{
     fields(req.body,['rating','content']);

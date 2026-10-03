@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.jiutian.reader",
+      "sha256_cert_fingerprints": [
+        "11:0B:52:0B:33:0B:CF:FD:E4:21:BF:46:6B:D8:34:44:9D:FF:5A:21:66:0C:0A:D4:D7:91:DD:78:DC:8E:3D:72"
+      ]
+    }
+  }
+]

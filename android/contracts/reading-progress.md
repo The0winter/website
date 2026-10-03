@@ -4,7 +4,7 @@
 
 段落严格按 `shared/reader-paragraphs.mjs`：按 CRLF/LF/CR 拆行，ECMAScript trim，移除空行，前三个非空行若与标题或“第N章 标题”去空白/括号后相同则去掉。逐 UTF-16 code unit 计算 FNV1a 和 DJB2 XOR 两个32位哈希，连接16位小写十六进制并附同哈希出现次数 `-1` 等。`charOffset` 以 UTF-16 code units 计数，不允许切开代理对；字体重排不改变锚点。
 
-`GET /api/v1/me/reading-progress/:bookId` 返回 `revision,position,furthest,deleted,deviceId,updatedAt`。无记录 revision=0。position 含 `chapterId,chapterNumber,contentVersion,paragraphKey,paragraphIndex,charOffset`。作者私有或已删除作品不可通过本接口公开读取。
+`GET /api/v1/me/reading-progress/:bookId` 返回 `revision,position,furthest,deleted,deviceId,updatedAt`。无记录 revision=0。position 含 `chapterId,chapterNumber,contentVersion,paragraphKey,paragraphIndex,charOffset`。私有作品仅作者本人或管理员可同步；已删除作品不能读取位置，但仍允许删除本人记录。旧网页记录的 contentVersion/paragraphKey 为 null，客户端按章首续读而不能假设精确锚点。
 
 `PUT` 同一地址：`{baseRevision,operationId,deviceId,position:{chapterId,contentVersion,paragraphKey,charOffset}}`。`DELETE` 同一地址：`{baseRevision,operationId,deviceId}`。设备 ID 为8–100位字母数字/下划线/连字符，操作 ID 为16–100位同字符集，推荐 UUID。
 
