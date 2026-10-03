@@ -2,7 +2,7 @@ import { forumWrites } from './routes/forum-writes.js';
 import {forumFeed,forumExcerpt} from './services/forum-feed.js';
 import {readForumPost} from './services/forum-read.js';
 import {forumJson} from './services/forum-json.js';
-import {visibleForumReplies, forumSourceName, forumDisplayContent} from './services/forum-curation.js';
+import {visibleForumReplies, forumSourceName, forumDisplayContent, forumReplyArchived} from './services/forum-curation.js';
 import {chapterResponse} from './services/chapter-storage.js';
 import {pagination} from './services/pagination.js';
 import {createRequestMetrics,allowMetrics} from './services/observability.js';
@@ -450,6 +450,7 @@ app.get('/api/forum/posts/:id/replies', async (req, res) => {
       id: r._id,
       title: r.title,
       source: r.source,
+      archived: forumReplyArchived(r),
       content: req.query.view==='preview' ? '' : forumDisplayContent(r),
       ...(req.query.view==='preview' ? {excerpt:forumExcerpt(forumDisplayContent(r)),thumbnail:r.curation?.status==='withheld'?undefined:/<img\b[^>]*\bsrc=["']((?:https?:\/\/|\/)[^"']+)["']/i.exec(r.content||'')?.[1]} : {}),
       votes: r.likes,

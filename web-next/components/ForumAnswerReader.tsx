@@ -26,6 +26,7 @@ type Checkpoint = {page:number; pageSize:number; answerId:string; offset:number}
 const PAGE_SIZE = 5;
 const authorName = (answer:ForumReply) => answer.source?.kind === 'guide' ? '拾页整理' : answer.source?.author || answer.author.name || '书友';
 const unique = (rows:ForumReply[]) => rows.filter((row, index) => rows.findIndex(item => item.id === row.id) === index);
+const visibleCount = (rows:ForumReply[]) => rows.filter(row => !row.archived).length;
 function Avatar({answer}: {answer:ForumReply}) {
   return <span className="qa-avatar" aria-hidden="true">{answer.author.avatar ? <img src={answer.author.avatar} alt=""/> : authorName(answer).slice(0, 1)}</span>;
 }
@@ -81,11 +82,11 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
         if (post.type !== 'question') {router.replace(`/forum/${post.id}`); return;}
         if (initialAnswerId && !selected) throw new Error('回答不存在或不属于这个问题');
         let rows = selected ? [selected] : [];
-        let lastPage = 0, more = post.comments > rows.length;
+        let lastPage = 0, more = post.comments > visibleCount(rows);
         while (more && lastPage < (checkpoint.current?.page ?? 0)) {
           const next = await loadForumAnswers(questionId, lastPage + 1, PAGE_SIZE);
           if (token !== generation.current) return;
-          rows = unique([...rows, ...next]); lastPage++; more = next.length === PAGE_SIZE && rows.length < post.comments;
+          rows = unique([...rows, ...next]); lastPage++; more = next.length === PAGE_SIZE && visibleCount(rows) < post.comments;
         }
         setQuestion(post); setAnswers(rows); setPage(lastPage); setHasMore(more);
         setActiveId(rows[0]?.id || '');
@@ -105,7 +106,7 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
       const next = await loadForumAnswers(questionId, page + 1, PAGE_SIZE);
       if (token !== generation.current) return [];
       const merged = unique([...answers, ...next]);
-      setAnswers(previous => unique([...previous, ...next])); setPage(value => value + 1); setHasMore(next.length === PAGE_SIZE && merged.length < (question?.comments ?? Infinity));
+      setAnswers(previous => unique([...previous, ...next])); setPage(value => value + 1); setHasMore(next.length === PAGE_SIZE && visibleCount(merged) < (question?.comments ?? Infinity));
       return next;
     } catch (error) {if (token === generation.current) setMoreError(error instanceof Error ? error.message : '其他回答加载失败'); return [];}
     finally {if (token === generation.current) {moreLock.current = false; setLoadingMore(false);}}

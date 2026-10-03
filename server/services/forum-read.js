@@ -3,7 +3,7 @@ import Post from '../models/ForumPost.js';
 import Reply from '../models/ForumReply.js';
 import Book from '../models/Book.js';
 import User from '../models/User.js';
-import {visibleForumReplies, forumSourceName, forumDisplayContent} from './forum-curation.js';
+import {visibleForumReplies, forumSourceName, forumDisplayContent, forumReplyArchived} from './forum-curation.js';
 
 export const forumAuthor = (field = 'author', output = field) => [
   {$lookup: {from: User.collection.name, localField: field, foreignField: '_id', pipeline: [{$project: {username: 1, avatar: 1}}], as: output}},
@@ -29,7 +29,7 @@ export function forumPostResponse(post, userId) {
 }
 
 export function forumReplyResponse(reply, userId) {
-  return {id: String(reply._id), title: reply.title, source: reply.source, content: forumDisplayContent(reply),
+  return {id: String(reply._id), title: reply.title, source: reply.source, content: forumDisplayContent(reply), archived:forumReplyArchived(reply),
     votes: reply.likes || 0, comments: reply.comments || 0, time: new Date(reply.createdAt).toISOString(),
     hasLiked: !!userId && (reply.likedBy || []).some(id => String(id) === userId),
     author: {name: forumSourceName(reply),

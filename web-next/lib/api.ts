@@ -51,6 +51,7 @@ export interface ForumPost {
 
 export interface ForumReply {
   id: string;
+  archived?: boolean;
   title?: string;
   source?: ForumSource;
   content: string;

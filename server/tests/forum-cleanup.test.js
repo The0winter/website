@@ -42,6 +42,8 @@ test('local-edition upload detects conflicts, preserves interactions and links, 
   assert.equal(normal.find(r=>r.source.kind==='guide').author.name,'拾页整理');
   const hidden=await get('/api/forum/posts/'+post._id+'/replies?target='+before[2]._id);assert.equal(hidden.length,1);assert.match(hidden[0].content,/暂不展示/);assert.ok(!hidden[0].content.includes('合成原文'));
   const duplicate=await get('/api/forum/posts/'+post._id+'/replies?target='+before[1]._id);assert.equal(duplicate.length,1);assert.equal(duplicate[0].votes,3);
+  assert.equal(hidden[0].archived,true);assert.equal(duplicate[0].archived,true);assert.ok(normal.every(row=>!row.archived));
+  const reading=await get('/api/forum/posts/'+post._id+'/reading?answer='+before[1]._id);assert.equal(reading.answer.archived,true);assert.equal(reading.post.comments,2);
   const feed=await get('/api/books/'+book._id+'/discussions');assert.equal(feed.total,2);assert.equal(feed.items.length,2);
   assert.equal((await applyReviewCleanup(plan,{apply:true,writeAudit:async()=>{}})).changed,0);
   await Book.updateOne({_id:book._id},{$set:{visibility:'private'}});
