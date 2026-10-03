@@ -19,8 +19,16 @@ const forumReplySchema = new mongoose.Schema({
     url: String,
     license: String,
     licenseUrl: String,
-    publishedAt: Date
+    publishedAt: Date,
+    kind: {type:String, enum:['original','excerpt','guide']},
+    alternates: {type:[new mongoose.Schema({author:String,url:String},{_id:false})],default:undefined}
   }, { _id: false }), default: undefined },
+  curation: {type: new mongoose.Schema({
+    status: {type:String, enum:['active','withheld','duplicate']},
+    duplicateOf: {type:mongoose.Schema.Types.ObjectId, ref:'ForumReply'},
+    version: String,
+    reason: String
+  }, {_id:false}), default:undefined},
 
   likes: { type: Number, default: 0 },
   likedBy: [{

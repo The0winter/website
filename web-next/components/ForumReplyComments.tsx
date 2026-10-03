@@ -83,7 +83,7 @@ export default function ForumReplyComments({answer, onClose, requireLogin, onCom
     </article>;
   }
   return <CommentSheet label="回答评论" title={<>全部评论 <small>{answer.comments}</small></>} closeLabel="关闭弹窗" onClose={onClose} duration={400} className="forum-comment-sheet">
-    <p className="qa-dialog-subtitle sr-only">{answer.source?.author || answer.author.name} · {answer.comments} 条评论</p>
+    <p className="qa-dialog-subtitle sr-only">{answer.source?.kind === 'guide' ? '拾页整理' : answer.source?.author || answer.author.name} · {answer.comments} 条评论</p>
     <div className="book-review-sheet-body" aria-busy={loading}>
       {!loading && !error && !rows.length && <p className="qa-empty">还没有评论，聊聊你的看法吧。</p>}
       <div className="book-review-list">{roots.map(root => <section key={root.id}>{comment(root)}<div className="qa-comment-children">{children.get(root.id)?.map(comment)}</div></section>)}</div>

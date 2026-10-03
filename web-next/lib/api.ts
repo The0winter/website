@@ -11,6 +11,8 @@ export interface ForumSource {
   license?: string;
   licenseUrl?: string;
   publishedAt?: string;
+  kind?: 'original' | 'excerpt' | 'guide';
+  alternates?: {author:string;url:string}[];
 }
 
 export interface ForumPost {

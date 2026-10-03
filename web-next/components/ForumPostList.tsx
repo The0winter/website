@@ -12,7 +12,7 @@ function ForumPostList({posts = [], loading, hideQuestion = false, onFeedback, e
     {loading ? <p className="forum-list-state" role="status">正在加载讨论…</p> : !posts.length ? <p className="forum-list-state">{emptyText || '还没有讨论，来分享你的阅读感受吧。'}</p> : posts.map(post => {
       const reply = post.topReply;
       const href = forumEntryHref(post);
-      const author = reply?.source?.author || reply?.author?.name || (typeof post.author === 'string' ? post.author : post.author.name) || '书友';
+      const author = reply?.source?.kind === 'guide' ? '拾页整理' : reply?.source?.author || reply?.author?.name || (typeof post.author === 'string' ? post.author : post.author.name) || '书友';
       const account = reply?.author || (typeof post.author === 'string' ? undefined : post.author);
       // A credited source author may differ from the account that imported the answer.
       const avatar = account?.name === author ? account.avatar : undefined;

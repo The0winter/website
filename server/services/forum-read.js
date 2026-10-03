@@ -3,6 +3,7 @@ import Post from '../models/ForumPost.js';
 import Reply from '../models/ForumReply.js';
 import Book from '../models/Book.js';
 import User from '../models/User.js';
+import {visibleForumReplies, forumSourceName, forumDisplayContent} from './forum-curation.js';
 
 export const forumAuthor = (field = 'author', output = field) => [
   {$lookup: {from: User.collection.name, localField: field, foreignField: '_id', pipeline: [{$project: {username: 1, avatar: 1}}], as: output}},
@@ -28,10 +29,10 @@ export function forumPostResponse(post, userId) {
 }
 
 export function forumReplyResponse(reply, userId) {
-  return {id: String(reply._id), title: reply.title, source: reply.source, content: reply.content,
+  return {id: String(reply._id), title: reply.title, source: reply.source, content: forumDisplayContent(reply),
     votes: reply.likes || 0, comments: reply.comments || 0, time: new Date(reply.createdAt).toISOString(),
     hasLiked: !!userId && (reply.likedBy || []).some(id => String(id) === userId),
-    author: {name: reply.source?.author || reply.author?.username || '书友',
+    author: {name: forumSourceName(reply),
       id: String(reply.author?._id || ''), avatar: reply.source ? '' : reply.author?.avatar || '', bio: '暂无介绍'},
   };
 }
@@ -40,7 +41,7 @@ export async function readForumPost(id, userId, {reading = false, answerId} = {}
   let post, answer;
   if (!mongoose.connection.transport) {
     const selected = reading ? [{$lookup: {from: Reply.collection.name, let: {post: '$_id', type: '$type'}, pipeline: [
-      {$match: {...(answerId ? {_id: new mongoose.Types.ObjectId(answerId)} : {}),
+      {$match: {...(answerId ? {_id: new mongoose.Types.ObjectId(answerId)} : visibleForumReplies),
         $expr: {$and: [{$eq: ['$postId', '$$post']}, {$eq: ['$$type', 'question']}]}}},
       {$sort: {likes: -1, createdAt: -1, _id: 1}}, {$limit: 1}, ...forumAuthor(),
     ], as: 'selected'}}] : [];
@@ -56,7 +57,7 @@ export async function readForumPost(id, userId, {reading = false, answerId} = {}
       if (!book) return null;
       post.bookTitle = book.title;
     }
-    if (reading && post?.type === 'question') answer = await Reply.findOne({postId: id, ...(answerId ? {_id: answerId} : {})})
+    if (reading && post?.type === 'question') answer = await Reply.findOne({postId: id, ...(answerId ? {_id: answerId} : visibleForumReplies)})
       .sort({likes: -1, createdAt: -1, _id: 1}).populate('author', 'username avatar').lean();
   }
   if (!post || (answerId && (post.type !== 'question' || !answer))) return null;

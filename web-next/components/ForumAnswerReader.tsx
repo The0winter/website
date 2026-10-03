@@ -24,7 +24,7 @@ import {afterForumNavigation} from '@/lib/forum-navigation';
 import {loadForumReading, loadForumAnswers} from '@/lib/forum-reading-cache';
 type Checkpoint = {page:number; pageSize:number; answerId:string; offset:number};
 const PAGE_SIZE = 5;
-const authorName = (answer:ForumReply) => answer.source?.author || answer.author.name || '书友';
+const authorName = (answer:ForumReply) => answer.source?.kind === 'guide' ? '拾页整理' : answer.source?.author || answer.author.name || '书友';
 const unique = (rows:ForumReply[]) => rows.filter((row, index) => rows.findIndex(item => item.id === row.id) === index);
 function Avatar({answer}: {answer:ForumReply}) {
   return <span className="qa-avatar" aria-hidden="true">{answer.author.avatar ? <img src={answer.author.avatar} alt=""/> : authorName(answer).slice(0, 1)}</span>;

@@ -19,7 +19,7 @@ test('collected reviews require the exact public book, retain attribution withou
     const book = await Book.create({title:'正确的书',author:'作者甲',description:'已有简介'});
     const other = await Book.create({title:'另一部书',author:'作者乙'});
     const content = '<p>用户提供的合成书评，保留完整段落。</p>';
-    const manifest = {version:1,usage:'public-collected-reviews',batch:'collected-test',book:{id:String(book._id),title:book.title,author:book.author,description:'已有简介'},question:{title:'如何评价正确的书？',content:'<p>交流阅读感受。</p>'},articles:[{id:'source-one',title:'阅读感受',content,sha256:crypto.createHash('sha256').update(content).digest('hex'),source:{title:'阅读感受',author:'站外读者',url:'https://example.test/source-one'}}]};
+    const manifest = {version:1,usage:'public-collected-reviews',batch:'collected-test',book:{id:String(book._id),title:book.title,author:book.author,description:'已有简介'},question:{title:'如何评价正确的书？',content:'<p>交流阅读感受。</p>'},articles:[{id:'source-one',title:'阅读感受',content,sha256:crypto.createHash('sha256').update(content).digest('hex'),source:{title:'阅读感受',author:'站外读者',url:'https://example.test/source-one',kind:'original'}}]};
     await assert.rejects(importForumArticles({...manifest,book:{...manifest.book,id:String(other._id)}}, {apply:true}), /编号与书名作者/);
     await assert.rejects(importForumArticles({...manifest,book:{...manifest.book,id:undefined}}, {apply:true}), /现有书籍编号/);
     await assert.rejects(importForumArticles({...manifest,usage:'public-licensed-reviews'}, {apply:true}), /许可/);
@@ -38,6 +38,10 @@ test('collected reviews require the exact public book, retain attribution withou
     await Reply.updateOne({_id:answer._id}, {$set:{likes:4,comments:2,likedBy:[admin._id]}});
     assert.deepEqual((await importForumArticles(manifest, {apply:true})).created, {books:0,questions:0,answers:0});
     assert.equal((await Reply.findById(answer._id)).likes, 4);
+    const repeated={...manifest.articles[0],id:'source-two',source:{...manifest.articles[0].source,url:'https://example.test/source-two'}};
+    await assert.rejects(importForumArticles({...manifest,articles:[...manifest.articles,repeated]}), /重复书评正文/);
+    await assert.rejects(importForumArticles({...manifest,batch:'another-collected-batch',articles:[repeated]}, {apply:true}), /已收录相同来源或相同正文/);
+    assert.equal(await Reply.countDocuments(), 1);
     assert.equal(await User.countDocuments(), 1);
     assert.equal((await Book.findById(book._id)).description, '已有简介');
     await Book.updateOne({_id:book._id}, {$set:{visibility:'private'}});

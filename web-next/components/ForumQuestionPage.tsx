@@ -20,7 +20,7 @@ import './forum-question.css';
 type Preview=ForumReply & {excerpt?:string;thumbnail?:string};
 function AnswerPreview({answer,questionId}:{answer:Preview;questionId:string}) {
   const [imageFailed,setImageFailed]=useState(false);
-  const author=answer.source?.author||answer.author.name||'书友';
+  const author=answer.source?.kind==='guide'?'拾页整理':answer.source?.author||answer.author.name||'书友';
   const date=new Date(answer.time);
   return <article className="fq-answer" data-answer-id={answer.id}><ForumLink className="fq-answer-link" href={`/forum/${answer.id}?fromQuestion=${questionId}`}>
     <div className="fq-author"><UserAvatar user={{id:answer.author.id,username:author,avatar:answer.author.avatar}}/><span>{author}</span></div>

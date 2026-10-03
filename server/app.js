@@ -2,6 +2,7 @@ import { forumWrites } from './routes/forum-writes.js';
 import {forumFeed,forumExcerpt} from './services/forum-feed.js';
 import {readForumPost} from './services/forum-read.js';
 import {forumJson} from './services/forum-json.js';
+import {visibleForumReplies, forumSourceName, forumDisplayContent} from './services/forum-curation.js';
 import {chapterResponse} from './services/chapter-storage.js';
 import {pagination} from './services/pagination.js';
 import {createRequestMetrics,allowMetrics} from './services/observability.js';
@@ -347,7 +348,7 @@ app.get('/api/forum/posts', async (req, res) => {
     const postIds = posts.map(p => p._id);
     const topReplyMap = new Map();
     if (postIds.length > 0) {
-      const replies = (await Promise.all(postIds.map(postId=>ForumReply.findOne({postId}).populate('author','username _id avatar').sort({likes:-1,createdAt:-1,_id:1}).maxTimeMS(3000).lean()))).filter(Boolean);
+      const replies = (await Promise.all(postIds.map(postId=>ForumReply.findOne({postId,...visibleForumReplies}).populate('author','username _id avatar').sort({likes:-1,createdAt:-1,_id:1}).maxTimeMS(3000).lean()))).filter(Boolean);
 
       for (const reply of replies) {
         const key = String(reply.postId);
@@ -436,7 +437,7 @@ app.get('/api/forum/posts/:id/replies', async (req, res) => {
         return res.json([]); 
     }
     const {limit,skip}=pagination(req.query);
-    const filter={postId:req.params.id};
+    const filter={postId:req.params.id,...(!req.query.target?visibleForumReplies:{})};
     const parent = await ForumPost.findById(req.params.id).select('bookId').lean();
     if(parent?.bookId && !await Book.exists({_id:parent.bookId,deletedAt:null,visibility:{$ne:'private'}})) return res.status(404).json({error:'帖子不存在'});
     if(req.query.target){if(typeof req.query.target!=='string'||!/^[a-f0-9]{24}$/i.test(req.query.target))return res.status(400).json({error:'回答ID无效'});filter._id=req.query.target;}
@@ -449,8 +450,8 @@ app.get('/api/forum/posts/:id/replies', async (req, res) => {
       id: r._id,
       title: r.title,
       source: r.source,
-      content: req.query.view==='preview' ? '' : r.content,
-      ...(req.query.view==='preview' ? {excerpt:forumExcerpt(r.content),thumbnail:/<img\b[^>]*\bsrc=["']((?:https?:\/\/|\/)[^"']+)["']/i.exec(r.content||'')?.[1]} : {}),
+      content: req.query.view==='preview' ? '' : forumDisplayContent(r),
+      ...(req.query.view==='preview' ? {excerpt:forumExcerpt(forumDisplayContent(r)),thumbnail:r.curation?.status==='withheld'?undefined:/<img\b[^>]*\bsrc=["']((?:https?:\/\/|\/)[^"']+)["']/i.exec(r.content||'')?.[1]} : {}),
       votes: r.likes,
       hasLiked: currentUserId
         ? (r.likedBy || []).some(uid => String(uid) === currentUserId)
@@ -458,7 +459,7 @@ app.get('/api/forum/posts/:id/replies', async (req, res) => {
       comments: r.comments,
       time: new Date(r.createdAt).toISOString(),
       author: {
-        name: r.source?.author || r.author?.username,
+        name: forumSourceName(r),
         bio: '暂无介绍', // 以后可以在 User 表加 bio 字段
         avatar: r.source ? '' : r.author?.avatar || '',
         id: r.author?._id

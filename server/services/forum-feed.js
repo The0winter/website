@@ -4,6 +4,7 @@ import Book from '../models/Book.js';
 import {safeHtml} from '../security.js';
 import mongoose from 'mongoose';
 import {forumAuthor, publicForumBook} from './forum-read.js';
+import {visibleForumReplies, forumSourceName} from './forum-curation.js';
 
 export const forumExcerpt = value => safeHtml(value || '')
   .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
@@ -23,7 +24,7 @@ export function forumFeedItem(post, reply, compact = false) {
       id: String(reply._id), title: reply.title, excerpt,
       content: compact ? '' : excerpt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
       source: reply.source, votes: reply.likes || 0, comments: reply.comments || 0,
-      author: {id: String(reply.author?._id || ''), name: reply.source?.author || reply.author?.username || '书友', avatar: reply.source ? '' : reply.author?.avatar || ''}
+      author: {id: String(reply.author?._id || ''), name: forumSourceName(reply), avatar: reply.source ? '' : reply.author?.avatar || ''}
     } : null
   };
 }
@@ -38,7 +39,7 @@ export async function forumFeed({tab = 'recommend', page = 1, limit = 20, bookId
   const postFilter = {$or: [{type: 'article'}, {type: 'question', replyCount: 0}], ...(bookId ? {bookId} : {})};
   const native = !mongoose.connection.transport;
   const questionIds = bookId && !native ? (await Post.find({bookId, type: 'question'}).select('_id').lean()).map(row => row._id) : null;
-  const replyFilter = questionIds ? {postId: {$in: questionIds}} : {};
+  const replyFilter = {...visibleForumReplies, ...(questionIds ? {postId: {$in: questionIds}} : {})};
   const bookCache = new Map();
   async function visible(rows, parent) {
     const ids = [...new Set(rows.map(row => parent(row)?.bookId?.toString()).filter(id => id && !bookCache.has(id)))];
@@ -94,7 +95,7 @@ export async function forumFeed({tab = 'recommend', page = 1, limit = 20, bookId
   if (paged) return {items, nextCursor: merged.length > limit ? encodeCursor(selected.at(-1), tab, bookId) : null};
   if (!bookId) return {items};
   const ids = questionIds || (await Post.find({bookId, type: 'question'}).select('_id').lean()).map(row => row._id);
-  const [answerCount, postCount] = await Promise.all([Reply.countDocuments({postId: {$in: ids}}), Post.countDocuments(postFilter)]);
+  const [answerCount, postCount] = await Promise.all([Reply.countDocuments({postId: {$in: ids}, ...visibleForumReplies}), Post.countDocuments(postFilter)]);
   return {items, total: answerCount + postCount, pageSize: limit};
 }
 
