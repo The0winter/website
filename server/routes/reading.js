@@ -49,11 +49,20 @@ export function readingRoutes(app,auth) {
     const counts=await Chapter.aggregate([{$match:{bookId:{$in:books.map(b=>b._id)},deletedAt:null}},{$group:{_id:'$bookId',count:{$sum:1}}}]).option({maxTimeMS:5000});
     const byId=new Map(counts.map(c=>[String(c._id),c.count]));res.json(books.map(b=>({...b,chapters:byId.get(String(b._id))||0})));
   }));
-  app.get('/api/books',asyncRoute(async(req,res)=>{
+  app.get('/api/books',(req,res,next)=>{
+    if(req.query.scope===undefined)return next();
+    res.set('Cache-Control','private, no-store').vary('Authorization').vary('Cookie');
+    if(req.query.scope!=='admin')return res.status(400).json({error:'书籍查询范围无效'});
+    return auth.authenticate(req,res,error=>{
+      if(error)return next(error);
+      if(req.user.role!=='admin')return res.status(403).json({error:'需要管理员权限'});
+      next();
+    });
+  },asyncRoute(async(req,res)=>{
     const {orderBy='views',order='desc',author_id,q,category}=req.query;
     if(!['views','weekly_views','daily_views','monthly_views','updatedAt','createdAt','rating','composite','discovery','featured_daily',...Object.keys(rankingViewFields)].includes(orderBy)||!['asc','desc'].includes(order))fail(400,'排序参数无效');
     const limit=integer(req.query.limit,20,100),page=integer(req.query.page,1,100000);
-    const filter={deletedAt:null,...publicWork,...(req.query.recommendation==='home'?homeRecommendationFilter:{})};
+    const filter={deletedAt:null,...(req.query.scope==='admin'?{}:publicWork),...(req.query.recommendation==='home'?homeRecommendationFilter:{})};
     if(author_id){
       if(typeof author_id!=='string'||!/^[a-f0-9]{24}$/i.test(author_id))fail(400,'作者ID无效');
       const profile=await authorProfile(author_id);
