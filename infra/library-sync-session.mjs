@@ -9,7 +9,8 @@ import {setTimeout as sleep} from 'node:timers/promises';
 export function createVpsLibrarySession({wait = (ms, signal) => sleep(ms, undefined, {signal}), ...options} = {}) {
   let session = openVpsLibrarySession(options), busy = false;
   const lifetime = new AbortController();
-  const transient = /^(?:网站暂时无法写入，已成功的批次保留，再次上传可续传|网站连接中断，已完成批次保留|网站连接已关闭，已完成批次保留；请再次上传核对|网站响应超时，已完成批次保留)$/;
+  const transient = new Set(['网站暂时无法写入，已成功的批次保留，再次上传可续传', '网站连接中断，已完成批次保留',
+    '网站连接已关闭，已完成批次保留；请再次上传核对', '网站连接已关闭，请再次上传核对', '网站响应超时，已完成批次保留']);
   const send = async (job, {signal, onProgress = () => {}} = {}) => {
     if (busy) throw Error('当前网站核对尚未完成');
     const combined = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
@@ -22,7 +23,7 @@ export function createVpsLibrarySession({wait = (ms, signal) => sleep(ms, undefi
         try { return await session(job, {signal: combined, onProgress}); }
         catch (error) {
           if (combined.aborted) throw Error('上传已停止，已完成批次保留');
-          if (!replayable || !error.fatal || !transient.test(error.message) || attempt === delays.length) throw error;
+          if (!replayable || !error.fatal || !transient.has(error.message) || attempt === delays.length) throw error;
           await session.close();
           onProgress({stage: 'retry', attempt: attempt + 1, delayMs: delays[attempt]});
           try { await wait(delays[attempt], combined); }

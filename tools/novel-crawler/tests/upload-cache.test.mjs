@@ -276,6 +276,18 @@ test('deployment interruption reconnects and replays the same missing-only uploa
   await send.close();
 });
 
+test('an SSH connection lost between books is reopened before the next inspection', async () => {
+  const worker = restartingWorker(() => ({type: 'result', result: {book: null, chapters: []}}));
+  let current;
+  const send = createVpsLibrarySession({spawnProcess(...args) { current = worker.spawnProcess(...args); return current; }, wait: async () => {}});
+  await send({mode: 'inspect', sourceUrl: 'https://example.test/first'});
+  current.emit('close', 1);
+  await send({mode: 'inspect', sourceUrl: 'https://example.test/second'});
+  assert.equal(worker.connections, 2);
+  assert.deepEqual(worker.jobs.map(job => job.sourceUrl), ['https://example.test/first', 'https://example.test/second']);
+  await send.close();
+});
+
 test('recovery is bounded and never replays rejected content, credentials, maintenance or cleaning writes', async () => {
   for (const error of ['网站拒绝上传（HTTP 409）：内容冲突', '网站拒绝上传（HTTP 403）：无权操作', '网站处于只读维护状态，请稍后重试']) {
     const worker = restartingWorker(() => ({...restartFailure, error}));
