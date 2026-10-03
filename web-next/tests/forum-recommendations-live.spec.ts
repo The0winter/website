@@ -11,7 +11,7 @@ for(const width of [390,1440])test(`recommendation release read-only acceptance 
   const pageErrors:string[]=[];page.on('pageerror',error=>pageErrors.push(error.message));
   const response=page.waitForResponse(res=>res.url().includes('/api/forum/posts?')&&res.url().includes('format=page')&&res.url().includes('tab=recommend'));
   await page.goto(base+'/forum');
-  const payload=await(await response).json();expect(payload.algorithm).toBe('balanced-v1');
+  const payload=await(await response).json();expect(payload.algorithm).toBe('balanced-fast-v2');
   await expect(page.locator(cards).first()).toBeVisible({timeout:30000});
   await expect(page.locator(cards)).toHaveCount(width<768?10:20,{timeout:20000});
   const titles=await page.locator(cards+' h2').allTextContents();

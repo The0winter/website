@@ -46,6 +46,37 @@ test('ranking balances interests, exploration, time decay and non-relaxable excl
   assert.equal(rankRecommendations(candidates,{...options,tab:'follow'}).length,0);
 });
 
+test('fast queues retain exploration and search beyond lookahead before relaxing diversity',()=>{
+  const now=Date.now(),interests={books:new Map(),authors:new Map(),topics:new Map([['科幻',8],['情感关系',8],['游戏竞技',8]])};
+  const rows=Array.from({length:200},(_,i)=>{
+    const topic=i<150?['科幻','情感关系','游戏竞技'][i%3]:['历史','文学写作','幽默日常','现实社会'][i%4];
+    return {_id:String(i).padStart(8,'0'),post:'post-'+i,book:'book-'+i,author:'author-'+i,topic,topics:[topic],
+      length:1000,quality:.8,publishedAt:new Date(now-DAY),fingerprint:'body-'+i};
+  });
+  const options={interests,seed:'independent-exploration',now,limit:20};
+  assert.equal(rankRecommendations(rows,options).filter(row=>row.affinity<.12).length,4);
+  assert.equal(rankRecommendations(rows,{...options,exploration:'more'}).filter(row=>row.affinity<.12).length,8);
+  const crowded=[...rows.slice(0,100).map(row=>({...row,book:'shared',author:'shared-author'})),...rows.slice(150,190)];
+  const varied=rankRecommendations(crowded,options);
+  assert.equal(varied.length,20);
+  assert.ok(varied.filter(row=>row.author==='shared-author').length<=2);
+});
+
+test('fast selection postpones a repeated question without losing it and excludes near-duplicate bodies',()=>{
+  const now=Date.now(),rows=Array.from({length:23},(_,i)=>({_id:String(i),post:'post-'+i,book:'book-'+i,author:'author-'+i,
+    topic:['科幻','历史','情感关系'][i%3],topics:[['科幻','历史','情感关系'][i%3]],length:1000,quality:1-i*.01,
+    publishedAt:new Date(now-DAY),fingerprint:'body-'+i}));
+  rows[1]={...rows[1],post:rows[0].post,book:rows[0].book};
+  const duplicate={...rows[22],_id:'near-duplicate',fingerprint:'different-exact-hash',nearSignature:'0123456789abcdef'};
+  rows[22].nearSignature=duplicate.nearSignature;
+  const ranked=rankRecommendations([...rows,duplicate],{seed:'question-window',now});
+  assert.equal(ranked.length,23);
+  const repeated=ranked.flatMap((row,i)=>row.post===rows[0].post?[i]:[]);
+  assert.equal(repeated.length,2);
+  assert.ok(repeated[1]-repeated[0]>=20);
+  assert.equal(ranked.filter(row=>row.book===duplicate.book).length,1);
+});
+
 test('personalized feed persists snapshots, protects identities/visibility and learns only verified events',async()=>{
   const database=await TestDatabase.create();
   const key=crypto.randomBytes(48).toString('hex');
@@ -74,7 +105,7 @@ test('personalized feed persists snapshots, protects identities/visibility and l
     await Bookmark.create({user_id:u1._id,bookId:books[0]._id});
     await Bookmark.create({user_id:u2._id,bookId:books[1]._id});
     const first=await personalizedForumFeed({identity,key,limit:5});
-    assert.equal(first.items.length,5);assert.equal(first.algorithm,'balanced-v1');
+    assert.equal(first.items.length,5);assert.equal(first.algorithm,'balanced-fast-v2');
     assert.equal(first.items[0].bookId,String(books[0]._id));
     const secondUser=await personalizedForumFeed({identity:other,key,limit:5});
     assert.equal(secondUser.items[0].bookId,String(books[1]._id));
@@ -137,8 +168,33 @@ test('personalized feed persists snapshots, protects identities/visibility and l
     assert.equal((await request('/api/forum/preferences','POST',{entry:wire.data.items[0].entryId,reason:'author'})).status,200);
     assert.equal((await request('/api/forum/recommendations/events','POST',{events:[{type:'read',token:'forged'}]})).status,409);
     assert.ok((await Event.countDocuments())<=2,'fetching and preloading never count as impressions or reads');
+    // The faster learning sample may be truncated; exclusions must still cover
+    // older reads outside it, including when an expanded recall is necessary.
+    const allItems=await Item.find({}).select('_id').lean(),busyActor='reader-beyond-learning-sample';
+    await Event.insertMany([
+      ...allItems.map((row,i)=>({_id:'older-read-'+i,actor:busyActor,entry:row._id,read:true,day:'older',at:new Date(now-2*DAY),expiresAt:new Date(now+60*DAY)})),
+      ...Array.from({length:400},(_,i)=>({_id:'recent-unrelated-'+i,actor:busyActor,entry:new mongoose.Types.ObjectId().toString(),
+        impression:true,day:'today',at:new Date(now),expiresAt:new Date(now+60*DAY)})),
+    ]);
+    const exhausted=await personalizedForumFeed({identity:{actor:busyActor,userId:null},key});
+    assert.equal(exhausted.items.length,0,'read cooldown survives truncation and wider recall');
     assert.throws(()=>verifyRecommendation(receipt.token,identity.actor,key,now+7*3600000),/更新/);
     await Reply.updateOne({_id:blocked.entryId},{$set:{'curation.status':'withheld'}});
     assert.equal((await publicRecommendationItems([blocked.entryId])).length,0);
+    // Stale public candidates can become private between catalog passes. The
+    // small pool is deliberately dominated by them; wider recall must recover
+    // public supply and persist its new order before returning a first cursor.
+    const hiddenBooks=books.slice(0,32).map(book=>String(book._id));
+    await Item.updateMany({},{$set:{quality:.1,bucket:0,createdAt:new Date(now-90*DAY)}});
+    await Item.updateMany({book:{$in:hiddenBooks}},{$set:{quality:.95,createdAt:new Date(now)}});
+    await Book.updateMany({_id:{$in:hiddenBooks}},{$set:{visibility:'private'}});
+    const visitor={actor:'visibility-fallback',userId:null};
+    const recovered=await personalizedForumFeed({identity:visitor,key,limit:5});
+    assert.equal(recovered.items.length,5,'live visibility filtering must not turn a small pool into a false empty feed');
+    assert.ok(recovered.items.every(row=>!hiddenBooks.includes(row.bookId)));
+    assert.ok(recovered.nextCursor);
+    const nextRecovered=await personalizedForumFeed({identity:visitor,key,limit:5,cursor:recovered.nextCursor});
+    assert.equal(new Set([...recovered.items,...nextRecovered.items].map(row=>row.id)).size,10);
+    assert.deepEqual((await personalizedForumFeed({identity:visitor,key,limit:5,cursor:recovered.nextCursor})).items.map(row=>row.entryId),nextRecovered.items.map(row=>row.entryId));
   } finally {await new Promise(resolve=>server.close(resolve));await mongoose.disconnect();await database.stop();}
 });

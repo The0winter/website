@@ -112,8 +112,8 @@ export function interestProfile(events, books, preferences, profile = {}, now = 
   return interests;
 }
 
-const schedule = ['interest','hot','interest','adjacent','new','interest','hot','interest','adjacent','interest',
-  'hot','interest','new','interest','hot','adjacent','interest','hot','interest','interest'];
+const schedule = ['interest','interest','hot','interest','explore'];
+const explorationSchedule = ['interest','explore','hot','interest','explore'];
 const neighbors = {科幻:['哲学思想','推理悬疑','奇幻仙侠'],推理悬疑:['历史','现实社会','科幻'],历史:['现实社会','哲学思想','文学写作'],
   奇幻仙侠:['科幻','人物成长','游戏竞技'],现实社会:['历史','情感关系','哲学思想'],人物成长:['情感关系','幽默日常','现实社会'],
   情感关系:['人物成长','现实社会','文学写作'],文学写作:['哲学思想','历史','人物成长'],哲学思想:['科幻','现实社会','文学写作'],
@@ -130,22 +130,8 @@ export function rankRecommendations(candidates, {interests, preferences = [], ev
     recent.set(event.entry,state);
   }
   const related = new Set([...interests.topics.keys()].flatMap(topic=>neighbors[topic]||[]));
-  // Candidate groups are fixed before scoring. Reuse their Jaccard overlap and
-  // count each rolling window once instead of rebuilding sets for every pair.
-  const topicGroups=new Map(),similarities=new Map();
-  const groupFor=topics=>{
-    const key=JSON.stringify([...topics].sort());
-    if(!topicGroups.has(key))topicGroups.set(key,{id:topicGroups.size,topics:new Set(topics)});
-    return topicGroups.get(key);
-  };
-  const topicSimilarity=(left,right)=>{
-    const key=Math.min(left.id,right.id)*topicGroups.size+Math.max(left.id,right.id);
-    if(!similarities.has(key)) {
-      let common=0;for(const topic of left.topics)if(right.topics.has(topic))common++;
-      similarities.set(key,common/Math.max(1,left.topics.size+right.topics.size-common));
-    }
-    return similarities.get(key);
-  };
+  // Score each candidate once. The queues trade fine-grained pairwise
+  // similarity and calibration for bounded lookahead and explicit diversity.
   const pool = candidates.filter(row => row.length>0 && !excludedByPreferences(row,preferences) &&
     (tab!=='follow' || preferences.some(p=>p.reason==='followBook'&&p.book===row.book || p.reason==='followAuthor'&&p.author===row.author)))
     .filter(row => {const state=recent.get(row._id);return tab!=='recommend' || !state ||
@@ -158,43 +144,57 @@ export function rankRecommendations(candidates, {interests, preferences = [], ev
       const satisfaction=Math.min(1,((trend?.reads||0)+2*(trend?.likes||0)+2)/(Math.max(trend?.exposures||0,trend?.reads||0)+20));
       const jitter=parseInt(hash(seed+row._id).slice(0,8),16)/0xffffffff;
       const fresh=2**(-Math.max(0,now-+new Date(row.publishedAt))/(30*DAY));
-      return {...row, affinity, heat, jitter, fresh, topicGroup:groupFor(row.topics), adjacent:row.topics.some(t=>related.has(t)),
-        score:.5*affinity+.2*row.quality+.05*satisfaction+.18*(heat/(heat+2))+.05*fresh+.02*jitter};
-    });
-  const chosen=[], fingerprints=new Set(),chosenByBook=new Map();
-  while(pool.length && chosen.length<limit) {
-    const window=chosen.slice(-19), lane=tab==='hot'?'hot':tab==='follow'?'follow':
-      exploration==='more' && chosen.length%5===2?'adjacent':schedule[chosen.length%schedule.length];
-    const counts=field=>{const values=new Map();for(const item of window)values.set(item[field],(values.get(item[field])||0)+1);return values;};
-    const bookCounts=counts('book'),authorCounts=counts('author'),topicCounts=counts('topic');
-    const questions=new Set(window.map(item=>item.post)),windowGroups=[...new Set(window.map(item=>item.topicGroup))];
-    let eligible=pool.filter(row=>!fingerprints.has(row.fingerprint)&&!questions.has(row.post) &&
-      !(chosenByBook.get(row.book)||[]).some(item=>nearDuplicate(row,item)));
-    if(!eligible.length)break;
-    const diversity=row=>(!row.book || (bookCounts.get(row.book)||0)<2) && (authorCounts.get(row.author)||0)<2;
-    const topics=row=>(topicCounts.get(row.topic)||0)<10 && !(chosen.length>=2 && chosen.at(-1).topic===row.topic && chosen.at(-2).topic===row.topic);
-    const varied=eligible.filter(row=>diversity(row)&&topics(row));
-    // Only soft author/topic caps relax when supply is exhausted. Never relax
-    // permission, explicit exclusions, exact duplicates or the question gap.
-    eligible=varied.length?varied:eligible.filter(diversity).length?eligible.filter(diversity):eligible;
-    const laneCandidates=eligible.filter(row=>lane==='interest'?row.affinity>.08:lane==='hot'?row.heat>0:
-      lane==='adjacent'?row.adjacent&&row.affinity<.7:lane==='new'?!(trends.get(row._id)?.exposures>20):true);
-    const matching=laneCandidates.length>0;
-    if(matching)eligible=laneCandidates;
-    const score=row=>{
-      const similarity=row.book && bookCounts.has(row.book.trim())?1:
-        Math.max(0,...windowGroups.map(group=>topicSimilarity(row.topicGroup,group)));
-      const calibration=(topicCounts.get(row.topic)||0)*.025;
-      return (tab==='hot'?row.heat:row.score)+(lane==='new'?.08*row.jitter:0)-.16*similarity-calibration;
-    };
-    let next=eligible[0],best=-Infinity;
-    for(const row of eligible){const value=score(row);if(value>best || value===best&&row._id<next._id){next=row;best=value;}}
+      return {...row, affinity, heat, jitter, fresh, adjacent:row.topics.some(t=>related.has(t)),
+        score:tab==='hot'?heat:.5*affinity+.2*row.quality+.05*satisfaction+.18*(heat/(heat+2))+.05*fresh+.02*jitter,
+        explorationScore:.65*row.quality+.2*fresh+.15*jitter};
+    }).sort((a,b)=>b.score-a.score || (a._id<b._id?-1:a._id>b._id?1:0));
+  const queues={all:pool,interest:pool.filter(row=>row.affinity>.08),hot:pool.filter(row=>row.heat>0),
+    explore:pool.filter(row=>row.affinity<.12 || row.adjacent && row.affinity<.7)
+      .sort((a,b)=>b.explorationScore-a.explorationScore || (a._id<b._id?-1:a._id>b._id?1:0))};
+  const chosen=[], unavailable=new Set(), fingerprints=new Set(),chosenByBook=new Map(),nearChecked=new WeakMap();
+  const questions=new Map(),bookCounts=new Map(),authorCounts=new Map(),topicCounts=new Map();
+  const bump=(counts,value,delta)=>{const count=(counts.get(value)||0)+delta;if(count)counts.set(value,count);else counts.delete(value);};
+  const available=row=>{
+    if(unavailable.has(row._id))return false;
+    if(fingerprints.has(row.fingerprint)){unavailable.add(row._id);return false;}
+    const prior=chosenByBook.get(row.book)||[];
+    for(let i=nearChecked.get(row)||0;i<prior.length;i++)if(nearDuplicate(row,prior[i])){unavailable.add(row._id);return false;}
+    nearChecked.set(row,prior.length);
+    // A question blocked by the rolling window remains available later.
+    return !questions.has(row.post);
+  };
+  const scan=(rows,maxAvailable=32)=>{
+    let first,diverse,examined=0;
+    for(const row of rows) {
+      if(!available(row))continue;
+      first ||= row;
+      const authorBookOk=(!row.book || (bookCounts.get(row.book)||0)<2) && (authorCounts.get(row.author)||0)<2;
+      if(authorBookOk) {
+        diverse ||= row;
+        if((topicCounts.get(row.topic)||0)<10 && !(chosen.length>=2 && chosen.at(-1).topic===row.topic && chosen.at(-2).topic===row.topic))
+          return {varied:row,diverse,first};
+      }
+      if(++examined>=maxAvailable)break;
+    }
+    return {diverse,first};
+  };
+  while(chosen.length<limit) {
+    const lane=tab==='hot'||tab==='follow'?'all':(exploration==='more'?explorationSchedule:schedule)[chosen.length%5];
+    const local=scan(queues[lane]);
+    // Look past the lane's small window before relaxing any soft cap. Hard
+    // exclusions, body duplicates and the twenty-item question gap never relax.
+    const global=local.varied?null:scan(pool,Infinity);
+    const next=local.varied || global?.varied || local.diverse || global?.diverse || local.first || global?.first;
+    if(!next)break;
     next.reason=tab==='follow'?'来自你的关注':tab==='hot'?(next.heat>0?'近期讨论较多':'优质内容待发现'):
-      matching&&lane==='interest'?'与你的阅读兴趣相关':matching&&lane==='hot'?'近期讨论较多':
-      matching&&lane==='adjacent'?'探索相邻兴趣':matching&&lane==='new'?'发现较少曝光的内容':'换个主题看看';
-    chosen.push(next);fingerprints.add(next.fingerprint);
+      lane==='interest'&&next.affinity>.08?'与你的阅读兴趣相关':lane==='hot'&&next.heat>0?'近期讨论较多':
+      lane==='explore'&&next.adjacent&&next.affinity<.7?'探索相邻兴趣':'换个主题看看';
+    chosen.push(next);unavailable.add(next._id);fingerprints.add(next.fingerprint);
     if(next.book){if(!chosenByBook.has(next.book))chosenByBook.set(next.book,[]);chosenByBook.get(next.book).push(next);}
-    pool.splice(pool.findIndex(row=>row._id===next._id),1);
+    for(const [counts,field] of [[questions,'post'],[bookCounts,'book'],[authorCounts,'author'],[topicCounts,'topic']]) {
+      bump(counts,next[field],1);
+      if(chosen.length>19)bump(counts,chosen[chosen.length-20][field],-1);
+    }
   }
   return chosen;
 }

@@ -8,7 +8,7 @@ import {RecommendationItem as Item, RecommendationProfile as Profile, Recommenda
 import {DAY,hash,interestProfile,rankRecommendations,excludedByPreferences,trendScore} from './forum-recommendation-ranking.js';
 import {initializeRecommendations,syncForumCatalog,publicRecommendationItems} from './forum-recommendation-catalog.js';
 
-export const recommendationVersion='balanced-v1';
+export const recommendationVersion='balanced-fast-v2';
 export const preferenceReasons=['dislike','author','similar','extreme','quality','book','topic','followAuthor','followBook'];
 const fail=(status,message,code)=>{throw Object.assign(new Error(message),{status,code});};
 const id=value=>typeof value==='string'&&/^[a-f0-9]{24}$/.test(value);
@@ -61,27 +61,31 @@ async function history(identity,profile,events) {
   let books=[];
   if(identity.userId && profile.enabled!==false) {
     const [shelf,reading]=await Promise.all([
-      Bookmark.find({user_id:identity.userId,...(profile.resetAt?{created_at:{$gt:profile.resetAt}}:{})}).sort({created_at:-1}).limit(60).select('bookId').lean(),
-      ReadingHistory.find({userId:identity.userId,lastReadAt:{$gt:new Date(Math.max(Date.now()-90*DAY,+new Date(profile.resetAt||0)))}}).sort({lastReadAt:-1}).limit(40).select('bookId').lean(),
+      Bookmark.find({user_id:identity.userId,...(profile.resetAt?{created_at:{$gt:profile.resetAt}}:{})}).sort({created_at:-1}).limit(24).select('bookId').lean(),
+      ReadingHistory.find({userId:identity.userId,lastReadAt:{$gt:new Date(Math.max(Date.now()-90*DAY,+new Date(profile.resetAt||0)))}}).sort({lastReadAt:-1}).limit(20).select('bookId').lean(),
     ]);
-    books=await Book.find({_id:{$in:[...new Set([...shelf,...reading].map(row=>String(row.bookId)))]},deletedAt:null,visibility:{$ne:'private'}})
+    const ids=[...new Set([...shelf,...reading].map(row=>String(row.bookId)))];
+    if(ids.length)books=await Book.find({_id:{$in:ids},deletedAt:null,visibility:{$ne:'private'}})
       .select('title category author description').lean();
   }
   return {events,books};
 }
 
 const candidateFeatures='_id post book author topic topics fingerprint nearSignature length quality publishedAt';
-function publicCandidates(seed) {
+const fastBudget={recent:32,quality:64,discovery:64,hot:32,personal:64};
+const expandedBudget={recent:150,quality:180,discovery:180,hot:150,personal:180};
+const historyLimit=400;
+function publicCandidates(seed,budget=fastBudget,now=Date.now()) {
   const bucket=parseInt(hash(seed).slice(0,4),16)%16;
   // Rank compact features; fetch display metadata only for the delivered page.
   return Promise.all([
-    Item.find({}).sort({createdAt:-1,_id:1}).limit(150).batchSize(150).select(candidateFeatures).lean(),
-    Item.find({}).sort({quality:-1,_id:1}).limit(180).batchSize(180).select(candidateFeatures).lean(),
-    Item.find({bucket:{$in:Array.from({length:4},(_,i)=>(bucket+i)%16)}}).sort({quality:-1,_id:1}).limit(180).batchSize(180).select(candidateFeatures).lean(),
-    Trend.find({at:{$gte:new Date(Date.now()-7*DAY)}}).sort({heat24:-1}).limit(150).batchSize(150).lean(),
+    Item.find({}).sort({createdAt:-1,_id:1}).limit(budget.recent).batchSize(budget.recent).select(candidateFeatures).lean(),
+    Item.find({}).sort({quality:-1,_id:1}).limit(budget.quality).batchSize(budget.quality).select(candidateFeatures).lean(),
+    Item.find({bucket:{$in:Array.from({length:4},(_,i)=>(bucket+i)%16)}}).sort({quality:-1,_id:1}).limit(budget.discovery).batchSize(budget.discovery).select(candidateFeatures).lean(),
+    Trend.find({at:{$gte:new Date(now-7*DAY)}}).sort({heat24:-1}).limit(budget.hot).batchSize(budget.hot).lean(),
   ]);
 }
-async function candidates(interests,preferences,publicRows) {
+async function candidates(interests,preferences,publicRows,budget=fastBudget) {
   const [recent,quality,discovery,trending]=publicRows;
   const personalFilters=[
     ['book',[...interests.books.keys(),...preferences.filter(p=>p.reason==='followBook').map(p=>p.book)]],
@@ -90,8 +94,8 @@ async function candidates(interests,preferences,publicRows) {
   ].filter(([,values])=>values.length).map(([field,values])=>({[field]:{$in:values}}));
   const [personal,hot]=await Promise.all([
     personalFilters.length?Item.find({$or:personalFilters})
-      .sort({quality:-1,_id:1}).limit(180).batchSize(180).select(candidateFeatures).lean():[],
-    trending.length?Item.find({_id:{$in:trending.map(row=>row._id)}}).batchSize(150).select(candidateFeatures).lean():[],
+      .sort({quality:-1,_id:1}).limit(budget.personal).batchSize(budget.personal).select(candidateFeatures).lean():[],
+    trending.length?Item.find({_id:{$in:trending.map(row=>row._id)}}).batchSize(budget.hot).select(candidateFeatures).lean():[],
   ]);
   const rows=[...new Map([...recent,...quality,...discovery,...hot,...personal].map(row=>[row._id,row])).values()];
   return rows;
@@ -104,12 +108,13 @@ export async function personalizedForumFeed({identity,tab='recommend',limit=20,c
   // when the database is far from the API server. Permissions stay uncached.
   const [preferences,initialEvents,publicRows]=await Promise.all([
     recommendationPreferences(identity.actor),
-    cursor?null:Event.find({actor:identity.actor,at:{$gte:new Date(now-90*DAY)}}).sort({at:-1}).limit(1200).lean(),
-    cursor || tab==='follow'?null:publicCandidates(seed),
+    cursor || tab!=='recommend'?[]:Event.find({actor:identity.actor,at:{$gte:new Date(now-90*DAY)}}).sort({at:-1}).limit(historyLimit)
+      .select('entry book author topic topics day at read impression like').lean(),
+    cursor || tab==='follow'?null:publicCandidates(seed,fastBudget,now),
   ]);
   if(!cursor && tab==='follow' && !preferences.rows.some(row=>row.reason==='followBook'||row.reason==='followAuthor'))
     return {items:[],nextCursor:null,algorithm:recommendationVersion};
-  let session,offset=0,tail=[],createSession=false;
+  let session,offset=0,tail=[],createSession=false,expandSession;
   if(cursor) {
     const parsed=verifyRecommendation(cursor,identity.actor,key,now);
     if(parsed.kind!=='cursor'||parsed.tab!==tab||!Number.isSafeInteger(parsed.offset)||parsed.offset<0)fail(400,'分页游标无效');
@@ -119,20 +124,39 @@ export async function personalizedForumFeed({identity,tab='recommend',limit=20,c
     if(!Array.isArray(parsed.tail)||parsed.tail.length>19||parsed.tail.some(value=>!id(value)))fail(400,'分页游标无效');
     tail=parsed.tail;
   } else {
-    const {events,books}=await history(identity,preferences,initialEvents);
+    const {events,books}=tab==='recommend'?await history(identity,preferences,initialEvents):{events:[],books:[]};
     const interests=interestProfile(events,books,preferences.rows,preferences,now);
-    let rows=await candidates(interests,preferences.rows,publicRows||await publicCandidates(seed));
-    if(!rows.length){await syncForumCatalog({batches:4});rows=await candidates(interests,preferences.rows,await publicCandidates(seed));}
-    // Interest learning is bounded, but the read/exposure exclusion must cover
-    // every candidate for the full cooldown even for very active readers.
-    const [trendRows,exposures]=await Promise.all([
-      Trend.find({_id:{$in:rows.map(row=>row._id)}}).lean(),
-      tab==='recommend' && rows.length?Event.find({actor:identity.actor,
-        entry:{$in:rows.map(row=>row._id)},at:{$gte:new Date(now-30*DAY)}})
-        .select('entry read impression day at').limit(rows.length*32).lean():events,
-    ]);
-    const ranked=rankRecommendations(rows,{interests,preferences:preferences.rows,events:exposures,trends:new Map(trendRows.map(row=>[row._id,row])),
-      tab,seed,now,exploration:preferences.exploration});
+    const rank=async(rows,trending=[])=>{
+      // A non-truncated history already covers the full 90 days, including all
+      // cooldown signals. Heavy readers still get a complete candidate-specific
+      // exclusion query; a smaller learning budget never weakens suppression.
+      const exposures=tab==='recommend' && events.length===historyLimit && rows.length?
+        await Event.find({actor:identity.actor,entry:{$in:rows.map(row=>row._id)},at:{$gte:new Date(now-30*DAY)}})
+          .select('entry read impression day at').limit(rows.length*32).lean():events;
+      return rankRecommendations(rows,{interests,preferences:preferences.rows,events:exposures,
+        // Coarse heat is enough for discovery. Only the recent top trends need
+        // scores; avoid a second trend lookup for every candidate in the pool.
+        trends:new Map(trending.map(row=>[row._id,row])),tab,seed,now,exploration:preferences.exploration});
+    };
+    let ranked;
+    if(tab==='follow') {
+      const filters=preferences.rows.filter(pref=>pref.reason==='followBook'||pref.reason==='followAuthor')
+        .map(pref=>pref.reason==='followBook'?{book:pref.book}:{author:pref.author});
+      ranked=await rank(await Item.find({$or:filters}).sort({quality:-1,_id:1}).limit(240).batchSize(240).select(candidateFeatures).lean());
+    } else {
+      let pools=publicRows,rows=await candidates(interests,preferences.rows,pools);
+      if(!rows.length){await syncForumCatalog({batches:4});pools=await publicCandidates(seed,fastBudget,now);rows=await candidates(interests,preferences.rows,pools);}
+      ranked=await rank(rows,pools[3]);
+      const canExpand=pools[1].length===fastBudget.quality;
+      const expand=async()=>{
+        const wider=await publicCandidates(seed,expandedBudget,now);
+        return rank(await candidates(interests,preferences.rows,wider,expandedBudget),wider[3]);
+      };
+      // One bounded wider pass only when filtering leaves too little supply.
+      // Normal first pages use <=256 candidates, not the former <=840.
+      if(ranked.length<Math.max(20,limit) && canExpand)ranked=await expand();
+      else if(canExpand)expandSession=expand;
+    }
     session={_id:seed,actor:identity.actor,tab,entries:ranked.map(row=>row._id),reasons:ranked.map(row=>row.reason),createdAt:new Date(now),expiresAt:new Date(now+6*3600000)};
     createSession=true;
   }
@@ -159,7 +183,19 @@ export async function personalizedForumFeed({identity,tab='recommend',limit=20,c
   return {items:result,nextCursor:offset<session.entries.length?signRecommendation({v:1,kind:'cursor',actor:identity.actor,
     session:session._id,tab,offset,tail,expires:+new Date(session.expiresAt)},key):null,algorithm:recommendationVersion};
   };
-  if(createSession){const [,feed]=await Promise.all([Session.create(session),deliver()]);return feed;}
+  if(createSession) {
+    const [,feed]=await Promise.all([Session.create(session),deliver()]);
+    if(feed.items.length>=limit || !expandSession)return feed;
+    // A small ranked pool can also run short after authoritative visibility
+    // checks. Widen once before exposing the first page or its cursor, then
+    // persist the replacement order and restart its duplicate/question window.
+    const ranked=await expandSession();
+    session.entries=ranked.map(row=>row._id);session.reasons=ranked.map(row=>row.reason);offset=0;tail=[];
+    const [,expanded]=await Promise.all([
+      Session.updateOne({_id:session._id,actor:identity.actor},{$set:{entries:session.entries,reasons:session.reasons}}),deliver(),
+    ]);
+    return expanded;
+  }
   return deliver();
 }
 
