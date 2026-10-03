@@ -348,6 +348,39 @@ export function recordContinuationSourceGap(spec, options, {file, exportHash, li
   return decision;
 }
 
+// A renumbered, already accepted notice may separate two narrative chapters.
+// Pin the preceding complete old chapter and an independent narrative sequence;
+// the notice alone must never authorize a gap in prose.
+function noticeNumberingBoundary(spec, options, {sourceDir, catalog, positions, chapters, book, previous, previousNumber, context}) {
+  const prior = book.chapters.at(-2), oldId = chapterIdentity(prior?.title), noticeReview = checked(path.join(sourceDir, 'catalog-notice-reviews.json'));
+  const review = Array.isArray(noticeReview) && noticeReview.find(d => d.link === previous.link);
+  const noticeCheckpoint = readJson(path.join(sourceDir, 'chapters', hash(previous.link) + '.json'));
+  if (chapterIdentity(previous.title) || !/^(?:请假|公告|通知|月票|总结|感言|后记)/u.test(previous.title) || !oldId || oldId.number !== previousNumber || chapterPartIdentity(prior.title) ||
+      context.chapterHash !== hash(prior) || previous.link !== chapters[0].link || previous.title !== chapters[0].title || previous.content !== chapters[0].content ||
+      !review || review.localChapterHash !== hash(previous) || review.previousTitle !== previous.title || review.checkpointHash !== noticeCheckpoint?.hash || noticeCheckpoint.hash !== hash(noticeCheckpoint.chapter) ||
+      review.position !== positions[0] + 1 || review.incomingHash !== hash(review.incoming) || review.incoming.link !== previous.link || review.incoming.title !== review.currentTitle || review.incoming.content !== previous.content ||
+      chapterIdentity(review.currentTitle)?.number !== previousNumber + 1 || chapterIdentity(chapters[1].title)?.number !== previousNumber + 2 || chapterIdentity(chapters[2].title)?.number !== previousNumber + 3) throw Error('公告边界必须匹配已核对的原公告、前一正文和仅占一位的来源编号');
+  const entry = catalog[positions[0] - 1], saved = readJson(path.join(sourceDir, 'chapters', hash(context.link) + '.json')), source = saved?.chapter;
+  if (!entry || entry.link !== context.link || entry.link !== prior.link || !source || saved.hash !== hash(source) || source.link !== entry.link || source.chapter_number !== entry.chapter_number ||
+      saved.catalogTitle !== entry.title || source.title !== entry.title || hash(source.content) !== context.contentHash || chapterIdentity(source.title)?.number !== previousNumber ||
+      !compatibleNames(oldId.name, chapterIdentity(source.title)?.name) || bodyKey(prior.content, prior.title, prior.link).length < 100 ||
+      bodyKey(prior.content, prior.title, prior.link) !== bodyKey(source.content, source.title, source.link) ||
+      qualityReport([entry], [source], [], 'probe').issues.some(i => i.level !== 'info' && i.code !== 'short-outlier')) throw Error('公告之前的完整正文或相邻目录已变化');
+  const reference = context.reference, url = httpUrl(reference?.url), raw = fs.readFileSync(reference.bodyFile);
+  if (!raw.length || raw.length > 2_000_000 || hash(raw) !== reference.hash || new URL(url).hostname === new URL(spec.sourceUrl).hostname || !Array.isArray(reference.chapters) || reference.chapters.length !== 3) throw Error('公告编号核对需要独立目录的连续三篇正文证据');
+  const $ = load(decode(raw, reference.contentType, reference.encoding));
+  if (!normalize($('title').text()).includes(normalize(spec.title)) || !normalize($.text()).includes(normalize(spec.author))) throw Error('独立目录未核实同书同作者');
+  const refs = reference.chapters.map(c => ({title: c.title, link: httpUrl(c.link, url)}));
+  const all = $('a[href]').toArray().map(el => ({title: $(el).text().trim(), link: (() => { try { return httpUrl($(el).attr('href'), url); } catch { return ''; } })()})).filter(c => chapterIdentity(c.title));
+  const at = refs.map(c => all.flatMap((a, i) => a.link === c.link && normalize(a.title) === normalize(c.title) ? [i] : []));
+  const narratives = [prior, ...chapters.slice(1)];
+  if (at.some(a => a.length !== 1) || !at.every((a, i) => !i || a[0] === at[0][0] + i) || refs.some((c, i) => {
+    const id = chapterIdentity(c.title); return !id || chapterPartIdentity(c.title) || id.number !== previousNumber + i || !compatibleNames(id.name, chapterIdentity(narratives[i].title)?.name);
+  })) throw Error('独立目录必须证明公告前后正文同题、连续且无遗漏');
+  atomicWrite(path.join(sourceDir, 'references', reference.hash + '.bin'), raw);
+  return {chapterHash: context.chapterHash, source: numberingFingerprint(source, entry.title), noticeReviewHash: hash(review), reference: {url, hash: reference.hash, chapters: refs}};
+}
+
 // Explicitly accept a known source numbering defect, without correcting, filling,
 // dropping or reordering prose. Three adjacent complete entries bind its scope.
 export function recordContinuationSourceDefect(spec, options, {links, hashes, evidenceFile, evidenceHash, reason, boundary}) {
@@ -375,10 +408,11 @@ export function recordContinuationSourceDefect(spec, options, {links, hashes, ev
     const previousId = chapterIdentity(previous.title), sourceId = chapterIdentity(chapters[0].title);
     const correspondence = boundary.anchorReviewKey && loadReviews(spec, options).anchorDecisions?.find(d =>
       d.key === boundary.anchorReviewKey && d.key === anchorReviewKey(book, boundary.file, previous, chapters[0]));
-    if (!previousId || !sourceId || previousId.number !== sourceId.number || !compatibleNames(previousId.name, sourceId.name) ||
+    const noticeContext = boundary.noticeContext && noticeNumberingBoundary(spec, options, {sourceDir, catalog, positions, chapters, book, previous, previousNumber, context: boundary.noticeContext});
+    if (!noticeContext && (!previousId || !sourceId || previousId.number !== sourceId.number || !compatibleNames(previousId.name, sourceId.name) ||
       bodyKey(previous.content, previous.title, previous.link).length < 100 ||
-      (boundary.anchorReviewKey ? !correspondence : bodyKey(previous.content, previous.title, previous.link) !== bodyKey(chapters[0].content, chapters[0].title, chapters[0].link))) throw Error('边界编号核对必须与原书末章完整正文一致，或提供匹配双方完整正文的显式衔接核对');
-    reviewedBoundary = {file: boundary.file, exportHash: boundary.exportHash, bookHash: hash(book), chapterHash: boundary.chapterHash, ...(correspondence ? {anchorReviewKey: correspondence.key} : {})};
+      (boundary.anchorReviewKey ? !correspondence : bodyKey(previous.content, previous.title, previous.link) !== bodyKey(chapters[0].content, chapters[0].title, chapters[0].link)))) throw Error('边界编号核对必须与原书末章完整正文一致，或提供匹配双方完整正文的显式衔接核对');
+    reviewedBoundary = {file: boundary.file, exportHash: boundary.exportHash, bookHash: hash(book), chapterHash: boundary.chapterHash, ...(correspondence ? {anchorReviewKey: correspondence.key} : {}), ...(noticeContext ? {noticeContext} : {})};
   }
   const scope = {previousNumber, window, ...(reviewedBoundary ? {boundary: reviewedBoundary} : {})};
   const key = sourceDefectKey(scope), decision = {key, kind: 'numbering', ...scope, evidenceHash, reason: reason.trim(), reviewedAt: new Date().toISOString()};

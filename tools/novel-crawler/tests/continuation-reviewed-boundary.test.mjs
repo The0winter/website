@@ -80,3 +80,42 @@ test('boundary numbering with a prose variant requires a pinned explicit anchor 
   const result=await acquire(f.spec,{...f.options,continuation:localBookState(f.spec,f.options).continuation,mode:'download'});
   assert.equal(result.completeAgainstSource,true,JSON.stringify(result.failures));assert.deepEqual(readJson(f.file).chapters.slice(0,4),f.book.chapters);
 });
+
+test('a reviewed renumbered notice requires four pinned bodies and an independent consecutive narrative window',async t=>{
+  const f=await fixture(t),sourceDir=path.join(f.options.stateDir,'continuations',continuationKey(f.spec),'sources',hash([f.spec.sourceUrl,f.options.extraction]).slice(0,24));
+  f.book.chapters[2].link=f.base+'/c/3';
+  f.book.chapters[3]={chapter_number:4,title:'请假一天',content:'今天身体不舒服，向大家请假一天，明天恢复更新。',link:f.base+'/c/4'};
+  atomicWrite(f.file,f.book);
+  const catalog=Array.from({length:6},(_,i)=>({chapter_number:i+1,title:i===3?'请假一天':heading(i+1),link:f.base+'/c/'+(i+1)}));
+  atomicWrite(sourceDir+'/catalog.json',catalog);
+  const prior={...catalog[2],content:body(3)},chapters=[{...f.book.chapters[3]},...catalog.slice(4).map(c=>({...c,content:body(c.chapter_number)}))];
+  [prior,...chapters].forEach(f.save);
+  const notice={position:4,link:chapters[0].link,previousTitle:'请假一天',currentTitle:'第4章 请假一天',checkpointHash:hash(chapters[0]),localChapterHash:hash(f.book.chapters[3]),incoming:{...chapters[0],title:'第4章 请假一天'}};
+  notice.incomingHash=hash(notice.incoming);
+  const writeNotice=value=>atomicWrite(sourceDir+'/catalog-notice-reviews.json',{value,hash:hash(value)});writeNotice([notice]);
+  const refs=[heading(3),'第4章 山间故事5','第5章 山间故事6'].map((title,i)=>({title,link:'https://independent.example/c/'+(i+3)}));
+  const referenceFile=path.join(f.options.stateDir,'reference.html');
+  const writeReference=(entries=refs,author=f.spec.author)=>{atomicWrite(referenceFile,`<title>${f.spec.title}</title><b>${author}</b>${entries.map(c=>`<a href="${c.link}">${c.title}</a>`).join('')}`);return {url:'https://independent.example/book',bodyFile:referenceFile,hash:hash(fs.readFileSync(referenceFile)),chapters:refs};};
+  const reference=writeReference(),evidenceFile=path.join(f.options.stateDir,'notice-evidence.json');atomicWrite(evidenceFile,{notice,reference});
+  const context={chapterHash:hash(f.book.chapters[2]),link:prior.link,contentHash:hash(prior.content),reference};
+  const choice={links:chapters.map(c=>c.link),hashes:chapters.map(c=>hash(c.content)),evidenceFile,evidenceHash:hash(fs.readFileSync(evidenceFile)),reason:'完整公告未变，独立目录证明前后正文连续；保留全部原文和来源编号',boundary:{file:path.basename(f.file),exportHash:hash(fs.readFileSync(f.file)),chapterHash:hash(f.book.chapters[3]),noticeContext:context}};
+  const record=override=>recordContinuationSourceDefect(f.spec,f.options,{...choice,...override});
+  assert.throws(()=>record({boundary:{...choice.boundary,noticeContext:undefined}}),/显式衔接核对/);
+  writeNotice([]);assert.throws(()=>record(),/已核对的原公告/);writeNotice([notice]);
+  assert.throws(()=>record({boundary:{...choice.boundary,noticeContext:{...context,chapterHash:'stale'}}}),/已核对的原公告/);
+  f.save({...prior,content:prior.content+'不同的正文'});assert.throws(()=>record(),/完整正文/);f.save(prior);
+  f.save({...chapters[0],content:'另外一次请假公告'});assert.throws(()=>record(),/完整检查点/);f.save(chapters[0]);
+  for(const i of [1,2]){f.save({...chapters[i],content:chapters[i].content+'不同'});assert.throws(()=>record(),/完整检查点/);f.save(chapters[i]);}
+  const missing={title:'第4章 遗失的正文',link:'https://independent.example/missing'};
+  const gapReference=writeReference([refs[0],missing,...refs.slice(1)]);
+  assert.throws(()=>record({boundary:{...choice.boundary,noticeContext:{...context,reference:gapReference}}}),/连续且无遗漏/);
+  const wrongAuthor=writeReference(refs,'另一作者');assert.throws(()=>record({boundary:{...choice.boundary,noticeContext:{...context,reference:wrongAuthor}}}),/同书同作者/);writeReference();
+  const decision=record();assert.equal(decision.boundary.noticeContext.chapterHash,context.chapterHash);
+  const reviewer=()=>createContinuationReviewer(f.book,[],[],undefined,[],[],[decision]);
+  const good=reviewer();assert.equal(good.accept(catalog[4],chapters[1]),true);assert.equal(good.accept(catalog[5],chapters[2]),true);good.finish();
+  assert.deepEqual(fs.readFileSync(f.file),Buffer.from(JSON.stringify(f.book,null,2)+'\n'));
+  const partial=reviewer();partial.accept(catalog[4],chapters[1]);assert.throws(()=>partial.finish(),/后续核对章缺失/);
+  const changed=reviewer();changed.accept(catalog[4],chapters[1]);assert.throws(()=>changed.accept(catalog[5],{...chapters[2],content:body(30)}),/后续完整核对章已变化/);
+  assert.throws(()=>reviewer().accept(catalog[4],{...chapters[1],content:body(30)}),/章号冲突/);
+  const stale=structuredClone(f.book);stale.chapters[2].content+='\n';assert.throws(()=>createContinuationReviewer(stale,[],[],undefined,[],[],[decision]).accept(catalog[4],chapters[1]),/章号冲突/);
+});
