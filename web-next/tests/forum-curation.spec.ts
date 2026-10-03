@@ -3,7 +3,11 @@ import {test,expect} from './fixtures/without-analytics';
 const base=process.env.QA_TEST_BASE||'http://127.0.0.1:3000';
 for(const width of [390,1440])test(`archived answer links load every visible answer at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:900});
- const questionId='aaaaaaaaaaaaaaaaaaaaaaaa',archivedId='bbbbbbbbbbbbbbbbbbbbbbbb';
+ const response=await page.request.get(base+'/api/forum/posts?view=answers&limit=20');
+ expect(response.ok()).toBeTruthy();
+ const entry=(await response.json()).find((row:{type:string;topReply?:{id:string}})=>row.type==='question'&&row.topReply?.id);
+ expect(entry,'A readable question fixture is required for the server-rendered route').toBeTruthy();
+ const questionId=entry.id,archivedId=entry.topReply.id;
  const author={id:'cccccccccccccccccccccccc',name:'合成读者',avatar:'',bio:''};
  const reply=(id:string,archived=false)=>({id,archived,content:'<p>用于核验连续阅读的合成书评。</p>',votes:0,comments:0,time:'2026-10-03T00:00:00Z',author});
  const answers=Array.from({length:6},(_,i)=>reply(String(i+1).padStart(24,'0')));
@@ -19,6 +23,8 @@ for(const width of [390,1440])test(`archived answer links load every visible ans
   return route.continue();
  });
  await page.goto(`${base}/forum/${archivedId}?fromQuestion=${questionId}`);
+ await expect(page.locator('.qa-answer').nth(5)).toBeAttached({timeout:25000});
+ await page.locator('.qa-stream-end').scrollIntoViewIfNeeded();
  await expect(page.locator('.qa-answer')).toHaveCount(7,{timeout:25000});
  for(const answer of answers)await expect(page.locator(`[data-answer-id="${answer.id}"]`)).toBeAttached();
  await expect(page.getByText('已读完这个问题的全部回答',{exact:true})).toBeAttached();
