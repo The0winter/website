@@ -122,7 +122,7 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
       // A verified TXT job owns its file boundaries and cleanup rules. Replacing
       // it with the site's HTML template abandons checkpoints/reading bindings.
       const savedSpec = reading?.spec || rawJob?.spec;
-      const reviewedSpec = binding || reading ? reviewedLibrarySpec(stateDir, outputDir, book, siteSpec) : null;
+      const reviewedSpec = binding || reading || rawJob ? reviewedLibrarySpec(stateDir, outputDir, book, siteSpec) : null;
       let currentSpec = reviewedSpec || (savedSpec?.kind === 'txt' && savedSpec.sourceUrl === siteSpec.sourceUrl ? savedSpec : siteSpec);
       if (currentSpec === savedSpec && siteSpec.maxChapterPages !== undefined) {
         currentSpec.maxChapterPages = Math.max(currentSpec.maxChapterPages || currentSpec.chapter?.maxPages || 20, siteSpec.maxChapterPages);

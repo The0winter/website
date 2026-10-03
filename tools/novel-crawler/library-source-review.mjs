@@ -17,10 +17,17 @@ export function reviewLibrarySource({stateDir, outputDir, file, spec: input, sit
   if(spec.title!==book.title||spec.author!==book.author||spec.sourceUrl!==siteSpec.sourceUrl)throw Error('来源规则核对的作品或网站不匹配');
   const key=continuationKey(book),continuation=readJson(path.join(stateDir,'continuations',key,'binding.json'));
   const record=continuation||readJson(path.join(stateDir,'jobs',jobId(spec),'reading-edition.json'));
-  if(!record?.value||record.hash!==hash(record.value)||record.value.outputPath!==file||record.value.exportHash!==hash(fs.readFileSync(file)))throw Error('仅可核对有效续更或阅读版绑定，文件及哈希必须匹配');
-  const local=localBookState(spec,{stateDir,outputDir});
-  if(local.blocked||!['complete','partial'].includes(local.state))throw Error(local.message||'原规则与绑定不匹配');
-  const value={version:1,title:book.title,author:book.author,outputPath:file,spec,extraction:extractionHash(spec),siteExtraction:extractionHash(siteSpec),reviewedExportHash:record.value.exportHash,reason,reviewedAt:new Date().toISOString()};
+  const raw=!record&&readJson(path.join(stateDir,'jobs',jobId(spec),'export.json'));
+  const exportHash=hash(fs.readFileSync(file));
+  if(record ? !record.value||record.hash!==hash(record.value)||record.value.outputPath!==file||record.value.exportHash!==exportHash : !raw||raw.path!==file||raw.hash!==exportHash)throw Error('仅可核对有效原始导出、续更或阅读版绑定，文件及哈希必须匹配');
+  if(raw){
+    const previous=readJson(path.join(stateDir,'jobs',jobId(spec),'spec.json'));
+    if(!previous||extractionHash(previous)!==extractionHash(spec))throw Error('原规则与导出记录不匹配');
+  }else{
+    const local=localBookState(spec,{stateDir,outputDir});
+    if(local.blocked||!['complete','partial'].includes(local.state))throw Error(local.message||'原规则与绑定不匹配');
+  }
+  const value={version:1,title:book.title,author:book.author,outputPath:file,spec,extraction:extractionHash(spec),siteExtraction:extractionHash(siteSpec),reviewedExportHash:exportHash,reason,reviewedAt:new Date().toISOString()};
   const target=reviewFile(stateDir,book);atomicWrite(target,{value,hash:hash(value)});
   return {reviewFile:target,title:book.title};
 }

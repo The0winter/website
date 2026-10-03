@@ -236,6 +236,30 @@ test('explicit per-book source review preserves bound cleanup and expires on fur
   assert.throws(()=>reviewLibrarySource(args),/哈希/);
 });
 
+test('explicit raw export review preserves verified per-book metadata and protects changed files and rules', async t => {
+  const f = await fixture(t), siteSpec = f.spec('alpha');
+  const spec = {...siteSpec, metadata: {...siteSpec.metadata, author: 'b:first-of-type'}};
+  const report = await acquire(spec, {...f.options, mode: 'download'}), file = report.exportFile;
+  assert.ok(file, JSON.stringify(report.failures));
+  const before = fs.readFileSync(file);
+  assert.equal(planLibrary(f.options)[0].state, 'blocked');
+  const args = {...f.options, file, spec, siteSpec, reason: 'Verified saved author selector on this book, preserving its exact extraction and complete export'};
+  assert.throws(() => reviewLibrarySource({...args, spec: {...spec, chapter: {...spec.chapter, content: 'section'}}}), /原规则与导出记录不匹配/);
+  reviewLibrarySource(args);
+  assert.equal(planLibrary(f.options)[0].state, 'pending');
+  assert.equal((await updateLibrary(f.options)).unchanged, 1);
+  assert.deepEqual(fs.readFileSync(file), before);
+  f.state.counts.alpha = 4;
+  assert.equal((await updateLibrary(f.options)).added, 1);
+  assert.deepEqual(readJson(file).chapters.slice(0, 3), JSON.parse(before).chapters);
+  const updated = fs.readFileSync(file);
+  f.site.spec.chapter.content = 'section';
+  assert.equal(planLibrary(f.options)[0].state, 'blocked');
+  assert.deepEqual(fs.readFileSync(file), updated);
+  fs.writeFileSync(file, Buffer.concat([updated, Buffer.from(' ')]));
+  assert.throws(() => reviewLibrarySource(args), /文件及哈希必须匹配/);
+});
+
 test('batch appends only new raw chapters, continues after manual skip, and reuses unchanged exports', async t => {
   const f = await fixture(t), alpha = await f.seed('alpha'), beta = await f.seed('beta');
   const original = readJson(alpha), betaBytes = fs.readFileSync(beta), betaTime = fs.statSync(beta).mtimeMs;
