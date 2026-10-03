@@ -59,5 +59,5 @@ export async function chapterResponse(chapter) {
   const doc = chapter.toObject ? chapter.toObject() : {...chapter};
   doc.content = await readChapterBody(doc);
   delete doc.contentKey; delete doc.contentSha256;
-  return {...doc,id:String(doc._id)};
+  return {...doc,id:String(doc._id),contentVersion:bodyHash(doc.content),paragraphVersion:1};
 }

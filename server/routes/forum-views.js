@@ -8,7 +8,7 @@ const schema=new mongoose.Schema({_id:String,postId:mongoose.Schema.Types.Object
 const Receipt=mongoose.models.ForumViewReceipt||mongoose.model('ForumViewReceipt',schema);
 export function forumViewRoutes(app,auth){
   app.post('/api/forum/posts/:id/views',rateLimit({windowMs:60000,limit:30}),asyncRoute(async(req,res)=>{
-    let visitor=req.cookies.visitor;
+    let visitor=req.nativeVisitorId || req.cookies.visitor;
     if(typeof visitor!=='string'||!/^[a-f0-9]{64}$/.test(visitor)){visitor=crypto.randomBytes(32).toString('hex');res.cookie('visitor',visitor,{httpOnly:true,sameSite:'lax',secure:process.env.APP_ENV==='production',maxAge:31536000000,path:'/'});}
     const userId=await auth.optionalUserId(req);
     const id=crypto.createHash('sha256').update(`${userId?'user:'+userId:'visitor:'+visitor}:${req.params.id}:${dayKey()}`).digest('hex');

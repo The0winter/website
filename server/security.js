@@ -5,6 +5,8 @@ import { doubleCsrf } from 'csrf-csrf';
 import sanitizeHtml from 'sanitize-html';
 import User from './models/User.js';
 import Session from './models/Session.js';
+import {createNativeAuth, nativeContext} from './services/native-auth.js';
+import {createNativeVisitor, nativeVisitorWrite} from './services/native-visitor.js';
 
 export const SESSION_IDLE_MS = 3 * 24 * 60 * 60 * 1000;
 export const SESSION_REFRESH_MS = 5 * 60 * 1000;
@@ -20,6 +22,39 @@ export function security(app, config) {
   const cookieName = secure ? '__Host-session' : 'session';
   const cookieOptions = { httpOnly: true, secure, sameSite: 'lax', path: '/' };
   app.use(cookieParser());
+  const native = createNativeAuth(config);
+  const visitor = createNativeVisitor(config.jwtSecret);
+  const nativePublic = new Set(['/v1/auth/login','/v1/auth/signup','/v1/auth/register','/v1/auth/send-code','/v1/auth/register-code','/v1/auth/refresh']);
+  app.use('/api', asyncRoute(async (req,res,next) => {
+    if (req.headers['x-native-visitor'] !== undefined || req.path === '/v1/visitor') {
+      res.set('Cache-Control', 'private, no-store');
+      if (!nativeContext(req)) return res.status(403).json({code: 'NATIVE_CONTEXT_REQUIRED', error: '原生访客不能携带浏览器凭据'});
+      if (req.path === '/v1/visitor') {
+        if (req.method !== 'POST' || !req.is('application/json')) return res.status(415).json({code: 'JSON_REQUIRED', error: '请使用 JSON 请求'});
+      } else {
+        try { req.nativeVisitorId = visitor.resolve(req.headers['x-native-visitor']); }
+        catch (error) { return res.status(401).json({code: error.code, error: error.message}); }
+      }
+    }
+    if (req.headers.authorization !== undefined || req.path.startsWith('/v1/auth/')) res.set('Cache-Control','private, no-store');
+    if (req.headers.authorization !== undefined) {
+      const match = /^Bearer ([^\s]{1,4096})$/.exec(req.headers.authorization);
+      if (!match) return res.status(401).json({code:'ACCESS_INVALID',error:'访问令牌无效'});
+      try { req.nativeSession = await native.resolve(match[1]); }
+      catch (error) {
+        if (error.status === 401) return res.status(401).json({code:error.code,error:error.message});
+        throw error;
+      }
+      if (!nativeContext(req) || req.path.startsWith('/auth/')) return res.status(403).json({code:'NATIVE_CONTEXT_REQUIRED',error:'原生请求不能携带浏览器凭据或调用网页认证入口'});
+    }
+    if (req.path.startsWith('/v1/auth/')) {
+      res.set('Cache-Control','private, no-store');
+      if (!nativeContext(req)) return res.status(403).json({code:'NATIVE_CONTEXT_REQUIRED',error:'原生认证不接受浏览器凭据或来源头'});
+      if (!req.nativeSession && !(req.method === 'POST' && nativePublic.has(req.path))) return res.status(401).json({code:'ACCESS_REQUIRED',error:'请先登录'});
+      if (req.method === 'POST' && nativePublic.has(req.path) && !req.is('application/json')) return res.status(415).json({code:'JSON_REQUIRED',error:'请使用 JSON 请求'});
+    }
+    next();
+  }));
   // Renewal changes the JWT, but not the session identity. Concurrent writes
   // and other tabs must keep valid CSRF tokens across a renewal.
   const csrf = doubleCsrf({ getSecret: () => config.jwtSecret, getSessionIdentifier: req => {
@@ -29,12 +64,18 @@ export function security(app, config) {
   app.get('/api/auth/csrf', (req,res) => { res.set('Cache-Control','no-store'); res.json({ csrfToken: csrf.generateCsrfToken(req,res) }); });
   app.use('/api', (req,res,next) => {
     if (['GET','HEAD','OPTIONS'].includes(req.method)) return next();
+    // Only a verified native credential or an exact, browser-isolated public
+    // native authentication endpoint bypasses the browser double-submit token.
+    if (req.nativeSession || (req.method === 'POST' && nativePublic.has(req.path) && nativeContext(req))) return next();
+    if ((req.path === '/v1/visitor' && req.method === 'POST' && nativeContext(req) && req.is('application/json')) ||
+        (req.nativeVisitorId && nativeVisitorWrite(req))) return next();
     // Dedicated script routes use their own credential and cannot act as a browser session.
     if (['/admin/check-sync','/admin/upload-book'].includes(req.path) && !req.headers.origin && !req.cookies[cookieName]) return next();
     if (!config.origins.includes(req.headers.origin)) return res.status(403).json({error:'请求来源无效'});
     csrf.doubleCsrfProtection(req,res,next);
   });
   async function resolveSession(req) {
+    if (req.nativeSession) return req.nativeSession;
     const token = req.cookies[cookieName];
     if (!token) return null;
     let payload;
@@ -100,5 +141,5 @@ export function security(app, config) {
     await Session.create([{_id:sid,userId:user._id,authVersion:user.authVersion||0,lastActiveAt:new Date(now),expiresAt}], session ? {session} : {});
     setSessionCookie(res,user._id,sid,expiresAt);
   }
-  return { authenticate, issue, renew, optionalUserId: async req => { const resolved = await resolveSession(req); return resolved ? String(resolved.user._id) : null; }, clear: res => res.clearCookie(cookieName,cookieOptions) };
+  return { authenticate, issue, renew, native, visitor, optionalUserId: async req => { const resolved = await resolveSession(req); return resolved ? String(resolved.user._id) : null; }, clear: res => res.clearCookie(cookieName,cookieOptions) };
 }

@@ -14,7 +14,7 @@ const fail=(status,message,code)=>{throw Object.assign(new Error(message),{statu
 const id=value=>typeof value==='string'&&/^[a-f0-9]{24}$/.test(value);
 const secret=()=>process.env.JWT_SECRET;
 export function recommendationIdentity(req,res,userId,key) {
-  let visitor=req.cookies?.forum_visitor;
+  let visitor=req.nativeVisitorId || req.cookies?.forum_visitor;
   if(!userId && !/^[a-f0-9]{64}$/.test(visitor||'')) {
     visitor=crypto.randomBytes(32).toString('hex');
     res.cookie('forum_visitor',visitor,{httpOnly:true,sameSite:'lax',secure:req.secure || process.env.APP_ENV==='production',maxAge:90*DAY,path:'/'});

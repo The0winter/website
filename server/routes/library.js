@@ -7,6 +7,8 @@ import ReadingHistory from '../models/ReadingHistory.js';
 import {asyncRoute} from '../security.js';
 import {fail} from '../services/content.js';
 import {pagination} from '../services/pagination.js';
+import {readingProgressRoutes} from './reading-progress.js';
+import {recordLegacyReading, removeLegacyReading} from '../services/reading-position.js';
 
 const own = (req, res, next) => String(req.user.id) === req.params.userId ? next() : res.status(403).json({error: '无权限'});
 const objectId = value => {
@@ -15,6 +17,7 @@ const objectId = value => {
 };
 
 export function libraryRoutes(app, auth) {
+  readingProgressRoutes(app, auth);
   app.get('/api/users/:userId/recent-books', asyncRoute(async (req, res) => {
     const userId = objectId(req.params.userId);
     if (!await User.exists({_id: userId, isBanned: {$ne: true}})) fail(404, '用户不存在');
@@ -42,6 +45,10 @@ export function libraryRoutes(app, auth) {
     const chapterId = req.body.chapterId ? objectId(req.body.chapterId) : null;
     if (!await Book.exists({_id: bookId, deletedAt: null, visibility: {$ne: 'private'}})) fail(404, '作品不可用');
     if (chapterId && !await Chapter.exists({_id: chapterId, bookId, deletedAt: null})) fail(404, '章节不可用');
+    if (chapterId) {
+      await recordLegacyReading(req.user.id, bookId, chapterId);
+      return res.json({success: true});
+    }
     const now = new Date();
     const fields = {lastVisitedAt: now, ...(chapterId ? {chapterId, lastReadAt: now} : {})};
     const filter = {userId: req.user.id, bookId};
@@ -54,7 +61,7 @@ export function libraryRoutes(app, auth) {
     res.json({success: true});
   }));
   app.delete('/api/users/:userId/history/:bookId', auth.authenticate, own, asyncRoute(async (req, res) => {
-    await ReadingHistory.deleteOne({userId: req.user.id, bookId: objectId(req.params.bookId)});
+    await removeLegacyReading(req.user.id, objectId(req.params.bookId));
     res.json({success: true});
   }));
   app.get('/api/users/:userId/library', auth.authenticate, own, asyncRoute(async (req, res) => {

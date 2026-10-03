@@ -110,7 +110,7 @@ export function readingRoutes(app,auth) {
   app.post('/api/books/:id/views',rateLimit({windowMs:60000,limit:30,message:{error:'阅读上报过于频繁'}}),asyncRoute(async(req,res)=>{
     const chapter=await Chapter.findOne({_id:req.body.chapterId,bookId:req.params.id,deletedAt:null});
     if(!chapter)fail(404,'章节与作品不匹配');
-    let visitor=req.cookies.visitor;
+    let visitor=req.nativeVisitorId || req.cookies.visitor;
     if(typeof visitor!=='string'||!/^[a-f0-9]{64}$/.test(visitor)){visitor=crypto.randomBytes(32).toString('hex');res.cookie('visitor',visitor,{httpOnly:true,sameSite:'lax',secure:process.env.APP_ENV==='production',maxAge:31536000000,path:'/'});}
     const day=dayKey(),bookId=req.params.id;
     const userId=await auth.optionalUserId(req);

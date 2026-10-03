@@ -21,7 +21,10 @@ import { mediaRoutes } from './routes/media.js';
 import {transferRoutes} from './routes/transfers.js';
 import { security, safeHtml, publicUser } from './security.js';
 import { authRoutes } from './routes/auth.js';
+import { nativeVisitorRoutes } from './routes/native-visitor.js';
+import {nativeAuthRoutes} from './routes/native-auth.js';
 import Session from './models/Session.js';
+import NativeSession from './models/NativeSession.js';
 import {trafficObservationRoutes} from './routes/traffic-observation.js';
 ﻿import { readConfig } from './config.js'; 
 import express from 'express';
@@ -176,6 +179,8 @@ const auth = security(app, config);
 trafficObservationRoutes(app,config);
 const authMiddleware = auth.authenticate;
 authRoutes(app,auth,config);
+nativeVisitorRoutes(app,auth);
+nativeAuthRoutes(app,auth,config);
 mediaRoutes(app,auth);
 transferRoutes(app,auth);
 contentRoutes(app,auth);
@@ -278,6 +283,7 @@ app.patch('/api/admin/users/:userId/ban', authMiddleware, adminMiddleware, async
           user=await User.findByIdAndUpdate(userId,{$set:{isBanned},$inc:{authVersion:1}},{new:true,session});
           if(!user)throw Object.assign(new Error('用户不存在'),{status:404});
           await Session.deleteMany({userId},{session});
+          await NativeSession.deleteMany({userId},{session});
         });
 
         res.json({ success: true, message: isBanned ? '用户已封禁' : '用户已解封', user: publicUser(user) });
