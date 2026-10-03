@@ -139,6 +139,8 @@ export interface ForumWriteResult {
 export type ReaderBook = Pick<Book, 'id' | 'title' | 'author' | 'cover_image' | 'category' | 'status' | 'writeVersion'>;
 
 export interface Chapter {
+  contentVersion?: string;
+  paragraphVersion?: number;
   catalogVersion?: number;
   chapterIndex?: number;
   chapterTotal?: number;

@@ -29,6 +29,8 @@ import ReaderScroll from './ReaderScroll';
 import {installReaderViewport} from '@/lib/reader-viewport';
 import {useReaderFullscreen} from './useReaderFullscreen';
 import type {ReaderTurnMode} from './useReaderPageTurn';
+import {useReadingProgress} from '@/lib/reading-progress-react';
+import {safeFetch} from '@/lib/request';
 
 const turnModes=[
   {value:'horizontal',label:'左右翻页',hint:'左右滑动或点击两侧翻页，点击中央打开菜单'},
@@ -86,7 +88,8 @@ function ReaderContent({ initialBook = null, initialChapter = null }: { initialB
   
   const bookId = params.id as string;
   const chapterIdParam = pathname?.split('/')[3] || params.chapterId as string;
-  const { user } = useAuth();
+  const { user,loading:authLoading } = useAuth();
+  const preciseProgress=useReadingProgress(user?.id??null,bookId,authLoading);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [book, setBook] = useState<ReaderBook | null>(initialBook || null);
   const [chapter, setChapter] = useState<Chapter | null>(initialChapter || null);
@@ -347,7 +350,21 @@ if (loading) return (
       }}
     >
       {themeColor === 'cream' && !isActuallyDark && <link rel="preload" as="image" href={readerPaperImage} media="(max-width:1023px)" />}
-      <RecordBookVisit bookId={bookId} chapterId={chapter.id}/>
+      <RecordBookVisit bookId={bookId} chapterId={chapter.id} precise/>
+      {preciseProgress.state.conflict && <div role="dialog" aria-modal="true" aria-label="阅读位置冲突" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40"><div className="rounded-xl bg-white text-gray-900 p-6 max-w-md m-4">
+        <h2>{preciseProgress.state.conflict==='CONTENT_CHANGED'?'正文已更新':'另一设备更新了阅读位置'}</h2>
+        <p>本机位置已保留。请选择继续的位置，重读较早章节也可以保留。</p>
+        <button onClick={async()=>{const changed=preciseProgress.state.conflict==='CONTENT_CHANGED';const position=preciseProgress.chooseCloud();
+          if(changed&&position){try{const response=await safeFetch(`/api/chapters/${encodeURIComponent(position.chapterId)}?navigation=1`,{cache:'no-store'});if(!response.ok)throw Error();const updated:Chapter=await response.json();chapterCache.set(updated.id,updated);if(updated.id===chapter.id)setChapter(updated);else goToChapter(updated.id);await preciseProgress.chooseLocal(updated);}catch{setNavigationError('正文刷新失败，阅读位置仍保留，请重试。');}}
+          else if(position&&position.chapterId!==chapter.id)goToChapter(position.chapterId);
+        }}>使用云端</button>
+        <button onClick={async()=>{
+          if(preciseProgress.state.conflict==='CONTENT_CHANGED'){
+            try{const id=preciseProgress.state.local?.chapterId||chapter.id;const response=await safeFetch(`/api/chapters/${encodeURIComponent(id)}?navigation=1`,{cache:'no-store'});if(!response.ok)throw Error();const updated:Chapter=await response.json();chapterCache.set(updated.id,updated);if(updated.id===chapter.id)setChapter(updated);else goToChapter(updated.id);await preciseProgress.chooseLocal(updated);}catch{setNavigationError('正文刷新失败，本机位置仍保留，请重试。');}
+          }else await preciseProgress.chooseLocal();
+        }}>{preciseProgress.state.conflict==='CONTENT_CHANGED'?'刷新正文并保留本机位置':'保留本机'}</button>
+      </div></div>}
+      {preciseProgress.state.error && <div role="status" className="reader-navigation-error">{preciseProgress.state.error}<button onClick={preciseProgress.retry}>重试同步</button></div>}
       <div
         className="reader-tools fixed bottom-0 left-0 right-0 z-50 border-t transition-transform duration-300"
         inert={!showNav}
@@ -391,7 +408,8 @@ if (loading) return (
       </div>
 
 
-      <div className="relative w-full" onPointerDown={() => { if (showHint) setShowHint(false); }}>
+      {!preciseProgress.ready && <div role="status" className="p-12">正在恢复阅读位置…</div>}
+      <div className="relative w-full" style={{visibility:preciseProgress.ready?'visible':'hidden'}} onPointerDown={() => { if (showHint) setShowHint(false); }}>
         <ReadingSurface
           key={`${turnMode==='scroll'?bookId:chapter.id}:${entryKey}`} book={book} chapter={chapter} chapterIndex={currentChapterIndex} chapterTotal={catalogTotal}
           previousChapter={adjacent.previous?.id===prevChapterId?adjacent.previous:chapterCache.get(prevChapterId || '')}
@@ -400,7 +418,10 @@ if (loading) return (
           paragraphGap={paraSpacingMap[paraSpacing] || '1rem'} theme={activeTheme}
           paper={themeColor === 'cream'} dark={isActuallyDark} pageWidth={pageWidth}
           previousId={prevChapterId} nextId={nextChapterId} navigating={isNavigating}
-          blocked={showCatalog || showSettings || Boolean(chapterEntry)}
+          blocked={!preciseProgress.ready || showCatalog || showSettings || Boolean(chapterEntry) || Boolean(preciseProgress.state.conflict)}
+          progressReady={preciseProgress.ready}
+          restorePosition={preciseProgress.state.local} restoreToken={preciseProgress.restore.token}
+          onReadingPosition={preciseProgress.report} onContentChanged={preciseProgress.contentChanged}
           turnMode={turnMode} toolsVisible={showNav} onHideTools={hideTools}
           onChapter={goToChapter} onTools={() => { setShowHint(false); setShowNav(value => !value); }}
           onNearEnd={nearEnd}

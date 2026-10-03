@@ -22,8 +22,9 @@ test('paragraph progress: CAS, replay, rereading, tombstones, legacy compatibili
   await new Promise(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   const jar = new Map();
-  async function request(path, method = 'GET', body, csrf = true) {
+  async function request(path, method = 'GET', body, csrf = true, expectedAccount) {
     const headers = {};
+    if (expectedAccount) headers['X-Reading-Account'] = expectedAccount;
     if (method !== 'GET' && csrf) {
       const token = await request('/api/auth/csrf');
       headers['x-csrf-token'] = token.data.csrfToken; headers.origin = 'http://127.0.0.1:3000';
@@ -50,6 +51,18 @@ test('paragraph progress: CAS, replay, rereading, tombstones, legacy compatibili
       position: {chapterId: String(chapter._id), contentVersion: crypto.createHash('sha256').update(chapter.content).digest('hex'),
         paragraphKey: readerParagraphs(chapter.content, chapter.title, chapter.chapter_number)[0].key, charOffset: offset}});
     const original = body(first, 0, 3);
+    const secondUser = await User.create({username: 'position-other', email: 'position-other@example.test', password: await bcrypt.hash('test-password-123', 10)});
+    // Simulate another tab replacing the Cookie after the original tab's session
+    // check. Neither reads nor queued writes/deletes may cross account ownership.
+    assert.equal((await request('/api/auth/signin', 'POST', {email: secondUser.email, password: 'test-password-123'})).status, 200);
+    for (const method of ['GET', 'PUT', 'DELETE']) {
+      const rejected = await request(url, method, method === 'GET' ? undefined : original, true, String(user._id));
+      assert.equal(rejected.status, 409); assert.equal(rejected.data.code, 'ACCOUNT_CHANGED');
+      assert.equal(rejected.data.current, undefined);
+    }
+    assert.equal((await request(url)).data.revision, 0, 'the new account receives no old-account write');
+    assert.equal((await request('/api/auth/signin', 'POST', {email: user.email, password: 'test-password-123'})).status, 200);
+    assert.equal((await request(url, 'GET', undefined, true, String(user._id))).data.revision, 0);
     assert.equal((await request(url, 'PUT', original, false)).status, 403);
     const saved = await request(url, 'PUT', original);
     assert.equal(saved.status, 200); assert.equal(saved.data.revision, 1); assert.equal(saved.data.position.charOffset, 3);

@@ -45,12 +45,12 @@
 | R01 | 详情目录预览/全部目录；双 | 正序章节与卷标题、卷展开折叠、当前章节定位、长目录窗口加载 | 详情/阅读器→目录 | GET `/books/:bid/catalog?offset=&limit=&anchor=&version=`；GET `/catalog/version`；旧 `/chapters` 分页 | 待实现/待验收 | W:components/BookCatalogSheet.tsx、lib/book-catalog.ts；T:catalog-volumes.spec.ts、catalog-store.spec.ts；万章目录/卷折叠/位置恢复 |
 | R02 | 目录拖动/滚动/选择；双 | 虚拟目录、滚动条定位、选择章、取消回原阅读位置 | 原生目录 sheet/全屏 | 同 R01；版本变化 409 返回最新 version | 待实现/待验收 | W:components/CatalogScrollbar.tsx、lib/catalog-layout.ts；T:reader-catalog-handoff.spec.ts、reader-history.spec.ts；不混版本、不下载全目录才开书 |
 | R03 | `/book/:bid/:cid`；双 | 完整正文、章标题、前后章导航、首末章/异常重试 | 原生阅读器 | GET `/chapters/:cid?reader=1&navigation=1` → {book,chapter} | 待实现/待验收 | W:components/ReaderClient.tsx；S:app.js 正文路由；T:reading.spec.ts、reader-payload（服务器）；长章完整、跨章无漏/重复 |
-| R04 | 阅读设置“左右翻页”；双 | 横向手势/两侧点击翻页，中央菜单，章末续章 | 阅读器→横向分页 | 本地排版/手势；正文同 R03 | 待实现/待验收 | W:components/ReaderPages.tsx、useReaderPageTurn.ts；T:reader-pages.spec.ts、reader-taps.spec.ts；标点/中英/emoji/首行缩进/快速手势 |
-| R05 | 阅读设置“上下翻页”；双 | 纵向手势/上下区域翻页，中央菜单 | 阅读器→纵向分页 | 本地 | 待实现/待验收 | W:components/ReaderClient.tsx、ReaderPages.tsx；T:reader-interactions.spec.ts；不能省略第三种模式 |
-| R06 | 阅读设置“上下滚屏”；双 | 连续滚动、相邻章节衔接、当前章随位置变、段评按所在章节 | 阅读器→连续滚动 | 本地有界正文预取；R03 | 待实现/待验收 | W:components/ReaderScroll.tsx；T:reader-scroll.spec.ts、reader-continuity.spec.ts；跨章往返/内存有界/末章 |
+| R04 | 阅读设置“左右翻页”；双 | 横向手势/两侧点击翻页，中央菜单，章末续章 | 阅读器→横向分页 | 本地排版/手势；正文同 R03 | 已实现；reader模块9单测/5模拟器用例通过，App整体验收待完成 | W:components/ReaderPages.tsx、useReaderPageTurn.ts；T:reader-pages.spec.ts、reader-taps.spec.ts；标点/中英/emoji/首行缩进/快速手势 |
+| R05 | 阅读设置“上下翻页”；双 | 纵向手势/上下区域翻页，中央菜单 | 阅读器→纵向分页 | 本地 | 已实现；reader模块9单测/5模拟器用例通过，App整体验收待完成 | W:components/ReaderClient.tsx、ReaderPages.tsx；T:reader-interactions.spec.ts；不能省略第三种模式 |
+| R06 | 阅读设置“上下滚屏”；双 | 连续滚动、相邻章节衔接、当前章随位置变、段评按所在章节 | 阅读器→连续滚动 | 本地有界正文预取；R03 | 已实现；reader模块9单测/5模拟器用例通过，App整体验收待完成 | W:components/ReaderScroll.tsx；T:reader-scroll.spec.ts、reader-continuity.spec.ts；跨章往返/内存有界/末章 |
 | R07 | 阅读主题；双 | 灰/奶油纸/绿/蓝日间底色、夜间模式，菜单与正文协调 | 阅读设置→主题 | 本地 reader_themeColor；全站主题 | 待实现/待验收 | W:components/ReaderClient.tsx、lib/reader-paper.ts；T:reader-paper.spec.ts、site-theme.spec.ts；纸纹可读、夜间无闪白 |
-| R08 | 正文字体/字号；双 | 黑体/宋体/楷体；可交互字号12–48（历史存值容许到72） | 阅读设置→字体、字号 | 本地 reader_fontFamily/fontSizeNum | 待实现/待验收 | W:components/ReaderClient.tsx；T:reader-pages.spec.ts；字体覆盖中文、放大保持同段同字符，不能持久化屏幕页码 |
-| R09 | 行距、段距；双 | 移动行距1.2–1.8步长0.1；四档段距；桌面不同布局选项 | 阅读设置→排版 | 本地 reader_lineHeight/paraSpacing | 待实现/待验收 | W:components/ReaderClient.tsx；T:reader-interactions.spec.ts；重排锚点稳定、大字号不裁切 |
+| R08 | 正文字体/字号；双 | 黑体/宋体/楷体；可交互字号12–48（历史存值容许到72） | 阅读设置→字体、字号 | 本地 reader_fontFamily/fontSizeNum | 已实现；reader模块9单测/5模拟器用例通过，App整体验收待完成 | W:components/ReaderClient.tsx；T:reader-pages.spec.ts；字体覆盖中文、放大保持同段同字符，不能持久化屏幕页码 |
+| R09 | 行距、段距；双 | 移动行距1.2–1.8步长0.1；四档段距；桌面不同布局选项 | 阅读设置→排版 | 本地 reader_lineHeight/paraSpacing | 已实现；reader模块9单测/5模拟器用例通过，App整体验收待完成 | W:components/ReaderClient.tsx；T:reader-interactions.spec.ts；重排锚点稳定、大字号不裁切 |
 | R10 | 页面宽度；桌设置 | 桌面宽度选择；App大屏需保留可调版心能力 | 平板阅读设置→版心/边距 | 本地 reader_pageWidth | 待实现/待验收 | W:components/ReaderClient.tsx；手机按可用宽度合理映射，平板/横屏验证 |
 | R11 | 阅读全屏开关/自动全屏；双 | 全屏偏好、退全屏不意外退书、提示可关闭 | 阅读设置→沉浸模式 | 本地；Android window insets | 待实现/待验收 | W:components/useReaderFullscreen.ts；T:reader-fullscreen-back.spec.ts、reader-auto-fullscreen.spec.ts；系统返回、旋转、键盘 |
 | R12 | 阅读菜单、前后章、详情/书架返回；双 | 换章不膨胀返回栈，目录/设置优先关闭，返回详情/来源保位 | 阅读器导航/系统返回 | 本地 navigation state | 待实现/待验收 | W:lib/book-navigation.ts；T:reader-history.spec.ts、reader-fullscreen-back.spec.ts；深链冷启动/进程死亡/返回无环 |
@@ -176,11 +176,11 @@
 
 | ID | 范围/入口 | 预期实际行为 | API/存储差异 | 状态 | 必需验收证据 |
 |---|---|---|---|---|---|
-| X01 | 原生登录/设备会话 | 短期access、轮换refresh、Keystore支持加密存储；退出/改密/封禁撤销；保持网页Cookie/CSRF | 基线无原生Bearer合同；不能用存量前端偶发Authorization写法当后端支持证明 | 待实现/待验收 | 令牌过期/刷新重放/撤销/跨账号、网页旧合同回归 |
+| X01 | 原生登录/设备会话 | 短期access、轮换refresh、Keystore支持加密存储；退出/改密/封禁撤销；保持网页Cookie/CSRF | 基线无原生Bearer合同；不能用存量前端偶发Authorization写法当后端支持证明 | 后端与数据层合同/真实Keystore检查通过；完整账号UI待验收 | 令牌过期/刷新重放/撤销/跨账号、网页旧合同回归 |
 | X02 | 原生全文/元数据仓库 | Room+私有正文文件+DataStore，离线优先；正文hash验证后原子落盘，目录版本一致 | 当前chapterResponse主动剔除contentKey/contentSha256，必须补公开内容版本/摘要而不泄R2内部凭据 | 待实现/待验收 | 断电/中断写/坏hash/磁盘不足/版本更新，旧正文与新目录不混用 |
 | X03 | 书籍/章节离线下载 | 用户主动下载、进度、暂停/取消/重试/恢复、离线可读、存储管理；自动缓存与下载分别淘汰 | 网页无离线下载业务API；可复用有界正文读取但需版本合同及队列 | 待实现/待验收 | 断网/后台/杀进程/网络约束、未完整章节不标完成 |
 | X04 | 精确跨端续读 | bookId+chapterId+contentVersion+paragraphKey+UTF-16 charOffset；最近读与最远读分开，重读合法 | 现history无章内锚点/修订号/operationId；网页与App共同升级 | 待实现/待验收 | Web→App→Web、字号/旋转重排、正文变更、旧离线设备冲突、不匹配明确回退 |
-| X05 | 书架/进度离线同步 | 操作ID、设备ID、服务端revision、删除标记；可重放队列、身份隔离 | 现书架添加/删除幂等但无增量/tombstone合同，不能只按客户端上传时间覆盖 | 待实现/待验收 | 重复同步、离线删除后旧设备上线、两端并发、恢复队列 |
+| X05 | 书架/进度离线同步 | 操作ID、设备ID、服务端revision、删除标记；可重放队列、身份隔离 | 现书架添加/删除幂等但无增量/tombstone合同，不能只按客户端上传时间覆盖 | CAS/幂等/墓碑及Room冲突测试通过；端到端恢复待验收 | 重复同步、离线删除后旧设备上线、两端并发、恢复队列 |
 | X06 | 分享接收/App Links | 正规书籍/章节/作者/用户/论坛问题/文章/答案链接冷暖启动可达 | 网站verified App Links association待补；answer等定位参数保留 | 待实现/待验收 | 安装前后、无登录/过期登录、无效链接、系统Back |
 | X07 | 原生可访问性 | 阅读正文可被TalkBack读取、段落操作语义、选择复制、焦点顺序、大字号/对比度 | StaticLayout/Canvas不能因自绘丢语义；复制为技术方案要求 | 待实现/待验收 | TalkBack实测、外接键盘/平板、200%字体、按钮触区 |
 | X08 | 生命周期/性能 | 前后台/旋转/进程死亡恢复；长章后台排版可取消、有界邻章缓存；低配流畅 | 独立reader模块、Room/StateFlow | 待实现/待验收 | release Macrobenchmark/内存/帧耗时、低端真实设备；模拟器不能算真机 |

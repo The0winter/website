@@ -7,12 +7,12 @@ import {recordBookVisit} from '@/lib/book-visit';
 import {currentChapterEntry} from '@/lib/chapter-entry';
 
 /** Visible book pages record visits; explicit shelf entries can start the same write earlier. */
-export default function RecordBookVisit({bookId, chapterId}: {bookId: string; chapterId?: string}) {
+export default function RecordBookVisit({bookId, chapterId,precise=false}: {bookId: string; chapterId?: string;precise?:boolean}) {
   const {user} = useAuth();
   const pathname = usePathname();
   const userId = user?.id;
   useEffect(() => {
-    if (!userId || pathname !== `/book/${bookId}${chapterId ? `/${chapterId}` : ''}`) return;
+    if (precise&&chapterId || !userId || pathname !== `/book/${bookId}${chapterId ? `/${chapterId}` : ''}`) return;
     const record = () => {
       if (document.visibilityState !== 'visible') return;
       document.removeEventListener('visibilitychange', record);
@@ -22,6 +22,6 @@ export default function RecordBookVisit({bookId, chapterId}: {bookId: string; ch
     const timer = window.setTimeout(record, 0);
     document.addEventListener('visibilitychange', record);
     return () => {window.clearTimeout(timer); document.removeEventListener('visibilitychange', record);};
-  }, [bookId, chapterId, userId, pathname]);
+  }, [bookId, chapterId, userId, pathname,precise]);
   return null;
 }

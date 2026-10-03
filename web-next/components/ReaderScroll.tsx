@@ -1,5 +1,7 @@
 'use client';
 import {observeReaderSize} from '@/lib/reader-viewport';
+import {anchorRectangle,firstVisibleAnchor,resolveReadingAnchor} from '@/lib/reading-progress-dom';
+import type {ReadingAnchor} from '@/lib/reading-progress';
 
 import {memo,useCallback,useEffect,useEffectEvent,useLayoutEffect,useMemo,useRef,useState,type CSSProperties} from 'react';
 import {Highlighter,MessageCircle} from 'lucide-react';
@@ -53,6 +55,9 @@ export default function ReaderScroll(props:ReaderPageProps){
   const [chapters,setChapters]=useState<Chapter[]>([props.chapter]);
   const [progress,setProgress]=useState<Progress>({id:props.chapter.id,fraction:0,page:0,total:1});
   const position=useRef(progress);
+  const exact=useRef<{id:string;anchor:ReadingAnchor}|null>(null);
+  const restoreToken=useRef(props.restoreToken);
+  const progressCallbacks=useRef(props);useLayoutEffect(()=>{progressCallbacks.current=props;});
   const [ready,setReady]=useState(false);
   const restored=useRef(false),routeChapter=useRef(props.chapter.id),scrollNavigation=useRef<string|null>(null);
   const anchor=useRef<{id:string;top:number}|null>(null);
@@ -94,16 +99,22 @@ export default function ReaderScroll(props:ReaderPageProps){
     const previous=position.current;
     if(restored.current && previous.id!==next.id)saveProgress(previous);
     position.current=next;
+    const chapter=chapters.find(item=>item.id===next.id);
+    if(chapter&&restored.current){
+      if(navigate||exact.current?.id!==chapter.id){const found=firstVisibleAnchor(active,view);if(found)exact.current={id:chapter.id,anchor:found};}
+      if(exact.current?.id===chapter.id)progressCallbacks.current.onReadingPosition?.(chapter,exact.current.anchor,navigate);
+    }
     setProgress(old=>old.id===next.id && old.page===next.page && old.total===next.total?old:next);
     if(navigate && !blocked && !navigating && next.id!==activeChapter.id && scrollNavigation.current!==next.id){
       saveProgress(next);scrollNavigation.current=next.id;onChapter(next.id);
     }
     if(start+height-top<view.clientHeight*3)onNearEnd();
-  },[nodes,topOf,blocked,navigating,activeChapter.id,onChapter,onNearEnd]);
+  },[nodes,topOf,blocked,navigating,activeChapter.id,onChapter,onNearEnd,chapters]);
 
   const resize=useEffectEvent(()=>{
     const saved=position.current,node=nodeFor(saved.id),view=viewport.current;
-    if(node && view)setScrollPosition(topOf(node)+saved.fraction*node.getBoundingClientRect().height);
+    const rect=node&&exact.current?.id===saved.id?anchorRectangle(node,exact.current.anchor):null;
+    if(node && view)setScrollPosition(rect?view.scrollTop+rect.top-view.getBoundingClientRect().top:topOf(node)+saved.fraction*node.getBoundingClientRect().height);
     measure();
   });
   useLayoutEffect(()=>{resize();},[props.fontFamily,props.fontSize,props.lineHeight,props.paragraphGap,props.pageWidth]);
@@ -111,6 +122,7 @@ export default function ReaderScroll(props:ReaderPageProps){
   // Append/prepend keyed chapters without replacing the native scroll container.
   // Only changes above the viewport need an offset correction before paint.
   useLayoutEffect(()=>{
+    if(props.progressReady===false)return;
     if(anchor.current){
       const node=nodeFor(anchor.current.id),view=viewport.current;
       if(node && view)setScrollPosition(view.scrollTop+node.getBoundingClientRect().top-anchor.current.top);
@@ -129,24 +141,33 @@ export default function ReaderScroll(props:ReaderPageProps){
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setChapters(next);return;
     }
-    if(!restored.current || (navigated && !fromScroll)){
+    const requestedRestore=restoreToken.current!==props.restoreToken;
+    restoreToken.current=props.restoreToken;
+    if(!restored.current || (navigated && !fromScroll) || requestedRestore){
       const node=nodeFor(props.chapter.id),view=viewport.current;
       if(node && view){
         let fraction=0;
+        let entry:string|null=null;
         try{
-          const entry=sessionStorage.getItem(`reader-entry:${props.chapter.id}`);
+          entry=sessionStorage.getItem(`reader-entry:${props.chapter.id}`);
           const saved=JSON.parse(localStorage.getItem(`reader-page:${props.chapter.id}`)||'null');
-          fraction=entry?entry==='end'?Math.max(0,1-view.clientHeight/node.getBoundingClientRect().height):0:Number.isFinite(saved?.fraction)?Math.max(0,Math.min(.999,saved.fraction)):0;
+          fraction=entry?entry==='end'?Math.max(0,1-view.clientHeight/node.getBoundingClientRect().height):0:!props.onReadingPosition&&Number.isFinite(saved?.fraction)?Math.max(0,Math.min(.999,saved.fraction)):0;
           sessionStorage.removeItem(`reader-entry:${props.chapter.id}`);
         }catch{ /* Default to the chapter start. */ }
         setScrollPosition(topOf(node)+fraction*node.getBoundingClientRect().height);
+        const saved=progressCallbacks.current.restorePosition;
+        const resolved=!entry&&saved?.chapterId===props.chapter.id?resolveReadingAnchor(props.chapter,saved):null;
+        exact.current=resolved?{id:props.chapter.id,anchor:resolved}:null;
+        if(resolved){const rect=anchorRectangle(node,resolved);if(rect)setScrollPosition(view.scrollTop+rect.top-view.getBoundingClientRect().top);
+          if(saved?.contentVersion&&props.chapter.contentVersion&&(saved.contentVersion!==props.chapter.contentVersion||saved.paragraphKey!==resolved.paragraphKey))progressCallbacks.current.onContentChanged?.(props.chapter,resolved);
+        }
         restored.current=true;setReady(true);
       }
     }
     routeChapter.current=props.chapter.id;
     if(fromScroll)scrollNavigation.current=null;
     measure();
-  },[props.chapter,props.previousChapter,props.nextChapter,props.previousId,props.nextId,chapters,measure,nodeFor,topOf,captureAnchor,setScrollPosition]);
+  },[props.chapter,props.previousChapter,props.nextChapter,props.previousId,props.nextId,chapters,measure,nodeFor,topOf,captureAnchor,setScrollPosition,props.restoreToken,props.onReadingPosition,props.progressReady]);
 
   useLayoutEffect(()=>{
     const view=viewport.current;if(!view)return;
@@ -256,7 +277,7 @@ export default function ReaderScroll(props:ReaderPageProps){
     return()=>{active=false;observer.disconnect();};
   },[followingId,props.book.id,chapters,progress.id,blocked,continuationRetry]);
 
-  return <div className="reader-pages-root" data-dark={props.dark} data-mode="scroll" data-reader-ready={ready} data-reader-chapter={props.chapter.id} data-reader-previous={props.previousChapter?.id || ''} data-reader-next={props.nextChapter?.id || ''} style={style}>
+  return <div className="reader-pages-root" data-dark={props.dark} data-mode="scroll" data-reader-ready={ready && props.progressReady!==false} data-reader-chapter={props.chapter.id} data-reader-previous={props.previousChapter?.id || ''} data-reader-next={props.nextChapter?.id || ''} style={style}>
     <section className="reader-frame" data-paper={props.paper && !props.dark} aria-label="章节阅读">
       <ReaderHeader bookId={props.book.id} bookTitle={props.book.title} title={title} firstPage={progress.page===0} toolsVisible={props.toolsVisible}/>
       <button className="reader-menu-access" onClick={props.onTools} aria-expanded={props.toolsVisible}>阅读菜单</button>

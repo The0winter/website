@@ -29,9 +29,9 @@
 
 ## 当前分工
 
-主智能体 Astra Ultra：部署基线、进度合同、集成与最终验收。
-子智能体 `parity_audit`（Astra high）：全量功能盘点及 `FEATURE_PARITY.md`。
-子智能体 `android_toolchain`（Astra medium）：SDK/JDK/Gradle、工程构建和后台工具。
-子智能体 `native_auth`（Astra high）：原生会话后端及安全合同测试。
+主智能体 Astra Ultra：社区 F01–F28、部署、签名、集成与最终验收。
+子智能体 `parity_audit`（Astra high）：阅读器已完成模块测试，转网页精确章内进度及双向续读。
+子智能体 `android_toolchain`（Astra medium）：App导航/发现/书架/账号/书评/段评与隔离环境端到端。
+子智能体 `native_auth`（Astra high）：数据仓储已完成模块测试，转创作 W01–W24、搬运与管理 M01–M10。
 
 最多三个并行子智能体，不递归派生；按任务重新安排所有权。

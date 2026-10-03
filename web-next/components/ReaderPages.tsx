@@ -15,6 +15,8 @@ import {useAuth} from '@/contexts/AuthContext';
 import type {ReaderBook,Chapter} from '@/lib/api';
 import {useReaderPageTurn,type ReaderTurnMode} from './useReaderPageTurn';
 import './reader-pages.css';
+import {anchorRectangle,firstVisibleAnchor,resolveReadingAnchor} from '@/lib/reading-progress-dom';
+import type {ReadingAnchor,ReadingPosition} from '@/lib/reading-progress';
 
 type Paragraph={key:string;text:string};
 const subscribeHydration=()=>()=>{};
@@ -28,6 +30,10 @@ export type ReaderPageProps={
   previousChapter?:Chapter; nextChapter?:Chapter;
   turnMode:ReaderTurnMode; toolsVisible:boolean;
   onChapter:(id:string)=>void; onTools:()=>void; onHideTools:()=>void; onNearEnd:()=>void;
+  restorePosition?:ReadingPosition|null; restoreToken?:number;
+  progressReady?:boolean;
+  onReadingPosition?:(chapter:Chapter,anchor:ReadingAnchor,intentional?:boolean)=>void;
+  onContentChanged?:(chapter:Chapter,anchor:ReadingAnchor)=>void;
 };
 
 export default function ReaderPages(props:ReaderPageProps) {
@@ -48,6 +54,10 @@ export default function ReaderPages(props:ReaderPageProps) {
   const menuRef=useRef<HTMLDivElement>(null);
   const currentPage=useRef(0);
   const fraction=useRef(0);
+  const exactAnchor=useRef<ReadingAnchor|null>(null);
+  const intentionalTurn=useRef(false);
+  const restoreToken=useRef(props.restoreToken);
+  const callbacks=useRef(props);useLayoutEffect(()=>{callbacks.current=props;});
   const previousLayout=useRef({width:0,height:0,total:1,typography:'',mode:turnMode});
   const restored=useRef(false);
   const suppressGestureClick=useRef(false);
@@ -66,7 +76,7 @@ export default function ReaderPages(props:ReaderPageProps) {
       if(id){try{sessionStorage.setItem(`reader-entry:${id}`,target<0?'end':'start');}catch{}onChapter(id);}
       return;
     }
-    currentPage.current=target;setPage(target);
+    intentionalTurn.current=true;currentPage.current=target;setPage(target);
   },[props.previousId,props.nextId,onChapter]);
   const {viewport:windowRef,textWindow,columns,surface,preview,begin:beginTurn,drag:dragTurn,finish:finishTurn,cancel:cancelTurn,busy:turnBusy,settling:turnSettling,settle:settleTurn}=useReaderPageTurn({mode:turnMode,onCommit:commitPage});
 
@@ -107,7 +117,7 @@ export default function ReaderPages(props:ReaderPageProps) {
     // progress. The server's default paging mode may differ from this browser.
     // The entry paper already covers native fullscreen resizing. Paginate at
     // its final size instead of rebuilding columns during every resize frame.
-    if(!hydrated || fullscreenPending)return;
+    if(!hydrated || fullscreenPending || props.progressReady===false)return;
     const viewport=textWindow.current,body=columns.current;
     if(!viewport || !body)return;
     let active=true,frame=0;
@@ -121,12 +131,19 @@ export default function ReaderPages(props:ReaderPageProps) {
       const typography=`${fontFamily}/${fontSize}/${lineHeight}/${paragraphGap}`;
       const previous=previousLayout.current;
       let next=currentPage.current,position=fraction.current;
+      let exact=exactAnchor.current;
+      const requestedRestore=restoreToken.current!==props.restoreToken;
+      restoreToken.current=props.restoreToken;
       let entry:string|null=null;
       try{entry=sessionStorage.getItem(`reader-entry:${chapter.id}`);}catch{}
-      if(!restored.current || entry){
+      if(!restored.current || entry || requestedRestore){
+        const savedExact=callbacks.current.restorePosition;
+        exact=!entry&&savedExact?.chapterId===chapter.id?resolveReadingAnchor(chapter,savedExact):null;
+        if(exact&&savedExact?.contentVersion&&chapter.contentVersion&&(savedExact.contentVersion!==chapter.contentVersion||savedExact.paragraphKey!==exact.paragraphKey))
+          callbacks.current.onContentChanged?.(chapter,exact);
         try {
           const saved=JSON.parse(localStorage.getItem(saveKey)||'null');
-          if(!restored.current && saved && Number.isFinite(saved.fraction))position=Math.min(.999,Math.max(0,saved.fraction));
+          if(!callbacks.current.onReadingPosition&&!restored.current && saved && Number.isFinite(saved.fraction))position=Math.min(.999,Math.max(0,saved.fraction));
           if(entry){position=entry==='end'?.999:0;sessionStorage.removeItem(`reader-entry:${chapter.id}`);}
         } catch { /* Storage may be disabled. */ }
         next=Math.round(position*total);
@@ -135,6 +152,8 @@ export default function ReaderPages(props:ReaderPageProps) {
         if(gesture.current){clearTimeout(gesture.current.timer);gesture.current=null;suppressGestureClick.current=true;}
         cancelTurn();next=Math.round(position*total);
       }
+      if(exact&&!scrolling){const rect=anchorRectangle(body,exact);if(rect)next=Math.floor((rect.left-body.getBoundingClientRect().left+.5)/(width+40));}
+      exactAnchor.current=exact;
       next=Math.max(0,Math.min(next,total-1));
       if(scrolling){
         viewport.scrollTop=Math.min(viewport.scrollHeight-height,position*body.scrollHeight);
@@ -148,7 +167,16 @@ export default function ReaderPages(props:ReaderPageProps) {
     measure();const stopObserving=observeReaderSize(viewport,schedule);
     void document.fonts?.ready.then(schedule);
     return()=>{active=false;stopObserving();cancelAnimationFrame(frame);};
-  },[paragraphs,counts,fontFamily,fontSize,lineHeight,paragraphGap,saveKey,scrolling,turnMode,chapter.id,cancelTurn,columns,textWindow,hydrated,fullscreenPending]);
+  },[paragraphs,counts,fontFamily,fontSize,lineHeight,paragraphGap,saveKey,scrolling,turnMode,chapter,cancelTurn,columns,textWindow,hydrated,fullscreenPending,props.restoreToken,props.progressReady]);
+
+  useLayoutEffect(()=>{
+    if(props.progressReady===false||!layout.width||!restored.current||!columns.current||!textWindow.current)return;
+    // Reflow displays the line/page containing the saved character; it must not drift
+    // backwards to the newly wrapped line start until an intentional page turn.
+    if(intentionalTurn.current||!exactAnchor.current)exactAnchor.current=firstVisibleAnchor(columns.current,textWindow.current);
+    if(exactAnchor.current)callbacks.current.onReadingPosition?.(chapter,exactAnchor.current,intentionalTurn.current);
+    intentionalTurn.current=false;
+  },[page,layout,chapter,columns,textWindow,props.progressReady,props.restoreToken]);
 
   useEffect(()=>{
     if(!layout.width)return;
@@ -361,7 +389,7 @@ export default function ReaderPages(props:ReaderPageProps) {
   const progress=progressAt(props.chapterIndex,(page+1)/layout.total);
   const style={'--reader-paper':props.theme.bg,'--reader-ink':props.theme.text,'--reader-panel':props.theme.panel,'--reader-width':`${props.pageWidth}px`,'--reader-paragraph-gap':paragraphGap} as CSSProperties;
 
-  return <div className="reader-pages-root" data-dark={props.dark} data-mode={turnMode} data-reader-ready={layout.width>0 && !fullscreenPending} data-reader-chapter={chapter.id} data-reader-previous={props.previousChapter?.id || ''} data-reader-next={props.nextChapter?.id || ''} style={style}>
+  return <div className="reader-pages-root" data-dark={props.dark} data-mode={turnMode} data-reader-ready={props.progressReady!==false && layout.width>0 && !fullscreenPending} data-reader-chapter={chapter.id} data-reader-previous={props.previousChapter?.id || ''} data-reader-next={props.nextChapter?.id || ''} style={style}>
     <section className="reader-frame" data-paper={props.paper && !props.dark} aria-label="章节阅读">
       <ReaderHeader bookId={book.id} bookTitle={book.title} title={title} firstPage={page===0} toolsVisible={props.toolsVisible}/>
       <button className="reader-menu-access" onClick={onTools} aria-expanded={props.toolsVisible}>阅读菜单</button>
