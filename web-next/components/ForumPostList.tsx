@@ -1,14 +1,17 @@
 'use client';
 import Link from './ForumLink';
-import {memo} from 'react';
+import {memo,useRef} from 'react';
 import {ArrowUpRight, MessageCircle, ThumbsUp, Triangle, X} from 'lucide-react';
 import UserAvatar from './UserAvatar';
 import type {ForumPost} from '@/lib/api';
 import {forumEntryHref, plainForumText} from '@/lib/forum-presentation';
 import './forum-content.css';
+import {useForumImpressions} from '@/lib/forum-activity';
 
-function ForumPostList({posts = [], loading, hideQuestion = false, onFeedback, emptyText}: {posts?: ForumPost[]; loading: boolean; hideQuestion?: boolean; onFeedback?:(post:ForumPost)=>void; emptyText?:string}) {
-  return <div className="forum-entry-list" aria-busy={loading}>
+function ForumPostList({posts = [], loading, hideQuestion = false, onFeedback, emptyText, trackImpressions = false}: {posts?: ForumPost[]; loading: boolean; hideQuestion?: boolean; onFeedback?:(post:ForumPost)=>void; emptyText?:string;trackImpressions?:boolean}) {
+  const root=useRef<HTMLDivElement>(null);
+  useForumImpressions(root,posts,trackImpressions&&!loading);
+  return <div ref={root} className="forum-entry-list" aria-busy={loading}>
     {loading ? <p className="forum-list-state" role="status">正在加载讨论…</p> : !posts.length ? <p className="forum-list-state">{emptyText || '还没有讨论，来分享你的阅读感受吧。'}</p> : posts.map(post => {
       const reply = post.topReply;
       const href = forumEntryHref(post);
@@ -24,6 +27,7 @@ function ForumPostList({posts = [], loading, hideQuestion = false, onFeedback, e
           <span>{author}</span>
         </div>
         <Link href={href} className="forum-entry-excerpt"><p>{excerpt}</p></Link>
+        {post.recommendation && <p className="forum-recommendation-reason">{post.recommendation.reason}</p>}
         <div className="forum-entry-meta">
           <span aria-label={`${reply?.votes ?? post.votes ?? 0} 人赞同`}><ThumbsUp className="forum-vote-desktop" size={14} aria-hidden="true"/><Triangle className="forum-vote-mobile" size={18} aria-hidden="true"/><span>{reply?.votes ?? post.votes ?? 0}<span className="forum-meta-label"> 赞同</span></span></span>
           <Link aria-label={`${reply?.comments ?? post.comments ?? 0} 条评论`} href={href + (href.includes('?') ? '&' : '?') + 'comments=1'}><MessageCircle size={14} aria-hidden="true"/><span>{reply?.comments ?? post.comments ?? 0}<span className="forum-meta-label"> 评论</span></span></Link>

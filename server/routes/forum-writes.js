@@ -68,7 +68,9 @@ export function forumWrites(app,auth){
       }
       if(await Comment.exists({replyId:reply._id,author:req.user.id,content:html,createdAt:recent()}).session(session))fail(429,'请勿重复评论');
       [comment]=await Comment.create([{postId:reply.postId,replyId:reply._id,parentCommentId:parentId||null,author:req.user.id,content:html}],{session});
-    });res.status(201).json({...comment.toObject(),id:String(comment._id)});
+    });
+    await app.locals.forumRecommendations?.action(req,res,String(req.params.id),'comment');
+    res.status(201).json({...comment.toObject(),id:String(comment._id)});
   }));
   for(const [path,Model] of [['posts',Post],['replies',Reply],['comments',Comment]]){
     app.post(`/api/forum/${path}/:id/like`,auth.authenticate,asyncRoute(async(req,res)=>{
@@ -76,7 +78,10 @@ export function forumWrites(app,auth){
       const actor=new mongoose.Types.ObjectId(req.user.id),list={$ifNull:['$likedBy',[]]},contains={$in:[actor,list]};
       const remove=req.body?.liked===undefined?contains:!req.body.liked;
       const doc=await Model.findByIdAndUpdate(req.params.id,[{$set:{likedBy:{$cond:[remove,{$setDifference:[list,[actor]]},{$setUnion:[list,[actor]]}]}}},{$set:{likes:{$size:'$likedBy'}}}],{new:true});
-      if(!doc)fail(404,'内容不存在');res.json({liked:doc.likedBy.some(id=>String(id)===req.user.id),votes:doc.likes,postId:doc.postId});
+      if(!doc)fail(404,'内容不存在');
+      const liked=doc.likedBy.some(id=>String(id)===req.user.id);
+      if(liked && path!=='comments')await app.locals.forumRecommendations?.action(req,res,String(doc._id),'like');
+      res.json({liked,votes:doc.likes,postId:doc.postId});
     }));
   }
 }

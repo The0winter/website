@@ -75,7 +75,9 @@ test('bounded forum reads preserve permissions, mixed-stream cursor order, body 
     assert.equal(wire.headers.get('content-encoding'),'gzip');
     assert.equal(wire.headers.get('cache-control'),'private, no-store');
     assert.match(wire.headers.get('vary'),/Accept-Encoding/i);
-    assert.equal((await wire.json()).items.length,5);
+    const mixedPage=(await wire.json()).items;
+    assert.ok(mixedPage.length>0 && mixedPage.length<=5);
+    assert.equal(new Set(mixedPage.map(row=>row.id)).size,mixedPage.length,'recommendation pages diversify questions while book discussion pagination remains complete');
     const uncompressed=await fetch(`${base}/api/forum/posts/${article._id}/reading`,{headers:{'accept-encoding':'identity'}});
     assert.equal(uncompressed.headers.get('content-encoding'),null);
     const articleResult=await uncompressed.json();

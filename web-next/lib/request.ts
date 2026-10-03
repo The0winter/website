@@ -20,7 +20,7 @@ export async function safeFetch(input: RequestInfo | URL, init?: RequestInit): P
   if (typeof window !== 'undefined' && response.ok && !['GET','HEAD','OPTIONS'].includes(method)) {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, window.location.origin);
     const libraryWrite = /^\/api\/users\/([^/]+)\/(bookmarks|history)(?:\/|$)/.exec(url.pathname);
-    if (url.pathname.startsWith('/api/forum/') && !url.pathname.endsWith('/views')) window.dispatchEvent(new Event('forum-changed'));
+    if (url.pathname.startsWith('/api/forum/') && !url.pathname.endsWith('/views') && !url.pathname.startsWith('/api/forum/recommendations/') && !url.pathname.startsWith('/api/forum/preferences')) window.dispatchEvent(new Event('forum-changed'));
     if (libraryWrite) window.dispatchEvent(new CustomEvent('library-changed', {detail: {userId: libraryWrite[1]}}));
   }
   return response;

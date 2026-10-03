@@ -10,6 +10,7 @@ import {forumApi, type ForumPost, type ForumReply} from '@/lib/api';
 import {plainForumText} from '@/lib/forum-presentation';
 import {refreshForum} from '@/lib/forum-cache';
 import {useForumView} from '@/lib/useForumView';
+import {useForumReadingActivity} from '@/lib/forum-activity';
 import ForumReaderDialog from './ForumReaderDialog';
 import ForumReplyComments from './ForumReplyComments';
 import ForumSourceCredit from './ForumSourceCredit';
@@ -149,6 +150,7 @@ export default function ForumAnswerReader({questionId, initialAnswerId, openComm
   }, [answers, loading, page, positionKey]);
 
   const active = answers.find(answer => answer.id === activeId) || answers[0];
+  useForumReadingActivity(active?.archived?undefined:active?.id,user?.id,`[data-answer-id="${active?.id}"] .qa-body`);
   const commentAnswer = answers.find(answer => answer.id === commentId);
   const requireLogin = () => {
     if (user) return true;

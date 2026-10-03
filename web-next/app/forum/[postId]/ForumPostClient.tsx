@@ -3,6 +3,7 @@ import ShareArrow from '@/components/ShareArrow';
 import { useAuth } from '@/contexts/AuthContext';
 import {useReadingSettings} from '@/contexts/ReadingSettingsContext';
 import {useForumView} from '@/lib/useForumView';
+import {useForumReadingActivity} from '@/lib/forum-activity';
 import ForumSourceCredit from '@/components/ForumSourceCredit';
 import ForumPostList from '@/components/ForumPostList';
 import ForumAnswerReader from '@/components/ForumAnswerReader';
@@ -110,6 +111,7 @@ function PostContent() {
   const autoComments = useRef('');
   const commentDialog = useRef<HTMLDivElement>(null);
   const isArticle = !fromQuestionId && question?.type === 'article';
+  useForumReadingActivity(isArticle?question?.id:undefined,user?.id,'.rich-text-content.forum-prose');
 
   useEffect(() => {
     const onClickOutside = (event: MouseEvent) => {

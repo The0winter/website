@@ -11,7 +11,7 @@ import {
   Search,
 } from 'lucide-react';
 import {useAuth} from '@/contexts/AuthContext';
-import {getForumSnapshot, serverForumSnapshot, subscribeForum, loadForum, loadMoreForum, getForumPosition, rememberForumPosition, forumPageSize} from '@/lib/forum-cache';
+import {getForumSnapshot, serverForumSnapshot, subscribeForum, loadForum, loadMoreForum, getForumPosition, rememberForumPosition, forumPageSize,renewForum,reloadForumFollowing} from '@/lib/forum-cache';
 import {useForumPagination} from '@/lib/useForumPagination';
 import {warmForumReaderCode} from '@/lib/forum-reading-cache';
 import HomeSearchHeader from '@/components/HomeSearchHeader';
@@ -27,6 +27,7 @@ import ForumFeedbackSheet from '@/components/ForumFeedbackSheet';
 import ForumReaderDialog from '@/components/ForumReaderDialog';
 import {feedbackReasons, isForumRecommended, useForumFeedback, type FeedbackReason} from '@/lib/forum-feedback';
 import type {ForumPost} from '@/lib/api';
+import {useForumImpressions} from '@/lib/forum-activity';
 
 const currentTheme = {
   bg: 'bg-[var(--home-background)]',
@@ -52,6 +53,8 @@ export default function ForumPage() {
   const [searchQuery, setSearchQuery] = useState(''); // 🔥 新增：搜索框状态
   
   const [activeTab, setActiveTab] = useState<FeedTab>('recommend');
+  const selectedTab=useRef<FeedTab|null>(null);
+  const selectTab=(tab:FeedTab)=>{selectedTab.current=tab;setActiveTab(tab);};
   
   const {user, loading: authLoading} = useAuth();
   const feedback = useForumFeedback(user?.id || 'guest');
@@ -64,10 +67,17 @@ export default function ForumPage() {
     return () => clearTimeout(timer);
   }, [feedbackNotice]);
   useEffect(() => {setFeedbackPost(null); setFeedbackNotice(null); setShowFeedbackHistory(false);},[user?.id]);
-  const submitFeedback = (post:ForumPost, reason:FeedbackReason) => {
-    const {row,persisted} = feedback.add(post,reason);
-    const text = reason === 'author' ? `不再推荐${row.authorName}的内容` : reason === 'similar' ? '已隐藏这个问题及重复、相似内容' : reason === 'dislike' ? '已隐藏该内容' : `已标记“${feedbackReasons[reason]}”并隐藏该内容`;
-    setFeedbackNotice({id:row.id,text:text + (persisted ? '' : '（当前浏览器无法保存，仅本次浏览有效）')});
+  const submitFeedback = async (post:ForumPost, reason:FeedbackReason) => {
+    try {
+      const row = await feedback.add(post,reason);
+      const text = reason.startsWith('follow')?'已关注，可在“关注”查看':reason === 'author' ? `不再推荐${row.authorName}的内容` : reason === 'similar' ? '已隐藏这个问题及重复内容' : reason === 'dislike' ? '已隐藏该内容' : `已保存：${feedbackReasons[reason]}`;
+      setFeedbackNotice({id:row.id,text});
+      if(reason.startsWith('follow'))reloadForumFollowing();
+    } catch {setFeedbackNotice({id:'',text:'偏好未能保存，请稍后重试'});}
+  };
+  const removeFeedback=async(id:string)=>{try{await feedback.remove(id);reloadForumFollowing();setFeedbackNotice(null);}catch{setFeedbackNotice({id:'',text:'偏好未能更新，请稍后重试'});}};
+  const updateSettings=async(value:{enabled?:boolean;exploration?:'balanced'|'more';action?:'reset'})=>{
+    try{await feedback.settings(value);setFeedbackNotice({id:'',text:'已保存，将用于下一批推荐'});}catch{setFeedbackNotice({id:'',text:'设置未能保存，请稍后重试'});}
   };
   const {posts: postsCache, loading: loadingState, errors, loadingMore, moreErrors, cursors, batches} = useSyncExternalStore(subscribeForum, getForumSnapshot, serverForumSnapshot);
   const savedPosition = useRef<{tab:FeedTab; search:string; y:number}|null>(null);
@@ -75,6 +85,7 @@ export default function ForumPage() {
   useEffect(() => {
     if (authLoading) return;
     savedPosition.current = {...getForumPosition()}; restoredPosition.current = false;
+    if(selectedTab.current)savedPosition.current={...savedPosition.current,tab:selectedTab.current,y:0};
     setActiveTab(savedPosition.current.tab); setSearchQuery(savedPosition.current.search);
     const timer = setTimeout(warmForumReaderCode, 450);
     return () => clearTimeout(timer);
@@ -112,6 +123,7 @@ export default function ForumPage() {
   };
   const suppressSwipeClick = useRef(false);
   const feed = useRef<HTMLDivElement>(null);
+  useForumImpressions(feed,postsCache.hot||[],activeTab==='hot'&&!searchQuery.trim()&&!authLoading);
   const horizontalSwipe = useRef(false);
   const sectionDrag = useRef<MobileSectionDrag | undefined>(undefined);
   useEffect(() => () => sectionDrag.current?.cancel(), []);
@@ -197,15 +209,15 @@ export default function ForumPage() {
     } else if (distance > threshold && current.index === 0) {
       navigateMobileSection(event.currentTarget, 'home');
     } else if (distance > threshold && current.index > 0) {
-      setActiveTab(TABS[current.index - 1].id);
+      selectTab(TABS[current.index - 1].id);
     } else if (distance < -threshold && current.index < TABS.length - 1) {
-      setActiveTab(TABS[current.index + 1].id);
+      selectTab(TABS[current.index + 1].id);
     }
   };
 
 // ====== 提取热榜页内容渲染器（纯文字版） ======
   const renderHotList = (tabId: FeedTab) => {
-    const tabPosts = postsCache[tabId] || [];
+    const tabPosts = (postsCache[tabId] || []).filter(post=>isForumRecommended(post,feedback.rows));
     const isTabLoading = loadingState[tabId];
 
     return (
@@ -225,8 +237,8 @@ export default function ForumPage() {
           const topReply = post.topReply || null;
           const answerLink = forumEntryHref(post);
           
-          // 热度计算：默认拿投票数作为热度，你之后可以根据后端实际算法替换
-          const heat = topReply?.votes ?? post.votes ?? 0;
+          // 推荐接口提供按真实近期互动衰减后的热度。
+          const heat = post.recommendation?.heat ?? topReply?.votes ?? post.votes ?? 0;
           const excerpt = topReply?.excerpt || plainForumText(topReply?.content || '') || post.excerpt || '这个问题还没有回答，点击查看并参与讨论。';
           
           // 前三名使用主题强调色和柔和暖色。
@@ -240,6 +252,7 @@ export default function ForumPage() {
           return (
             <article
               key={post.entryId || topReply?.id || realId}
+              data-entry-id={post.entryId || topReply?.id || realId}
               className={`flex gap-3 md:gap-4 px-4 md:px-6 py-4 md:py-5 ${index < tabPosts.length - 1 ? `border-b ${currentTheme.border}` : ''} hover:bg-black/[0.02] transition-colors`}
             >
               {/* 左侧：排名序号 */}
@@ -272,7 +285,7 @@ export default function ForumPage() {
                   <span className="inline-flex items-center gap-1 font-medium">
                     {/* 热度火焰小图标 */}
                     <svg className="w-3.5 h-3.5 text-[var(--home-accent)] fill-current" viewBox="0 0 24 24"><path d="M17.5 12.5c0 2.8-2.2 5.5-5.5 5.5s-5.5-2.7-5.5-5.5c0-2.8 5.5-8.5 5.5-8.5s5.5 5.7 5.5 8.5z" /></svg>
-                    {formatCount(heat)} 热度
+                    {heat>0?`${formatCount(heat)} 热度`:'等待更多讨论'}
                   </span>
                   <ForumLink href={post.type === 'question' ? `/forum/question/${realId}` : answerLink} className="hover:text-[var(--home-accent)] transition-colors">{post.type === 'question' ? '查看问题' : '阅读文章'}</ForumLink>
                 </div>
@@ -299,8 +312,9 @@ return (
           </form>
         </HomeSearchHeader>
       </div>
-      <ForumTabs activeTab={activeTab} onSelect={setActiveTab}/>
-      {activeTab === 'recommend' && feedback.rows.length > 0 && <div className="forum-feedback-manage"><button onClick={() => setShowFeedbackHistory(true)}>推荐偏好 · {feedback.rows.length}</button></div>}
+      <ForumTabs activeTab={activeTab} onSelect={selectTab}/>
+      <div className="forum-feedback-manage"><button onClick={() => setShowFeedbackHistory(true)}>推荐偏好{feedback.rows.length?` · ${feedback.rows.length}`:''}</button><button onClick={() => {renewForum();window.scrollTo({top:0,behavior:'instant'});}}>换一批</button></div>
+      {feedback.error && <p className="forum-list-state" role="status">{feedback.error} <button onClick={()=>void feedback.retry()}>重试</button></p>}
 
       {/* 移动端内容连续铺满页面；桌面端保留双栏卡片布局。 */}
       <div className="max-w-[1040px] mx-auto px-0 md:px-4 mt-0 md:mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px] gap-5 md:gap-6">
@@ -314,11 +328,11 @@ return (
             {TABS.map(tab => (
               <div key={tab.id} className="forum-feed-panel w-full shrink-0" inert={tab.id!==activeTab} aria-hidden={tab.id!==activeTab}>
                 {errors[tab.id] && <div className="forum-feed-error" role="status">{errors[tab.id]}<button onClick={()=>loadForum(tab.id)}>重新加载</button></div>}
-                {(tab.id === activeTab || postsCache[tab.id]) && (!errors[tab.id] || postsCache[tab.id]) && (tab.id === 'hot' && !searchQuery.trim() ? renderHotList(tab.id) : <ForumPostList posts={postsCache[tab.id]?.filter(matchesSearch).filter(post => tab.id !== 'recommend' || isForumRecommended(post,feedback.rows))} loading={!!loadingState[tab.id] || tab.id === 'recommend' && (!feedback.ready || authLoading)} onFeedback={tab.id === 'recommend' ? setFeedbackPost : undefined} emptyText={searchQuery.trim() ? '已加载的内容中暂无匹配，可继续加载更多。' : tab.id === 'recommend' && feedback.rows.length ? '暂时没有更多推荐，可在“推荐偏好”中恢复已隐藏内容。' : undefined}/>)}
+                {(tab.id === activeTab || postsCache[tab.id]) && (!errors[tab.id] || postsCache[tab.id]) && (tab.id === 'hot' && !searchQuery.trim() ? renderHotList(tab.id) : <ForumPostList posts={postsCache[tab.id]?.filter(matchesSearch).filter(post => isForumRecommended(post,feedback.rows))} trackImpressions={tab.id===activeTab} loading={!!loadingState[tab.id] || tab.id === 'recommend' && (!feedback.ready || authLoading)} onFeedback={setFeedbackPost} emptyText={searchQuery.trim() ? '已加载的内容中暂无匹配，可继续加载更多。' : tab.id === 'follow' ? '还没有关注内容。在推荐卡片中关注作者或书籍后，这里会显示相关内容。' : '暂时没有新的推荐，稍后再来看看，也可以查看热榜。'}/>)}
                 {tab.id === activeTab && <div ref={sentinel} className="forum-feed-more" aria-live="polite">
                   {moreErrors[tab.id] && <p role="alert">{moreErrors[tab.id]}</p>}
                   {cursors[tab.id] && <button type="button" disabled={!!loadingMore[tab.id]} onClick={() => void loadMoreForum(tab.id)}>{loadingMore[tab.id] ? '正在加载更多…' : moreErrors[tab.id] ? '重试' : '加载更多内容'}</button>}
-                  {postsCache[tab.id]?.length && !cursors[tab.id] && !loadingState[tab.id] ? <span>已展示全部内容</span> : null}
+                  {postsCache[tab.id]?.length && !cursors[tab.id] && !loadingState[tab.id] ? <span>这批内容已看完，可以换一批</span> : null}
                 </div>}
               </div>
             ))}
@@ -382,10 +396,13 @@ return (
         <span className="text-sm font-semibold">发布</span>
       </Link>
       <MobileBottomNav/>
-      {feedbackPost && <ForumFeedbackSheet post={feedbackPost} onClose={() => setFeedbackPost(null)} onSelect={reason => submitFeedback(feedbackPost,reason)}/>}
-      {feedbackNotice && <div className="forum-feedback-notice" role="status"><span>{feedbackNotice.text}</span><button onClick={() => {feedback.remove(feedbackNotice.id); setFeedbackNotice(null);}}>撤销</button></div>}
+      {feedbackPost && <ForumFeedbackSheet post={feedbackPost} onClose={() => setFeedbackPost(null)} onSelect={reason => void submitFeedback(feedbackPost,reason)}/>}
+      {feedbackNotice && <div className="forum-feedback-notice" role="status"><span>{feedbackNotice.text}</span>{feedbackNotice.id && <button onClick={() => void removeFeedback(feedbackNotice.id)}>撤销</button>}</div>}
       {showFeedbackHistory && <ForumReaderDialog title="推荐偏好" onClose={() => setShowFeedbackHistory(false)}><div className="forum-feedback-history">
-        {feedback.rows.length ? feedback.rows.map(row => <div key={row.id}><p>{row.reason === 'author' ? row.authorName : row.title}<small>{feedbackReasons[row.reason]}</small></p><button onClick={() => feedback.remove(row.id)}>恢复推荐</button></div>) : <p className="forum-list-state">暂无已屏蔽的推荐</p>}
+        <div><p>个性化推荐<small>根据书架、在读和有效阅读调整兴趣</small></p><button aria-pressed={feedback.enabled} onClick={()=>void updateSettings({enabled:!feedback.enabled})}>{feedback.enabled?'已开启':'已关闭'}</button></div>
+        <div><p>探索新兴趣<small>在熟悉内容之间穿插更多新主题</small></p><button onClick={()=>void updateSettings({exploration:feedback.exploration==='more'?'balanced':'more'})}>{feedback.exploration==='more'?'更多探索':'均衡探索'}</button></div>
+        <div><p>重新学习兴趣<small>从现在的阅读重新学习，保留关注与屏蔽</small></p><button onClick={()=>void updateSettings({action:'reset'})}>重置兴趣</button></div>
+        {feedback.rows.length ? feedback.rows.map(row => <div key={row.id}><p>{row.reason === 'author'||row.reason==='followAuthor' ? row.authorName : row.reason==='topic'?row.topic:row.title}<small>{feedbackReasons[row.reason]}</small></p><button onClick={() => void removeFeedback(row.id)}>{row.reason.startsWith('follow')?'取消关注':'恢复推荐'}</button></div>) : <p className="forum-list-state">暂无关注或屏蔽偏好</p>}
       </div></ForumReaderDialog>}
     </div>
   );

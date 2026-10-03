@@ -18,6 +18,7 @@ export interface ForumSource {
 export interface ForumPost {
   id: string;
   entryId?: string;
+  recommendation?: {reason:string; topic:string; author:string; token:string; heat?:number};
   bookId?: string;
   bookTitle?: string;
   title: string;

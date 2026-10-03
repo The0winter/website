@@ -16,6 +16,7 @@ import {trustedLocalImport} from './services/import-auth.js';
 import { contentRoutes } from './routes/content.js';
 import { manuscriptRoutes } from './routes/manuscripts.js';
 import { forumViewRoutes } from './routes/forum-views.js';
+import {forumRecommendationRoutes} from './routes/forum-recommendations.js';
 import { mediaRoutes } from './routes/media.js';
 import {transferRoutes} from './routes/transfers.js';
 import { security, safeHtml, publicUser } from './security.js';
@@ -180,6 +181,7 @@ transferRoutes(app,auth);
 contentRoutes(app,auth);
 manuscriptRoutes(app,auth);
 forumViewRoutes(app,auth);
+forumRecommendationRoutes(app,auth,config);
 libraryImportRoutes(app);
 importRoutes(app);
 readingRoutes(app,auth);
@@ -321,7 +323,8 @@ app.get('/api/forum/posts', async (req, res) => {
       const paged = req.query.format === 'page';
       if (typeof tab !== 'string' || !['recommend', 'hot', 'follow'].includes(tab)) return res.status(400).json({error:'论坛分类无效'});
       if (req.query.cursor && !paged || paged && page !== 1) return res.status(400).json({error:'分页参数无效'});
-      const feed = await forumFeed({tab, page, limit, paged, cursor: req.query.cursor});
+      const feed = paged ? await app.locals.forumRecommendations.feed(req,res,{tab,limit,cursor:req.query.cursor}) :
+        await forumFeed({tab, page, limit});
       return await forumJson(req, res, paged ? feed : feed.items);
     }
     const currentUserId = await getOptionalUserId(req);

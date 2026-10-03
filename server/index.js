@@ -2,12 +2,14 @@ import mongoose from 'mongoose';
 import { readConfig } from './config.js';
 import { createApp } from './app.js';
 import {connectDatabase, startExpiryCleanup} from './database/index.js';
+import {startForumCatalog} from './services/forum-recommendation-catalog.js';
 
 try {
   const config = readConfig();
   mongoose.set('bufferCommands', false);
   await connectDatabase(config.uri, {maxPoolSize:20});
   const stopCleanup = config.writeMode === 'readwrite' ? startExpiryCleanup() : () => {};
+  const stopForumCatalog = config.writeMode === 'readwrite' ? startForumCatalog() : () => {};
   const app = createApp(config);
   const server = app.listen(config.port, config.host, () => console.log('API ready on configured loopback/private endpoint'));
   server.requestTimeout = 120000; // Bounded TXT uploads may arrive over a mobile connection.
@@ -17,6 +19,7 @@ try {
     if (stopping) return;
     stopping = true;
     stopCleanup();
+    stopForumCatalog();
     const timer = setTimeout(() => process.exit(1), 10000);
     timer.unref();
     server.close(async () => { await app.locals.trafficObservationDrain?.(); await mongoose.disconnect(); clearTimeout(timer); });
