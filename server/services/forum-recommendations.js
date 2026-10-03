@@ -73,16 +73,18 @@ async function history(identity,profile) {
 
 async function candidates(interests,preferences,tab,seed) {
   const bucket=parseInt(hash(seed).slice(0,4),16)%16;
+  // Rank compact features; fetch display metadata only for the delivered page.
+  const features='_id post book author topic topics fingerprint nearSignature length quality publishedAt';
   const [recent,quality,discovery,trending,personal]=await Promise.all([
-    Item.find({}).sort({createdAt:-1,_id:1}).limit(150).lean(),
-    Item.find({}).sort({quality:-1,_id:1}).limit(180).lean(),
-    Item.find({bucket:{$in:Array.from({length:4},(_,i)=>(bucket+i)%16)}}).sort({quality:-1,_id:1}).limit(180).lean(),
+    Item.find({}).sort({createdAt:-1,_id:1}).limit(150).select(features).lean(),
+    Item.find({}).sort({quality:-1,_id:1}).limit(180).select(features).lean(),
+    Item.find({bucket:{$in:Array.from({length:4},(_,i)=>(bucket+i)%16)}}).sort({quality:-1,_id:1}).limit(180).select(features).lean(),
     Trend.find({at:{$gte:new Date(Date.now()-7*DAY)}}).sort({heat24:-1}).limit(150).lean(),
     Item.find({$or:[{book:{$in:[...interests.books.keys(),...preferences.filter(p=>p.reason==='followBook').map(p=>p.book)]}},
       {topic:{$in:[...interests.topics.keys()]}},{author:{$in:[...interests.authors.keys(),...preferences.filter(p=>p.reason==='followAuthor').map(p=>p.author)]}}]})
-      .sort({quality:-1,_id:1}).limit(180).lean(),
+      .sort({quality:-1,_id:1}).limit(180).select(features).lean(),
   ]);
-  const hot=trending.length?await Item.find({_id:{$in:trending.map(row=>row._id)}}).lean():[];
+  const hot=trending.length?await Item.find({_id:{$in:trending.map(row=>row._id)}}).select(features).lean():[];
   const rows=[...new Map([...recent,...quality,...discovery,...hot,...personal].map(row=>[row._id,row])).values()];
   const trends=await Trend.find({_id:{$in:rows.map(row=>row._id)}}).lean();
   return {rows,trends:new Map(trends.map(row=>[row._id,row]))};
