@@ -46,8 +46,7 @@ export function loadForum(tab:Feed = 'recommend') {
   if (user === undefined || pending.has(tab) || Date.now() - (updated.get(tab) ?? 0) < 60000) return;
   sizes.set(tab, sizes.get(tab) || forumPageSize());
   const previous = snapshot.posts[tab];
-  // Returning from a document restores the same recommendation session. Only
-  // an explicit new batch changes the order; passive revalidation cannot do so.
+  // Returning from a document restores the same cards and reading position.
   if(previous && updated.has(tab))return;
   // Revalidate the retained window on return without shrinking a scrolled list.
   const limit = Math.max(sizes.get(tab)!, Math.min(100, previous?.length || 0));
@@ -77,28 +76,30 @@ export async function loadMoreForum(tab:Feed) {
   pending.set(tab, controller);
   snapshot = {...snapshot, loadingMore:{...snapshot.loadingMore, [tab]:true}, moreErrors:{...snapshot.moreErrors, [tab]:undefined}}; notify();
   try {
-    const result = await forumApi.getFeedPage(tab, sizes.get(tab) || forumPageSize(), cursor, requestSignal(controller.signal));
+    const limit = sizes.get(tab) || forumPageSize();
+    let result;
+    try {
+      result = await forumApi.getFeedPage(tab, limit, cursor, requestSignal(controller.signal));
+    } catch(error) {
+      if (!(error instanceof Error && /推荐已更新|游标/.test(error.message)) || controller.signal.aborted) throw error;
+      // Renew an expired session once, without replacing cards already read or
+      // moving the reader. Further failures use the normal inline retry.
+      result = await forumApi.getFeedPage(tab, limit, null, requestSignal(controller.signal));
+    }
     if (version !== generation || pending.get(tab)!==controller) return;
     snapshot = {...snapshot, posts:{...snapshot.posts, [tab]:unique([...(snapshot.posts[tab] || []), ...result.items])},
       cursors:{...snapshot.cursors, [tab]:result.nextCursor}, batches:{...snapshot.batches, [tab]:(snapshot.batches[tab] || 1) + 1}};
     updated.set(tab, Date.now());
-  } catch(error) {
-    const expired=error instanceof Error && /推荐已更新|游标/.test(error.message);
-    if (version === generation && pending.get(tab)===controller) snapshot = {...snapshot, moreErrors:{...snapshot.moreErrors, [tab]:expired?'这批推荐已过期，请点击“换一批”继续。':'更多内容加载失败，请重试'}};
+  } catch {
+    if (version === generation && pending.get(tab)===controller) snapshot = {...snapshot, moreErrors:{...snapshot.moreErrors, [tab]:'更多内容加载失败，请重试'}};
   } finally {
     if (version === generation && pending.get(tab)===controller) {pending.delete(tab); snapshot = {...snapshot, loadingMore:{...snapshot.loadingMore, [tab]:false}}; notify();}
   }
 }
 export function refreshForum() {
   clearForumReadingCache();
-  // Existing cards remain stable after likes/comments. Newly requested batches
-  // hydrate fresh counters, and the explicit refresh also discovers new posts.
+  // Existing cards remain stable after likes/comments; new pages hydrate fresh counters.
   for(const tab of requested)if(!snapshot.posts[tab])loadForum(tab);
-}
-export function renewForum() {
-  cancel(); clearForumReadingCache(); updated.clear();
-  snapshot = {...empty};position={...position,y:0};notify();
-  for (const tab of requested) loadForum(tab);
 }
 export function reloadForumFollowing() {
   pending.get('follow')?.abort();pending.delete('follow');updated.delete('follow');

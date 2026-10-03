@@ -18,6 +18,9 @@ for(const width of [390,1440])test(`recommendation release read-only acceptance 
   expect(new Set(titles).size).toBe(titles.length);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
   await expect(page.locator(cards+' .forum-recommendation-reason').first()).toBeVisible();
+  await expect(page.getByRole('button',{name:/推荐偏好|换一批/})).toHaveCount(0);
+  const toolbar=await page.locator('.forum-feed-toolbar').boundingBox(),card=await page.locator(cards).first().boundingBox();
+  expect(Math.abs(card!.y-toolbar!.y-toolbar!.height-(width<768?0:24))).toBeLessThan(2);
   await page.screenshot({path:info.outputPath(`verified-public-feed-${width}.png`)});
   const first=await page.locator(cards).first().getAttribute('data-entry-id');
   await page.locator(cards+' .forum-entry-title').first().click();
@@ -26,12 +29,6 @@ for(const width of [390,1440])test(`recommendation release read-only acceptance 
   await page.goBack();
   await expect(page.locator(cards).first()).toHaveAttribute('data-entry-id',first!);
   expect(await page.locator(cards+' h2').allTextContents()).toEqual(titles);
-  await page.getByRole('button',{name:/推荐偏好/}).click();
-  const dialog=page.getByRole('dialog',{name:'推荐偏好'});
-  await expect(dialog.getByRole('button',{name:'已开启',exact:true})).toBeVisible();
-  await expect(dialog.getByRole('button',{name:'均衡探索',exact:true})).toBeVisible();
-  await page.screenshot({path:info.outputPath(`verified-public-preferences-${width}.png`)});
-  await page.keyboard.press('Escape');
   await page.getByRole('navigation',{name:'论坛内容分类'}).getByRole('button',{name:'热榜',exact:true}).click();
   await expect(page.locator('.forum-feed-panel[aria-hidden="false"] article').first()).toBeVisible();
   await page.getByRole('navigation',{name:'论坛内容分类'}).getByRole('button',{name:'关注',exact:true}).click();

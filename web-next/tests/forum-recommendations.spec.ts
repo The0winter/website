@@ -4,7 +4,7 @@ const base=process.env.QA_TEST_BASE||'http://127.0.0.1:3208';
 test.skip(!base.includes('127.0.0.1'),'Mutation tests require an isolated synthetic server');
 const cards='.forum-feed-panel[aria-hidden="false"] .forum-entry';
 
-for(const width of [320,390,1440])test(`balanced recommendations, preference controls and stable return at ${width}px`,async({page},info)=>{
+for(const width of [320,390,1440])test(`automatic recommendations, card feedback and stable return at ${width}px`,async({page},info)=>{
   await page.setViewportSize({width,height:900});
   await page.route('**/api/forum/recommendations/events',route=>route.fulfill({json:{recorded:0}}));
   await page.route('**/api/forum/posts/*/views',route=>route.fulfill({json:{counted:false}}));
@@ -16,6 +16,11 @@ for(const width of [320,390,1440])test(`balanced recommendations, preference con
   expect(new Set(titles).size).toBe(titles.length);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
   await expect(page.locator(cards+' .forum-recommendation-reason').first()).toBeVisible();
+  await expect(page.getByRole('button',{name:/推荐偏好|换一批/})).toHaveCount(0);
+  const toolbar=await page.locator('.forum-feed-toolbar').boundingBox();
+  const card=await page.locator(cards).first().boundingBox();
+  expect(Math.abs(card!.y-toolbar!.y-toolbar!.height-(width<768?0:24))).toBeLessThan(2);
+  await page.screenshot({path:info.outputPath(`verified-feed-${width}.png`)});
   const firstId=await page.locator(cards).first().getAttribute('data-entry-id');
   await page.locator(cards+' .forum-entry-title').first().click();
   await expect(page.locator('main .qa-body').first()).toBeVisible();
@@ -26,20 +31,14 @@ for(const width of [320,390,1440])test(`balanced recommendations, preference con
   const sheet=page.getByRole('dialog',{name:'调整推荐'});
   await sheet.getByRole('button',{name:'少看这本书',exact:true}).click();
   await expect(page.locator(`${cards}[data-entry-id="${firstId}"]`)).toHaveCount(0);
-  await page.getByRole('button',{name:/推荐偏好/}).click();
-  const preferences=page.getByRole('dialog',{name:'推荐偏好'});
-  await expect(preferences.getByText('少看这本书',{exact:true})).toBeVisible();
-  await preferences.getByRole('button',{name:'均衡探索',exact:true}).click();
-  await expect(preferences.getByRole('button',{name:'更多探索',exact:true})).toBeVisible();
-  await preferences.getByRole('button',{name:'已开启',exact:true}).click();
-  await expect(preferences.getByRole('button',{name:'已关闭',exact:true})).toBeVisible();
-  await page.screenshot({path:info.outputPath(`verified-preferences-${width}.png`)});
-  await page.keyboard.press('Escape');
-  await expect(preferences).toHaveCount(0);
-  await page.getByRole('button',{name:'换一批',exact:true}).click();
-  await expect(page.locator(cards).first()).toBeVisible();
+  await page.getByRole('status').filter({hasText:'已保存：少看这本书'}).getByRole('button',{name:'撤销'}).click();
+  await expect(page.locator(cards).first()).toHaveAttribute('data-entry-id',firstId!);
+  await page.locator(cards+' .forum-feedback-toggle').first().click();
+  await sheet.getByRole('button',{name:'少看这本书',exact:true}).click();
   await expect(page.locator(`${cards}[data-entry-id="${firstId}"]`)).toHaveCount(0);
-  await page.screenshot({path:info.outputPath(`verified-feed-${width}.png`)});
+  await page.reload();
+  await expect(page.locator(cards).first()).toBeVisible({timeout:30000});
+  await expect(page.locator(`${cards}[data-entry-id="${firstId}"]`)).toHaveCount(0);
 });
 
 test('real follow preferences synchronize across devices without leaking to guests',async({browser})=>{
@@ -116,14 +115,12 @@ test('preference loading waits for authentication and logout restores guest sett
     expect(preferenceRequests).toBe(0);
   } finally {releaseAuth();}
   await expect(page.locator(cards).first()).toBeVisible();
-  await page.getByRole('button',{name:/推荐偏好/}).click();
-  await expect(page.getByRole('dialog',{name:'推荐偏好'}).getByRole('button',{name:'已关闭',exact:true})).toBeVisible();
-  await page.keyboard.press('Escape');
+  expect((await(await context.request.get(base+'/api/forum/preferences')).json()).enabled).toBe(false);
   await page.getByRole('link',{name:'九天小说首页',exact:true}).click();
+  const guestPreferences=page.waitForResponse(response=>response.url().endsWith('/api/forum/preferences')&&response.request().method()==='GET');
   await page.getByRole('button',{name:'退出登录',exact:true}).click();
   await expect(page.getByRole('button',{name:'退出登录',exact:true})).toHaveCount(0);
   await page.getByRole('link',{name:'论坛',exact:true}).first().click();
   await expect(page.locator(cards).first()).toBeVisible();
-  await page.getByRole('button',{name:/推荐偏好/}).click();
-  await expect(page.getByRole('dialog',{name:'推荐偏好'}).getByRole('button',{name:'已开启',exact:true})).toBeVisible();
+  expect((await(await guestPreferences).json()).enabled).toBe(true);
 });

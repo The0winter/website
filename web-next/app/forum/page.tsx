@@ -11,7 +11,7 @@ import {
   Search,
 } from 'lucide-react';
 import {useAuth} from '@/contexts/AuthContext';
-import {getForumSnapshot, serverForumSnapshot, subscribeForum, loadForum, loadMoreForum, getForumPosition, rememberForumPosition, forumPageSize,renewForum,reloadForumFollowing} from '@/lib/forum-cache';
+import {getForumSnapshot, serverForumSnapshot, subscribeForum, loadForum, loadMoreForum, getForumPosition, rememberForumPosition, forumPageSize,reloadForumFollowing} from '@/lib/forum-cache';
 import {useForumPagination} from '@/lib/useForumPagination';
 import {warmForumReaderCode} from '@/lib/forum-reading-cache';
 import HomeSearchHeader from '@/components/HomeSearchHeader';
@@ -24,7 +24,6 @@ import ForumLink from '@/components/ForumLink';
 import {forumEntryHref, plainForumText} from '@/lib/forum-presentation';
 import ForumTabs, {FORUM_TABS as TABS, type FeedTab} from '@/components/ForumTabs';
 import ForumFeedbackSheet from '@/components/ForumFeedbackSheet';
-import ForumReaderDialog from '@/components/ForumReaderDialog';
 import {feedbackReasons, isForumRecommended, useForumFeedback, type FeedbackReason} from '@/lib/forum-feedback';
 import type {ForumPost} from '@/lib/api';
 import {useForumImpressions} from '@/lib/forum-activity';
@@ -59,14 +58,13 @@ export default function ForumPage() {
   const {user, loading: authLoading} = useAuth();
   const feedback = useForumFeedback(user?.id || 'guest',!authLoading);
   const [feedbackPost, setFeedbackPost] = useState<ForumPost|null>(null);
-  const [showFeedbackHistory, setShowFeedbackHistory] = useState(false);
   const [feedbackNotice, setFeedbackNotice] = useState<{id:string; text:string}|null>(null);
   useEffect(() => {
     if (!feedbackNotice) return;
     const timer = setTimeout(() => setFeedbackNotice(null),8000);
     return () => clearTimeout(timer);
   }, [feedbackNotice]);
-  useEffect(() => {setFeedbackPost(null); setFeedbackNotice(null); setShowFeedbackHistory(false);},[user?.id]);
+  useEffect(() => {setFeedbackPost(null); setFeedbackNotice(null);},[user?.id]);
   const submitFeedback = async (post:ForumPost, reason:FeedbackReason) => {
     try {
       const row = await feedback.add(post,reason);
@@ -76,9 +74,6 @@ export default function ForumPage() {
     } catch {setFeedbackNotice({id:'',text:'偏好未能保存，请稍后重试'});}
   };
   const removeFeedback=async(id:string)=>{try{await feedback.remove(id);reloadForumFollowing();setFeedbackNotice(null);}catch{setFeedbackNotice({id:'',text:'偏好未能更新，请稍后重试'});}};
-  const updateSettings=async(value:{enabled?:boolean;exploration?:'balanced'|'more';action?:'reset'})=>{
-    try{await feedback.settings(value);setFeedbackNotice({id:'',text:'已保存，将用于下一批推荐'});}catch{setFeedbackNotice({id:'',text:'设置未能保存，请稍后重试'});}
-  };
   const {posts: postsCache, loading: loadingState, errors, loadingMore, moreErrors, cursors, batches} = useSyncExternalStore(subscribeForum, getForumSnapshot, serverForumSnapshot);
   const savedPosition = useRef<{tab:FeedTab; search:string; y:number}|null>(null);
   const restoredPosition = useRef(false);
@@ -313,7 +308,6 @@ return (
         </HomeSearchHeader>
       </div>
       <ForumTabs activeTab={activeTab} onSelect={selectTab}/>
-      <div className="forum-feedback-manage"><button onClick={() => setShowFeedbackHistory(true)}>推荐偏好{feedback.rows.length?` · ${feedback.rows.length}`:''}</button><button onClick={() => {renewForum();window.scrollTo({top:0,behavior:'instant'});}}>换一批</button></div>
       {feedback.error && <p className="forum-list-state" role="status">{feedback.error} <button onClick={()=>void feedback.retry()}>重试</button></p>}
 
       {/* 移动端内容连续铺满页面；桌面端保留双栏卡片布局。 */}
@@ -332,7 +326,7 @@ return (
                 {tab.id === activeTab && <div ref={sentinel} className="forum-feed-more" aria-live="polite">
                   {moreErrors[tab.id] && <p role="alert">{moreErrors[tab.id]}</p>}
                   {cursors[tab.id] && <button type="button" disabled={!!loadingMore[tab.id]} onClick={() => void loadMoreForum(tab.id)}>{loadingMore[tab.id] ? '正在加载更多…' : moreErrors[tab.id] ? '重试' : '加载更多内容'}</button>}
-                  {postsCache[tab.id]?.length && !cursors[tab.id] && !loadingState[tab.id] ? <span>这批内容已看完，可以换一批</span> : null}
+                  {postsCache[tab.id]?.length && !cursors[tab.id] && !loadingState[tab.id] ? <span>暂时没有更多内容，稍后再来看看</span> : null}
                 </div>}
               </div>
             ))}
@@ -398,12 +392,6 @@ return (
       <MobileBottomNav/>
       {feedbackPost && <ForumFeedbackSheet post={feedbackPost} onClose={() => setFeedbackPost(null)} onSelect={reason => void submitFeedback(feedbackPost,reason)}/>}
       {feedbackNotice && <div className="forum-feedback-notice" role="status"><span>{feedbackNotice.text}</span>{feedbackNotice.id && <button onClick={() => void removeFeedback(feedbackNotice.id)}>撤销</button>}</div>}
-      {showFeedbackHistory && <ForumReaderDialog title="推荐偏好" onClose={() => setShowFeedbackHistory(false)}><div className="forum-feedback-history">
-        <div><p>个性化推荐<small>根据书架、在读和有效阅读调整兴趣</small></p><button aria-pressed={feedback.enabled} onClick={()=>void updateSettings({enabled:!feedback.enabled})}>{feedback.enabled?'已开启':'已关闭'}</button></div>
-        <div><p>探索新兴趣<small>在熟悉内容之间穿插更多新主题</small></p><button onClick={()=>void updateSettings({exploration:feedback.exploration==='more'?'balanced':'more'})}>{feedback.exploration==='more'?'更多探索':'均衡探索'}</button></div>
-        <div><p>重新学习兴趣<small>从现在的阅读重新学习，保留关注与屏蔽</small></p><button onClick={()=>void updateSettings({action:'reset'})}>重置兴趣</button></div>
-        {feedback.rows.length ? feedback.rows.map(row => <div key={row.id}><p>{row.reason === 'author'||row.reason==='followAuthor' ? row.authorName : row.reason==='topic'?row.topic:row.title}<small>{feedbackReasons[row.reason]}</small></p><button onClick={() => void removeFeedback(row.id)}>{row.reason.startsWith('follow')?'取消关注':'恢复推荐'}</button></div>) : <p className="forum-list-state">暂无关注或屏蔽偏好</p>}
-      </div></ForumReaderDialog>}
     </div>
   );
 }

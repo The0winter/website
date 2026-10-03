@@ -53,6 +53,31 @@ test('mobile feed paints five, idles to ten, scrolls to more, retries and return
   } finally {second.release();}
 });
 
+test('expired recommendations renew once, retain existing cards, and recover from a renewal failure',async({page})=>{
+  const {row}=await fixture(page);
+  const rows=Array.from({length:10},(_,i)=>({...row,entryId:String(i).padStart(24,'0'),title:`自动续接 ${i+1}`}));
+  const requests:(string|null)[]=[];let newSessions=0;
+  await page.route('**/api/forum/posts?*',async route=>{
+    const cursor=new URL(route.request().url()).searchParams.get('cursor');requests.push(cursor);
+    if(cursor==='expired')return route.fulfill({status:410,json:{error:'推荐已更新，请重新加载'}});
+    newSessions++;
+    if(newSessions===2)return route.fulfill({status:503,json:{error:'暂时不可用'}});
+    await route.fulfill({json:newSessions===1?{items:rows.slice(0,5),nextCursor:'expired'}:{items:[rows[0],...rows.slice(5)],nextCursor:null}});
+  });
+  await page.goto(base+'/forum');
+  const cards=page.locator('.forum-feed-panel[aria-hidden=false] .forum-entry');
+  await expect(cards).toHaveCount(5);
+  await expect(page.locator('.forum-feed-more [role=alert]')).toHaveText('更多内容加载失败，请重试');
+  expect(requests).toEqual([null,'expired',null]);
+  await page.waitForTimeout(300);expect(requests).toHaveLength(3);
+  await page.locator('.forum-feed-more').getByRole('button',{name:'重试'}).click();
+  await expect(cards).toHaveCount(10);
+  expect(await cards.locator('h2').allTextContents()).toEqual(rows.map(row=>row.title));
+  expect(requests).toEqual([null,'expired',null,'expired',null]);
+  await expect(page.getByText('暂时没有更多内容，稍后再来看看')).toBeVisible();
+  await expect(page.getByText(/换一批/)).toHaveCount(0);
+});
+
 test('selected body is readable before other answers, and repeat entry reuses its request',async({page})=>{
   const {row,reading}=await fixture(page), more=gate();let reads=0,otherReads=0;
   reading.post.comments=6;

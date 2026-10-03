@@ -13,7 +13,7 @@ function captureFeed(source:HTMLElement) {
   const snapshot=source.cloneNode(false) as HTMLElement;
   snapshot.classList.add('forum-navigation-source');snapshot.setAttribute('aria-hidden','true');snapshot.inert=true;
   Object.assign(snapshot.style,{margin:'0',padding:'0',height:'100dvh',minHeight:'0',fontFamily:getComputedStyle(source).fontFamily});
-  const rows=source.querySelectorAll<HTMLElement>('.forum-feed-panel[aria-hidden=false] article, .forum-masthead, .forum-feed-toolbar, .forum-feedback-manage, aside, .forum-publish, .mh-bottom, .fq-topbar, .fq-heading, .fq-tabs, .fq-answer, .fq-actions');
+  const rows=source.querySelectorAll<HTMLElement>('.forum-feed-panel[aria-hidden=false] article, .forum-masthead, .forum-feed-toolbar, aside, .forum-publish, .mh-bottom, .fq-topbar, .fq-heading, .fq-tabs, .fq-answer, .fq-actions');
   const visible=[...rows].map(node=>({node,rect:node.getBoundingClientRect()})).filter(({rect})=>rect.width>0&&rect.bottom>0&&rect.top<innerHeight);
   for(const {node,rect} of visible) {
     const copy=node.cloneNode(true) as HTMLElement;

@@ -63,7 +63,6 @@ export default function MobileSectionShells() {
     <div data-mobile-section-shell="/forum" className="forum-page min-h-screen font-sans">
       <div className="forum-masthead"><div data-section-shell-header/></div>
       <ForumTabs/>
-      <div className="forum-feedback-manage"><button>推荐偏好{feedback.rows.length?` · ${feedback.rows.length}`:''}</button><button>换一批</button></div>
       <ForumPostList posts={forum.posts.recommend?.filter(post => isForumRecommended(post,feedback.rows))} loading={forum.loading.recommend || !feedback.ready} onFeedback={() => {}}/>
     </div>
     <div data-mobile-section-shell="/" className="mobile-home">
