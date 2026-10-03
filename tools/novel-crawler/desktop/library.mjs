@@ -138,6 +138,12 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
         for (const field of ['titleAliases', 'authorAliases']) if (Array.isArray(savedSpec[field])) {
           currentSpec[field] = [...savedSpec[field]];
         }
+        // A per-book simplified/traditional identity review belongs to the
+        // saved edition, just like its aliases. An explicit site setting still
+        // wins, so changes to that setting remain subject to the hash guard.
+        if (currentSpec.identityNormalization === undefined && savedSpec.identityNormalization !== undefined) {
+          currentSpec.identityNormalization = savedSpec.identityNormalization;
+        }
       }
       const spec = applyVerifiedBookStatus(currentSpec, stateDir, currentSpec.identityNormalization);
       if (binding && (binding.source.variant !== (spec.variant || '') || binding.source.extraction !== extractionHash(spec))) throw Error('当前续更来源规则已变化，请先核对适配；原文件保留');

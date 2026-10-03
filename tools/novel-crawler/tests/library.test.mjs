@@ -182,6 +182,32 @@ test('HTML raw and reading editions retain reviewed identity aliases without hid
   }
 });
 
+test('raw and reading editions keep per-book identity normalization during library updates', async t => {
+  for (const reading of [false, true]) {
+    const f = await fixture(t), spec = {...f.spec('alpha'), identityNormalization: 'chinese-simplified'};
+    const report = await acquire(spec, {...f.options, mode: 'download'});
+    assert.ok(report.exportFile, JSON.stringify(report.failures));
+    let file = report.exportFile;
+    if (reading) {
+      const original = readJson(file);
+      file = path.join(f.options.outputDir, 'normalized.json');
+      atomicWrite(file, {...original, chapters: original.chapters.map(c => ({...c, sourceChapterNumber: c.chapter_number, sourceChapterUrl: c.link}))});
+      await bindReadingEdition(spec, file, f.options);
+    }
+    const before = fs.readFileSync(file), plan = planLibrary(f.options)[0];
+    assert.equal(plan.state, 'pending', plan.message);
+    assert.equal(plan.spec.identityNormalization, 'chinese-simplified');
+    assert.equal((await updateLibrary(f.options)).unchanged, 1);
+    assert.deepEqual(fs.readFileSync(file), before);
+    f.state.counts.alpha = 4;
+    assert.equal((await updateLibrary(f.options)).added, 1);
+    const updated = fs.readFileSync(file);
+    f.site.spec.chapter.content = 'section';
+    assert.equal(planLibrary(f.options)[0].state, 'blocked');
+    assert.deepEqual(fs.readFileSync(file), updated);
+  }
+});
+
 test('explicit per-book source review preserves bound cleanup and expires on further site changes', async t => {
   const f=await fixture(t),spec={...f.spec('alpha'),variant:'reviewed-cleanup',chapter:{...f.spec('alpha').chapter,removeText:['独立广告行']}};
   const source=await acquire(spec,{...f.options,mode:'download'}),book=readJson(source.exportFile);

@@ -131,7 +131,7 @@ function chineseNumber(text) {
   return total + section + digit;
 }
 export function chapterIdentity(title) {
-  const text = String(title).normalize('NFKC').trim(), match = /^第([0-9零〇一二三四五六七八九十百千万两]+)[章节回]\s*(.*)$/u.exec(text);
+  const text = String(title).normalize('NFKC').trim(), match = /^第?([0-9零〇一二三四五六七八九十百千万两]+)[章节回]\s*(.*)$/u.exec(text);
   return match ? {number: chineseNumber(match[1]), name: normalize(match[2])} : null;
 }
 const notice = title => /^(?:番外|IF番外|总结|请假|公告|通知|活动|感言|后记|月票|[0-9零〇一二三四五六七八九十年月日份\s:：-]*(?:月票|抽奖|总结|活动|请假|公告|通知))|求(?:双倍)?月票|月票冲刺|年终总结/iu.test(String(title).normalize('NFKC').trim());
@@ -171,7 +171,7 @@ function numbered(chapters) {
   for (const [index, chapter] of chapters.entries()) {
     const identity = chapterIdentity(chapter.title);
     if (!identity) continue;
-    if (!Number.isSafeInteger(identity.number) || identity.number < 1) throw Error(`无法确定正文章号「${chapter.title}」`);
+    if (!Number.isSafeInteger(identity.number) || identity.number < 0) throw Error(`无法确定正文章号「${chapter.title}」`);
     result.push({index, ...identity});
   }
   return result;
