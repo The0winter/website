@@ -184,7 +184,7 @@ test('HTML raw and reading editions retain reviewed identity aliases without hid
 
 test('raw and reading editions keep per-book identity normalization during library updates', async t => {
   for (const reading of [false, true]) {
-    const f = await fixture(t), spec = {...f.spec('alpha'), identityNormalization: 'chinese-simplified'};
+    const f = await fixture(t), spec = {...f.spec('alpha'), identityNormalization: 'chinese-simplified', titleAliases: ['alpha故事'], authorAliases: ['测试作者'], browser: {headless: true}};
     const report = await acquire(spec, {...f.options, mode: 'download'});
     assert.ok(report.exportFile, JSON.stringify(report.failures));
     let file = report.exportFile;
@@ -197,6 +197,7 @@ test('raw and reading editions keep per-book identity normalization during libra
     const before = fs.readFileSync(file), plan = planLibrary(f.options)[0];
     assert.equal(plan.state, 'pending', plan.message);
     assert.equal(plan.spec.identityNormalization, 'chinese-simplified');
+    assert.deepEqual(plan.spec.titleAliases, spec.titleAliases);
     assert.equal((await updateLibrary(f.options)).unchanged, 1);
     assert.deepEqual(fs.readFileSync(file), before);
     f.state.counts.alpha = 4;

@@ -123,7 +123,7 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
       // it with the site's HTML template abandons checkpoints/reading bindings.
       const savedSpec = reading?.spec || rawJob?.spec;
       const reviewedSpec = binding || reading ? reviewedLibrarySpec(stateDir, outputDir, book, siteSpec) : null;
-      const currentSpec = reviewedSpec || (savedSpec?.kind === 'txt' && savedSpec.sourceUrl === siteSpec.sourceUrl ? savedSpec : siteSpec);
+      let currentSpec = reviewedSpec || (savedSpec?.kind === 'txt' && savedSpec.sourceUrl === siteSpec.sourceUrl ? savedSpec : siteSpec);
       if (currentSpec === savedSpec && siteSpec.maxChapterPages !== undefined) {
         currentSpec.maxChapterPages = Math.max(currentSpec.maxChapterPages || currentSpec.chapter?.maxPages || 20, siteSpec.maxChapterPages);
       }
@@ -144,6 +144,11 @@ export function planLibrary({stateDir, outputDir, sites = loadSites().sites, for
         if (currentSpec.identityNormalization === undefined && savedSpec.identityNormalization !== undefined) {
           currentSpec.identityNormalization = savedSpec.identityNormalization;
         }
+        // Existing extraction hashes encode insertion order. Keep that order
+        // when rebuilding the same edition, while retaining every current
+        // value and newly added field so real rule changes still fail closed.
+        currentSpec = Object.fromEntries([...new Set([...Object.keys(savedSpec), ...Object.keys(currentSpec)])]
+          .filter(key => Object.hasOwn(currentSpec, key)).map(key => [key, currentSpec[key]]));
       }
       const spec = applyVerifiedBookStatus(currentSpec, stateDir, currentSpec.identityNormalization);
       if (binding && (binding.source.variant !== (spec.variant || '') || binding.source.extraction !== extractionHash(spec))) throw Error('当前续更来源规则已变化，请先核对适配；原文件保留');
