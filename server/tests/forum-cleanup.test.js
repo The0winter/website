@@ -27,6 +27,7 @@ test('local-edition upload detects conflicts, preserves interactions and links, 
   const originals=await Reply.create(Array.from({length:4},(_,i)=>({postId:post._id,author:admin._id,title:'原题'+i,content:'<p>合成原文'+i+'</p>',source:{author:'原作者'+i,title:'原题'+i,url:'https://example.test/review/'+i},likes:3,comments:2,likedBy:[admin._id]})));
   const before=await Reply.find({postId:post._id}).lean();
   const plan={version:1,batch:'cleanup-test',changes:before.map((r,i)=>({id:String(r._id),bookId:String(book._id),postId:String(post._id),expected:reviewFingerprint(r),content:i===2?r.content:i===3?'<p>整理者的导读。</p>':'<p>相同的完整正文。</p>',source:{...r.source,kind:i===3?'guide':'original'},curation:{status:i===1?'duplicate':i===2?'withheld':'active',version:'cleanup-test',...(i===1?{duplicateOf:String(before[0]._id)}:{})},reason:'已核验的本地清理'}))};
+  plan.changes[0].title='清理后标题';
   assert.equal((await applyReviewCleanup(plan)).pending,4);
   await Reply.updateOne({_id:before[3]._id},{$set:{content:'<p>用户刚刚改动。</p>'}});
   await assert.rejects(applyReviewCleanup(plan,{apply:true,writeAudit:async()=>{throw Error('Must not write an audit on stale plan');}}),/线上书评已变化/);
@@ -36,6 +37,9 @@ test('local-edition upload detects conflicts, preserves interactions and links, 
   const result=await applyReviewCleanup(plan,{apply:true,writeAudit:async data=>{backup=data;}});
   assert.equal(result.verified,4);assert.equal(backup.rows.length,4);
   const saved=await Reply.find({postId:post._id}).lean();
+  assert.equal(saved.find(r=>String(r._id)===plan.changes[0].id).title,'清理后标题');
+  assert.equal(saved.find(r=>String(r._id)===plan.changes[1].id).title,before[1].title);
+  assert.equal(backup.rows.find(r=>r.id===plan.changes[0].id).after.title,'清理后标题');
   for(const row of saved){assert.equal(row.likes,3);assert.equal(row.comments,2);assert.deepEqual(row.likedBy.map(String),[String(admin._id)]);}
   assert.equal((await Post.findById(post._id)).replyCount,2);
   const normal=await get('/api/forum/posts/'+post._id+'/replies');assert.equal(normal.length,2);

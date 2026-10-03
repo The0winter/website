@@ -18,6 +18,7 @@ const canonical = value => {
 };
 export const reviewFingerprint = row => reviewDigest(JSON.stringify(canonical({content:row.content,title:row.title||'',source:row.source||null,curation:row.curation||null})));
 const id = value => /^[a-f\d]{24}$/.test(value || '');
+const editorialFields = row => ({...(row.title===undefined?{}:{title:row.title}),content:row.content,source:row.source,curation:row.curation});
 
 export function validateReviewCleanup(plan) {
   if(plan?.version!==1 || !/^[a-z\d-]{1,80}$/.test(plan.batch||'') || !Array.isArray(plan.changes) || !plan.changes.length || plan.changes.length>3000)throw Error('书评清理清单无效');
@@ -25,6 +26,7 @@ export function validateReviewCleanup(plan) {
   for(const row of plan.changes){
     if(!id(row.id)||!id(row.bookId)||!id(row.postId)||seen.has(row.id)||!/^[a-f\d]{64}$/.test(row.expected)||typeof row.reason!=='string'||!row.reason.trim())throw Error('清理身份或核对指纹无效');
     seen.add(row.id);
+    if(row.title!==undefined&&(typeof row.title!=='string'||!row.title.trim()||row.title.length>200))throw Error('清理标题无效');
     if(typeof row.content!=='string'||!row.content.trim()||row.content.length>200000||safeHtml(row.content)!==row.content)throw Error('清理正文无效');
     if(!['original','excerpt','guide'].includes(row.source?.kind)||!row.source?.author||!row.source?.title||!['active','withheld','duplicate'].includes(row.curation?.status)||row.curation.version!==plan.batch)throw Error('清理来源或分类无效');
     const url=new URL(row.source.url);if(url.protocol!=='https:'||url.username||url.password)throw Error('来源链接无效');
@@ -51,7 +53,7 @@ export async function applyReviewCleanup(plan,{apply=false,writeAudit,admin,batc
     for(const change of changes){
       const before=stored.find(r=>String(r._id)===change.id),post=posts.find(r=>String(r._id)===change.postId);
       if(!before?.source||String(before.postId)!==change.postId||String(post?.bookId)!==change.bookId||post?.type!=='question'||!books.some(b=>String(b._id)===change.bookId))throw Error('线上书评归属已变化：'+change.id);
-      const after={...before,content:change.content,source:change.source,curation:change.curation};
+      const after={...before,...editorialFields(change)};
       if(reviewFingerprint(before)===reviewFingerprint(after))continue;
       if(reviewFingerprint(before)!==change.expected)throw Error('线上书评已变化，保留新内容：'+change.id);
       if(change.curation.status==='duplicate'){
@@ -70,14 +72,14 @@ export async function applyReviewCleanup(plan,{apply=false,writeAudit,admin,batc
   }
   if(!apply)return {batch:plan.batch,pending:pending.length,alreadyApplied:unchanged.length};
   if(typeof writeAudit!=='function')throw Error('应用前必须提供原文审计备份');
-  await writeAudit({version:1,batch:plan.batch,createdAt:new Date().toISOString(),rows:pending.map(({change,before})=>({id:change.id,before,after:{content:change.content,source:change.source,curation:change.curation}}))});
+  await writeAudit({version:1,batch:plan.batch,createdAt:new Date().toISOString(),rows:pending.map(({change,before})=>({id:change.id,before,after:editorialFields(change)}))});
   const changed=[];
   for(let start=0;start<pending.length;start+=batchSize){
     const batch=pending.slice(start,start+batchSize).map(r=>r.change);
     await mongoose.connection.transaction(async session=>{
       const active=await inspect(batch,session);
       for(const {change,before}of active){
-        const update=await Reply.updateOne({_id:before._id,content:before.content,source:before.source},{$set:{content:change.content,source:change.source,curation:change.curation}},{session,runValidators:true,timestamps:false});
+        const update=await Reply.updateOne({_id:before._id,content:before.content,source:before.source},{$set:editorialFields(change)},{session,runValidators:true,timestamps:false});
         if(update.matchedCount!==1)throw Error('书评发生并发修改：'+change.id);
       }
       for(const postId of new Set(active.map(r=>r.change.postId))){
@@ -91,7 +93,7 @@ export async function applyReviewCleanup(plan,{apply=false,writeAudit,admin,batc
   const verified=[];
   for(let start=0;start<plan.changes.length;start+=100){
     const batch=plan.changes.slice(start,start+100),stored=await Reply.find({_id:{$in:batch.map(r=>r.id)}}).lean();
-    for(const change of batch){const live=stored.find(r=>String(r._id)===change.id);if(!live||reviewFingerprint(live)!==reviewFingerprint({...live,content:change.content,source:change.source,curation:change.curation}))throw Error('写入后核验失败：'+change.id);verified.push(change.id);}
+    for(const change of batch){const live=stored.find(r=>String(r._id)===change.id);if(!live||reviewFingerprint(live)!==reviewFingerprint({...live,...editorialFields(change)}))throw Error('写入后核验失败：'+change.id);verified.push(change.id);}
   }
   return {batch:plan.batch,changed:changed.length,alreadyApplied:unchanged.length,verified:verified.length};
 }
